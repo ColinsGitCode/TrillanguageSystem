@@ -125,6 +125,22 @@ h1 {
   padding-bottom: 6px;
 }
 
+.month-group {
+  margin-bottom: 12px;
+}
+
+.month-label {
+  font-weight: 600;
+  color: var(--text);
+  margin: 4px 0 8px 2px;
+}
+
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .viewer {
   grid-area: viewer;
   min-height: 620px;
@@ -178,6 +194,9 @@ h1 {
 
 .file-list {
   max-height: 420px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
 }
 
 .viewer-note {

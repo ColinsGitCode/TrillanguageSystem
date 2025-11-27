@@ -44,12 +44,40 @@ function renderFolders() {
     folderListEl.innerHTML = '<p class="muted">未找到包含 HTML 的文件夹</p>';
     return;
   }
+  const groups = [];
   state.folders.forEach((name) => {
-    const btn = document.createElement('button');
-    btn.textContent = name;
-    btn.className = state.selectedFolder === name ? 'active' : '';
-    btn.addEventListener('click', () => selectFolder(name));
-    folderListEl.appendChild(btn);
+    const match = name.match(/^(\\d{4})(\\d{2})/);
+    const key = match ? `${match[1]}-${match[2]}` : '其它';
+    let group = groups.find((g) => g.key === key);
+    if (!group) {
+      group = { key, items: [] };
+      groups.push(group);
+    }
+    group.items.push(name);
+  });
+
+  groups.forEach((group) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'month-group';
+
+    const heading = document.createElement('div');
+    heading.className = 'month-label';
+    heading.textContent = group.key;
+    wrap.appendChild(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'folder-grid';
+
+    group.items.forEach((name) => {
+      const btn = document.createElement('button');
+      btn.textContent = name;
+      btn.className = state.selectedFolder === name ? 'active' : '';
+      btn.addEventListener('click', () => selectFolder(name));
+      grid.appendChild(btn);
+    });
+
+    wrap.appendChild(grid);
+    folderListEl.appendChild(wrap);
   });
 }
 
@@ -87,8 +115,9 @@ function renderFiles() {
     return;
   }
   state.files.forEach((file) => {
+    const label = file.replace(/\.html$/i, '');
     const btn = document.createElement('button');
-    btn.textContent = file;
+    btn.textContent = label;
     btn.className = state.selectedFile === file ? 'active' : '';
     btn.addEventListener('click', () => selectFile(file));
     fileListEl.appendChild(btn);
