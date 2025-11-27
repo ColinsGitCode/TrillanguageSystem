@@ -1,0 +1,12 @@
+{
+  "name": "trilingual-records-viewer",
+  "version": "1.0.0",
+  "description": "Simple web viewer for local trilingual HTML records",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

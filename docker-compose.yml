@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  viewer:
+    build: .
+    container_name: trilingual-viewer
+    environment:
+      - PORT=3010
+      - RECORDS_PATH=/data/trilingual_records
+    ports:
+      - "3010:3010"
+    volumes:
+      - /Users/xueguodong/Desktop/trilingual_records:/data/trilingual_records:ro
+    restart: unless-stopped
