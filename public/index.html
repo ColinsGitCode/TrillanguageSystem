@@ -15,18 +15,18 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Trilingual Records</p>
-          <h1>HTML 记录浏览面板</h1>
-          <p class="lede">左上选择文件夹，右侧查看 HTML 清单，点击文件后会以大尺寸弹窗显示内容。</p>
+<!--          <h1>HTML 记录浏览面板</h1>-->
+<!--          <p class="lede">左上选择文件夹，右侧查看 HTML 清单，点击文件后会以大尺寸弹窗显示内容。</p>-->
         </div>
-        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>
+<!--        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>-->
       </header>
 
       <section class="grid">
         <article class="card folders" aria-label="Folders">
           <div class="card-header">
             <div>
-              <p class="label">文件夹</p>
-              <h2>包含 HTML 的日期目录</h2>
+              <p class="label">Path</p>
+              <h2>Date</h2>
             </div>
             <div class="chip" id="folderCount">0</div>
           </div>
@@ -34,25 +34,25 @@
         </article>
 
         <article class="card viewer" aria-label="Viewer">
-          <div class="card-header">
-            <div>
-              <p class="label">右侧区域</p>
-              <h2>HTML 清单与预览弹窗</h2>
-            </div>
-          </div>
+<!--          <div class="card-header">-->
+<!--            <div>-->
+<!--              <p class="label">右侧区域</p>-->
+<!--              <h2>HTML 清单与预览弹窗</h2>-->
+<!--            </div>-->
+<!--          </div>-->
           <div class="file-panel">
             <div class="card-header sub">
               <div>
-                <p class="label">文件</p>
-                <h3>HTML 清单</h3>
-                <p class="muted small">点击文件名后以弹窗形式查看内容</p>
+                <p class="label">FileName</p>
+                <h3>Phrase List</h3>
+                <p class="muted small">Click to Browse</p>
               </div>
               <div class="chip" id="fileCount">0</div>
             </div>
             <div class="list file-list" id="fileList" role="listbox" aria-label="file list"></div>
           </div>
           <div class="viewer-note">
-            <p>选中文件后，内容会在全屏弹窗中展示。点击弹窗外即可关闭。</p>
+<!--            <p>选中文件后，内容会在全屏弹窗中展示。点击弹窗外即可关闭。</p>-->
           </div>
         </article>
       </section>
@@ -60,9 +60,9 @@
       <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <p class="label">预览</p>
+            <p class="label">Preview</p>
             <h3 id="modalTitle">HTML 文件内容</h3>
-            <p class="muted small">点击外部区域关闭弹窗，或按 Esc</p>
+<!--            <p class="muted small">点击外部区域关闭弹窗，或按 Esc</p>-->
           </div>
           <iframe id="modalFrame" title="HTML 预览" loading="lazy"></iframe>
         </div>
