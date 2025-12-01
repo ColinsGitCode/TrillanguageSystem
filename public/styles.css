@@ -124,20 +124,26 @@ h1 {
 }
 
 .month-group {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  border: 1px solid #e9edf4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f9fbff 0%, #f6f8fc 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .month-label {
   font-weight: 700;
-  color: var(--text);
-  margin: 4px 0 8px 4px;
-  font-size: 15px;
+  color: #d0504c;
+  margin: 2px 0 10px 4px;
+  font-size: 16px;
+  letter-spacing: 0.02em;
 }
 
 .folder-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
 }
 
 .viewer {
@@ -154,20 +160,21 @@ h1 {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding-right: 4px;
 }
 
 .list button {
-  border: 1px solid #d8dfe8;
-  background: #f5f7fb;
-  border-radius: 14px;
-  padding: 12px 12px;
+  border: 1px solid #d6deeb;
+  background: #f3f6fb;
+  border-radius: 12px;
+  padding: 12px 14px;
   text-align: left;
   color: var(--text);
   font-size: 15px;
   cursor: pointer;
   transition: all 0.18s ease;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .list button:hover {
@@ -179,7 +186,7 @@ h1 {
 .list button.active {
   background: #e8f2ff;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-2), inset 0 0 0 1px #c5d8f5;
 }
 
 .viewer-frame {

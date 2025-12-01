@@ -45,20 +45,34 @@ function renderFolders() {
     return;
   }
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const groups = new Map();
+  const monthBuckets = new Map();
+  const misc = [];
 
   state.folders.forEach((name) => {
-    const match = name.match(/^(\\d{4})(\\d{2})/);
-    const year = match ? match[1] : null;
-    const month = match ? parseInt(match[2], 10) : null;
-    const label = year && month && month >= 1 && month <= 12 ? `${year}.${monthNames[month - 1]}` : '其它';
-    if (!groups.has(label)) {
-      groups.set(label, []);
+    const match = name.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!match) {
+      misc.push(name);
+      return;
     }
-    groups.get(label).push(name);
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!month || month < 1 || month > 12) {
+      misc.push(name);
+      return;
+    }
+
+    const key = `${match[1]}${match[2]}`; // YYYYMM
+    const label = `${match[1]}.${monthNames[month - 1]}`;
+    if (!monthBuckets.has(key)) {
+      monthBuckets.set(key, { label, items: [] });
+    }
+    monthBuckets.get(key).items.push(name);
   });
 
-  groups.forEach((items, label) => {
+  const orderedKeys = Array.from(monthBuckets.keys()).sort((a, b) => b.localeCompare(a));
+  orderedKeys.forEach((key) => {
+    const { label, items } = monthBuckets.get(key);
+    const sortedItems = items.sort((a, b) => b.localeCompare(a));
     const wrap = document.createElement('div');
     wrap.className = 'month-group';
 
@@ -70,7 +84,7 @@ function renderFolders() {
     const grid = document.createElement('div');
     grid.className = 'folder-grid';
 
-    items.forEach((name) => {
+    sortedItems.forEach((name) => {
       const btn = document.createElement('button');
       btn.textContent = name;
       btn.className = state.selectedFolder === name ? 'active' : '';
@@ -81,6 +95,29 @@ function renderFolders() {
     wrap.appendChild(grid);
     folderListEl.appendChild(wrap);
   });
+
+  if (misc.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'month-group';
+    const heading = document.createElement('div');
+    heading.className = 'month-label';
+    heading.textContent = '其它';
+    wrap.appendChild(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'folder-grid';
+
+    misc.sort((a, b) => a.localeCompare(b)).forEach((name) => {
+      const btn = document.createElement('button');
+      btn.textContent = name;
+      btn.className = state.selectedFolder === name ? 'active' : '';
+      btn.addEventListener('click', () => selectFolder(name));
+      grid.appendChild(btn);
+    });
+
+    wrap.appendChild(grid);
+    folderListEl.appendChild(wrap);
+  }
 }
 
 async function selectFolder(name) {
