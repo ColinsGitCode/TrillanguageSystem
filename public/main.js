@@ -44,31 +44,33 @@ function renderFolders() {
     folderListEl.innerHTML = '<p class="muted">未找到包含 HTML 的文件夹</p>';
     return;
   }
-  const groups = [];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const groups = new Map();
+
   state.folders.forEach((name) => {
     const match = name.match(/^(\\d{4})(\\d{2})/);
-    const key = match ? `${match[1]}-${match[2]}` : '其它';
-    let group = groups.find((g) => g.key === key);
-    if (!group) {
-      group = { key, items: [] };
-      groups.push(group);
+    const year = match ? match[1] : null;
+    const month = match ? parseInt(match[2], 10) : null;
+    const label = year && month && month >= 1 && month <= 12 ? `${year}.${monthNames[month - 1]}` : '其它';
+    if (!groups.has(label)) {
+      groups.set(label, []);
     }
-    group.items.push(name);
+    groups.get(label).push(name);
   });
 
-  groups.forEach((group) => {
+  groups.forEach((items, label) => {
     const wrap = document.createElement('div');
     wrap.className = 'month-group';
 
     const heading = document.createElement('div');
     heading.className = 'month-label';
-    heading.textContent = group.key;
+    heading.textContent = label;
     wrap.appendChild(heading);
 
     const grid = document.createElement('div');
     grid.className = 'folder-grid';
 
-    group.items.forEach((name) => {
+    items.forEach((name) => {
       const btn = document.createElement('button');
       btn.textContent = name;
       btn.className = state.selectedFolder === name ? 'active' : '';

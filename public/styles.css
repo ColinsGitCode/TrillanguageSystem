@@ -1,12 +1,12 @@
 :root {
-  --bg: #f4f6fb;
+  --bg: #f7f9fc;
   --card: #ffffff;
-  --accent: #1f7a8c;
-  --accent-2: #ffb703;
-  --border: #e4e7ee;
-  --text: #1e2a38;
-  --muted: #697586;
-  --shadow: 0 10px 40px rgba(23, 38, 79, 0.12);
+  --accent: #5c8fc1;
+  --accent-2: #c9d8f0;
+  --border: #e2e7ef;
+  --text: #1f2b3a;
+  --muted: #7a8595;
+  --shadow: 0 8px 26px rgba(31, 43, 63, 0.08);
 }
 
 * {
@@ -16,10 +16,7 @@
 body {
   margin: 0;
   font-family: "Space Grotesk", "SF Pro Display", "Helvetica Neue", sans-serif;
-  background: radial-gradient(circle at 20% 20%, rgba(31, 122, 140, 0.08), transparent 35%),
-    radial-gradient(circle at 80% 10%, rgba(255, 183, 3, 0.16), transparent 30%),
-    radial-gradient(circle at 70% 70%, rgba(23, 38, 79, 0.08), transparent 35%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
 }
@@ -81,7 +78,7 @@ h1 {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 14px 16px;
   box-shadow: var(--shadow);
   display: flex;
@@ -110,10 +107,11 @@ h1 {
 }
 
 .chip {
-  background: rgba(23, 38, 79, 0.06);
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: 12px;
+  background: #f1f3f7;
+  color: #4c5564;
+  border: 1px solid #d8dfe8;
+  padding: 6px 12px;
+  border-radius: 16px;
   font-weight: 600;
   font-size: 14px;
 }
@@ -130,9 +128,10 @@ h1 {
 }
 
 .month-label {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
-  margin: 4px 0 8px 2px;
+  margin: 4px 0 8px 4px;
+  font-size: 15px;
 }
 
 .folder-grid {
@@ -160,9 +159,9 @@ h1 {
 }
 
 .list button {
-  border: 1px solid var(--border);
-  background: #f9fafc;
-  border-radius: 12px;
+  border: 1px solid #d8dfe8;
+  background: #f5f7fb;
+  border-radius: 14px;
   padding: 12px 12px;
   text-align: left;
   color: var(--text);
@@ -172,14 +171,15 @@ h1 {
 }
 
 .list button:hover {
-  border-color: rgba(31, 122, 140, 0.5);
+  border-color: var(--accent);
+  background: #eef3fb;
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
 }
 
 .list button.active {
-  background: linear-gradient(135deg, rgba(31, 122, 140, 0.14), rgba(31, 122, 140, 0.08));
-  border-color: rgba(31, 122, 140, 0.4);
+  background: #e8f2ff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-2);
 }
 
 .viewer-frame {
