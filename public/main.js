@@ -17,7 +17,9 @@ function setStatus(text) {
   console.log(text);
 }
 
-async function loadFolders() {
+async function loadFolders(options = {}) {
+  const { keepSelection = false, refreshFiles = false } = options;
+  const prevSelectedFolder = state.selectedFolder;
   try {
     setStatus('加载文件夹列表中…');
     const response = await fetch('/api/folders');
@@ -26,8 +28,21 @@ async function loadFolders() {
     state.folders = data.folders || [];
     folderCountEl.textContent = state.folders.length;
     renderFolders();
-    if (state.folders.length && !state.selectedFolder) {
+    if (!state.folders.length) {
+      state.selectedFolder = null;
+      state.files = [];
+      fileCountEl.textContent = '0';
+      fileListEl.innerHTML = '<p class="muted">未找到包含 HTML 的文件夹</p>';
+      return;
+    }
+
+    const hasPrev = prevSelectedFolder && state.folders.includes(prevSelectedFolder);
+
+    if (!keepSelection || !hasPrev) {
       await selectFolder(state.folders[0]);
+    } else if (refreshFiles) {
+      state.selectedFolder = prevSelectedFolder;
+      await loadFiles(prevSelectedFolder);
     } else {
       setStatus('选择一个文件夹以查看 HTML 清单');
     }
@@ -135,6 +150,9 @@ async function loadFiles(folder) {
     if (!response.ok) throw new Error('无法获取文件列表');
     const data = await response.json();
     state.files = data.files || [];
+    if (state.selectedFile && !state.files.includes(state.selectedFile)) {
+      state.selectedFile = null;
+    }
     fileCountEl.textContent = state.files.length;
     renderFiles();
     setStatus(state.files.length ? '选择一个 HTML 文件以预览' : '此文件夹中没有 HTML 文件');
@@ -198,3 +216,7 @@ const modalContent = modalOverlay.querySelector('.modal-content');
 modalContent.addEventListener('click', (e) => e.stopPropagation());
 
 loadFolders();
+
+setInterval(() => {
+  loadFolders({ keepSelection: true, refreshFiles: true });
+}, 60_000);
