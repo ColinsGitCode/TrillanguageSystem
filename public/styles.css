@@ -68,11 +68,10 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: 58% 42%;
-  grid-template-rows: minmax(240px, 46%) minmax(260px, 54%);
+  grid-template-columns: 50% 50%;
+  grid-template-rows: 1fr;
   grid-template-areas:
-    "folders viewer"
-    "local viewer";
+    "folders viewer";
   gap: 14px;
   height: calc(100vh - 130px);
   min-height: 760px;
@@ -151,38 +150,6 @@ h1 {
 .viewer {
   grid-area: viewer;
   min-height: 520px;
-}
-
-.local-panel {
-  grid-area: local;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 260px;
-}
-
-.local-panel__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.local-panel__header h3 {
-  margin: 2px 0 0 0;
-  font-size: 16px;
-}
-
-.local-panel__status {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.local-panel iframe {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  flex: 1;
-  width: 100%;
-  background: #fff;
 }
 
 .files {
@@ -317,10 +284,9 @@ h1 {
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     grid-template-areas:
       "folders"
-      "local"
       "viewer";
     height: auto;
     min-height: unset;
