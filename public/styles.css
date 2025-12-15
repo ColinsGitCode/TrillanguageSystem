@@ -1,12 +1,12 @@
 :root {
-  --bg: #f7f9fc;
-  --card: #ffffff;
-  --accent: #5c8fc1;
-  --accent-2: #c9d8f0;
-  --border: #e2e7ef;
-  --text: #1f2b3a;
-  --muted: #7a8595;
-  --shadow: 0 8px 26px rgba(31, 43, 63, 0.08);
+  --bg: #0e141b;
+  --card: #111924;
+  --accent: #7dd3fc;
+  --accent-2: #38bdf8;
+  --border: #1d2a38;
+  --text: #e8edf5;
+  --muted: #9aa8b8;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
 }
 
 * {
@@ -16,7 +16,9 @@
 body {
   margin: 0;
   font-family: "Space Grotesk", "SF Pro Display", "Helvetica Neue", sans-serif;
-  background: var(--bg);
+  background: radial-gradient(circle at 20% 20%, rgba(125, 211, 252, 0.08), transparent 38%),
+    radial-gradient(circle at 80% -10%, rgba(56, 189, 248, 0.08), transparent 32%),
+    linear-gradient(135deg, #0c1219 0%, #0f1721 35%, #0b121a 100%);
   color: var(--text);
   min-height: 100vh;
 }
@@ -57,9 +59,9 @@ h1 {
 }
 
 .pill {
-  background: rgba(31, 122, 140, 0.1);
+  background: rgba(125, 211, 252, 0.12);
   color: var(--accent);
-  border: 1px solid rgba(31, 122, 140, 0.2);
+  border: 1px solid rgba(125, 211, 252, 0.28);
   padding: 10px 12px;
   border-radius: 14px;
   font-size: 13px;
@@ -109,9 +111,9 @@ h1 {
 }
 
 .chip {
-  background: #f1f3f7;
-  color: #4c5564;
-  border: 1px solid #d8dfe8;
+  background: #0f1724;
+  color: #d9e1ec;
+  border: 1px solid var(--border);
   padding: 6px 12px;
   border-radius: 16px;
   font-weight: 600;
@@ -127,15 +129,15 @@ h1 {
 .month-group {
   margin-bottom: 14px;
   padding: 8px 10px;
-  border: 1px solid #e9edf4;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: linear-gradient(180deg, #f9fbff 0%, #f6f8fc 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(35, 47, 63, 0.6) 0%, rgba(24, 32, 44, 0.8) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .month-label {
   font-weight: 700;
-  color: #d0504c;
+  color: var(--accent);
   margin: 2px 0 10px 4px;
   font-size: 16px;
   letter-spacing: 0.02em;
@@ -166,8 +168,8 @@ h1 {
 }
 
 .list button {
-  border: 1px solid #d6deeb;
-  background: #f3f6fb;
+  border: 1px solid var(--border);
+  background: #161f2b;
   border-radius: 12px;
   padding: 12px 14px;
   text-align: left;
@@ -175,19 +177,19 @@ h1 {
   font-size: 15px;
   cursor: pointer;
   transition: all 0.18s ease;
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .list button:hover {
-  border-color: var(--accent);
-  background: #eef3fb;
+  border-color: var(--accent-2);
+  background: #1c2735;
   transform: translateY(-1px);
 }
 
 .list button.active {
-  background: #e8f2ff;
+  background: #0f1724;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-2), inset 0 0 0 1px #c5d8f5;
+  box-shadow: 0 0 0 2px rgba(101, 211, 255, 0.2), inset 0 0 0 1px rgba(101, 211, 255, 0.45);
 }
 
 .viewer-frame {
@@ -242,7 +244,7 @@ h1 {
 }
 
 .modal-content {
-  background: #fff;
+  background: #0f141c;
   border-radius: 16px;
   width: 90vw;
   height: 88vh;
@@ -262,7 +264,7 @@ h1 {
 .modal-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(31, 122, 140, 0.08), rgba(23, 38, 79, 0.05));
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.16), rgba(28, 40, 56, 0.7));
 }
 
 .hidden {
