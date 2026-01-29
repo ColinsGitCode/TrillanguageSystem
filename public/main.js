@@ -268,19 +268,134 @@ function renderFiles() {
   });
 }
 
-function selectFile(file, title) {
+async function selectFile(file, title) {
   if (!state.selectedFolder) return;
   state.selectedFile = file;
   state.selectedFileTitle = title || file;
   renderFiles();
-  const src = `/api/folders/${encodeURIComponent(state.selectedFolder)}/files/${encodeURIComponent(file)}`;
-  openModal(src, title || file);
+
+  const folder = encodeURIComponent(state.selectedFolder);
+  const baseName = file.replace(/\.html$/i, '');
+  const mdFile = `${baseName}.md`;
+
+  // Try to fetch Markdown first
+  try {
+    const res = await fetch(`/api/folders/${folder}/files/${encodeURIComponent(mdFile)}`);
+    if (res.ok) {
+        const text = await res.text();
+        renderModernCard(text, baseName);
+    } else {
+        throw new Error('No markdown found');
+    }
+  } catch (e) {
+      console.log('Fallback to legacy HTML view', e);
+      const src = `/api/folders/${folder}/files/${encodeURIComponent(file)}`;
+      openLegacyModal(src, title || file);
+  }
+
   setStatus('已加载文件');
 }
 
-function openModal(src, fileName) {
-  modalFrame.src = src;
-  modalTitle.textContent = fileName || 'HTML 文件内容';
+function renderModernCard(markdown, title) {
+  const container = document.getElementById('modalContainer');
+  
+  // 1. Extract Title (First H1 or fallback to filename)
+  let displayTitle = title;
+  const h1Match = markdown.match(/^#\s+(.+)$/m);
+  if (h1Match) {
+      displayTitle = h1Match[1];
+  }
+
+  // 2. Parse Markdown Body
+  const htmlContent = marked.parse(markdown);
+
+  // 3. Build DOM
+  const cardHtml = `
+    <div class="modern-card">
+        <button class="mc-close" onclick="closeModal()">×</button>
+        <div class="mc-header">
+            <h1 class="mc-phrase">${displayTitle}</h1>
+            <div class="mc-meta">
+                <span>Trilingual</span>
+                <span>${new Date().getFullYear()}</span>
+            </div>
+        </div>
+        <div class="mc-body mc-content">
+            ${htmlContent}
+        </div>
+    </div>
+  `;
+
+  container.innerHTML = cardHtml;
+
+  // 4. Post-process: Enhance Audio Elements
+  const audioDivs = container.querySelectorAll('.audio');
+  audioDivs.forEach(div => {
+      const audioEl = div.querySelector('audio');
+      if (audioEl) {
+          const src = audioEl.getAttribute('src');
+          const btn = document.createElement('button');
+          btn.className = 'audio-btn';
+          btn.innerHTML = '▶'; 
+          btn.onclick = () => playAudio(btn, src);
+          
+          const prev = div.previousElementSibling;
+          if (prev && (prev.tagName === 'LI' || prev.tagName === 'P')) {
+              prev.appendChild(btn);
+              div.remove();
+          } else {
+              div.innerHTML = '';
+              div.appendChild(btn);
+          }
+      }
+  });
+
+  modalOverlay.classList.remove('hidden');
+  modalOverlay.classList.add('show');
+}
+
+let currentAudio = null;
+function playAudio(btn, src) {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+        document.querySelectorAll('.audio-btn').forEach(b => {
+            b.classList.remove('playing');
+            b.innerHTML = '▶';
+        });
+    }
+    
+    const folder = encodeURIComponent(state.selectedFolder);
+    const audioUrl = `/api/folders/${folder}/files/${encodeURIComponent(src)}`;
+
+    const audio = new Audio(audioUrl);
+    currentAudio = audio;
+    
+    btn.classList.add('playing');
+    btn.innerHTML = '||';
+
+    audio.play();
+    audio.onended = () => {
+        btn.classList.remove('playing');
+        btn.innerHTML = '▶';
+        currentAudio = null;
+    };
+    audio.onerror = () => {
+        btn.classList.remove('playing');
+        btn.style.color = 'red';
+        console.error('Audio load failed', audioUrl);
+    };
+}
+
+function openLegacyModal(src, fileName) {
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = `
+    <div class="modal-header" style="background:white; padding:1rem; border-radius:8px 8px 0 0;">
+        <p class="label">Legacy Preview</p>
+        <h3>${fileName}</h3>
+    </div>
+    <iframe id="modalFrame" src="${src}" title="HTML 预览" style="width:100%; height:80vh; border:none; background:white;"></iframe>
+  `;
   modalOverlay.classList.remove('hidden');
   modalOverlay.classList.add('show');
 }
@@ -288,21 +403,28 @@ function openModal(src, fileName) {
 function closeModal() {
   modalOverlay.classList.remove('show');
   modalOverlay.classList.add('hidden');
-  modalFrame.src = '';
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = ''; 
+  if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+  }
   state.selectedFile = null;
   state.selectedFileTitle = null;
   renderFiles();
 }
 
-modalOverlay.addEventListener('click', () => closeModal());
+modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) closeModal();
+});
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeModal();
   }
 });
 
-const modalContent = modalOverlay.querySelector('.modal-content');
-modalContent.addEventListener('click', (e) => e.stopPropagation());
+// const modalContent = modalOverlay.querySelector('.modal-content');
+// modalContent.addEventListener('click', (e) => e.stopPropagation());
 
 loadFolders();
 

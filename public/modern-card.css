@@ -1,0 +1,215 @@
+:root {
+  /* Palette */
+  --bg-canvas: #FAFAF9;
+  --bg-card: #FFFFFF;
+  --text-ink: #2D2D2D;
+  --text-slate: #666666;
+  --text-muted: #999999;
+  
+  --accent-en: #2563EB; /* Academic Blue */
+  --accent-jp: #BC4749; /* Vermilion */
+  --accent-cn: #10B981; /* Emerald */
+  
+  --border-subtle: #E5E5E5;
+  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  
+  /* Typography */
+  --font-serif: 'Noto Serif CJK SC', 'Noto Serif', serif;
+  --font-sans: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Modal Container Overrides */
+.modal-content {
+  background: transparent !important;
+  box-shadow: none !important;
+  max-width: 900px !important;
+  width: 95% !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+/* The Modern Card */
+.modern-card {
+  background: var(--bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--text-ink);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  position: relative;
+}
+
+/* Card Header */
+.mc-header {
+  padding: 3rem 3rem 2rem 3rem;
+  background: linear-gradient(to bottom, #FFFFFF, #FAFAF9);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: center;
+}
+
+.mc-phrase {
+  font-family: var(--font-serif);
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+  color: var(--text-ink);
+}
+
+.mc-meta {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--text-slate);
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.mc-meta span {
+  background: #F3F4F6;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+/* Scrollable Content Body */
+.mc-body {
+  padding: 2rem 3rem;
+  overflow-y: auto;
+  line-height: 1.7;
+}
+
+/* Sections */
+.mc-section {
+  margin-bottom: 2.5rem;
+}
+
+.mc-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mc-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* Definitions & Markdown Content */
+.mc-content h1, .mc-content h2 {
+  display: none; /* Hide original MD headers as we use custom header */
+}
+
+.mc-content p {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.mc-content strong {
+  color: var(--accent-en);
+  font-weight: 600;
+}
+
+/* Lists (Examples) */
+.mc-content ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.mc-content li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 1.2rem;
+  border-left: 3px solid var(--border-subtle);
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  transition: border-color 0.2s;
+}
+
+.mc-content li:hover {
+  border-left-color: var(--accent-en);
+}
+
+/* Ruby Text Optimization */
+ruby {
+  ruby-position: over;
+}
+rt {
+  font-size: 0.6em;
+  color: var(--text-slate);
+}
+
+/* Audio Button (Injected via JS) */
+.audio-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #F3F4F6;
+  color: var(--text-slate);
+  margin-left: 0.5rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.audio-btn:hover {
+  background: var(--accent-en);
+  color: white;
+  transform: scale(1.1);
+}
+
+.audio-btn.playing {
+  background: var(--accent-jp);
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(188, 71, 73, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(188, 71, 73, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(188, 71, 73, 0); }
+}
+
+/* Close Button */
+.mc-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.05);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: var(--text-slate);
+  transition: background 0.2s;
+}
+.mc-close:hover {
+  background: rgba(0,0,0,0.1);
+  color: var(--text-ink);
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .mc-header { padding: 2rem 1.5rem; }
+  .mc-body { padding: 1.5rem 1.5rem; }
+  .mc-phrase { font-size: 1.8rem; }
+}

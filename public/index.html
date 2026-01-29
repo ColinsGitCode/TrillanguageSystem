@@ -8,7 +8,12 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+    <!-- Noto Serif for Academic Style -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Noto+Serif:wght@400;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="modern-card.css" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   </head>
   <body>
     <div class="page">
@@ -70,18 +75,8 @@
       </section>
 
       <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <p class="label">Preview</p>
-            <h3 id="modalTitle">HTML 文件内容</h3>
-<!--            <p class="muted small">点击外部区域关闭弹窗，或按 Esc</p>-->
-          </div>
-          <iframe
-            id="modalFrame"
-            title="HTML 预览"
-            loading="lazy"
-            sandbox="allow-same-origin"
-          ></iframe>
+        <div class="modal-content" id="modalContainer">
+            <!-- Content injected via JS -->
         </div>
       </div>
     </div>
