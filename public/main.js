@@ -18,6 +18,12 @@ const clearImageBtn = document.getElementById('clearImageBtn');
 // Progress Elements
 const progressBar = document.getElementById('progressBar');
 const progressStatus = document.getElementById('progressStatus');
+const promptText = document.getElementById('promptText');
+const progressTimer = document.getElementById('progressTimer');
+
+// Timer state
+let timerInterval = null;
+let timerStartTime = null;
 
 const state = {
   folders: [],
@@ -147,6 +153,7 @@ async function recognizeAndFill() {
 
   ocrBtn.disabled = true;
   ocrBtn.textContent = '识别中...';
+  showProgress('[图片识别]');
   updateProgress('ocr', '正在识别图片中的文字...');
 
   try {
@@ -160,13 +167,17 @@ async function recognizeAndFill() {
     if (!res.ok) throw new Error(data.error);
 
     // 填充到文本框
+    stopTimer();
+    const elapsed = getElapsedTime();
     phraseInput.value = data.text;
     phraseInput.focus();
-    updateProgress('ocr', `✓ 识别完成: "${data.text.substring(0, 30)}${data.text.length > 30 ? '...' : ''}"`, false);
+    promptText.textContent = data.text;
+    updateProgress('ocr', `✓ 识别完成 (${elapsed}): "${data.text.substring(0, 30)}${data.text.length > 30 ? '...' : ''}"`, false);
 
-    setTimeout(hideProgress, 2000);
+    setTimeout(hideProgress, 2500);
 
   } catch (error) {
+    stopTimer();
     progressStatus.textContent = '✗ 识别失败: ' + error.message;
     progressStatus.style.color = '#f87171';
     setTimeout(() => {
@@ -179,7 +190,46 @@ async function recognizeAndFill() {
   }
 }
 
+// ========== Timer Functions ==========
+
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function startTimer() {
+  stopTimer();
+  timerStartTime = Date.now();
+  progressTimer.textContent = '00:00';
+  progressTimer.classList.add('running');
+  timerInterval = setInterval(() => {
+    const elapsed = Date.now() - timerStartTime;
+    progressTimer.textContent = formatTime(elapsed);
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  progressTimer.classList.remove('running');
+}
+
+function getElapsedTime() {
+  if (!timerStartTime) return '00:00';
+  return formatTime(Date.now() - timerStartTime);
+}
+
 // ========== Progress Functions ==========
+
+function showProgress(phrase) {
+  progressBar.classList.remove('hidden');
+  promptText.textContent = phrase || '';
+  startTimer();
+}
 
 function updateProgress(step, status, isActive = true) {
   progressBar.classList.remove('hidden');
@@ -200,6 +250,8 @@ function updateProgress(step, status, isActive = true) {
 
 function hideProgress() {
   progressBar.classList.add('hidden');
+  stopTimer();
+  promptText.textContent = '';
 }
 
 // ========== Event Listeners for Image ==========
@@ -230,6 +282,7 @@ genBtn.addEventListener('click', async () => {
   ocrBtn.disabled = true;
 
   try {
+    showProgress(phrase);
     updateProgress('generate', '正在调用 LLM 生成三语内容...');
 
     const res = await fetch('/api/generate', {
@@ -253,15 +306,17 @@ genBtn.addEventListener('click', async () => {
     }
 
     // 成功
+    stopTimer();
+    const elapsed = getElapsedTime();
     const savedHtml = data.result.files.find((file) => file.endsWith('.html')) || data.result.files[0];
-    updateProgress('audio', `✓ 已保存: ${data.result.folder}/${savedHtml}`, false);
+    updateProgress('audio', `✓ 完成 (${elapsed}) - ${data.result.folder}/${savedHtml}`, false);
     phraseInput.value = '';
     clearImage();
 
     // Refresh folders and select the new one
     await loadFolders({ targetSelect: data.result.folder });
 
-    setTimeout(hideProgress, 3000);
+    setTimeout(hideProgress, 4000);
 
   } catch (error) {
     console.error(error);
