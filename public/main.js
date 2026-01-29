@@ -11,7 +11,6 @@ const genBtn = document.getElementById('genBtn');
 // Image OCR Elements
 const imageDropZone = document.getElementById('imageDropZone');
 const imagePreview = document.getElementById('imagePreview');
-const imageFileInput = document.getElementById('imageFileInput');
 const ocrBtn = document.getElementById('ocrBtn');
 const clearImageBtn = document.getElementById('clearImageBtn');
 
@@ -109,11 +108,6 @@ function handleDrop(e) {
   }
 }
 
-function handleFileSelect(e) {
-  const file = e.target.files[0];
-  if (file) processImageFile(file);
-}
-
 function processImageFile(file) {
   if (file.size > 4 * 1024 * 1024) {
     alert('图片过大，请使用小于 4MB 的图片');
@@ -145,7 +139,6 @@ function clearImage() {
   if (hint) hint.classList.remove('hidden');
   ocrBtn.disabled = true;
   clearImageBtn.disabled = true;
-  imageFileInput.value = '';
 }
 
 async function recognizeAndFill() {
@@ -257,12 +250,6 @@ function hideProgress() {
 // ========== Event Listeners for Image ==========
 
 document.addEventListener('paste', handlePaste);
-imageDropZone.addEventListener('click', (e) => {
-  // 允许点击整个区域（包括图片预览）触发文件选择
-  if (e.target === imageDropZone || e.target === imagePreview || e.target.classList.contains('drop-hint')) {
-    imageFileInput.click();
-  }
-});
 imageDropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
   imageDropZone.classList.add('dragover');
@@ -271,7 +258,6 @@ imageDropZone.addEventListener('dragleave', () => {
   imageDropZone.classList.remove('dragover');
 });
 imageDropZone.addEventListener('drop', handleDrop);
-imageFileInput.addEventListener('change', handleFileSelect);
 ocrBtn.addEventListener('click', recognizeAndFill);
 clearImageBtn.addEventListener('click', clearImage);
 

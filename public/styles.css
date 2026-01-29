@@ -434,7 +434,6 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
   overflow: hidden;
 }
@@ -460,22 +459,6 @@ h1 {
   max-width: 100%;
   max-height: 120px;
   object-fit: contain;
-  cursor: pointer;
-}
-
-.image-drop-zone::after {
-  content: '点击更换图片';
-  position: absolute;
-  bottom: 4px;
-  right: 8px;
-  font-size: 10px;
-  color: var(--muted);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.image-drop-zone:hover::after {
-  opacity: 0.7;
 }
 
 .image-actions {
