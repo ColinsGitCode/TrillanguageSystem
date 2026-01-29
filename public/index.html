@@ -23,6 +23,18 @@
 
       <section class="grid">
         <article class="card folders" aria-label="Folders">
+          <!-- Generation Panel -->
+          <div class="card-header gen-panel" style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
+            <div>
+                <p class="label">New Card</p>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <input type="text" id="phraseInput" placeholder="Enter phrase..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                    <button id="genBtn" style="padding: 0.5rem 1rem; background: var(--text); color: var(--bg); border: none; border-radius: 4px; cursor: pointer;">Generate</button>
+                </div>
+                <p id="genStatus" class="muted small" style="margin-top: 0.5rem; height: 1.2em;">&nbsp;</p>
+            </div>
+          </div>
+
           <div class="card-header">
             <div>
               <p class="label">Path</p>
@@ -64,7 +76,12 @@
             <h3 id="modalTitle">HTML 文件内容</h3>
 <!--            <p class="muted small">点击外部区域关闭弹窗，或按 Esc</p>-->
           </div>
-          <iframe id="modalFrame" title="HTML 预览" loading="lazy"></iframe>
+          <iframe
+            id="modalFrame"
+            title="HTML 预览"
+            loading="lazy"
+            sandbox="allow-same-origin"
+          ></iframe>
         </div>
       </div>
     </div>

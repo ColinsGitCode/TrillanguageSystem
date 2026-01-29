@@ -6,6 +6,11 @@ const modalOverlay = document.getElementById('modalOverlay');
 const modalFrame = document.getElementById('modalFrame');
 const modalTitle = document.getElementById('modalTitle');
 
+// Generation Elements
+const phraseInput = document.getElementById('phraseInput');
+const genBtn = document.getElementById('genBtn');
+const genStatus = document.getElementById('genStatus');
+
 const state = {
   folders: [],
   files: [],
@@ -17,8 +22,57 @@ function setStatus(text) {
   console.log(text);
 }
 
+// Generation Logic
+genBtn.addEventListener('click', async () => {
+    const phrase = phraseInput.value.trim();
+    if (!phrase) return;
+
+    genBtn.disabled = true;
+    genBtn.textContent = '...';
+    genStatus.textContent = 'Generating... (may take 10s)';
+    genStatus.style.color = '#7dd3fc';
+
+    try {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phrase })
+        });
+
+        const data = await res.json();
+        
+        if (!res.ok) {
+            const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
+            const message = detail ? `${data.error}（${detail}）` : data.error;
+            throw new Error(message || 'Generation failed');
+        }
+
+        const savedHtml = data.result.files.find((file) => file.endsWith('.html')) || data.result.files[0];
+        genStatus.textContent = `已保存：${data.result.folder}/${savedHtml}`;
+        genStatus.style.color = '#7dd3fc';
+        phraseInput.value = '';
+
+        // Refresh folders and select the new one (today's folder)
+        const newFolder = data.result.folder;
+        // Reload folders, select the target folder, and refresh its files
+        await loadFolders({ targetSelect: newFolder });
+
+    } catch (error) {
+        console.error(error);
+        genStatus.textContent = 'Error: ' + error.message;
+        genStatus.style.color = '#f87171';
+    } finally {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Generate';
+        // Clear status after 5s
+        setTimeout(() => { 
+            if (genStatus.textContent.startsWith('已保存：')) genStatus.textContent = ''; 
+        }, 5000);
+    }
+});
+
 async function loadFolders(options = {}) {
-  const { keepSelection = false, refreshFiles = false } = options;
+  const { keepSelection = false, refreshFiles = false, targetSelect = null } = options;
   const prevSelectedFolder = state.selectedFolder;
   try {
     setStatus('加载文件夹列表中…');
@@ -36,16 +90,26 @@ async function loadFolders(options = {}) {
       return;
     }
 
-    const hasPrev = prevSelectedFolder && state.folders.includes(prevSelectedFolder);
+    // Selection Logic Priority:
+    // 1. targetSelect (if specified and exists)
+    // 2. prevSelectedFolder (if keepSelection is true and exists)
+    // 3. First folder (default)
 
-    if (!keepSelection || !hasPrev) {
-      await selectFolder(state.folders[0]);
-    } else if (refreshFiles) {
-      state.selectedFolder = prevSelectedFolder;
-      await loadFiles(prevSelectedFolder);
-    } else {
-      setStatus('选择一个文件夹以查看 HTML 清单');
+    let folderToSelect = state.folders[0];
+
+    if (targetSelect && state.folders.includes(targetSelect)) {
+        folderToSelect = targetSelect;
+    } else if (keepSelection && prevSelectedFolder && state.folders.includes(prevSelectedFolder)) {
+        folderToSelect = prevSelectedFolder;
     }
+
+    if (targetSelect || !keepSelection || (keepSelection && !prevSelectedFolder)) {
+         await selectFolder(folderToSelect);
+    } else if (refreshFiles) {
+         // Just refresh current
+         await loadFiles(state.selectedFolder);
+    }
+
   } catch (err) {
     console.error(err);
     setStatus(err.message || '加载文件夹失败');

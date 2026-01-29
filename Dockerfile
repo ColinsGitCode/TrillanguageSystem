@@ -8,5 +8,5 @@ RUN npm ci --omit=dev
 COPY . .
 
 ENV RECORDS_PATH=/data/trilingual_records
-EXPOSE 3000
+EXPOSE 3010
 CMD ["npm", "start"]

@@ -6,8 +6,43 @@ services:
     environment:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
+      - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
+      - TTS_EN_TYPE=kokoro
+      - TTS_EN_SPEED=1.0
+      - TTS_EN_VOICE=af_bella
+      - TTS_EN_MODEL=hexgrad/Kokoro-82M
+      - HTML_RENDER_MODE=local
+      - TTS_JA_ENDPOINT=http://tts-ja:50021
+      - TTS_JA_TYPE=voicevox
+      - VOICEVOX_SPEAKER=2
     ports:
       - "3010:3010"
     volumes:
-      - /Users/xueguodong/Desktop/trilingual_records:/data/trilingual_records:ro
+      - /Users/xueguodong/Desktop/trilingual_records:/data/trilingual_records
     restart: unless-stopped
+
+  tts-en:
+    image: dlaszlo/speech-service:cpu-latest
+    container_name: trilingual-tts-en
+    environment:
+      - STT_MODEL_NAME=Systran/faster-distil-whisper-small.en
+      - STT_COMPUTE_TYPE=int8
+      - TTS_MODEL_NAME=hexgrad/Kokoro-82M
+      - TTS_LANG_CODE=a
+      - HF_HOME=/data/huggingface
+    ports:
+      - "8000:8000"
+    volumes:
+      - kokoro_cache:/data/huggingface
+    restart: unless-stopped
+
+  tts-ja:
+    image: voicevox/voicevox_engine:latest
+    container_name: trilingual-tts-ja
+    # Apple Silicon 如拉取失败，可尝试指定 platform: linux/arm64
+    ports:
+      - "50021:50021"
+    restart: unless-stopped
+
+volumes:
+  kokoro_cache:
