@@ -221,6 +221,7 @@ function normalizeAudioTasks(tasks, baseName) {
 // Routes
 
 app.post('/api/generate', async (req, res) => {
+  let prompt = null;
   try {
     if (!canGenerate(req)) {
       return res.status(429).json({ error: '生成请求过于频繁，请稍后再试' });
@@ -235,7 +236,7 @@ app.post('/api/generate', async (req, res) => {
     // 1. Build Prompt
     const { targetDir, folderName } = ensureTodayDirectory();
     const baseName = buildBaseName(phrase, targetDir);
-    const prompt = buildPrompt({ phrase, filenameBase: baseName });
+    prompt = buildPrompt({ phrase, filenameBase: baseName });
 
     // 2. Call Gemini
     const content = await generateContent(prompt);
@@ -249,6 +250,7 @@ app.post('/api/generate', async (req, res) => {
       return res.status(422).json({
         error: `Invalid AI response: ${validationErrors.join('; ')}`,
         details: validationErrors,
+        prompt,
       });
     }
 
@@ -302,7 +304,7 @@ app.post('/api/generate', async (req, res) => {
     });
   } catch (error) {
     console.error('[Generate] Error:', error);
-    res.status(500).json({ error: error.message || 'Generation failed' });
+    res.status(500).json({ error: error.message || 'Generation failed', prompt });
   }
 });
 
