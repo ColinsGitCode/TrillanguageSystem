@@ -4,7 +4,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 const { buildPrompt } = require('./services/promptEngine');
-const { generateContent } = require('./services/geminiService');
+const { generateContent, recognizeImage } = require('./services/geminiService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
@@ -302,6 +302,37 @@ app.post('/api/generate', async (req, res) => {
   } catch (error) {
     console.error('[Generate] Error:', error);
     res.status(500).json({ error: error.message || 'Generation failed' });
+  }
+});
+
+app.post('/api/ocr', async (req, res) => {
+  try {
+    if (!canGenerate(req)) {
+      return res.status(429).json({ error: '请求过于频繁，请稍后再试' });
+    }
+
+    const { image } = req.body;
+    if (!image || !image.startsWith('data:image/')) {
+      return res.status(400).json({ error: '请提供有效的图片' });
+    }
+
+    // 限制图片大小 (4MB base64 约 5.3MB)
+    if (image.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: '图片过大，请使用小于 4MB 的图片' });
+    }
+
+    console.log('[OCR] Starting recognition...');
+    const text = await recognizeImage(image);
+
+    if (!text || !text.trim()) {
+      return res.status(422).json({ error: '未能识别出文字' });
+    }
+
+    console.log('[OCR] Recognized:', text.substring(0, 100));
+    res.json({ text: text.trim() });
+  } catch (error) {
+    console.error('[OCR] Error:', error);
+    res.status(500).json({ error: error.message || 'OCR 失败' });
   }
 });
 

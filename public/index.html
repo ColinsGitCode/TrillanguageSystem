@@ -30,14 +30,62 @@
       <section class="grid">
         <article class="card folders" aria-label="Folders">
           <!-- Generation Panel -->
-          <div class="card-header gen-panel" style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
-            <div>
-                <p class="label">New Card</p>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <input type="text" id="phraseInput" placeholder="Enter phrase..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
-                    <button id="genBtn" style="padding: 0.5rem 1rem; background: var(--text); color: var(--bg); border: none; border-radius: 4px; cursor: pointer;">Generate</button>
+          <div class="gen-panel">
+            <p class="label">New Card</p>
+
+            <div class="input-modes">
+              <!-- 文本输入 -->
+              <div class="input-mode">
+                <div class="mode-header">
+                  <span class="mode-icon">📝</span>
+                  <span>文本输入</span>
                 </div>
-                <p id="genStatus" class="muted small" style="margin-top: 0.5rem; height: 1.2em;">&nbsp;</p>
+                <textarea id="phraseInput" placeholder="输入短语或句子..."></textarea>
+                <button id="genBtn" class="btn-primary">Generate</button>
+              </div>
+
+              <!-- 图片识别 -->
+              <div class="input-mode">
+                <div class="mode-header">
+                  <span class="mode-icon">🖼️</span>
+                  <span>图片识别</span>
+                </div>
+                <div id="imageDropZone" class="image-drop-zone">
+                  <div class="drop-hint">点击选择或 Ctrl+V 粘贴图片</div>
+                  <img id="imagePreview" class="hidden" alt="预览" />
+                </div>
+                <input type="file" id="imageFileInput" accept="image/*" class="hidden" />
+                <div class="image-actions">
+                  <button id="ocrBtn" class="btn-secondary" disabled>识别文字</button>
+                  <button id="clearImageBtn" class="btn-text" disabled>清除</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 进度指示器 -->
+            <div id="progressBar" class="progress-bar hidden">
+              <div class="progress-steps">
+                <div class="step" data-step="ocr">
+                  <div class="step-dot"></div>
+                  <div class="step-label">识别文字</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="generate">
+                  <div class="step-dot"></div>
+                  <div class="step-label">生成内容</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="save">
+                  <div class="step-dot"></div>
+                  <div class="step-label">保存文件</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="audio">
+                  <div class="step-dot"></div>
+                  <div class="step-label">生成音频</div>
+                </div>
+              </div>
+              <p id="progressStatus" class="progress-status"></p>
             </div>
           </div>
 

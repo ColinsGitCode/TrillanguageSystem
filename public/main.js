@@ -7,7 +7,17 @@ const modalOverlay = document.getElementById('modalOverlay');
 // Generation Elements
 const phraseInput = document.getElementById('phraseInput');
 const genBtn = document.getElementById('genBtn');
-const genStatus = document.getElementById('genStatus');
+
+// Image OCR Elements
+const imageDropZone = document.getElementById('imageDropZone');
+const imagePreview = document.getElementById('imagePreview');
+const imageFileInput = document.getElementById('imageFileInput');
+const ocrBtn = document.getElementById('ocrBtn');
+const clearImageBtn = document.getElementById('clearImageBtn');
+
+// Progress Elements
+const progressBar = document.getElementById('progressBar');
+const progressStatus = document.getElementById('progressStatus');
 
 const state = {
   folders: [],
@@ -15,6 +25,8 @@ const state = {
   selectedFolder: null,
   selectedFile: null,
   selectedFileTitle: null,
+  imageBase64: null,
+  isGenerating: false,
 };
 
 function setStatus(text) {
@@ -66,53 +78,205 @@ function sanitizeHtml(html) {
   return html;
 }
 
-// Generation Logic
-genBtn.addEventListener('click', async () => {
-    const phrase = phraseInput.value.trim();
-    if (!phrase) return;
+// ========== Image Processing Functions ==========
 
-    genBtn.disabled = true;
-    genBtn.textContent = '...';
-    genStatus.textContent = 'Generating... (may take 10s)';
-    genStatus.style.color = '#7dd3fc';
+function handlePaste(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
 
-    try {
-        const res = await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phrase })
-        });
-
-        const data = await res.json();
-        
-        if (!res.ok) {
-            const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
-            const message = detail ? `${data.error}（${detail}）` : data.error;
-            throw new Error(message || 'Generation failed');
-        }
-
-        const savedHtml = data.result.files.find((file) => file.endsWith('.html')) || data.result.files[0];
-        genStatus.textContent = `已保存：${data.result.folder}/${savedHtml}`;
-        genStatus.style.color = '#7dd3fc';
-        phraseInput.value = '';
-
-        // Refresh folders and select the new one (today's folder)
-        const newFolder = data.result.folder;
-        // Reload folders, select the target folder, and refresh its files
-        await loadFolders({ targetSelect: newFolder });
-
-    } catch (error) {
-        console.error(error);
-        genStatus.textContent = 'Error: ' + error.message;
-        genStatus.style.color = '#f87171';
-    } finally {
-        genBtn.disabled = false;
-        genBtn.textContent = 'Generate';
-        // Clear status after 5s
-        setTimeout(() => { 
-            if (genStatus.textContent.startsWith('已保存：')) genStatus.textContent = ''; 
-        }, 5000);
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      processImageFile(file);
+      break;
     }
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  imageDropZone.classList.remove('dragover');
+  const file = e.dataTransfer?.files[0];
+  if (file?.type.startsWith('image/')) {
+    processImageFile(file);
+  }
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processImageFile(file);
+}
+
+function processImageFile(file) {
+  if (file.size > 4 * 1024 * 1024) {
+    alert('图片过大，请使用小于 4MB 的图片');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.imageBase64 = reader.result;
+    showImagePreview(reader.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showImagePreview(base64) {
+  imagePreview.src = base64;
+  imagePreview.classList.remove('hidden');
+  const hint = imageDropZone.querySelector('.drop-hint');
+  if (hint) hint.classList.add('hidden');
+  ocrBtn.disabled = false;
+  clearImageBtn.disabled = false;
+}
+
+function clearImage() {
+  state.imageBase64 = null;
+  imagePreview.src = '';
+  imagePreview.classList.add('hidden');
+  const hint = imageDropZone.querySelector('.drop-hint');
+  if (hint) hint.classList.remove('hidden');
+  ocrBtn.disabled = true;
+  clearImageBtn.disabled = true;
+  imageFileInput.value = '';
+}
+
+async function recognizeAndFill() {
+  if (!state.imageBase64) return;
+
+  ocrBtn.disabled = true;
+  ocrBtn.textContent = '识别中...';
+  updateProgress('ocr', '正在识别图片中的文字...');
+
+  try {
+    const res = await fetch('/api/ocr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: state.imageBase64 }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    // 填充到文本框
+    phraseInput.value = data.text;
+    phraseInput.focus();
+    updateProgress('ocr', `✓ 识别完成: "${data.text.substring(0, 30)}${data.text.length > 30 ? '...' : ''}"`, false);
+
+    setTimeout(hideProgress, 2000);
+
+  } catch (error) {
+    progressStatus.textContent = '✗ 识别失败: ' + error.message;
+    progressStatus.style.color = '#f87171';
+    setTimeout(() => {
+      hideProgress();
+      progressStatus.style.color = '';
+    }, 3000);
+  } finally {
+    ocrBtn.disabled = false;
+    ocrBtn.textContent = '识别文字';
+  }
+}
+
+// ========== Progress Functions ==========
+
+function updateProgress(step, status, isActive = true) {
+  progressBar.classList.remove('hidden');
+
+  const steps = ['ocr', 'generate', 'save', 'audio'];
+  const currentIndex = steps.indexOf(step);
+
+  document.querySelectorAll('.progress-steps .step').forEach((el, i) => {
+    el.classList.remove('active', 'done');
+    if (i < currentIndex) el.classList.add('done');
+    if (i === currentIndex && isActive) el.classList.add('active');
+    if (i === currentIndex && !isActive) el.classList.add('done');
+  });
+
+  progressStatus.textContent = status;
+  progressStatus.style.color = '';
+}
+
+function hideProgress() {
+  progressBar.classList.add('hidden');
+}
+
+// ========== Event Listeners for Image ==========
+
+document.addEventListener('paste', handlePaste);
+imageDropZone.addEventListener('click', () => imageFileInput.click());
+imageDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  imageDropZone.classList.add('dragover');
+});
+imageDropZone.addEventListener('dragleave', () => {
+  imageDropZone.classList.remove('dragover');
+});
+imageDropZone.addEventListener('drop', handleDrop);
+imageFileInput.addEventListener('change', handleFileSelect);
+ocrBtn.addEventListener('click', recognizeAndFill);
+clearImageBtn.addEventListener('click', clearImage);
+
+// ========== Generation Logic ==========
+
+genBtn.addEventListener('click', async () => {
+  const phrase = phraseInput.value.trim();
+  if (!phrase) return;
+
+  state.isGenerating = true;
+  genBtn.disabled = true;
+  genBtn.textContent = '...';
+  ocrBtn.disabled = true;
+
+  try {
+    updateProgress('generate', '正在调用 LLM 生成三语内容...');
+
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phrase })
+    });
+
+    updateProgress('save', '正在保存文件...');
+    const data = await res.json();
+
+    if (!res.ok) {
+      const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
+      const message = detail ? `${data.error}（${detail}）` : data.error;
+      throw new Error(message || 'Generation failed');
+    }
+
+    // 检查是否有音频生成
+    if (data.audio && data.audio.results && data.audio.results.length > 0) {
+      updateProgress('audio', '音频生成完成');
+    }
+
+    // 成功
+    const savedHtml = data.result.files.find((file) => file.endsWith('.html')) || data.result.files[0];
+    updateProgress('audio', `✓ 已保存: ${data.result.folder}/${savedHtml}`, false);
+    phraseInput.value = '';
+    clearImage();
+
+    // Refresh folders and select the new one
+    await loadFolders({ targetSelect: data.result.folder });
+
+    setTimeout(hideProgress, 3000);
+
+  } catch (error) {
+    console.error(error);
+    progressStatus.textContent = '✗ 错误: ' + error.message;
+    progressStatus.style.color = '#f87171';
+    setTimeout(() => {
+      hideProgress();
+      progressStatus.style.color = '';
+    }, 5000);
+  } finally {
+    state.isGenerating = false;
+    genBtn.disabled = false;
+    genBtn.textContent = 'Generate';
+    ocrBtn.disabled = !state.imageBase64;
+  }
 });
 
 async function loadFolders(options = {}) {

@@ -157,4 +157,59 @@ async function generateContent(prompt) {
     }
 }
 
-module.exports = { generateContent };
+/**
+ * Recognizes text from an image using multimodal LLM.
+ * @param {string} base64Image - Base64 encoded image (data:image/xxx;base64,...)
+ * @returns {Promise<string>} The recognized text.
+ */
+async function recognizeImage(base64Image) {
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (API_KEY) {
+            headers.Authorization = `Bearer ${API_KEY}`;
+        }
+
+        const response = await fetch(buildUrl('/chat/completions'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model: MODEL_NAME,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'text',
+                            text: '请识别图片中的文字内容。只返回识别出的原文，不要翻译、解释或添加任何其他内容。如果有多行文字，保持原有的换行格式。'
+                        },
+                        {
+                            type: 'image_url',
+                            image_url: { url: base64Image }
+                        }
+                    ]
+                }],
+                max_tokens: 512,
+                temperature: 0.1,
+            }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const message = data?.error?.message || response.statusText;
+            throw new Error(`OCR request failed: ${response.status} ${message}`.trim());
+        }
+
+        const text = extractContent(data);
+        if (!text) {
+            throw new Error('OCR response missing content');
+        }
+
+        return text.trim();
+    } catch (error) {
+        console.error("OCR API Error:", error);
+        throw new Error("Failed to recognize image text.");
+    }
+}
+
+module.exports = { generateContent, recognizeImage };

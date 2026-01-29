@@ -302,3 +302,262 @@ h1 {
     padding: 18px 16px 26px;
   }
 }
+
+/* ========== Generation Panel Styles ========== */
+
+.gen-panel {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.gen-panel > .label {
+  margin-bottom: 0.75rem;
+}
+
+.input-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.input-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mode-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.mode-icon {
+  font-size: 14px;
+}
+
+.input-mode textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  background: #f8fafc;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-mode textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.btn-primary {
+  padding: 0.5rem 1rem;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #374151;
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: 0.45rem 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-text {
+  padding: 0.45rem 0.6rem;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.btn-text:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.btn-text:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Image Drop Zone */
+.image-drop-zone {
+  position: relative;
+  min-height: 80px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  overflow: hidden;
+}
+
+.image-drop-zone:hover {
+  border-color: var(--accent-2);
+  background: #eef2f7;
+}
+
+.image-drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.drop-hint {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  padding: 1rem;
+}
+
+.image-drop-zone img {
+  max-width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.image-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Progress Bar */
+.progress-bar {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #f8fafc, #eef2f7);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.progress-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d1d5db;
+  border: 2px solid #d1d5db;
+  transition: all 0.3s;
+}
+
+.step.active .step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.step.done .step-dot {
+  background: #10b981;
+  border-color: #10b981;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.1); }
+}
+
+.step-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.step.active .step-label {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.step.done .step-label {
+  color: #10b981;
+}
+
+.step-line {
+  width: 30px;
+  height: 2px;
+  background: #d1d5db;
+  margin: 0 0.3rem;
+  margin-bottom: 1.2rem;
+}
+
+.progress-status {
+  margin: 0.6rem 0 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .input-modes {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-steps {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .step-line {
+    display: none;
+  }
+}
