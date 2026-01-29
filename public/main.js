@@ -20,6 +20,11 @@ const progressStatus = document.getElementById('progressStatus');
 const promptText = document.getElementById('promptText');
 const progressTimer = document.getElementById('progressTimer');
 
+// Prompt Display Elements
+const promptDisplay = document.getElementById('promptDisplay');
+const promptContent = document.getElementById('promptContent');
+const togglePromptBtn = document.getElementById('togglePromptBtn');
+
 // Timer state
 let timerInterval = null;
 let timerStartTime = null;
@@ -247,6 +252,31 @@ function hideProgress() {
   promptText.textContent = '';
 }
 
+// ========== Prompt Display Functions ==========
+
+function showFullPrompt(prompt) {
+  promptContent.textContent = prompt;
+  promptDisplay.classList.remove('hidden');
+  promptDisplay.classList.remove('collapsed');
+  togglePromptBtn.textContent = '收起';
+}
+
+function hideFullPrompt() {
+  promptDisplay.classList.add('hidden');
+}
+
+function togglePrompt() {
+  if (promptDisplay.classList.contains('collapsed')) {
+    promptDisplay.classList.remove('collapsed');
+    togglePromptBtn.textContent = '收起';
+  } else {
+    promptDisplay.classList.add('collapsed');
+    togglePromptBtn.textContent = '展开';
+  }
+}
+
+togglePromptBtn.addEventListener('click', togglePrompt);
+
 // ========== Event Listeners for Image ==========
 
 document.addEventListener('paste', handlePaste);
@@ -284,6 +314,11 @@ genBtn.addEventListener('click', async () => {
 
     updateProgress('save', '正在保存文件...');
     const data = await res.json();
+
+    // 显示完整 Prompt
+    if (data.prompt) {
+      showFullPrompt(data.prompt);
+    }
 
     if (!res.ok) {
       const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';

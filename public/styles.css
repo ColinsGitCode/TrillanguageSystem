@@ -466,6 +466,73 @@ h1 {
   gap: 0.5rem;
 }
 
+/* Prompt Display */
+.prompt-display {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1e293b;
+  overflow: hidden;
+}
+
+.prompt-display-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: #334155;
+  border-bottom: 1px solid #475569;
+}
+
+.prompt-display-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.prompt-display-header .btn-text {
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 0.2rem 0.5rem;
+}
+
+.prompt-display-header .btn-text:hover {
+  color: #e2e8f0;
+}
+
+.prompt-content {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  background: #1e293b;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.prompt-content::-webkit-scrollbar-track {
+  background: #334155;
+}
+
+.prompt-content::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 3px;
+}
+
+.prompt-display.collapsed .prompt-content {
+  display: none;
+}
+
 /* Progress Bar */
 .progress-bar {
   margin-top: 1rem;

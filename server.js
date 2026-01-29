@@ -298,6 +298,7 @@ app.post('/api/generate', async (req, res) => {
       success: true,
       result,
       audio,
+      prompt,
     });
   } catch (error) {
     console.error('[Generate] Error:', error);
