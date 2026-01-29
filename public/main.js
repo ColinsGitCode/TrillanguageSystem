@@ -3,8 +3,6 @@ const fileListEl = document.getElementById('fileList');
 const folderCountEl = document.getElementById('folderCount');
 const fileCountEl = document.getElementById('fileCount');
 const modalOverlay = document.getElementById('modalOverlay');
-const modalFrame = document.getElementById('modalFrame');
-const modalTitle = document.getElementById('modalTitle');
 
 // Generation Elements
 const phraseInput = document.getElementById('phraseInput');
@@ -21,6 +19,10 @@ const state = {
 
 function setStatus(text) {
   console.log(text);
+}
+
+if (window.marked) {
+  marked.setOptions({ mangle: false, headerIds: false });
 }
 
 function normalizeFiles(files) {
@@ -42,6 +44,26 @@ function normalizeFiles(files) {
       return { file, title };
     })
     .filter(Boolean);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHtml(html) {
+  if (window.DOMPurify) {
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+      ADD_TAGS: ['audio', 'source', 'ruby', 'rt', 'rp'],
+      ADD_ATTR: ['class', 'src', 'controls', 'href', 'title', 'alt', 'aria-label'],
+    });
+  }
+  return html;
 }
 
 // Generation Logic
@@ -278,19 +300,18 @@ async function selectFile(file, title) {
   const baseName = file.replace(/\.html$/i, '');
   const mdFile = `${baseName}.md`;
 
-  // Try to fetch Markdown first
+  // Only render from Markdown
   try {
     const res = await fetch(`/api/folders/${folder}/files/${encodeURIComponent(mdFile)}`);
     if (res.ok) {
         const text = await res.text();
-        renderModernCard(text, baseName);
+        renderModernCard(text, title || baseName);
     } else {
         throw new Error('No markdown found');
     }
   } catch (e) {
-      console.log('Fallback to legacy HTML view', e);
-      const src = `/api/folders/${folder}/files/${encodeURIComponent(file)}`;
-      openLegacyModal(src, title || file);
+      console.log('Markdown not found', e);
+      renderErrorCard(title || baseName, '未找到 Markdown，无法渲染卡片。');
   }
 
   setStatus('已加载文件');
@@ -308,20 +329,21 @@ function renderModernCard(markdown, title) {
 
   // 2. Parse Markdown Body
   const htmlContent = marked.parse(markdown);
+  const safeHtml = sanitizeHtml(htmlContent);
 
   // 3. Build DOM
   const cardHtml = `
     <div class="modern-card">
         <button class="mc-close" onclick="closeModal()">×</button>
         <div class="mc-header">
-            <h1 class="mc-phrase">${displayTitle}</h1>
+            <h1 class="mc-phrase">${escapeHtml(displayTitle)}</h1>
             <div class="mc-meta">
                 <span>Trilingual</span>
                 <span>${new Date().getFullYear()}</span>
             </div>
         </div>
         <div class="mc-body mc-content">
-            ${htmlContent}
+            ${safeHtml}
         </div>
     </div>
   `;
@@ -350,6 +372,27 @@ function renderModernCard(markdown, title) {
       }
   });
 
+  modalOverlay.classList.remove('hidden');
+  modalOverlay.classList.add('show');
+}
+
+function renderErrorCard(title, message) {
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = `
+    <div class="modern-card mc-error">
+      <button class="mc-close" onclick="closeModal()">×</button>
+      <div class="mc-header">
+        <h1 class="mc-phrase">${escapeHtml(title)}</h1>
+        <div class="mc-meta">
+          <span>Trilingual</span>
+          <span>${new Date().getFullYear()}</span>
+        </div>
+      </div>
+      <div class="mc-body">
+        <p class="mc-error-text">${escapeHtml(message)}</p>
+      </div>
+    </div>
+  `;
   modalOverlay.classList.remove('hidden');
   modalOverlay.classList.add('show');
 }
@@ -385,19 +428,6 @@ function playAudio(btn, src) {
         btn.style.color = 'red';
         console.error('Audio load failed', audioUrl);
     };
-}
-
-function openLegacyModal(src, fileName) {
-  const container = document.getElementById('modalContainer');
-  container.innerHTML = `
-    <div class="modal-header" style="background:white; padding:1rem; border-radius:8px 8px 0 0;">
-        <p class="label">Legacy Preview</p>
-        <h3>${fileName}</h3>
-    </div>
-    <iframe id="modalFrame" src="${src}" title="HTML 预览" style="width:100%; height:80vh; border:none; background:white;"></iframe>
-  `;
-  modalOverlay.classList.remove('hidden');
-  modalOverlay.classList.add('show');
 }
 
 function closeModal() {
