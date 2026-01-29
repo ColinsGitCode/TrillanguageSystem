@@ -257,7 +257,12 @@ function hideProgress() {
 // ========== Event Listeners for Image ==========
 
 document.addEventListener('paste', handlePaste);
-imageDropZone.addEventListener('click', () => imageFileInput.click());
+imageDropZone.addEventListener('click', (e) => {
+  // 允许点击整个区域（包括图片预览）触发文件选择
+  if (e.target === imageDropZone || e.target === imagePreview || e.target.classList.contains('drop-hint')) {
+    imageFileInput.click();
+  }
+});
 imageDropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
   imageDropZone.classList.add('dragover');
