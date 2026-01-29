@@ -1,17 +1,17 @@
 :root {
   /* Palette */
-  --bg-canvas: #0b1118;
-  --bg-card: #101923;
-  --text-ink: #e6edf6;
-  --text-slate: #a2b0c3;
-  --text-muted: #7e8da3;
+  --bg-canvas: #f5f7fb;
+  --bg-card: #ffffff;
+  --text-ink: #111827;
+  --text-slate: #4b5563;
+  --text-muted: #6b7280;
   
-  --accent-en: #7dd3fc; /* Cyan */
-  --accent-jp: #f59e0b; /* Amber */
-  --accent-cn: #34d399; /* Emerald */
+  --accent-en: #2563eb; /* Blue */
+  --accent-jp: #f97316; /* Orange */
+  --accent-cn: #10b981; /* Emerald */
   
-  --border-subtle: #1f2a38;
-  --shadow-card: 0 18px 44px rgba(0, 0, 0, 0.5);
+  --border-subtle: #e5e7eb;
+  --shadow-card: 0 18px 40px rgba(15, 23, 42, 0.12);
   
   /* Typography */
   --font-serif: 'Noto Serif SC', 'Noto Serif', serif;
@@ -23,7 +23,7 @@
 .modal-content {
   background: transparent !important;
   box-shadow: none !important;
-  max-width: 900px !important;
+  max-width: 1080px !important;
   width: 95% !important;
   padding: 0 !important;
   overflow: visible !important;
@@ -42,19 +42,20 @@
   max-height: 85vh;
   position: relative;
   border: 1px solid var(--border-subtle);
+  font-size: 1.5rem;
 }
 
 /* Card Header */
 .mc-header {
   padding: 3rem 3rem 2rem 3rem;
-  background: linear-gradient(180deg, #141d29 0%, #101923 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%);
   border-bottom: 1px solid var(--border-subtle);
   text-align: center;
 }
 
 .mc-phrase {
   font-family: var(--font-serif);
-  font-size: 2.5rem;
+  font-size: 2.5em;
   font-weight: 700;
   line-height: 1.2;
   margin-bottom: 0.5rem;
@@ -63,7 +64,7 @@
 
 .mc-meta {
   font-family: var(--font-mono);
-  font-size: 0.9rem;
+  font-size: 0.9em;
   color: var(--text-slate);
   display: flex;
   justify-content: center;
@@ -71,7 +72,7 @@
 }
 
 .mc-meta span {
-  background: #141f2b;
+  background: #f3f4f6;
   border: 1px solid var(--border-subtle);
   padding: 0.2rem 0.6rem;
   border-radius: 4px;
@@ -90,7 +91,7 @@
 }
 
 .mc-label {
-  font-size: 0.75rem;
+  font-size: 0.75em;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -114,7 +115,7 @@
 
 .mc-content p {
   margin-bottom: 1rem;
-  font-size: 1.1rem;
+  font-size: 1.1em;
 }
 
 .mc-content strong {
@@ -166,16 +167,16 @@ rt {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: #1a2432;
+  background: #f3f4f6;
   color: var(--text-slate);
   margin-left: 0.5rem;
   cursor: pointer;
   border: 1px solid var(--border-subtle);
   transition: all 0.2s;
-  font-size: 12px;
+  font-size: 18px;
 }
 
 .audio-btn:hover {
@@ -186,7 +187,7 @@ rt {
 
 .audio-btn.playing {
   background: var(--accent-jp);
-  color: #111827;
+  color: white;
   animation: pulse 1.5s infinite;
 }
 
@@ -201,26 +202,26 @@ rt {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: #1a2432;
+  background: #f3f4f6;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1.6rem;
   color: var(--text-slate);
   transition: background 0.2s;
 }
 .mc-close:hover {
-  background: #243041;
+  background: #e5e7eb;
   color: var(--text-ink);
 }
 
 .mc-error .mc-header {
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.16) 0%, #101923 100%);
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.16) 0%, #ffffff 100%);
 }
 
 .mc-error-text {
