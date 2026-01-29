@@ -140,10 +140,20 @@ function injectAudioTags(markdown, baseName, audioTasks) {
   return output.join('\n');
 }
 
-async function renderHtmlFromMarkdown(markdown, options = {}) {
+async function prepareMarkdownForCard(markdown, options = {}) {
   const { baseName = 'phrase', audioTasks = [] } = options;
   const normalized = await normalizeJapaneseRuby(markdown);
-  const markdownWithAudio = injectAudioTags(normalized, baseName, audioTasks);
+  const hasAudio =
+    /<div\s+class=["']audio["']\s*>/i.test(normalized) || /<audio\b/i.test(normalized);
+  if (hasAudio) return normalized;
+  return injectAudioTags(normalized, baseName, audioTasks);
+}
+
+async function renderHtmlFromMarkdown(markdown, options = {}) {
+  const { baseName = 'phrase', audioTasks = [], prepared = false } = options;
+  const markdownWithAudio = prepared
+    ? markdown
+    : await prepareMarkdownForCard(markdown, { baseName, audioTasks });
 
   marked.setOptions({ mangle: false, headerIds: false });
   const contentHtml = marked.parse(markdownWithAudio);
@@ -216,4 +226,4 @@ async function renderHtmlFromMarkdown(markdown, options = {}) {
 </html>`;
 }
 
-module.exports = { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown };
+module.exports = { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard };

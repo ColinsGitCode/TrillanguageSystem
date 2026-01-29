@@ -7,7 +7,7 @@ const { buildPrompt } = require('./services/promptEngine');
 const { generateContent } = require('./services/geminiService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
-const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown } = require('./services/htmlRenderer');
+const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -252,14 +252,22 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
+    const derivedAudioTasks = buildAudioTasksFromMarkdown(content.markdown_content);
+    if (!Array.isArray(content.audio_tasks) || !content.audio_tasks.length) {
+      content.audio_tasks = derivedAudioTasks;
+    }
+
+    const preparedMarkdown = await prepareMarkdownForCard(content.markdown_content, {
+      baseName,
+      audioTasks: content.audio_tasks,
+    });
+    content.markdown_content = preparedMarkdown;
+
     if (renderHtmlLocally || !content.html_content) {
-      const derivedAudioTasks = buildAudioTasksFromMarkdown(content.markdown_content);
-      content.audio_tasks = derivedAudioTasks.length
-        ? derivedAudioTasks
-        : Array.isArray(content.audio_tasks) ? content.audio_tasks : [];
-      content.html_content = await renderHtmlFromMarkdown(content.markdown_content, {
+      content.html_content = await renderHtmlFromMarkdown(preparedMarkdown, {
         baseName,
         audioTasks: content.audio_tasks,
+        prepared: true,
       });
     }
 
@@ -318,7 +326,7 @@ app.get('/api/folders/:folder/files', (req, res) => {
   }
 });
 
-app.get('/api/folders/:folder/files/:file', (req, res) => {
+app.get('/api/folders/:folder/files/:file', async (req, res) => {
   const folder = req.params.folder;
   const file = req.params.file;
   const folderPath = resolveFolder(folder);
@@ -332,7 +340,21 @@ app.get('/api/folders/:folder/files/:file', (req, res) => {
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     return res.status(404).json({ error: 'File not found' });
   }
-  if (path.extname(filePath).toLowerCase() === '.html') {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.md') {
+    try {
+      const markdown = fs.readFileSync(filePath, 'utf-8');
+      const audioTasks = buildAudioTasksFromMarkdown(markdown);
+      const baseName = path.basename(filePath, '.md');
+      const prepared = await prepareMarkdownForCard(markdown, { baseName, audioTasks });
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      return res.send(prepared);
+    } catch (err) {
+      console.error('Error preparing markdown', err);
+      return res.status(500).json({ error: 'Unable to load markdown' });
+    }
+  }
+  if (ext === '.html') {
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
