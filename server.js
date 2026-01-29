@@ -204,7 +204,7 @@ app.post('/api/generate', async (req, res) => {
       content.audio_tasks = derivedAudioTasks.length
         ? derivedAudioTasks
         : Array.isArray(content.audio_tasks) ? content.audio_tasks : [];
-      content.html_content = renderHtmlFromMarkdown(content.markdown_content, {
+      content.html_content = await renderHtmlFromMarkdown(content.markdown_content, {
         baseName,
         audioTasks: content.audio_tasks,
       });

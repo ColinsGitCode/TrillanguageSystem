@@ -10,6 +10,8 @@
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
+    "kuroshiro": "^1.2.0",
+    "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "marked": "^9.1.6"
   }
 }

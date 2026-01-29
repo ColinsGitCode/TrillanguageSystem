@@ -1,4 +1,5 @@
 const { marked } = require('marked');
+const { toRuby } = require('./japaneseFurigana');
 
 function stripMarkup(text) {
   if (!text) return '';
@@ -43,6 +44,64 @@ function buildAudioTasksFromMarkdown(markdown) {
   return tasks;
 }
 
+async function normalizeJapaneseRuby(markdown) {
+  if (!markdown) return '';
+  const lines = String(markdown).split(/\r?\n/);
+  let inJapanese = false;
+  const rubyPattern = /([\u3400-\u9FFF々〆ヵヶ]+)\s*[（(]([\u3041-\u3096\u30A1-\u30FA\u30FC]+)[）)]/g;
+  const output = [];
+  for (const line of lines) {
+    const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
+    if (headerMatch) {
+      const header = headerMatch[1];
+      if (/日本語|日语/i.test(header)) {
+        inJapanese = true;
+      } else {
+        inJapanese = false;
+      }
+    }
+
+    if (!inJapanese) {
+      output.push(line);
+      continue;
+    }
+
+    if (line.includes('<ruby>') || line.includes('<rt>')) {
+      output.push(line);
+      continue;
+    }
+
+    const hasKanji = /[\u3400-\u9FFF々〆ヵヶ]/.test(line);
+    if (!hasKanji) {
+      output.push(line);
+      continue;
+    }
+
+    const inlineMatch = line.match(/^(\s*-\s*\*\*[^*]+?\*\*:\s*)(.+)$/);
+    if (inlineMatch) {
+      const prefix = inlineMatch[1];
+      const content = inlineMatch[2];
+      const withRuby = content.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
+      if (withRuby !== content) {
+        output.push(`${prefix}${withRuby}`);
+        continue;
+      }
+      const converted = await toRuby(content);
+      output.push(`${prefix}${converted}`);
+      continue;
+    }
+
+    const replaced = line.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
+    if (replaced !== line) {
+      output.push(replaced);
+      continue;
+    }
+    const converted = await toRuby(line);
+    output.push(converted);
+  }
+  return output.join('\n');
+}
+
 function injectAudioTags(markdown, baseName, audioTasks) {
   if (!markdown) return '';
   const audioMap = new Map();
@@ -81,9 +140,10 @@ function injectAudioTags(markdown, baseName, audioTasks) {
   return output.join('\n');
 }
 
-function renderHtmlFromMarkdown(markdown, options = {}) {
+async function renderHtmlFromMarkdown(markdown, options = {}) {
   const { baseName = 'phrase', audioTasks = [] } = options;
-  const markdownWithAudio = injectAudioTags(markdown, baseName, audioTasks);
+  const normalized = await normalizeJapaneseRuby(markdown);
+  const markdownWithAudio = injectAudioTags(normalized, baseName, audioTasks);
 
   marked.setOptions({ mangle: false, headerIds: false });
   const contentHtml = marked.parse(markdownWithAudio);
