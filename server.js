@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const { buildPrompt } = require('./services/promptEngine');
 const { generateContent } = require('./services/geminiService');
-const { saveGeneratedFiles, buildBaseName } = require('./services/fileManager');
+const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown } = require('./services/htmlRenderer');
 
@@ -57,14 +57,66 @@ function listFoldersWithHtml() {
     .sort();
 }
 
-function listHtmlFiles(folderName) {
+function readMetaTitle(metaPath) {
+  try {
+    if (!fs.existsSync(metaPath)) return null;
+    const raw = fs.readFileSync(metaPath, 'utf-8');
+    const data = JSON.parse(raw);
+    if (data && typeof data.phrase === 'string') {
+      const phrase = data.phrase.trim();
+      if (phrase) return phrase;
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+}
+
+function readMarkdownTitle(mdPath) {
+  try {
+    if (!fs.existsSync(mdPath)) return null;
+    const raw = fs.readFileSync(mdPath, 'utf-8');
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith('#')) {
+        const title = trimmed.replace(/^#+\s*/, '').trim();
+        if (title) return title;
+      } else {
+        return trimmed;
+      }
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+}
+
+function getDisplayTitle(folderPath, baseName) {
+  const metaTitle = readMetaTitle(path.join(folderPath, `${baseName}.meta.json`));
+  if (metaTitle) return metaTitle;
+  const mdTitle = readMarkdownTitle(path.join(folderPath, `${baseName}.md`));
+  if (mdTitle) return mdTitle;
+  return baseName;
+}
+
+function listHtmlFilesDetailed(folderName) {
   const folderPath = resolveFolder(folderName);
   if (!folderPath) return [];
-  return fs
+  const htmlFiles = fs
     .readdirSync(folderPath, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.html'))
     .map((entry) => entry.name)
     .sort();
+
+  return htmlFiles.map((file) => {
+    const baseName = file.replace(/\.html$/i, '');
+    return {
+      file,
+      title: getDisplayTitle(folderPath, baseName),
+    };
+  });
 }
 
 function validateGeneratedContent(content, options = {}) {
@@ -181,7 +233,8 @@ app.post('/api/generate', async (req, res) => {
     console.log(`[Generate] Starting task for phrase: "${phrase}"`);
 
     // 1. Build Prompt
-    const baseName = buildBaseName(phrase);
+    const { targetDir, folderName } = ensureTodayDirectory();
+    const baseName = buildBaseName(phrase, targetDir);
     const prompt = buildPrompt({ phrase, filenameBase: baseName });
 
     // 2. Call Gemini
@@ -211,7 +264,7 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // 3. Save Files
-    const result = saveGeneratedFiles(phrase, content, { baseName });
+    const result = saveGeneratedFiles(phrase, content, { baseName, targetDir, folderName });
 
     console.log(`[Generate] Success. Saved to ${result.folder}/${result.files.join(', ')}`);
 
@@ -257,7 +310,7 @@ app.get('/api/folders', (req, res) => {
 app.get('/api/folders/:folder/files', (req, res) => {
   try {
     const folder = req.params.folder;
-    const files = listHtmlFiles(folder);
+    const files = listHtmlFilesDetailed(folder);
     res.json({ files });
   } catch (err) {
     console.error('Error listing files', err);

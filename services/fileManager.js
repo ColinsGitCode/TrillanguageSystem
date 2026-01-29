@@ -33,18 +33,51 @@ function ensureTodayDirectory() {
 /**
  * Builds a safe base filename for generated assets.
  * @param {string} phrase - The input phrase.
+ * @param {string} targetDir - Folder used to check for duplicates.
  * @returns {string} Safe filename base.
  */
-function buildBaseName(phrase) {
-    const safe = String(phrase || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const base = safe || 'phrase';
-    const stamp = new Date()
-        .toISOString()
-        .replace(/[:]/g, '')
-        .replace(/\..*$/, '')
-        .replace(/-/g, '')
-        .replace('T', '_');
-    return `${base}_${stamp}`;
+function buildBaseName(phrase, targetDir) {
+    const raw = String(phrase || '').trim().replace(/\s+/g, ' ');
+    let base = raw
+        .replace(/[\\/:*?"<>|]/g, '')
+        .replace(/[\u0000-\u001F]/g, '')
+        .replace(/\s+$/g, '')
+        .replace(/^\.+$/g, '');
+    if (!base || base === '.' || base === '..') {
+        base = 'phrase';
+    }
+
+    if (!targetDir || !fs.existsSync(targetDir)) {
+        return base;
+    }
+
+    const files = fs.readdirSync(targetDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name);
+
+    const hasConflict = (candidate) => {
+        const lowerCandidate = candidate.toLowerCase();
+        return files.some((file) => {
+            const lowerFile = file.toLowerCase();
+            return (
+                lowerFile === `${lowerCandidate}.md` ||
+                lowerFile === `${lowerCandidate}.html` ||
+                lowerFile.startsWith(`${lowerCandidate}_`)
+            );
+        });
+    };
+
+    if (!hasConflict(base)) {
+        return base;
+    }
+
+    let index = 2;
+    let candidate = `${base} (${index})`;
+    while (hasConflict(candidate)) {
+        index += 1;
+        candidate = `${base} (${index})`;
+    }
+    return candidate;
 }
 
 /**
@@ -56,21 +89,30 @@ function buildBaseName(phrase) {
  * @returns {Object} Result paths.
  */
 function saveGeneratedFiles(phrase, content, options = {}) {
-    const { targetDir, folderName } = ensureTodayDirectory();
-    const baseName = options.baseName || buildBaseName(phrase);
+    const ensured = options.targetDir ? null : ensureTodayDirectory();
+    const targetDir = options.targetDir || ensured.targetDir;
+    const folderName = options.folderName || ensured.folderName;
+    const baseName = options.baseName || buildBaseName(phrase, targetDir);
     const mdPath = path.join(targetDir, `${baseName}.md`);
     const htmlPath = path.join(targetDir, `${baseName}.html`);
     
     fs.writeFileSync(mdPath, content.markdown_content, 'utf-8');
     fs.writeFileSync(htmlPath, content.html_content, 'utf-8');
+    const metaPath = path.join(targetDir, `${baseName}.meta.json`);
+    const displayPhrase = String(phrase || '').trim();
+    const meta = {
+        phrase: displayPhrase,
+        created_at: new Date().toISOString(),
+    };
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
     
     return {
         folder: folderName,
         baseName,
         targetDir,
         files: [`${baseName}.md`, `${baseName}.html`],
-        absPaths: { md: mdPath, html: htmlPath }
+        absPaths: { md: mdPath, html: htmlPath, meta: metaPath }
     };
 }
 
-module.exports = { saveGeneratedFiles, buildBaseName };
+module.exports = { saveGeneratedFiles, buildBaseName, ensureTodayDirectory };

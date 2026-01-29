@@ -16,10 +16,32 @@ const state = {
   files: [],
   selectedFolder: null,
   selectedFile: null,
+  selectedFileTitle: null,
 };
 
 function setStatus(text) {
   console.log(text);
+}
+
+function normalizeFiles(files) {
+  if (!Array.isArray(files)) return [];
+  return files
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === 'string') {
+        return {
+          file: item,
+          title: item.replace(/\.html$/i, ''),
+        };
+      }
+      const file = typeof item.file === 'string' ? item.file : '';
+      if (!file) return null;
+      const title = typeof item.title === 'string' && item.title.trim()
+        ? item.title.trim()
+        : file.replace(/\.html$/i, '');
+      return { file, title };
+    })
+    .filter(Boolean);
 }
 
 // Generation Logic
@@ -213,9 +235,10 @@ async function loadFiles(folder) {
     const response = await fetch(`/api/folders/${encodeURIComponent(folder)}/files`);
     if (!response.ok) throw new Error('无法获取文件列表');
     const data = await response.json();
-    state.files = data.files || [];
-    if (state.selectedFile && !state.files.includes(state.selectedFile)) {
+    state.files = normalizeFiles(data.files || []);
+    if (state.selectedFile && !state.files.some((item) => item.file === state.selectedFile)) {
       state.selectedFile = null;
+      state.selectedFileTitle = null;
     }
     fileCountEl.textContent = state.files.length;
     renderFiles();
@@ -235,22 +258,23 @@ function renderFiles() {
     fileListEl.innerHTML = '<p class="muted">没有可展示的 HTML 文件</p>';
     return;
   }
-  state.files.forEach((file) => {
-    const label = file.replace(/\.html$/i, '');
+  state.files.forEach((item) => {
+    const label = item.title;
     const btn = document.createElement('button');
     btn.textContent = label;
-    btn.className = state.selectedFile === file ? 'active' : '';
-    btn.addEventListener('click', () => selectFile(file));
+    btn.className = state.selectedFile === item.file ? 'active' : '';
+    btn.addEventListener('click', () => selectFile(item.file, item.title));
     fileListEl.appendChild(btn);
   });
 }
 
-function selectFile(file) {
+function selectFile(file, title) {
   if (!state.selectedFolder) return;
   state.selectedFile = file;
+  state.selectedFileTitle = title || file;
   renderFiles();
   const src = `/api/folders/${encodeURIComponent(state.selectedFolder)}/files/${encodeURIComponent(file)}`;
-  openModal(src, file);
+  openModal(src, title || file);
   setStatus('已加载文件');
 }
 
@@ -266,6 +290,7 @@ function closeModal() {
   modalOverlay.classList.add('hidden');
   modalFrame.src = '';
   state.selectedFile = null;
+  state.selectedFileTitle = null;
   renderFiles();
 }
 
