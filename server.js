@@ -240,6 +240,7 @@ app.post('/api/generate', async (req, res) => {
 
     // 2. Call Gemini
     const content = await generateContent(prompt);
+    const llmOutput = JSON.parse(JSON.stringify(content));
 
     const renderHtmlLocally = (process.env.HTML_RENDER_MODE || 'local').toLowerCase() === 'local';
     const validationErrors = validateGeneratedContent(content, {
@@ -251,6 +252,7 @@ app.post('/api/generate', async (req, res) => {
         error: `Invalid AI response: ${validationErrors.join('; ')}`,
         details: validationErrors,
         prompt,
+        llm_output: llmOutput,
       });
     }
 
@@ -301,6 +303,7 @@ app.post('/api/generate', async (req, res) => {
       result,
       audio,
       prompt,
+      llm_output: llmOutput,
     });
   } catch (error) {
     console.error('[Generate] Error:', error);

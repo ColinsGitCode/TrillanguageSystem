@@ -24,6 +24,9 @@ const progressTimer = document.getElementById('progressTimer');
 const promptDisplay = document.getElementById('promptDisplay');
 const promptContent = document.getElementById('promptContent');
 const togglePromptBtn = document.getElementById('togglePromptBtn');
+const outputDisplay = document.getElementById('outputDisplay');
+const outputContent = document.getElementById('outputContent');
+const toggleOutputBtn = document.getElementById('toggleOutputBtn');
 
 // Timer state
 let timerInterval = null;
@@ -277,6 +280,33 @@ function togglePrompt() {
 
 togglePromptBtn.addEventListener('click', togglePrompt);
 
+function showFullOutput(output) {
+  if (typeof output === 'string') {
+    outputContent.textContent = output;
+  } else {
+    outputContent.textContent = JSON.stringify(output, null, 2);
+  }
+  outputDisplay.classList.remove('hidden');
+  outputDisplay.classList.remove('collapsed');
+  toggleOutputBtn.textContent = '收起';
+}
+
+function hideFullOutput() {
+  outputDisplay.classList.add('hidden');
+}
+
+function toggleOutput() {
+  if (outputDisplay.classList.contains('collapsed')) {
+    outputDisplay.classList.remove('collapsed');
+    toggleOutputBtn.textContent = '收起';
+  } else {
+    outputDisplay.classList.add('collapsed');
+    toggleOutputBtn.textContent = '展开';
+  }
+}
+
+toggleOutputBtn.addEventListener('click', toggleOutput);
+
 // ========== Event Listeners for Image ==========
 
 document.addEventListener('paste', handlePaste);
@@ -315,9 +345,16 @@ genBtn.addEventListener('click', async () => {
     updateProgress('save', '正在保存文件...');
     const data = await res.json();
 
-    // 显示完整 Prompt
+    // 显示完整 Prompt 与 LLM 输出
     if (data.prompt) {
       showFullPrompt(data.prompt);
+    } else {
+      hideFullPrompt();
+    }
+    if (data.llm_output) {
+      showFullOutput(data.llm_output);
+    } else {
+      hideFullOutput();
     }
 
     if (!res.ok) {

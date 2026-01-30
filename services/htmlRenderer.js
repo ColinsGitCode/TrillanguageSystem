@@ -78,6 +78,11 @@ async function normalizeJapaneseRuby(markdown) {
     }
 
     const inlineMatch = line.match(/^(\s*-\s*\*\*[^*]+?\*\*:\s*)(.+)$/);
+    const isTranslationLine = /^\s*-\s+/.test(line) && !/\*\*[^*]+?\*\*:\s*/.test(line);
+    if (isTranslationLine) {
+      output.push(line);
+      continue;
+    }
     if (inlineMatch) {
       const prefix = inlineMatch[1];
       const content = inlineMatch[2];
