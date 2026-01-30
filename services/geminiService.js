@@ -1,42 +1,74 @@
 require('dotenv').config();
 
-const BASE_URL = process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || 'http://10.48.3.40:15800/v1';
-const API_KEY = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || 'EMPTY';
-const MODEL_NAME = process.env.LLM_MODEL || process.env.OPENAI_MODEL || 'qwen2_5_vl';
+// ========== Gemini API 配置 ==========
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+
+// ========== 备用配置（已封存，保留供参考） ==========
+// const QWEN_BASE_URL = process.env.LLM_BASE_URL || 'http://10.48.3.40:15800/v1';
+// const QWEN_API_KEY = process.env.LLM_API_KEY || 'EMPTY';
+// const QWEN_MODEL = process.env.LLM_MODEL || 'qwen2_5_vl';
+
 const MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS || 2048);
+const TEMPERATURE = Number(process.env.LLM_TEMPERATURE || 0.2);
 
-function buildUrl(pathname) {
-    const base = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
-    const target = pathname.replace(/^\//, '');
-    return new URL(target, base).toString();
+/**
+ * 构建 Gemini API URL
+ * @param {string} endpoint - API 端点（如 'generateContent'）
+ * @returns {string} 完整的 URL
+ */
+function buildGeminiUrl(endpoint) {
+    const baseUrl = GEMINI_BASE_URL.endsWith('/') ? GEMINI_BASE_URL.slice(0, -1) : GEMINI_BASE_URL;
+    return `${baseUrl}/models/${GEMINI_MODEL}:${endpoint}?key=${GEMINI_API_KEY}`;
 }
 
-function extractContent(data) {
-    const message = data?.choices?.[0]?.message;
-    const content = message?.content;
-    if (Array.isArray(content)) {
-        return content
-            .map((part) => {
-                if (typeof part === 'string') return part;
-                if (part && typeof part === 'object') {
-                    if (typeof part.text === 'string') return part.text;
-                }
-                return '';
-            })
+/**
+ * 从 Gemini 响应中提取文本内容
+ * @param {Object} data - Gemini API 响应数据
+ * @returns {string} 提取的文本
+ */
+function extractGeminiContent(data) {
+    try {
+        // Gemini 响应结构: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
+        const candidate = data?.candidates?.[0];
+        if (!candidate) {
+            throw new Error('No candidate in response');
+        }
+
+        const parts = candidate?.content?.parts;
+        if (!Array.isArray(parts)) {
+            throw new Error('Invalid response structure');
+        }
+
+        // 合并所有文本部分
+        const text = parts
+            .filter(part => part.text)
+            .map(part => part.text)
             .join('');
+
+        if (!text) {
+            throw new Error('No text content in response');
+        }
+
+        return text;
+    } catch (error) {
+        console.error('[Gemini] Content extraction error:', error);
+        throw new Error('Failed to extract content from Gemini response');
     }
-    if (typeof content === 'string') return content;
-    if (content && typeof content === 'object' && typeof content.text === 'string') {
-        return content.text;
-    }
-  return '';
 }
 
+/**
+ * 从文本中解析 JSON（支持 markdown 代码块）
+ * @param {string} rawText - 原始文本
+ * @returns {Object} 解析后的 JSON 对象
+ */
 function parseJsonFromText(rawText) {
     if (!rawText || typeof rawText !== 'string') {
         throw new Error('LLM response missing text');
     }
 
+    // 转义字符串内的控制字符
     const escapeControlCharsInStrings = (input) => {
         let out = '';
         let inString = false;
@@ -48,7 +80,7 @@ function parseJsonFromText(rawText) {
                 escaped = false;
                 continue;
             }
-            if (ch === '\\\\') {
+            if (ch === '\\') {
                 out += ch;
                 if (inString) {
                     escaped = true;
@@ -62,15 +94,15 @@ function parseJsonFromText(rawText) {
             }
             if (inString) {
                 if (ch === '\n') {
-                    out += '\\\\n';
+                    out += '\\n';
                     continue;
                 }
                 if (ch === '\r') {
-                    out += '\\\\r';
+                    out += '\\r';
                     continue;
                 }
                 if (ch === '\t') {
-                    out += '\\\\t';
+                    out += '\\t';
                     continue;
                 }
             }
@@ -80,10 +112,12 @@ function parseJsonFromText(rawText) {
     };
 
     const trimmed = rawText.trim();
+
+    // 尝试直接解析
     try {
         return JSON.parse(trimmed);
     } catch (_) {
-        // try to strip markdown fences
+        // 尝试提取 markdown 代码块
         const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
         if (fenceMatch && fenceMatch[1]) {
             const fenced = fenceMatch[1].trim();
@@ -97,7 +131,8 @@ function parseJsonFromText(rawText) {
                 }
             }
         }
-        // try to extract the first JSON object
+
+        // 尝试提取第一个 JSON 对象
         const start = trimmed.indexOf('{');
         const end = trimmed.lastIndexOf('}');
         if (start >= 0 && end > start) {
@@ -108,107 +143,176 @@ function parseJsonFromText(rawText) {
                 return JSON.parse(escapeControlCharsInStrings(candidate));
             }
         }
+
         throw new Error('LLM response is not valid JSON');
     }
 }
 
 /**
- * Calls Gemini API to generate content based on the prompt.
- * @param {string} prompt - The constructed prompt.
- * @returns {Promise<Object>} The parsed JSON response from Gemini.
+ * 调用 Gemini API 生成内容
+ * @param {string} prompt - 构建好的提示词
+ * @returns {Promise<Object>} 解析后的 JSON 响应
  */
 async function generateContent(prompt) {
-    try {
-        const headers = {
-            'Content-Type': 'application/json',
-        };
-        if (API_KEY) {
-            headers.Authorization = `Bearer ${API_KEY}`;
-        }
+    if (!GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not configured. Please set it in .env file.');
+    }
 
-        const response = await fetch(buildUrl('/chat/completions'), {
+    try {
+        const url = buildGeminiUrl('generateContent');
+
+        // Gemini API 请求体格式
+        const requestBody = {
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: prompt
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                temperature: TEMPERATURE,
+                maxOutputTokens: MAX_TOKENS,
+                topP: 0.95,
+                topK: 40
+            },
+            safetySettings: [
+                {
+                    category: 'HARM_CATEGORY_HATE_SPEECH',
+                    threshold: 'BLOCK_NONE'
+                },
+                {
+                    category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                    threshold: 'BLOCK_NONE'
+                },
+                {
+                    category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                    threshold: 'BLOCK_NONE'
+                },
+                {
+                    category: 'HARM_CATEGORY_HARASSMENT',
+                    threshold: 'BLOCK_NONE'
+                }
+            ]
+        };
+
+        console.log('[Gemini] Sending request to:', GEMINI_MODEL);
+
+        const response = await fetch(url, {
             method: 'POST',
-            headers,
-            body: JSON.stringify({
-                model: MODEL_NAME,
-                messages: [
-                    { role: 'user', content: prompt },
-                ],
-                temperature: 0.2,
-                max_tokens: Number.isFinite(MAX_TOKENS) ? MAX_TOKENS : 2048,
-            }),
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
         });
 
         const data = await response.json().catch(() => ({}));
+
         if (!response.ok) {
-            const message = data?.error?.message || response.statusText;
-            throw new Error(`LLM request failed: ${response.status} ${message}`.trim());
+            const errorMsg = data?.error?.message || response.statusText;
+            console.error('[Gemini] API Error:', data);
+            throw new Error(`Gemini API request failed: ${response.status} ${errorMsg}`.trim());
         }
 
-        const text = extractContent(data);
-        if (!text) {
-            throw new Error('LLM response missing content');
-        }
+        // 提取文本内容
+        const text = extractGeminiContent(data);
 
+        console.log('[Gemini] Response received, length:', text.length);
+
+        // 解析 JSON
         return parseJsonFromText(text);
+
     } catch (error) {
-        console.error("LLM API Error:", error);
-        throw new Error("Failed to generate content from LLM.");
+        console.error('[Gemini] API Error:', error);
+        throw new Error(`Failed to generate content from Gemini: ${error.message}`);
     }
 }
 
 /**
- * Recognizes text from an image using multimodal LLM.
- * @param {string} base64Image - Base64 encoded image (data:image/xxx;base64,...)
- * @returns {Promise<string>} The recognized text.
+ * 使用 Gemini 识别图片中的文字（OCR）
+ * @param {string} base64Image - Base64 编码的图片（data:image/xxx;base64,...）
+ * @returns {Promise<string>} 识别出的文字
  */
 async function recognizeImage(base64Image) {
+    if (!GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not configured. Please set it in .env file.');
+    }
+
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-        };
-        if (API_KEY) {
-            headers.Authorization = `Bearer ${API_KEY}`;
+        // 提取 MIME 类型和 base64 数据
+        const matches = base64Image.match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+        if (!matches) {
+            throw new Error('Invalid base64 image format');
         }
 
-        const response = await fetch(buildUrl('/chat/completions'), {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                model: MODEL_NAME,
-                messages: [{
-                    role: 'user',
-                    content: [
+        const mimeType = matches[1];
+        const imageData = matches[2];
+
+        const url = buildGeminiUrl('generateContent');
+
+        // Gemini 图片识别请求格式
+        const requestBody = {
+            contents: [
+                {
+                    parts: [
                         {
-                            type: 'text',
-                            text: '请识别图片中的文字内容。只返回识别出的原文，不要翻译、解释或添加任何其他内容。如果有多行文字，保持原有的换行格式。'
+                            text: `Please extract ALL text from the image accurately. Requirements:
+- Preserve the original language (Chinese/English/Japanese)
+- Maintain line breaks and formatting
+- Return ONLY the extracted text, no explanations
+- If no text is found, return "NO_TEXT_FOUND"`
                         },
                         {
-                            type: 'image_url',
-                            image_url: { url: base64Image }
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: imageData
+                            }
                         }
                     ]
-                }],
-                max_tokens: 512,
+                }
+            ],
+            generationConfig: {
                 temperature: 0.1,
-            }),
+                maxOutputTokens: 1024,
+                topP: 0.95,
+                topK: 40
+            }
+        };
+
+        console.log('[Gemini OCR] Sending image recognition request...');
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
         });
 
         const data = await response.json().catch(() => ({}));
+
         if (!response.ok) {
-            const message = data?.error?.message || response.statusText;
-            throw new Error(`OCR request failed: ${response.status} ${message}`.trim());
+            const errorMsg = data?.error?.message || response.statusText;
+            console.error('[Gemini OCR] API Error:', data);
+            throw new Error(`Gemini OCR request failed: ${response.status} ${errorMsg}`.trim());
         }
 
-        const text = extractContent(data);
-        if (!text) {
-            throw new Error('OCR response missing content');
+        // 提取文本内容
+        const text = extractGeminiContent(data);
+
+        if (!text || text.trim() === 'NO_TEXT_FOUND') {
+            throw new Error('No text found in image');
         }
+
+        console.log('[Gemini OCR] Recognized text length:', text.length);
 
         return text.trim();
+
     } catch (error) {
-        console.error("OCR API Error:", error);
-        throw new Error("Failed to recognize image text.");
+        console.error('[Gemini OCR] Error:', error);
+        throw new Error(`Failed to recognize image text: ${error.message}`);
     }
 }
 
