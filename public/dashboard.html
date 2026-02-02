@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control - Three LANS</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/dashboard.css">
+    <!-- Libraries -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- 1. Header -->
+        <header class="dashboard-header">
+            <div class="header-left">
+                <a href="/" class="back-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back to Generator
+                </a>
+                <h1>Mission Control <span class="badge">LIVE</span></h1>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span id="systemStatusText">System Operational</span>
+                </div>
+                <div class="last-updated">Last update: <span id="lastUpdatedTime">-</span></div>
+            </div>
+        </header>
+
+        <!-- 2. Main Grid -->
+        <main class="bento-grid">
+            
+            <!-- Layer 1: Infrastructure -->
+            <div class="card card-sm" id="card-services">
+                <div class="card-header">
+                    <h3>Service Matrix</h3>
+                    <div class="icon-pulse"></div>
+                </div>
+                <div class="service-matrix" id="serviceMatrix">
+                    <!-- Injected via JS -->
+                    <div class="skeleton-line"></div>
+                    <div class="skeleton-line"></div>
+                </div>
+            </div>
+
+            <div class="card card-sm" id="card-quota">
+                <div class="card-header"><h3>API Quota</h3></div>
+                <div class="quota-container">
+                    <div id="quotaChart"></div>
+                    <div class="quota-overlay">
+                        <span class="quota-percent" id="quotaPercent">-</span>
+                        <span class="quota-label">USED</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card card-sm" id="card-storage">
+                <div class="card-header"><h3>Storage</h3></div>
+                <div class="storage-info">
+                    <div class="storage-metric">
+                        <span class="metric-value" id="storageUsed">-</span>
+                        <span class="metric-unit">GB</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="storageBar" style="width: 0%"></div>
+                    </div>
+                    <div class="storage-meta" id="storageMeta">- files</div>
+                </div>
+            </div>
+
+            <!-- Layer 2: Generation Analytics -->
+            <div class="card card-wide" id="card-performance">
+                <div class="card-header">
+                    <h3>Performance Waterfall</h3>
+                    <span class="card-tag">Latest Request</span>
+                </div>
+                <div class="chart-container" id="timelineChart"></div>
+            </div>
+
+            <div class="card card-md" id="card-quality">
+                <div class="card-header"><h3>Quality Radar</h3></div>
+                <div class="chart-container" id="radarChart"></div>
+                <div class="quality-score-badge" id="qualityScoreBadge">-</div>
+            </div>
+
+            <div class="card card-md" id="card-tokens">
+                <div class="card-header"><h3>Token Economics</h3></div>
+                <div class="token-metrics">
+                    <div class="token-row">
+                        <span class="label">Input</span>
+                        <span class="value" id="tokenInput">-</span>
+                    </div>
+                    <div class="token-row">
+                        <span class="label">Output</span>
+                        <span class="value" id="tokenOutput">-</span>
+                    </div>
+                    <div class="token-divider"></div>
+                    <div class="token-row total">
+                        <span class="label">Total</span>
+                        <span class="value highlight" id="tokenTotal">-</span>
+                    </div>
+                    <div class="cost-tag" id="tokenCost">$0.0000</div>
+                </div>
+            </div>
+
+            <!-- Layer 2.5: Model Arena (Comparison) -->
+            <div class="card card-full hidden" id="card-arena">
+                <div class="card-header">
+                    <h3>Model Arena</h3>
+                    <span class="badge" id="arenaWinner">-</span>
+                </div>
+                <div class="arena-grid">
+                    <!-- Gemini Column -->
+                    <div class="arena-col">
+                        <div class="arena-title">🤖 Gemini API</div>
+                        <div class="arena-stat">
+                            <span class="label">Speed</span>
+                            <div class="bar-container"><div class="bar-fill" id="geminiSpeedBar" style="width: 0%"></div></div>
+                            <span class="val" id="geminiSpeedVal">-</span>
+                        </div>
+                        <div class="arena-stat">
+                            <span class="label">Quality</span>
+                            <div class="bar-container"><div class="bar-fill" id="geminiQualityBar" style="width: 0%"></div></div>
+                            <span class="val" id="geminiQualityVal">-</span>
+                        </div>
+                        <div class="arena-stat">
+                            <span class="label">Cost</span>
+                            <span class="val" id="geminiCostVal">-</span>
+                        </div>
+                    </div>
+                    
+                    <!-- VS Divider -->
+                    <div class="arena-vs">VS</div>
+
+                    <!-- Local Column -->
+                    <div class="arena-col">
+                        <div class="arena-title">🖥️ Local LLM</div>
+                        <div class="arena-stat">
+                            <span class="label">Speed</span>
+                            <div class="bar-container"><div class="bar-fill" id="localSpeedBar" style="width: 0%"></div></div>
+                            <span class="val" id="localSpeedVal">-</span>
+                        </div>
+                        <div class="arena-stat">
+                            <span class="label">Quality</span>
+                            <div class="bar-container"><div class="bar-fill" id="localQualityBar" style="width: 0%"></div></div>
+                            <span class="val" id="localQualityVal">-</span>
+                        </div>
+                        <div class="arena-stat">
+                            <span class="label">Cost</span>
+                            <span class="val" id="localCostVal">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="arena-footer">
+                    <p id="arenaRecommendation">Recommendation: -</p>
+                </div>
+            </div>
+
+            <!-- Layer 3: Deep Dive -->
+            <div class="card card-full" id="card-prompt">
+                <div class="card-header">
+                    <h3>Prompt Inspector</h3>
+                    <div class="tabs">
+                        <button class="tab active" data-target="struct">Structure</button>
+                        <button class="tab" data-target="raw">Raw</button>
+                    </div>
+                </div>
+                <div class="prompt-content" id="promptViewStruct">
+                    <!-- Structured Prompt View -->
+                    <div class="prompt-block">
+                        <span class="block-label">Role</span>
+                        <p id="promptRole">-</p>
+                    </div>
+                    <div class="prompt-block">
+                        <span class="block-label">CoT Steps</span>
+                        <ul id="promptCoTList"></ul>
+                    </div>
+                </div>
+                <div class="prompt-content hidden" id="promptViewRaw">
+                    <pre id="promptRawText"></pre>
+                </div>
+            </div>
+
+        </main>
+    </div>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

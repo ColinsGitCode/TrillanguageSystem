@@ -10,6 +10,107 @@ const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 
 const baseDir = path.resolve(RECORDS_PATH);
 
+function resolveFolder(folderName) {
+    const safeName = folderName || '';
+    const folderPath = path.resolve(path.join(baseDir, safeName));
+    if (!folderPath.startsWith(baseDir)) return null;
+    if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) return null;
+    return folderPath;
+}
+
+function readMetaTitle(metaPath) {
+    try {
+        if (!fs.existsSync(metaPath)) return null;
+        const raw = fs.readFileSync(metaPath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data && typeof data.phrase === 'string') {
+            const phrase = data.phrase.trim();
+            if (phrase) return phrase;
+        }
+    } catch (err) {
+        return null;
+    }
+    return null;
+}
+
+function readMarkdownTitle(mdPath) {
+    try {
+        if (!fs.existsSync(mdPath)) return null;
+        const raw = fs.readFileSync(mdPath, 'utf-8');
+        const lines = raw.split(/\r?\n/);
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('#')) {
+                const title = trimmed.replace(/^#+\s*/, '').trim();
+                if (title) return title;
+            } else {
+                return trimmed;
+            }
+        }
+    } catch (err) {
+        return null;
+    }
+    return null;
+}
+
+function getDisplayTitle(folderPath, baseName) {
+    const metaTitle = readMetaTitle(path.join(folderPath, `${baseName}.meta.json`));
+    if (metaTitle) return metaTitle;
+    const mdTitle = readMarkdownTitle(path.join(folderPath, `${baseName}.md`));
+    if (mdTitle) return mdTitle;
+    return baseName;
+}
+
+function listFoldersWithHtml() {
+    if (!fs.existsSync(baseDir)) return [];
+    return fs
+        .readdirSync(baseDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .filter((entry) => {
+            const dirPath = path.join(baseDir, entry.name);
+            return fs
+                .readdirSync(dirPath, { withFileTypes: true })
+                .some((f) => f.isFile() && f.name.toLowerCase().endsWith('.html'));
+        })
+        .map((entry) => entry.name)
+        .sort();
+}
+
+function listHtmlFilesInFolder(folderName) {
+    const folderPath = resolveFolder(folderName);
+    if (!folderPath) return [];
+    const htmlFiles = fs
+        .readdirSync(folderPath, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.html'))
+        .map((entry) => entry.name)
+        .sort();
+
+    return htmlFiles.map((file) => {
+        const baseName = file.replace(/\.html$/i, '');
+        return {
+            file,
+            title: getDisplayTitle(folderPath, baseName),
+        };
+    });
+}
+
+function readFileInFolder(folderName, filename) {
+    const folderPath = resolveFolder(folderName);
+    if (!folderPath) throw new Error('Folder not found');
+    const safeFile = filename || '';
+    const filePath = path.resolve(path.join(folderPath, safeFile));
+    if (!filePath.startsWith(folderPath)) throw new Error('Invalid file path');
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        throw new Error('File not found');
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    if (['.md', '.html', '.json', '.txt'].includes(ext)) {
+        return fs.readFileSync(filePath, 'utf-8');
+    }
+    return fs.readFileSync(filePath);
+}
+
 /**
  * Ensures the target directory for today exists (YYYYMMDD).
  * @returns {string} The full path to today's directory.
@@ -115,4 +216,11 @@ function saveGeneratedFiles(phrase, content, options = {}) {
     };
 }
 
-module.exports = { saveGeneratedFiles, buildBaseName, ensureTodayDirectory };
+module.exports = {
+    saveGeneratedFiles,
+    buildBaseName,
+    ensureTodayDirectory,
+    listFoldersWithHtml,
+    listHtmlFilesInFolder,
+    readFileInFolder,
+};

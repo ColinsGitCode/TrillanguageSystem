@@ -28,14 +28,7 @@ const outputDisplay = document.getElementById('outputDisplay');
 const outputContent = document.getElementById('outputContent');
 const toggleOutputBtn = document.getElementById('toggleOutputBtn');
 
-// Observability Elements
-const observabilityPanel = document.getElementById('observabilityPanel');
 const enableCompareCheckbox = document.getElementById('enableCompare');
-
-// Health Panel Elements
-const healthToggle = document.getElementById('healthToggle');
-const healthContent = document.querySelector('.health-content');
-const healthRefresh = document.getElementById('healthRefresh');
 
 // Timer state
 let timerInterval = null;
@@ -49,7 +42,7 @@ const state = {
   selectedFileTitle: null,
   imageBase64: null,
   isGenerating: false,
-  llmProvider: localStorage.getItem('llm_provider') || 'gemini', // 新增
+  llmProvider: localStorage.getItem('llm_provider') || 'gemini', 
 };
 
 function setStatus(text) {
@@ -95,10 +88,17 @@ function sanitizeHtml(html) {
     return DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true },
       ADD_TAGS: ['audio', 'source', 'ruby', 'rt', 'rp'],
-      ADD_ATTR: ['class', 'src', 'controls', 'href', 'title', 'alt', 'aria-label'],
+      ADD_ATTR: ['class', 'src', 'data-audio-src', 'preload', 'controls', 'href', 'title', 'alt', 'aria-label'],
     });
   }
   return html;
+}
+
+function rewriteAudioSources(html) {
+  return html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src, post) => {
+    const preloadAttr = /preload=/i.test(match) ? '' : ' preload="none"';
+    return `<audio${pre} data-audio-src=${quote}${src}${quote}${preloadAttr}${post}>`;
+  });
 }
 
 // ========== Image Processing Functions ==========
@@ -331,271 +331,6 @@ imageDropZone.addEventListener('drop', handleDrop);
 ocrBtn.addEventListener('click', recognizeAndFill);
 clearImageBtn.addEventListener('click', clearImage);
 
-// ========== F1: Token 统计更新 ==========
-function updateTokenStats(observability) {
-  if (!observability || !observability.tokens) return;
-
-  const { tokens, cost, quota } = observability;
-
-  document.getElementById('tokenInput').textContent = tokens.input.toLocaleString();
-  document.getElementById('tokenOutput').textContent = tokens.output.toLocaleString();
-  document.getElementById('tokenTotal').textContent = tokens.total.toLocaleString();
-  document.getElementById('tokenCost').textContent = `$${cost.total.toFixed(4)}`;
-
-  if (quota) {
-    document.getElementById('quotaText').textContent = `${quota.used}/${quota.limit}`;
-    const fillEl = document.getElementById('quotaFill');
-    fillEl.style.width = `${quota.percentage}%`;
-
-    // 配额预警
-    if (quota.percentage > 80) {
-      fillEl.classList.add('warning');
-    } else {
-      fillEl.classList.remove('warning');
-    }
-  }
-}
-
-// ========== F2: 性能指标更新 ==========
-function updatePerformanceMetrics(observability) {
-  if (!observability || !observability.performance) return;
-
-  const { performance } = observability;
-  const { totalTime, phases } = performance;
-
-  document.getElementById('perfTotal').textContent = `${(totalTime / 1000).toFixed(2)}s`;
-
-  // 更新各阶段
-  const phaseData = [
-    { id: 'perfPrompt', time: phases.promptBuild || 0 },
-    { id: 'perfLlm', time: phases.llmCall || 0 },
-    { id: 'perfParse', time: phases.jsonParse || 0 },
-    { id: 'perfSave', time: phases.fileSave || 0 }
-  ];
-
-  phaseData.forEach(({ id, time }) => {
-    const percentage = totalTime > 0 ? (time / totalTime) * 100 : 0;
-    document.getElementById(`${id}Bar`).style.width = `${percentage}%`;
-    document.getElementById(`${id}Time`).textContent = `${time}ms`;
-  });
-}
-
-// ========== F7: 质量评分更新 ==========
-function updateQualityScore(observability) {
-  if (!observability || !observability.quality) return;
-
-  const { quality } = observability;
-  const { score, checks, warnings } = quality;
-
-  // 更新分数环
-  document.getElementById('qualityScore').textContent = score;
-  const circumference = 251;
-  const offset = circumference - (score / 100) * circumference;
-  document.getElementById('qualityCircle').style.strokeDashoffset = offset;
-
-  // 更新检查项
-  const checksHtml = Object.entries(checks).map(([key, value]) => {
-    const icon = value === true || value === 'excellent' || value === 'good' ? '✅' : '⚠️';
-    const label = key.replace(/([A-Z])/g, ' $1').trim();
-    const displayValue = typeof value === 'boolean' ? (value ? '通过' : '失败') : value;
-
-    return `
-      <div class="quality-check-item">
-        <span class="check-icon">${icon}</span>
-        <span class="check-label">${label}</span>
-        <span class="check-value">${displayValue}</span>
-      </div>
-    `;
-  }).join('');
-
-  document.getElementById('qualityChecks').innerHTML = checksHtml;
-
-  // 显示警告
-  const warningsEl = document.getElementById('qualityWarnings');
-  if (warnings && warnings.length) {
-    const warningsHtml = warnings.map(w => `<li>${w}</li>`).join('');
-    warningsEl.innerHTML = `<ul>${warningsHtml}</ul>`;
-    warningsEl.classList.remove('hidden');
-  } else {
-    warningsEl.classList.add('hidden');
-  }
-}
-
-// ========== F5: Prompt 结构更新 ==========
-function updatePromptStructure(observability) {
-  if (!observability || !observability.prompt) return;
-
-  const { prompt } = observability;
-
-  // 完整 Prompt
-  document.getElementById('promptFullContent').textContent = prompt.full;
-
-  // 结构化视图
-  const { structure } = prompt;
-
-  document.getElementById('promptSystem').textContent = structure.systemInstruction || '-';
-
-  // CoT 步骤
-  const cotHtml = structure.chainOfThought.map(step => `<li>${escapeHtml(step)}</li>`).join('');
-  document.getElementById('promptCoT').innerHTML = cotHtml;
-
-  // Few-shot 示例
-  const examplesHtml = structure.fewShotExamples.map(ex => `
-    <details>
-      <summary>${escapeHtml(ex.title)}</summary>
-      <pre>${escapeHtml(ex.content)}</pre>
-    </details>
-  `).join('');
-  document.getElementById('promptExamples').innerHTML = examplesHtml;
-
-  // 质量标准
-  const standardsHtml = structure.qualityStandards.map(s => `<li>${escapeHtml(s)}</li>`).join('');
-  document.getElementById('promptStandards').innerHTML = standardsHtml;
-
-  document.getElementById('promptUserInput').textContent = structure.userInput;
-}
-
-// Prompt 标签切换
-document.querySelectorAll('.prompt-tab').forEach(tab => {
-  tab.addEventListener('click', (e) => {
-    const targetTab = e.target.dataset.tab;
-
-    document.querySelectorAll('.prompt-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.prompt-tab-panel').forEach(p => p.classList.remove('active'));
-
-    e.target.classList.add('active');
-    document.getElementById(`prompt${targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}`).classList.add('active');
-  });
-});
-
-// ========== F3: 健康状态面板 ==========
-healthToggle.addEventListener('click', () => {
-  healthContent.classList.toggle('hidden');
-  if (!healthContent.classList.contains('hidden')) {
-    loadHealthStatus();
-  }
-});
-
-healthRefresh.addEventListener('click', loadHealthStatus);
-
-async function loadHealthStatus() {
-  try {
-    const response = await fetch('/api/health');
-    const data = await response.json();
-
-    // 渲染服务状态
-    const servicesHtml = data.services.map(service => {
-      const statusClass = service.status;
-      const statusIcon = {
-        online: '🟢',
-        offline: '🔴',
-        degraded: '🟡',
-        unknown: '⚪'
-      }[service.status] || '⚪';
-
-      return `
-        <div class="health-service ${statusClass}">
-          <div class="service-header">
-            <span class="service-icon">${statusIcon}</span>
-            <span class="service-name">${service.name}</span>
-          </div>
-          <div class="service-info">
-            ${service.latency ? `<span class="service-latency">${service.latency}ms</span>` : ''}
-            <span class="service-message ${service.status === 'offline' ? 'error' : ''}">${service.message || '-'}</span>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    document.getElementById('healthServices').innerHTML = servicesHtml;
-
-    // 更新存储信息
-    if (data.storage && data.storage.used !== undefined) {
-      const { used, total, percentage, recordsCount } = data.storage;
-      const usedGB = (used / (1024 ** 3)).toFixed(2);
-      const totalGB = (total / (1024 ** 3)).toFixed(2);
-
-      document.getElementById('storageFill').style.width = `${percentage}%`;
-      document.getElementById('storageText').textContent = `${usedGB} GB / ${totalGB} GB (${percentage.toFixed(1)}%) - ${recordsCount || 0} 条记录`;
-    } else {
-      document.getElementById('storageFill').style.width = '0%';
-      document.getElementById('storageText').textContent = '存储信息不可用';
-    }
-
-  } catch (error) {
-    console.error('[Health] Load error:', error);
-    document.getElementById('healthServices').innerHTML = '<p class="error">加载失败</p>';
-  }
-}
-
-// 定期刷新健康状态（每30秒）
-setInterval(() => {
-  if (!healthContent.classList.contains('hidden')) {
-    loadHealthStatus();
-  }
-}, 30000);
-
-// ========== F9: 对比模式 ==========
-function showComparisonResult(comparisonData) {
-  const modal = document.getElementById('comparisonModal');
-
-  // Gemini 结果
-  if (comparisonData.gemini.success) {
-    document.getElementById('geminiStatus').textContent = '✅ 成功';
-    document.getElementById('geminiMetrics').innerHTML = `
-      <div class="metric">耗时: ${comparisonData.gemini.observability.performance.totalTime}ms</div>
-      <div class="metric">质量: ${comparisonData.gemini.observability.quality.score}/100</div>
-      <div class="metric">Tokens: ${comparisonData.gemini.observability.tokens.total}</div>
-    `;
-    const geminiMarkdown = comparisonData.gemini.output.markdown_content || '';
-    document.getElementById('geminiOutput').innerHTML = `
-      <pre>${escapeHtml(geminiMarkdown.substring(0, 500))}...</pre>
-    `;
-  } else {
-    document.getElementById('geminiStatus').textContent = '❌ 失败';
-    document.getElementById('geminiMetrics').innerHTML = `<p class="error">${comparisonData.gemini.error}</p>`;
-  }
-
-  // Local 结果
-  if (comparisonData.local.success) {
-    document.getElementById('localStatus').textContent = '✅ 成功';
-    document.getElementById('localMetrics').innerHTML = `
-      <div class="metric">耗时: ${comparisonData.local.observability.performance.totalTime}ms</div>
-      <div class="metric">质量: ${comparisonData.local.observability.quality.score}/100</div>
-      <div class="metric">Tokens: ${comparisonData.local.observability.tokens.total}</div>
-    `;
-    const localMarkdown = comparisonData.local.output.markdown_content || '';
-    document.getElementById('localOutput').innerHTML = `
-      <pre>${escapeHtml(localMarkdown.substring(0, 500))}...</pre>
-    `;
-  } else {
-    document.getElementById('localStatus').textContent = '❌ 失败';
-    document.getElementById('localMetrics').innerHTML = `<p class="error">${comparisonData.local.error}</p>`;
-  }
-
-  // 对比总结
-  if (comparisonData.comparison) {
-    const { winner, recommendation } = comparisonData.comparison;
-
-    const winnerText = winner === 'gemini' ? '🤖 Gemini API' : winner === 'local' ? '🖥️ Local LLM' : '🤝 平局';
-
-    document.getElementById('comparisonWinner').innerHTML = `
-      <div class="winner-badge">优胜者: ${winnerText}</div>
-    `;
-
-    document.getElementById('comparisonRec').textContent = recommendation;
-  }
-
-  modal.classList.remove('hidden');
-}
-
-function closeComparisonModal() {
-  document.getElementById('comparisonModal').classList.add('hidden');
-}
-
-// 允许通过全局调用关闭
-window.closeComparisonModal = closeComparisonModal;
-
 // ========== Generation Logic ==========
 
 genBtn.addEventListener('click', async () => {
@@ -619,20 +354,60 @@ genBtn.addEventListener('click', async () => {
       body: JSON.stringify({
         phrase,
         llm_provider: state.llmProvider,
-        enable_compare: enableCompare  // ✅ 新增
+        enable_compare: enableCompare
       })
     });
 
     const data = await res.json();
 
-    // ===== 对比模式 =====
-    if (enableCompare && data.comparison) {
+    if (!res.ok) {
+      const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
+      const message = detail ? `${data.error}（${detail}）` : data.error;
+      throw new Error(message || 'Generation failed');
+    }
+
+    // Save Observability Data
+    if (data.comparison) {
+        const comparisonPayload = {
+          phrase: data.phrase,
+          comparison: data.comparison,
+          gemini: data.gemini ? { success: data.gemini.success, error: data.gemini.error, observability: data.gemini.observability } : null,
+          local: data.local ? { success: data.local.success, error: data.local.error, observability: data.local.observability } : null,
+        };
+        try {
+          localStorage.setItem('latest_observability', JSON.stringify(comparisonPayload));
+        } catch (storageError) {
+          console.warn('保存对比观测数据失败，已跳过', storageError);
+        }
+    } else if (data.observability) {
+        try {
+          localStorage.setItem('latest_observability', JSON.stringify(data.observability));
+        } catch (storageError) {
+          console.warn('保存观测数据失败，已跳过', storageError);
+        }
+    }
+
+    if (enableCompare) {
+      if (!data.comparison) {
+        const fallbackObs = data.gemini?.observability || data.observability;
+        if (fallbackObs) {
+          try {
+            localStorage.setItem('latest_observability', JSON.stringify(fallbackObs));
+          } catch (storageError) {
+            console.warn('保存 Gemini 观测数据失败，已跳过', storageError);
+          }
+        }
+        hideProgress();
+        const reason = data.local?.error || data.error || '本地模型未返回对比结果';
+        alert(`对比未完成：${reason}\n已保存 Gemini 观测数据供 Mission Control 查看。`);
+        return;
+      }
       hideProgress();
-      showComparisonResult(data);
+      alert('对比完成！请访问 Mission Control (Dashboard) 查看详细分析数据。');
       return;
     }
 
-    // ===== 单模型模式 =====
+    // ===== Single Mode Success =====
     updateProgress('save', '正在保存文件...');
 
     // 显示完整 Prompt 与 LLM 输出
@@ -645,21 +420,6 @@ genBtn.addEventListener('click', async () => {
       showFullOutput(data.llm_output);
     } else {
       hideFullOutput();
-    }
-
-    // ===== 更新可观测性数据 =====
-    if (data.observability) {
-      observabilityPanel.classList.remove('hidden');
-      updateTokenStats(data.observability);
-      updatePerformanceMetrics(data.observability);
-      updateQualityScore(data.observability);
-      updatePromptStructure(data.observability);
-    }
-
-    if (!res.ok) {
-      const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
-      const message = detail ? `${data.error}（${detail}）` : data.error;
-      throw new Error(message || 'Generation failed');
     }
 
     // 检查是否有音频生成
@@ -715,11 +475,6 @@ async function loadFolders(options = {}) {
       return;
     }
 
-    // Selection Logic Priority:
-    // 1. targetSelect (if specified and exists)
-    // 2. prevSelectedFolder (if keepSelection is true and exists)
-    // 3. First folder (default)
-
     let folderToSelect = state.folders[0];
 
     if (targetSelect && state.folders.includes(targetSelect)) {
@@ -731,7 +486,6 @@ async function loadFolders(options = {}) {
     if (targetSelect || !keepSelection || (keepSelection && !prevSelectedFolder)) {
          await selectFolder(folderToSelect);
     } else if (refreshFiles) {
-         // Just refresh current
          await loadFiles(state.selectedFolder);
     }
 
@@ -910,7 +664,7 @@ function renderModernCard(markdown, title) {
 
   // 2. Parse Markdown Body
   const htmlContent = marked.parse(markdown);
-  const safeHtml = sanitizeHtml(htmlContent);
+  const safeHtml = sanitizeHtml(rewriteAudioSources(htmlContent));
 
   // 3. Build DOM
   const cardHtml = `
@@ -936,7 +690,9 @@ function renderModernCard(markdown, title) {
   audioDivs.forEach(div => {
       const audioEl = div.querySelector('audio');
       if (audioEl) {
-          const src = audioEl.getAttribute('src');
+          const src = audioEl.getAttribute('data-audio-src') || audioEl.getAttribute('src');
+          if (!src) return;
+          audioEl.removeAttribute('src');
           const btn = document.createElement('button');
           btn.className = 'audio-btn';
           btn.innerHTML = '▶'; 
@@ -1033,9 +789,6 @@ document.addEventListener('keydown', (e) => {
     closeModal();
   }
 });
-
-// const modalContent = modalOverlay.querySelector('.modal-content');
-// modalContent.addEventListener('click', (e) => e.stopPropagation());
 
 loadFolders();
 
