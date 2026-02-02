@@ -293,6 +293,110 @@ graph TB
     style Output fill:#4CAF50,color:#fff
 ```
 
+### 🎨 D3.js 可视化：Prompt 工程五层模型 (Icicle Chart)
+
+<svg width="800" height="300" viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#BBDEFB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Title -->
+  <text x="400" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">
+    Prompt 工程五层模型 (Icicle Chart)
+  </text>
+
+  <!-- Layer 1: System Role -->
+  <g transform="translate(0,40)">
+    <rect x="20" y="0" width="156" height="240" fill="#E3F2FD" stroke="#fff" stroke-width="2"/>
+    <text x="98" y="110" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">
+      Layer 1
+    </text>
+    <text x="98" y="130" text-anchor="middle" font-size="13" fill="#333">
+      System Role
+    </text>
+    <text x="98" y="150" text-anchor="middle" font-size="11" fill="#666">
+      定义 AI 身份
+    </text>
+    <text x="98" y="170" text-anchor="middle" font-size="10" fill="#999">
+      ~100 tokens
+    </text>
+  </g>
+
+  <!-- Layer 2: CoT Guidance -->
+  <g transform="translate(0,40)">
+    <rect x="180" y="0" width="156" height="240" fill="#FFF9C4" stroke="#fff" stroke-width="2"/>
+    <text x="258" y="110" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">
+      Layer 2
+    </text>
+    <text x="258" y="130" text-anchor="middle" font-size="13" fill="#333">
+      CoT Guidance
+    </text>
+    <text x="258" y="150" text-anchor="middle" font-size="11" fill="#666">
+      5步推理流程
+    </text>
+    <text x="258" y="170" text-anchor="middle" font-size="10" fill="#999">
+      ~150 tokens
+    </text>
+  </g>
+
+  <!-- Layer 3: Few-shot Examples -->
+  <g transform="translate(0,40)">
+    <rect x="340" y="0" width="156" height="240" fill="#F0F4C3" stroke="#fff" stroke-width="2"/>
+    <text x="418" y="100" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">
+      Layer 3
+    </text>
+    <text x="418" y="120" text-anchor="middle" font-size="13" fill="#333">
+      Few-shot Examples
+    </text>
+    <text x="418" y="140" text-anchor="middle" font-size="11" fill="#666">
+      4个典型场景
+    </text>
+    <text x="418" y="160" text-anchor="middle" font-size="10" fill="#999">
+      ~400 tokens
+    </text>
+  </g>
+
+  <!-- Layer 4: Requirements -->
+  <g transform="translate(0,40)">
+    <rect x="500" y="0" width="140" height="240" fill="#FFE0B2" stroke="#fff" stroke-width="2"/>
+    <text x="570" y="110" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">
+      Layer 4
+    </text>
+    <text x="570" y="130" text-anchor="middle" font-size="13" fill="#333">
+      Requirements
+    </text>
+    <text x="570" y="150" text-anchor="middle" font-size="11" fill="#666">
+      50+ 质量标准
+    </text>
+    <text x="570" y="170" text-anchor="middle" font-size="10" fill="#999">
+      ~200 tokens
+    </text>
+  </g>
+
+  <!-- Layer 5: Data Contract -->
+  <g transform="translate(0,40)">
+    <rect x="644" y="0" width="136" height="240" fill="#FFCCBC" stroke="#fff" stroke-width="2"/>
+    <text x="712" y="110" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">
+      Layer 5
+    </text>
+    <text x="712" y="130" text-anchor="middle" font-size="13" fill="#333">
+      Data Contract
+    </text>
+    <text x="712" y="150" text-anchor="middle" font-size="11" fill="#666">
+      JSON Schema
+    </text>
+    <text x="712" y="170" text-anchor="middle" font-size="10" fill="#999">
+      ~100 tokens
+    </text>
+  </g>
+</svg>
+
+
+
 ### Layer 1: System Role（角色层）
 
 **代码实现**（`promptEngine.js:129-134`）
@@ -843,6 +947,68 @@ sequenceDiagram
     end
 ```
 
+### 🎨 D3.js 可视化：端到端流程时间线 (Gantt Chart)
+
+<svg width="800" height="350" viewBox="0 0 800 350" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="400" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">
+    端到端流程时间线 (总计: ~4.5秒)
+  </text>
+
+  <!-- Y-axis labels -->
+  <text x="110" y="60" text-anchor="end" font-size="12" fill="#333">请求验证</text>
+  <text x="110" y="100" text-anchor="end" font-size="12" fill="#333">Prompt 构建</text>
+  <text x="110" y="140" text-anchor="end" font-size="12" fill="#333">Gemini 生成</text>
+  <text x="110" y="180" text-anchor="end" font-size="12" fill="#333">数据校验</text>
+  <text x="110" y="220" text-anchor="end" font-size="12" fill="#333">渲染处理</text>
+  <text x="110" y="260" text-anchor="end" font-size="12" fill="#333">TTS (英文)</text>
+  <text x="110" y="300" text-anchor="end" font-size="12" fill="#333">TTS (日语)</text>
+
+  <!-- X-axis -->
+  <line x1="120" y1="320" x2="780" y2="320" stroke="#ccc" stroke-width="1"/>
+  <text x="120" y="340" text-anchor="middle" font-size="11" fill="#666">0ms</text>
+  <text x="252" y="340" text-anchor="middle" font-size="11" fill="#666">1000ms</text>
+  <text x="384" y="340" text-anchor="middle" font-size="11" fill="#666">2000ms</text>
+  <text x="516" y="340" text-anchor="middle" font-size="11" fill="#666">3000ms</text>
+  <text x="648" y="340" text-anchor="middle" font-size="11" fill="#666">4000ms</text>
+  <text x="780" y="340" text-anchor="middle" font-size="11" fill="#666">4500ms</text>
+
+  <!-- Task bars -->
+  <!-- Request validation: 0-50ms -->
+  <rect x="120" y="50" width="6.6" height="20" fill="#2196F3" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="123" y="64" font-size="10" fill="#fff" font-weight="bold">50ms</text>
+
+  <!-- Prompt build: 50-100ms -->
+  <rect x="126.6" y="90" width="6.6" height="20" fill="#2196F3" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="130" y="104" font-size="10" fill="#fff" font-weight="bold">50ms</text>
+
+  <!-- Gemini generation: 100-3500ms (BOTTLENECK) -->
+  <rect x="133.2" y="130" width="448.8" height="20" fill="#4CAF50" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="357" y="144" font-size="11" fill="#fff" font-weight="bold">⚡ 3400ms (瓶颈)</text>
+
+  <!-- Validation: 3500-3600ms -->
+  <rect x="582" y="170" width="13.2" height="20" fill="#2196F3" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="588" y="184" font-size="9" fill="#fff" font-weight="bold">100ms</text>
+
+  <!-- Rendering: 3600-3650ms -->
+  <rect x="595.2" y="210" width="6.6" height="20" fill="#2196F3" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="598" y="224" font-size="9" fill="#fff" font-weight="bold">50ms</text>
+
+  <!-- TTS English: 3650-4200ms (Parallel) -->
+  <rect x="601.8" y="250" width="72.6" height="20" fill="#FF9800" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="638" y="264" font-size="10" fill="#fff" font-weight="bold">550ms</text>
+
+  <!-- TTS Japanese: 3650-4500ms (Parallel) -->
+  <rect x="601.8" y="290" width="112.2" height="20" fill="#FF9800" opacity="0.8" stroke="#fff" stroke-width="1"/>
+  <text x="658" y="304" font-size="10" fill="#fff" font-weight="bold">850ms</text>
+
+  <!-- Parallel indicator -->
+  <path d="M 601 255 L 601 295" stroke="#9C27B0" stroke-width="2" stroke-dasharray="3,3"/>
+  <text x="720" y="275" font-size="11" fill="#9C27B0" font-weight="bold">← 并行处理</text>
+</svg>
+
+
+
 ### 关键节点解析
 
 #### 节点 1：限流保护
@@ -904,6 +1070,74 @@ if (data.llm_output) {
 | **语法自然** | 使用口语表达和缩写 | "Wanna grab lunch?" ✓ "Do you desire food?" ✗ |
 | **场景多样** | 两个例句覆盖不同场景 | 例句1工作场景，例句2日常场景 |
 ```
+
+### 🎨 D3.js 可视化：例文质量雷达图 (Radar Chart)
+
+<svg width="500" height="500" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="250" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">
+    例文质量雷达图 (5维度评估)
+  </text>
+
+  <g transform="translate(250,270)">
+    <!-- Background circles -->
+    <circle r="40" fill="none" stroke="#f0f0f0" stroke-width="1"/>
+    <circle r="80" fill="none" stroke="#e0e0e0" stroke-width="1"/>
+    <circle r="120" fill="none" stroke="#d0d0d0" stroke-width="1"/>
+    <circle r="160" fill="none" stroke="#c0c0c0" stroke-width="1"/>
+    <circle r="200" fill="none" stroke="#b0b0b0" stroke-width="1"/>
+
+    <!-- Scale labels -->
+    <text x="5" y="-42" font-size="9" fill="#999">1</text>
+    <text x="5" y="-82" font-size="9" fill="#999">2</text>
+    <text x="5" y="-122" font-size="9" fill="#999">3</text>
+    <text x="5" y="-162" font-size="9" fill="#999">4</text>
+    <text x="5" y="-202" font-size="9" fill="#999">5</text>
+    
+    <!-- Axis lines -->
+    <line x1="0" y1="0" x2="0" y2="-200" stroke="#ccc" stroke-width="1"/>
+    <line x1="0" y1="0" x2="190" y2="-62" stroke="#ccc" stroke-width="1"/>
+    <line x1="0" y1="0" x2="118" y2="162" stroke="#ccc" stroke-width="1"/>
+    <line x1="0" y1="0" x2="-118" y2="162" stroke="#ccc" stroke-width="1"/>
+    <line x1="0" y1="0" x2="-190" y2="-62" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- Axis labels -->
+    <text x="0" y="-230" text-anchor="middle" font-size="12" font-weight="bold" fill="#333">场景真实性</text>
+    <text x="210" y="-55" text-anchor="start" font-size="12" font-weight="bold" fill="#333">长度控制</text>
+    <text x="130" y="185" text-anchor="start" font-size="12" font-weight="bold" fill="#333">难度适配</text>
+    <text x="-130" y="185" text-anchor="end" font-size="12" font-weight="bold" fill="#333">语法自然</text>
+    <text x="-210" y="-55" text-anchor="end" font-size="12" font-weight="bold" fill="#333">场景多样</text>
+    
+    <!-- Good example (green) -->
+    <path d="M 0,-200 L 190,-62 L 94,152 L -94,152 L -190,-62 Z"
+          fill="#4CAF50" fill-opacity="0.3" stroke="#4CAF50" stroke-width="2"/>
+    <circle cx="0" cy="-200" r="4" fill="#4CAF50" stroke="#fff" stroke-width="2"/>
+    <circle cx="190" cy="-62" r="4" fill="#4CAF50" stroke="#fff" stroke-width="2"/>
+    <circle cx="94" cy="152" r="4" fill="#4CAF50" stroke="#fff" stroke-width="2"/>
+    <circle cx="-94" cy="152" r="4" fill="#4CAF50" stroke="#fff" stroke-width="2"/>
+    <circle cx="-190" cy="-62" r="4" fill="#4CAF50" stroke="#fff" stroke-width="2"/>
+    
+    <!-- Bad example (red) -->
+    <path d="M 0,-80 L 38,-12 L 190,152 L -190,152 L -38,-12 Z"
+          fill="#F44336" fill-opacity="0.3" stroke="#F44336" stroke-width="2"/>
+    <circle cx="0" cy="-80" r="4" fill="#F44336" stroke="#fff" stroke-width="2"/>
+    <circle cx="38" cy="-12" r="4" fill="#F44336" stroke="#fff" stroke-width="2"/>
+    <circle cx="190" cy="152" r="4" fill="#F44336" stroke="#fff" stroke-width="2"/>
+    <circle cx="-190" cy="152" r="4" fill="#F44336" stroke="#fff" stroke-width="2"/>
+    <circle cx="-38" cy="-12" r="4" fill="#F44336" stroke="#fff" stroke-width="2"/>
+    
+    <!-- Legend -->
+    <g transform="translate(-90,190)">
+      <rect x="0" y="0" width="15" height="15" fill="#4CAF50"/>
+      <text x="20" y="12" font-size="12" fill="#333">优秀例句 (5,5,4,5,5)</text>
+    
+      <rect x="0" y="25" width="15" height="15" fill="#F44336"/>
+      <text x="20" y="37" font-size="12" fill="#333">较差例句 (2,1,5,2,1)</text>
+    </g>
+  </g>
+</svg>
+
+
 
 ### 真实案例对比
 
@@ -1082,6 +1316,107 @@ if (isTranslationLine) {
 ### 当前痛点
 
 ```
+
+### 🎨 D3.js 可视化：错误率优化趋势 (Line Chart)
+
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="400" y="25" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">
+    错误率优化趋势 (2026-01)
+  </text>
+
+  <!-- Y-axis -->
+  <line x1="60" y1="50" x2="60" y2="330" stroke="#333" stroke-width="2"/>
+  <text x="25" y="335" font-size="11" fill="#666">错误率 (%)</text>
+
+  <!-- Y-axis labels -->
+  <text x="55" y="330" text-anchor="end" font-size="11" fill="#666">0</text>
+  <line x1="55" y1="330" x2="65" y2="330" stroke="#333" stroke-width="1"/>
+
+  <text x="55" y="290" text-anchor="end" font-size="11" fill="#666">10</text>
+  <line x1="55" y1="290" x2="65" y2="290" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="250" text-anchor="end" font-size="11" fill="#666">20</text>
+  <line x1="55" y1="250" x2="65" y2="250" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="210" text-anchor="end" font-size="11" fill="#666">30</text>
+  <line x1="55" y1="210" x2="65" y2="210" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="170" text-anchor="end" font-size="11" fill="#666">40</text>
+  <line x1="55" y1="170" x2="65" y2="170" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="130" text-anchor="end" font-size="11" fill="#666">50</text>
+  <line x1="55" y1="130" x2="65" y2="130" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="90" text-anchor="end" font-size="11" fill="#666">60</text>
+  <line x1="55" y1="90" x2="65" y2="90" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <text x="55" y="50" text-anchor="end" font-size="11" fill="#666">70</text>
+  <line x1="55" y1="50" x2="65" y2="50" stroke="#ddd" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <!-- X-axis -->
+  <line x1="60" y1="330" x2="750" y2="330" stroke="#333" stroke-width="2"/>
+
+  <!-- X-axis labels -->
+  <text x="120" y="350" text-anchor="middle" font-size="11" fill="#666">01-20</text>
+  <text x="260" y="350" text-anchor="middle" font-size="11" fill="#666">01-22</text>
+  <text x="400" y="350" text-anchor="middle" font-size="11" fill="#666">01-25</text>
+  <text x="540" y="350" text-anchor="middle" font-size="11" fill="#666">01-27</text>
+  <text x="680" y="350" text-anchor="middle" font-size="11" fill="#666">01-30</text>
+
+  <!-- Line 1: Language mixing (Red) -->
+  <path d="M 120,90 L 260,110 L 400,270 L 540,298 L 680,310"
+        fill="none" stroke="#F44336" stroke-width="3"/>
+  <circle cx="120" cy="90" r="5" fill="#F44336" stroke="#fff" stroke-width="2"/>
+  <circle cx="260" cy="110" r="5" fill="#F44336" stroke="#fff" stroke-width="2"/>
+  <circle cx="400" cy="270" r="5" fill="#F44336" stroke="#fff" stroke-width="2"/>
+  <circle cx="540" cy="298" r="5" fill="#F44336" stroke="#fff" stroke-width="2"/>
+  <circle cx="680" cy="310" r="5" fill="#F44336" stroke="#fff" stroke-width="2"/>
+
+  <!-- Line 2: False Ruby (Orange) -->
+  <path d="M 120,170 L 260,178 L 400,190 L 540,210 L 680,322"
+        fill="none" stroke="#FF9800" stroke-width="3"/>
+  <circle cx="120" cy="170" r="5" fill="#FF9800" stroke="#fff" stroke-width="2"/>
+  <circle cx="260" cy="178" r="5" fill="#FF9800" stroke="#fff" stroke-width="2"/>
+  <circle cx="400" cy="190" r="5" fill="#FF9800" stroke="#fff" stroke-width="2"/>
+  <circle cx="540" cy="210" r="5" fill="#FF9800" stroke="#fff" stroke-width="2"/>
+  <circle cx="680" cy="322" r="5" fill="#FF9800" stroke="#fff" stroke-width="2"/>
+
+  <!-- Line 3: Missing annotation (Blue) -->
+  <path d="M 120,210 L 260,218 L 400,230 L 540,242 L 680,290"
+        fill="none" stroke="#2196F3" stroke-width="3"/>
+  <circle cx="120" cy="210" r="5" fill="#2196F3" stroke="#fff" stroke-width="2"/>
+  <circle cx="260" cy="218" r="5" fill="#2196F3" stroke="#fff" stroke-width="2"/>
+  <circle cx="400" cy="230" r="5" fill="#2196F3" stroke="#fff" stroke-width="2"/>
+  <circle cx="540" cy="242" r="5" fill="#2196F3" stroke="#fff" stroke-width="2"/>
+  <circle cx="680" cy="290" r="5" fill="#2196F3" stroke="#fff" stroke-width="2"/>
+
+  <!-- Event annotation 1: Few-shot -->
+  <line x1="400" y1="50" x2="400" y2="330" stroke="#9C27B0" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="400" y="40" text-anchor="middle" font-size="11" font-weight="bold" fill="#9C27B0">
+    🔧 Few-shot 示例
+  </text>
+
+  <!-- Event annotation 2: Renderer fix -->
+  <line x1="680" y1="50" x2="680" y2="330" stroke="#9C27B0" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="680" y="40" text-anchor="middle" font-size="11" font-weight="bold" fill="#9C27B0">
+    🔧 Renderer 修复
+  </text>
+
+  <!-- Legend -->
+  <g transform="translate(600,70)">
+    <line x1="0" y1="0" x2="30" y2="0" stroke="#F44336" stroke-width="3"/>
+    <text x="35" y="5" font-size="12" fill="#333">语言混淆</text>
+
+    <line x1="0" y1="25" x2="30" y2="25" stroke="#FF9800" stroke-width="3"/>
+    <text x="35" y="30" font-size="12" fill="#333">误加 Ruby</text>
+
+    <line x1="0" y1="50" x2="30" y2="50" stroke="#2196F3" stroke-width="3"/>
+    <text x="35" y="55" font-size="12" fill="#333">注记欠失</text>
+  </g>
+</svg>
+
+
 问题：Prompt 修改后无法回滚到历史版本
 场景：
 - 发现新 Prompt 导致质量下降

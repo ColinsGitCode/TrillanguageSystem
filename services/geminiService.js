@@ -13,6 +13,8 @@ const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelangua
 const MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS || 2048);
 const TEMPERATURE = Number(process.env.LLM_TEMPERATURE || 0.2);
 
+console.log('[Gemini Service] MAX_TOKENS:', MAX_TOKENS, 'TEMPERATURE:', TEMPERATURE);
+
 /**
  * 构建 Gemini API URL
  * @param {string} endpoint - API 端点（如 'generateContent'）
@@ -218,8 +220,11 @@ async function generateContent(prompt) {
 
         // 提取文本内容
         const text = extractGeminiContent(data);
+        const finishReason = data?.candidates?.[0]?.finishReason;
 
         console.log('[Gemini] Response received, length:', text.length);
+        console.log('[Gemini] Finish reason:', finishReason);
+        console.log('[Gemini] Response text preview:', text.substring(0, 300));
 
         // 解析 JSON
         return parseJsonFromText(text);

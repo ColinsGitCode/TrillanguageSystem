@@ -4,10 +4,14 @@ const fs = require('fs');
 require('dotenv').config();
 
 const { buildPrompt } = require('./services/promptEngine');
-const { generateContent, recognizeImage } = require('./services/geminiService');
+const geminiService = require('./services/geminiService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
+
+// 可观测性服务
+const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
+const { HealthCheckService } = require('./services/healthCheckService');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -220,27 +224,195 @@ function normalizeAudioTasks(tasks, baseName) {
 
 // Routes
 
+// ========== 辅助函数：使用指定 provider 生成内容 ==========
+async function generateWithProvider(phrase, provider, perf) {
+  const llmService = provider === 'gemini' ? geminiService : require('./services/localLlmService');
+
+  perf.mark('promptBuild');
+  const { targetDir, folderName } = ensureTodayDirectory();
+  const baseName = buildBaseName(phrase, targetDir);
+  const prompt = buildPrompt({ phrase, filenameBase: baseName });
+
+  perf.mark('llmCall');
+  const content = await llmService.generateContent(prompt);
+
+  perf.mark('jsonParse');
+
+  // 提取 tokens（从原始 API 响应）
+  const tokens = provider === 'gemini'
+    ? TokenCounter.extractGeminiTokens(content)
+    : TokenCounter.extractOpenAITokens(content);
+
+  const cost = TokenCounter.calculateCost(tokens, provider);
+  const quality = QualityChecker.check(content, phrase);
+  const promptData = PromptParser.parse(prompt);
+
+  return {
+    output: content,
+    prompt,
+    observability: {
+      tokens,
+      cost,
+      quality,
+      prompt: promptData,
+      metadata: { provider, timestamp: Date.now() }
+    }
+  };
+}
+
+// ========== 辅助函数：对比模式处理 ==========
+async function handleComparisonMode(phrase) {
+  console.log('[Comparison] Starting parallel generation...');
+
+  const results = {
+    phrase,
+    gemini: { success: false },
+    local: { success: false },
+    comparison: null
+  };
+
+  // 并行调用两个 provider
+  const perfGemini = new PerformanceMonitor().start();
+  const perfLocal = new PerformanceMonitor().start();
+
+  const [geminiResult, localResult] = await Promise.allSettled([
+    generateWithProvider(phrase, 'gemini', perfGemini),
+    generateWithProvider(phrase, 'local', perfLocal)
+  ]);
+
+  // 处理 Gemini 结果
+  if (geminiResult.status === 'fulfilled') {
+    const perfData = perfGemini.end();
+    results.gemini = {
+      success: true,
+      output: geminiResult.value.output,
+      observability: {
+        ...geminiResult.value.observability,
+        performance: perfData
+      }
+    };
+  } else {
+    results.gemini = {
+      success: false,
+      error: geminiResult.reason.message
+    };
+  }
+
+  // 处理 Local 结果
+  if (localResult.status === 'fulfilled') {
+    const perfData = perfLocal.end();
+    results.local = {
+      success: true,
+      output: localResult.value.output,
+      observability: {
+        ...localResult.value.observability,
+        performance: perfData
+      }
+    };
+  } else {
+    results.local = {
+      success: false,
+      error: localResult.reason.message
+    };
+  }
+
+  // 生成对比分析
+  if (results.gemini.success && results.local.success) {
+    const geminiObs = results.gemini.observability;
+    const localObs = results.local.observability;
+
+    results.comparison = {
+      metrics: {
+        speed: {
+          gemini: geminiObs.performance.totalTime,
+          local: localObs.performance.totalTime,
+          faster: geminiObs.performance.totalTime < localObs.performance.totalTime ? 'gemini' : 'local'
+        },
+        quality: {
+          gemini: geminiObs.quality.score,
+          local: localObs.quality.score,
+          better: geminiObs.quality.score > localObs.quality.score ? 'gemini' : 'local'
+        },
+        cost: {
+          gemini: geminiObs.cost.total,
+          local: localObs.cost.total,
+          cheaper: geminiObs.cost.total <= localObs.cost.total ? 'gemini' : 'local'
+        }
+      },
+      winner: determineWinner(geminiObs, localObs),
+      recommendation: generateRecommendation(geminiObs, localObs)
+    };
+  }
+
+  return results;
+}
+
+function determineWinner(geminiObs, localObs) {
+  const geminiScore = geminiObs.quality.score * 0.6 + (10000 / geminiObs.performance.totalTime) * 0.4;
+  const localScore = localObs.quality.score * 0.6 + (10000 / localObs.performance.totalTime) * 0.4;
+
+  if (Math.abs(geminiScore - localScore) < 5) return 'tie';
+  return geminiScore > localScore ? 'gemini' : 'local';
+}
+
+function generateRecommendation(geminiObs, localObs) {
+  const speedDiff = localObs.performance.totalTime - geminiObs.performance.totalTime;
+  const qualityDiff = geminiObs.quality.score - localObs.quality.score;
+
+  if (qualityDiff > 10 && speedDiff < 2000) {
+    return '推荐使用 Gemini：质量更高且速度相当';
+  }
+  if (speedDiff > 3000 && qualityDiff < 5) {
+    return '推荐使用 Gemini：速度明显更快';
+  }
+  if (localObs.cost.total === 0 && qualityDiff < 10) {
+    return '推荐使用 Local LLM：成本为零且质量接近';
+  }
+
+  return '两者表现相当，可根据实际需求选择';
+}
+
+// ========== 增强的 /api/generate 端点 ==========
 app.post('/api/generate', async (req, res) => {
   let prompt = null;
+  const perf = new PerformanceMonitor().start();
+
   try {
     if (!canGenerate(req)) {
       return res.status(429).json({ error: '生成请求过于频繁，请稍后再试' });
     }
-    const { phrase } = req.body;
+
+    // 获取参数
+    const { phrase, llm_provider = 'gemini', enable_compare = false } = req.body;
+
     if (!phrase) {
       return res.status(400).json({ error: 'Phrase is required' });
     }
 
-    console.log(`[Generate] Starting task for phrase: "${phrase}"`);
+    // ===== 对比模式 =====
+    if (enable_compare) {
+      const comparisonResults = await handleComparisonMode(phrase);
+      return res.json(comparisonResults);
+    }
+
+    // ===== 单模型模式 =====
+    const llmService = llm_provider === 'gemini' ? geminiService : require('./services/localLlmService');
+
+    console.log(`[Generate] Using provider: ${llm_provider.toUpperCase()}`);
+    console.log(`[Generate] Phrase: "${phrase}"`);
 
     // 1. Build Prompt
+    perf.mark('promptBuild');
     const { targetDir, folderName } = ensureTodayDirectory();
     const baseName = buildBaseName(phrase, targetDir);
     prompt = buildPrompt({ phrase, filenameBase: baseName });
 
-    // 2. Call Gemini
-    const content = await generateContent(prompt);
+    // 2. Call LLM
+    perf.mark('llmCall');
+    const content = await llmService.generateContent(prompt);
     const llmOutput = JSON.parse(JSON.stringify(content));
+
+    perf.mark('jsonParse');
 
     const renderHtmlLocally = (process.env.HTML_RENDER_MODE || 'local').toLowerCase() === 'local';
     const validationErrors = validateGeneratedContent(content, {
@@ -276,6 +448,7 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // 3. Save Files
+    perf.mark('fileSave');
     const result = saveGeneratedFiles(phrase, content, { baseName, targetDir, folderName });
 
     console.log(`[Generate] Success. Saved to ${result.folder}/${result.files.join(', ')}`);
@@ -298,12 +471,56 @@ app.post('/api/generate', async (req, res) => {
       }
     }
 
+    perf.mark('audioGenerate');
+    const performance = perf.end();
+
+    // ===== 构建可观测性数据 =====
+
+    // F1: Token 计数
+    const tokens = llm_provider === 'gemini'
+      ? TokenCounter.extractGeminiTokens(llmOutput)
+      : TokenCounter.extractOpenAITokens(llmOutput);
+
+    const cost = TokenCounter.calculateCost(tokens, llm_provider);
+
+    // 配额数据（TODO: 从数据库或缓存读取）
+    const quota = {
+      used: 0,  // 需要持久化统计
+      limit: 1500,
+      remaining: 1500,
+      resetAt: new Date().setHours(24, 0, 0, 0),
+      percentage: 0
+    };
+
+    // F5: Prompt 解析
+    const promptData = PromptParser.parse(prompt);
+
+    // F7: 质量检查
+    const quality = QualityChecker.check(content, phrase);
+
+    // 组装可观测性数据
+    const observability = {
+      tokens,
+      cost,
+      quota,
+      performance,
+      prompt: promptData,
+      quality,
+      metadata: {
+        provider: llm_provider,
+        model: process.env[llm_provider === 'gemini' ? 'GEMINI_MODEL' : 'LLM_MODEL'],
+        timestamp: Date.now(),
+        requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }
+    };
+
     res.json({
       success: true,
       result,
       audio,
       prompt,
       llm_output: llmOutput,
+      observability  // ✅ 新增可观测性数据
     });
   } catch (error) {
     console.error('[Generate] Error:', error);
@@ -317,7 +534,7 @@ app.post('/api/ocr', async (req, res) => {
       return res.status(429).json({ error: '请求过于频繁，请稍后再试' });
     }
 
-    const { image } = req.body;
+    const { image, llm_provider = 'gemini' } = req.body;
     if (!image || !image.startsWith('data:image/')) {
       return res.status(400).json({ error: '请提供有效的图片' });
     }
@@ -328,7 +545,7 @@ app.post('/api/ocr', async (req, res) => {
     }
 
     console.log('[OCR] Starting recognition...');
-    const text = await recognizeImage(image);
+    const text = await geminiService.recognizeImage(image);
 
     if (!text || !text.trim()) {
       return res.status(422).json({ error: '未能识别出文字' });
@@ -339,6 +556,31 @@ app.post('/api/ocr', async (req, res) => {
   } catch (error) {
     console.error('[OCR] Error:', error);
     res.status(500).json({ error: error.message || 'OCR 失败' });
+  }
+});
+
+// ========== F3: 健康检查端点 ==========
+app.get('/api/health', async (req, res) => {
+  try {
+    const { services, system } = await HealthCheckService.checkAll();
+
+    // 计算存储信息
+    const storageService = services.find(s => s.type === 'storage');
+    const storage = storageService?.details || {
+      used: 0,
+      total: 0,
+      percentage: 0,
+      recordsCount: 0
+    };
+
+    res.json({
+      services,
+      storage,
+      system
+    });
+  } catch (error) {
+    console.error('[Health] Error:', error);
+    res.status(500).json({ error: 'Health check failed' });
   }
 });
 

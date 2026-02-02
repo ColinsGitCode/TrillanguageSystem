@@ -13,6 +13,7 @@
     
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="modern-card.css" />
+    <link rel="stylesheet" href="observability.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
   </head>
@@ -111,6 +112,148 @@
               </div>
               <p id="progressStatus" class="progress-status"></p>
             </div>
+
+            <!-- F9: 对比模式控件 -->
+            <div class="comparison-controls">
+              <label class="comparison-toggle">
+                <input type="checkbox" id="enableCompare" />
+                <span>启用对比模式 (Gemini vs Local LLM)</span>
+              </label>
+            </div>
+
+            <!-- 可观测性面板 -->
+            <div id="observabilityPanel" class="observability-panel hidden">
+
+              <!-- F1: Token 统计 -->
+              <div class="obs-section token-stats">
+                <h4 class="obs-title">📊 Token 使用情况</h4>
+                <div class="token-grid">
+                  <div class="token-item">
+                    <span class="token-label">Input</span>
+                    <span class="token-value" id="tokenInput">-</span>
+                  </div>
+                  <div class="token-item">
+                    <span class="token-label">Output</span>
+                    <span class="token-value" id="tokenOutput">-</span>
+                  </div>
+                  <div class="token-item">
+                    <span class="token-label">Total</span>
+                    <span class="token-value" id="tokenTotal">-</span>
+                  </div>
+                  <div class="token-item">
+                    <span class="token-label">Cost</span>
+                    <span class="token-value" id="tokenCost">$0.000</span>
+                  </div>
+                </div>
+                <div class="quota-bar">
+                  <div class="quota-label">
+                    <span>今日配额</span>
+                    <span id="quotaText">0/1,500</span>
+                  </div>
+                  <div class="quota-progress">
+                    <div class="quota-fill" id="quotaFill" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- F2: 性能指标 -->
+              <div class="obs-section performance-metrics">
+                <h4 class="obs-title">⚡ 性能分析</h4>
+                <div class="perf-summary">
+                  <div class="perf-total">
+                    <span class="perf-value" id="perfTotal">-</span>
+                    <span class="perf-label">总耗时</span>
+                  </div>
+                </div>
+                <div class="perf-breakdown">
+                  <div class="perf-phase">
+                    <span class="phase-name">Prompt 构建</span>
+                    <div class="phase-bar-container">
+                      <div class="phase-bar" id="perfPromptBar" style="width: 0%"></div>
+                    </div>
+                    <span class="phase-time" id="perfPromptTime">-</span>
+                  </div>
+                  <div class="perf-phase">
+                    <span class="phase-name">LLM 调用</span>
+                    <div class="phase-bar-container">
+                      <div class="phase-bar" id="perfLlmBar" style="width: 0%"></div>
+                    </div>
+                    <span class="phase-time" id="perfLlmTime">-</span>
+                  </div>
+                  <div class="perf-phase">
+                    <span class="phase-name">JSON 解析</span>
+                    <div class="phase-bar-container">
+                      <div class="phase-bar" id="perfParseBar" style="width: 0%"></div>
+                    </div>
+                    <span class="phase-time" id="perfParseTime">-</span>
+                  </div>
+                  <div class="perf-phase">
+                    <span class="phase-name">文件保存</span>
+                    <div class="phase-bar-container">
+                      <div class="phase-bar" id="perfSaveBar" style="width: 0%"></div>
+                    </div>
+                    <span class="phase-time" id="perfSaveTime">-</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- F7: 质量评分 -->
+              <div class="obs-section quality-score">
+                <h4 class="obs-title">✨ 内容质量</h4>
+                <div class="quality-main">
+                  <div class="quality-circle">
+                    <svg viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" class="quality-bg"></circle>
+                      <circle cx="50" cy="50" r="40" class="quality-progress"
+                              id="qualityCircle"
+                              style="stroke-dasharray: 251; stroke-dashoffset: 251"></circle>
+                    </svg>
+                    <div class="quality-score-value" id="qualityScore">-</div>
+                  </div>
+                  <div class="quality-checks" id="qualityChecks">
+                    <!-- 动态生成质量检查项 -->
+                  </div>
+                </div>
+                <div class="quality-warnings hidden" id="qualityWarnings"></div>
+              </div>
+
+              <!-- F5: Prompt 结构 -->
+              <div class="obs-section prompt-structure">
+                <h4 class="obs-title">📋 Prompt 结构</h4>
+                <div class="prompt-tabs">
+                  <button class="prompt-tab active" data-tab="full">完整 Prompt</button>
+                  <button class="prompt-tab" data-tab="structure">结构化视图</button>
+                </div>
+                <div class="prompt-tab-content">
+                  <div class="prompt-tab-panel active" id="promptFull">
+                    <pre id="promptFullContent"></pre>
+                  </div>
+                  <div class="prompt-tab-panel" id="promptStructure">
+                    <div class="prompt-section">
+                      <h5>🎯 System Instruction</h5>
+                      <pre id="promptSystem"></pre>
+                    </div>
+                    <div class="prompt-section">
+                      <h5>🧠 Chain of Thought</h5>
+                      <ol id="promptCoT"></ol>
+                    </div>
+                    <div class="prompt-section">
+                      <h5>📚 Few-shot Examples</h5>
+                      <div id="promptExamples"></div>
+                    </div>
+                    <div class="prompt-section">
+                      <h5>✅ Quality Standards</h5>
+                      <ul id="promptStandards"></ul>
+                    </div>
+                    <div class="prompt-section">
+                      <h5>📝 User Input</h5>
+                      <pre id="promptUserInput"></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
 
           <div class="card-header">
@@ -150,6 +293,62 @@
       <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog">
         <div class="modal-content" id="modalContainer">
             <!-- Content injected via JS -->
+        </div>
+      </div>
+
+      <!-- F3: 健康状态面板 -->
+      <div id="healthPanel" class="health-panel">
+        <button id="healthToggle" class="health-toggle">
+          <span class="health-icon">🏥</span>
+          <span class="health-text">系统状态</span>
+        </button>
+        <div class="health-content hidden">
+          <h4>服务健康状态</h4>
+          <div id="healthServices" class="health-services">
+            <!-- 动态生成服务状态 -->
+          </div>
+          <div class="health-storage">
+            <h5>存储空间</h5>
+            <div class="storage-bar">
+              <div class="storage-fill" id="storageFill" style="width: 0%"></div>
+            </div>
+            <span class="storage-text" id="storageText">-</span>
+          </div>
+          <button id="healthRefresh" class="btn-secondary">刷新状态</button>
+        </div>
+      </div>
+
+      <!-- F9: 对比模式结果模态框 -->
+      <div id="comparisonModal" class="modal hidden">
+        <div class="modal-content comparison-view">
+          <button class="modal-close" onclick="closeComparisonModal()">×</button>
+          <h2>🔍 模型对比分析</h2>
+
+          <div class="comparison-grid">
+            <div class="comparison-panel">
+              <div class="comparison-header gemini">
+                <h3>🤖 Gemini API</h3>
+                <span class="comparison-status" id="geminiStatus"></span>
+              </div>
+              <div class="comparison-metrics" id="geminiMetrics"></div>
+              <div class="comparison-output" id="geminiOutput"></div>
+            </div>
+
+            <div class="comparison-panel">
+              <div class="comparison-header local">
+                <h3>🖥️ Local LLM</h3>
+                <span class="comparison-status" id="localStatus"></span>
+              </div>
+              <div class="comparison-metrics" id="localMetrics"></div>
+              <div class="comparison-output" id="localOutput"></div>
+            </div>
+          </div>
+
+          <div class="comparison-summary">
+            <h3>📊 对比总结</h3>
+            <div class="comparison-winner" id="comparisonWinner"></div>
+            <div class="comparison-recommendation" id="comparisonRec"></div>
+          </div>
         </div>
       </div>
     </div>

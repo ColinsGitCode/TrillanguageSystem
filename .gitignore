@@ -5,3 +5,15 @@ npm-debug.log*
 .env
 
 CLAUDE.md
+
+# Generated data
+trilingual_records/
+
+# Temporary documentation files
+Docs/**/*.bak
+Docs/**/*_backup.md
+Docs/**/*_ja.md
+Docs/**/*_with_d3.md
+Docs/diagram_tools/
+Docs/visualizations/
+Docs/assets/
