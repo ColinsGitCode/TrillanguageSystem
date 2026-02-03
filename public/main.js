@@ -791,6 +791,205 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ========== Tab Switching ==========
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const targetTab = btn.dataset.tab;
+
+    // Update active states
+    tabBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    tabContents.forEach(content => {
+      if (content.dataset.content === targetTab) {
+        content.classList.add('active');
+      } else {
+        content.classList.remove('active');
+      }
+    });
+
+    // Load history when switching to history tab
+    if (targetTab === 'history' && !historyState.loaded) {
+      loadHistory();
+    }
+  });
+});
+
+// ========== History Panel ==========
+const historyListEl = document.getElementById('historyList');
+const historyCountEl = document.getElementById('historyCount');
+const historySearchEl = document.getElementById('historySearch');
+const historyProviderFilterEl = document.getElementById('historyProviderFilter');
+const historyPrevBtn = document.getElementById('historyPrevBtn');
+const historyNextBtn = document.getElementById('historyNextBtn');
+const historyPageInfo = document.getElementById('historyPageInfo');
+
+const historyState = {
+  records: [],
+  currentPage: 1,
+  pageSize: 20,
+  totalPages: 1,
+  totalCount: 0,
+  searchQuery: '',
+  providerFilter: '',
+  loaded: false
+};
+
+async function loadHistory() {
+  try {
+    const params = new URLSearchParams({
+      page: historyState.currentPage,
+      limit: historyState.pageSize,
+      search: historyState.searchQuery,
+      provider: historyState.providerFilter
+    });
+
+    const response = await fetch(`/api/history?${params}`);
+    if (!response.ok) throw new Error('Failed to load history');
+
+    const data = await response.json();
+
+    historyState.records = data.records || [];
+    historyState.totalCount = data.pagination.total;
+    historyState.totalPages = data.pagination.totalPages;
+    historyState.loaded = true;
+
+    renderHistory();
+    updateHistoryPagination(data.pagination);
+  } catch (err) {
+    console.error('[History] Load failed:', err);
+    historyListEl.innerHTML = '<div class="empty-hint">❌ 加载失败</div>';
+  }
+}
+
+function renderHistory() {
+  if (!historyState.records.length) {
+    historyListEl.innerHTML = `
+      <div class="empty-hint">
+        <div class="empty-hint-icon">📭</div>
+        <div>${historyState.searchQuery ? '未找到匹配的记录' : '暂无历史记录'}</div>
+      </div>
+    `;
+    historyCountEl.textContent = '0';
+    return;
+  }
+
+  historyCountEl.textContent = historyState.totalCount;
+
+  historyListEl.innerHTML = historyState.records.map(record => {
+    const date = new Date(record.created_at).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const qualityClass = getQualityClass(record.quality_score);
+    const providerIcon = record.llm_provider === 'gemini' ? '🤖' : '🏠';
+
+    return `
+      <div class="history-item" data-id="${record.id}">
+        <div class="history-item-phrase">${escapeHtml(record.phrase)}</div>
+        <div class="history-item-meta">
+          <span>${providerIcon} ${escapeHtml(record.llm_provider)}</span>
+          <span>🕒 ${date}</span>
+          <span>📊 <span class="quality-badge ${qualityClass}">${record.quality_score || 0}</span></span>
+          <span>🔤 ${record.tokens_total || 0} tokens</span>
+          ${record.cost_total > 0 ? `<span>💰 $${record.cost_total.toFixed(4)}</span>` : ''}
+        </div>
+        ${record.en_translation || record.zh_translation ? `
+          <div class="history-item-translation">
+            ${escapeHtml(record.en_translation || record.zh_translation || '')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  // Add click handlers
+  historyListEl.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = item.dataset.id;
+      viewHistoryDetail(id);
+    });
+  });
+}
+
+function getQualityClass(score) {
+  if (score >= 80) return 'quality-excellent';
+  if (score >= 60) return 'quality-good';
+  if (score >= 40) return 'quality-fair';
+  return 'quality-poor';
+}
+
+function updateHistoryPagination(pagination) {
+  historyPageInfo.textContent = `${pagination.page} / ${pagination.totalPages}`;
+  historyPrevBtn.disabled = !pagination.hasPrev;
+  historyNextBtn.disabled = !pagination.hasNext;
+}
+
+async function viewHistoryDetail(id) {
+  try {
+    const response = await fetch(`/api/history/${id}`);
+    if (!response.ok) throw new Error('Failed to load record detail');
+
+    const data = await response.json();
+    const record = data.record;
+
+    // Render the record's HTML file
+    const htmlPath = record.html_file_path;
+    const folder = record.folder_name;
+    const filename = htmlPath.split('/').pop();
+
+    // Fetch and display the HTML content
+    const htmlResponse = await fetch(`/api/folders/${folder}/files/${filename}`);
+    if (!htmlResponse.ok) throw new Error('Failed to load HTML content');
+
+    const htmlContent = await htmlResponse.text();
+    renderCard(htmlContent, record.phrase, folder);
+
+  } catch (err) {
+    console.error('[History] Detail load failed:', err);
+    renderErrorCard('加载失败', err.message);
+  }
+}
+
+// Search and filter handlers
+let searchTimeout = null;
+historySearchEl.addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    historyState.searchQuery = e.target.value.trim();
+    historyState.currentPage = 1;
+    loadHistory();
+  }, 500);
+});
+
+historyProviderFilterEl.addEventListener('change', (e) => {
+  historyState.providerFilter = e.target.value;
+  historyState.currentPage = 1;
+  loadHistory();
+});
+
+// Pagination handlers
+historyPrevBtn.addEventListener('click', () => {
+  if (historyState.currentPage > 1) {
+    historyState.currentPage--;
+    loadHistory();
+  }
+});
+
+historyNextBtn.addEventListener('click', () => {
+  if (historyState.currentPage < historyState.totalPages) {
+    historyState.currentPage++;
+    loadHistory();
+  }
+});
+
+// ========== Initialize ==========
 loadFolders();
 
 setInterval(() => {

@@ -32,8 +32,15 @@
 
       <section class="grid">
         <article class="card folders" aria-label="Folders">
+          <!-- Tab 切换 -->
+          <div class="panel-tabs">
+            <button class="tab-btn active" data-tab="generator">生成</button>
+            <button class="tab-btn" data-tab="folders">文件夹</button>
+            <button class="tab-btn" data-tab="history">历史记录</button>
+          </div>
+
           <!-- Generation Panel -->
-          <div class="gen-panel">
+          <div class="gen-panel tab-content active" data-content="generator">
             <p class="label">New Card</p>
 
             <div class="input-modes">
@@ -124,14 +131,50 @@
             </div>
           </div>
 
-          <div class="card-header">
-            <div>
-              <p class="label">Path</p>
-              <h2>Date</h2>
+          <!-- Folders Panel -->
+          <div class="folders-panel tab-content" data-content="folders">
+            <div class="card-header">
+              <div>
+                <p class="label">Path</p>
+                <h2>Date</h2>
+              </div>
+              <div class="chip" id="folderCount">0</div>
             </div>
-            <div class="chip" id="folderCount">0</div>
+            <div class="list" id="folderList" role="listbox" aria-label="folder list"></div>
           </div>
-          <div class="list" id="folderList" role="listbox" aria-label="folder list"></div>
+
+          <!-- History Panel -->
+          <div class="history-panel tab-content" data-content="history">
+            <div class="card-header">
+              <div>
+                <p class="label">Database</p>
+                <h2>历史记录</h2>
+              </div>
+              <div class="chip" id="historyCount">0</div>
+            </div>
+
+            <!-- 搜索和过滤 -->
+            <div class="history-filters">
+              <input type="text" id="historySearch" placeholder="🔍 搜索短语或翻译..." class="search-input" />
+              <select id="historyProviderFilter" class="filter-select">
+                <option value="">所有提供商</option>
+                <option value="local">Local LLM</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </div>
+
+            <!-- 历史记录列表 -->
+            <div class="list history-list" id="historyList" role="listbox" aria-label="history list">
+              <div class="loading-hint">加载中...</div>
+            </div>
+
+            <!-- 分页控件 -->
+            <div class="history-pagination" id="historyPagination">
+              <button id="historyPrevBtn" class="btn-text" disabled>← 上一页</button>
+              <span id="historyPageInfo" class="page-info">1 / 1</span>
+              <button id="historyNextBtn" class="btn-text" disabled>下一页 →</button>
+            </div>
+          </div>
         </article>
 
         <article class="card viewer" aria-label="Viewer">

@@ -392,7 +392,7 @@ function setupTabs() {
             buttons.forEach(b => b.classList.remove('active'));
             document.getElementById('promptViewStruct').classList.add('hidden');
             document.getElementById('promptViewRaw').classList.add('hidden');
-            
+
             // Set
             btn.classList.add('active');
             const target = btn.dataset.target;
@@ -403,4 +403,317 @@ function setupTabs() {
             }
         });
     });
+
+    // Setup time range selector
+    const timeBtns = document.querySelectorAll('.time-btn');
+    timeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            timeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const days = parseInt(btn.dataset.days);
+            loadHistoricalAnalytics(days);
+        });
+    });
+}
+
+// --- Layer 3: Historical Analytics ---
+
+let analyticsState = {
+    days: 30,
+    loaded: false
+};
+
+async function loadHistoricalAnalytics(days = 30) {
+    analyticsState.days = days;
+
+    try {
+        // Calculate date range
+        const dateTo = new Date().toISOString().split('T')[0];
+        const dateFrom = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        // Fetch statistics and recent records
+        const [statsRes, historyRes] = await Promise.all([
+            fetch(`/api/statistics?dateFrom=${dateFrom}&dateTo=${dateTo}`),
+            fetch(`/api/history?limit=100&dateFrom=${dateFrom}&dateTo=${dateTo}`)
+        ]);
+
+        if (!statsRes.ok || !historyRes.ok) throw new Error('Failed to load analytics');
+
+        const statsData = await statsRes.json();
+        const historyData = await historyRes.json();
+
+        renderQualityTrend(historyData.records);
+        renderProviderDistribution(statsData.statistics);
+        renderTokenTrend(historyData.records);
+
+        analyticsState.loaded = true;
+    } catch (err) {
+        console.error('[Analytics] Load failed:', err);
+    }
+}
+
+function renderQualityTrend(records) {
+    const container = document.getElementById('qualityTrendChart');
+    container.innerHTML = '';
+
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:#888;">No data</div>';
+        return;
+    }
+
+    // Group by date and calculate average quality
+    const dateMap = {};
+    records.forEach(r => {
+        const date = r.generation_date || r.created_at.split(' ')[0];
+        if (!dateMap[date]) {
+            dateMap[date] = { sum: 0, count: 0 };
+        }
+        dateMap[date].sum += r.quality_score || 0;
+        dateMap[date].count += 1;
+    });
+
+    const data = Object.keys(dateMap).sort().map(date => ({
+        date: new Date(date),
+        avgQuality: dateMap[date].sum / dateMap[date].count
+    }));
+
+    // D3 line chart
+    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+    const width = container.clientWidth - margin.left - margin.right;
+    const height = 200 - margin.top - margin.bottom;
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleTime()
+        .domain(d3.extent(data, d => d.date))
+        .range([0, width]);
+
+    const y = d3.scaleLinear()
+        .domain([0, 100])
+        .range([height, 0]);
+
+    const line = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.avgQuality))
+        .curve(d3.curveMonotoneX);
+
+    // Add gradient
+    const gradient = svg.append('defs')
+        .append('linearGradient')
+        .attr('id', 'quality-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+
+    gradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', '#3b82f6')
+        .attr('stop-opacity', 0.3);
+
+    gradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', '#3b82f6')
+        .attr('stop-opacity', 0);
+
+    // Add area
+    const area = d3.area()
+        .x(d => x(d.date))
+        .y0(height)
+        .y1(d => y(d.avgQuality))
+        .curve(d3.curveMonotoneX);
+
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'url(#quality-gradient)')
+        .attr('d', area);
+
+    // Add line
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', '#3b82f6')
+        .attr('stroke-width', 2)
+        .attr('d', line);
+
+    // Add axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x).ticks(5))
+        .style('font-size', '10px')
+        .style('color', '#888');
+
+    svg.append('g')
+        .call(d3.axisLeft(y).ticks(5))
+        .style('font-size', '10px')
+        .style('color', '#888');
+
+    // Add dots
+    svg.selectAll('dot')
+        .data(data)
+        .enter().append('circle')
+        .attr('cx', d => x(d.date))
+        .attr('cy', d => y(d.avgQuality))
+        .attr('r', 3)
+        .attr('fill', '#3b82f6');
+}
+
+function renderProviderDistribution(statistics) {
+    const container = document.getElementById('providerPieChart');
+    container.innerHTML = '';
+
+    if (!statistics || statistics.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:#888;">No data</div>';
+        return;
+    }
+
+    const data = statistics.map(s => ({
+        provider: s.llm_provider,
+        count: s.total_count
+    }));
+
+    const width = container.clientWidth;
+    const height = 200;
+    const radius = Math.min(width, height) / 2 - 20;
+
+    const color = d3.scaleOrdinal()
+        .domain(data.map(d => d.provider))
+        .range(['#3b82f6', '#10b981', '#f59e0b', '#ef4444']);
+
+    const pie = d3.pie()
+        .value(d => d.count)
+        .sort(null);
+
+    const arc = d3.arc()
+        .innerRadius(radius * 0.5)
+        .outerRadius(radius);
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
+
+    const arcs = svg.selectAll('arc')
+        .data(pie(data))
+        .enter().append('g');
+
+    arcs.append('path')
+        .attr('d', arc)
+        .attr('fill', d => color(d.data.provider))
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2);
+
+    arcs.append('text')
+        .attr('transform', d => `translate(${arc.centroid(d)})`)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '12px')
+        .attr('fill', '#fff')
+        .attr('font-weight', 'bold')
+        .text(d => d.data.count);
+
+    // Add legend
+    const legend = d3.select(container)
+        .append('div')
+        .style('display', 'flex')
+        .style('justify-content', 'center')
+        .style('gap', '1rem')
+        .style('margin-top', '1rem')
+        .style('font-size', '12px');
+
+    data.forEach(d => {
+        const item = legend.append('div')
+            .style('display', 'flex')
+            .style('align-items', 'center')
+            .style('gap', '0.3rem');
+
+        item.append('div')
+            .style('width', '12px')
+            .style('height', '12px')
+            .style('border-radius', '2px')
+            .style('background-color', color(d.provider));
+
+        item.append('span')
+            .text(`${d.provider} (${d.count})`);
+    });
+}
+
+function renderTokenTrend(records) {
+    const container = document.getElementById('tokenTrendChart');
+    container.innerHTML = '';
+
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:#888;">No data</div>';
+        return;
+    }
+
+    // Group by date and sum tokens
+    const dateMap = {};
+    records.forEach(r => {
+        const date = r.generation_date || r.created_at.split(' ')[0];
+        if (!dateMap[date]) {
+            dateMap[date] = 0;
+        }
+        dateMap[date] += r.tokens_total || 0;
+    });
+
+    const data = Object.keys(dateMap).sort().map(date => ({
+        date: new Date(date),
+        tokens: dateMap[date]
+    }));
+
+    // D3 bar chart
+    const margin = { top: 20, right: 20, bottom: 30, left: 50 };
+    const width = container.clientWidth - margin.left - margin.right;
+    const height = 200 - margin.top - margin.bottom;
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleBand()
+        .domain(data.map(d => d.date))
+        .range([0, width])
+        .padding(0.2);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.tokens) * 1.1])
+        .range([height, 0]);
+
+    // Add bars
+    svg.selectAll('bar')
+        .data(data)
+        .enter().append('rect')
+        .attr('x', d => x(d.date))
+        .attr('y', d => y(d.tokens))
+        .attr('width', x.bandwidth())
+        .attr('height', d => height - y(d.tokens))
+        .attr('fill', '#10b981')
+        .attr('rx', 4);
+
+    // Add axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x).tickFormat(d3.timeFormat('%m/%d')).ticks(5))
+        .style('font-size', '10px')
+        .style('color', '#888');
+
+    svg.append('g')
+        .call(d3.axisLeft(y).ticks(5))
+        .style('font-size', '10px')
+        .style('color', '#888');
+}
+
+// Load analytics on init
+if (document.getElementById('qualityTrendChart')) {
+    loadHistoricalAnalytics(30);
 }

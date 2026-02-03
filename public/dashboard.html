@@ -162,7 +162,30 @@
                 </div>
             </div>
 
-            <!-- Layer 3: Deep Dive -->
+            <!-- Layer 3: Historical Analytics -->
+            <div class="card card-wide" id="card-quality-trend">
+                <div class="card-header">
+                    <h3>Quality Trend (Last 30 Days)</h3>
+                    <div class="time-range-selector">
+                        <button class="time-btn active" data-days="7">7D</button>
+                        <button class="time-btn" data-days="30">30D</button>
+                        <button class="time-btn" data-days="90">90D</button>
+                    </div>
+                </div>
+                <div class="chart-container" id="qualityTrendChart"></div>
+            </div>
+
+            <div class="card card-md" id="card-provider-stats">
+                <div class="card-header"><h3>Provider Distribution</h3></div>
+                <div class="chart-container" id="providerPieChart"></div>
+            </div>
+
+            <div class="card card-md" id="card-token-trend">
+                <div class="card-header"><h3>Token Usage Trend</h3></div>
+                <div class="chart-container" id="tokenTrendChart"></div>
+            </div>
+
+            <!-- Layer 4: Deep Dive -->
             <div class="card card-full" id="card-prompt">
                 <div class="card-header">
                     <h3>Prompt Inspector</h3>
