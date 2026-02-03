@@ -197,7 +197,8 @@ app.post('/api/generate', async (req, res) => {
   try {
     if (!canGenerate(req)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
-    const { phrase, llm_provider = 'gemini', enable_compare = false } = req.body;
+    // 默认使用本地LLM（Gemini已封存）
+    const { phrase, llm_provider = 'local', enable_compare = false } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
 
     // Mode: Comparison

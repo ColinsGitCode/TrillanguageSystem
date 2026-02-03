@@ -42,7 +42,8 @@ const state = {
   selectedFileTitle: null,
   imageBase64: null,
   isGenerating: false,
-  llmProvider: localStorage.getItem('llm_provider') || 'gemini', 
+  // ⚠️ 默认使用本地LLM（Gemini已封存 2026-02-03）
+  llmProvider: localStorage.getItem('llm_provider') || 'local', 
 };
 
 function setStatus(text) {
