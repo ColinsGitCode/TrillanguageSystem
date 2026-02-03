@@ -4,6 +4,10 @@
  */
 
 const crypto = require('crypto');
+const path = require('path');
+
+const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
+const RESOLVED_RECORDS_PATH = path.resolve(RECORDS_PATH);
 
 /**
  * 生成唯一请求ID
@@ -132,7 +136,7 @@ function prepareAudioFilesData({ audioTasks, baseName, folderName }) {
     language: task.lang,
     text: task.text,
     filenameSuffix: task.filename_suffix,
-    filePath: task.filePath || `./trilingual_records/${folderName}/${baseName}${task.filename_suffix}.wav`,
+    filePath: task.filePath || path.join(RESOLVED_RECORDS_PATH, folderName, `${baseName}${task.filename_suffix}.wav`),
     ttsProvider: task.lang === 'en' ? 'kokoro' : 'voicevox',
     ttsModel: task.lang === 'en' ? process.env.TTS_EN_MODEL : null,
     status: task.status || 'pending'

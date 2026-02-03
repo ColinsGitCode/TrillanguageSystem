@@ -7,7 +7,7 @@
 
 ## 前置条件
 - 已安装 Docker Desktop 并登录；勾选「Login items / Start Docker Desktop when you log in」（Preferences › General）。
-- 本仓库包含 `docker-compose.yml`，且宿主路径 `/Users/xueguodong/Desktop/trilingual_records` 已存在且含 HTML。
+- 本仓库包含 `docker-compose.yml`；记录数据使用 Docker 命名卷 `trilingual_records`（容器内路径 `/data/trilingual_records`）。
 
 ## 一次性初始化
 1) 进入项目目录：
@@ -50,7 +50,7 @@
   ```bash
   docker compose up -d --build
   ```
-- 彻底删除容器/网络（不会删宿主机数据目录）：
+- 彻底删除容器/网络（不会删除命名卷数据）：
   ```bash
   docker compose down
   ```
@@ -64,5 +64,5 @@
 
 ## 排查
 - 端口占用：确保宿主 3010 未被其他进程使用。
-- 数据路径：确认 `/Users/xueguodong/Desktop/trilingual_records` 可读（挂载是只读）。
+- 数据路径：容器内 `/data/trilingual_records`，由命名卷 `trilingual_records` 提供（读写）。
 - 若自动拉起失效：检查是否曾执行 `docker compose stop`；如是，运行 `docker compose start` 恢复。

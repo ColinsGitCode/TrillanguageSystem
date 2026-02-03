@@ -6,6 +6,7 @@ services:
     environment:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
+      - DB_PATH=/data/trilingual_records/trilingual_records.db
       - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
       - TTS_EN_TYPE=kokoro
       - TTS_EN_SPEED=1.0
@@ -18,7 +19,7 @@ services:
     ports:
       - "3010:3010"
     volumes:
-      - /Users/xueguodong/Desktop/trilingual_records:/data/trilingual_records
+      - trilingual_records:/data/trilingual_records
     restart: unless-stopped
 
   tts-en:
@@ -46,3 +47,4 @@ services:
 
 volumes:
   kokoro_cache:
+  trilingual_records:

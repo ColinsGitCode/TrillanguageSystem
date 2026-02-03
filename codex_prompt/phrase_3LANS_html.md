@@ -9,7 +9,7 @@ $ARGUMENTS
 - phrase: 待识别的短语，可包含空格或特殊字符。
 
 ## 基本规则
-1. 先按 `phrase_3LANS.md` 完成 Markdown 输出，文件保存为 `/Users/xueguodong/Desktop/trilingual_records/<YYYYMMDD>/<phrase>.md`（日期为当天，不存在则创建路径，文件名需处理非法字符）。
+1. 先按 `phrase_3LANS.md` 完成 Markdown 输出，文件保存为 `/data/trilingual_records/<YYYYMMDD>/<phrase>.md`（日期为当天，不存在则创建路径，文件名需处理非法字符；路径由 `RECORDS_PATH` 控制，默认 `/data/trilingual_records`）。
 2. 在同一路径生成同名 HTML（后缀 `.html`），正文内容来源于上一步的 Markdown，保持原有结构、ruby 标签和示例格式。
 3. 禁止引入额外颜色主题指令（保持默认主题即可），如需再调色，应与用户确认后单独修改。
 
@@ -52,8 +52,8 @@ $ARGUMENTS
 5. 写入同目录的 `<phrase>.html`，UTF-8 编码。
 
 ## 产出位置
-- Markdown：`/Users/xueguodong/Desktop/trilingual_records/<YYYYMMDD>/<phrase>.md`
-- HTML：同目录 `/Users/xueguodong/Desktop/trilingual_records/<YYYYMMDD>/<phrase>.html`
+- Markdown：`/data/trilingual_records/<YYYYMMDD>/<phrase>.md`
+- HTML：同目录 `/data/trilingual_records/<YYYYMMDD>/<phrase>.html`
 
 ## 注意
 - 保持与 Markdown 内容一致，不新增或删减文本。

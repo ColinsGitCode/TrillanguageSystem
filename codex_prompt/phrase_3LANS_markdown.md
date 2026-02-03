@@ -18,7 +18,7 @@ $ARGUMENTS
   - 其中，英文和日语的解释之后，增加两个例句
     - 例句的风格一定要是日常的口语风格，这非常重要
 3. 若检测结果不确定，输出“无法判定”并给出最可能的语言排名。
-4. 将最终输出保存为 Markdown 文件，命名为 `<phrase>.md`，存放在 `/Users/xueguodong/Desktop/trilingual_records/<YYYYMMDD>/`（若目录不存在则创建），必要时替换非法文件名字符。
+4. 将最终输出保存为 Markdown 文件，命名为 `<phrase>.md`，存放在 `/data/trilingual_records/<YYYYMMDD>/`（若目录不存在则创建；路径由 `RECORDS_PATH` 控制，默认 `/data/trilingual_records`），必要时替换非法文件名字符。
   - YYYYMMDD 必须是当天的日期
 
 **输出格式**
@@ -74,7 +74,7 @@ $ARGUMENTS
 - 若输出内容使用日语且包含汉字，请使用 `<ruby>字<rt>かな</rt></ruby>` 结构标注读音；解释为日语时也需要对汉字标注假名。
 - 即使原语言已存在于输出列表中，也需明确指出该语言栏对应的内容（可标注为“原文”）。
 - 若无法判定语言，给出“无法判定”并简单列出最可能的语言顺序。
-- 最终请按照“输出格式”生成内容，并保存为 `/Users/xueguodong/Desktop/trilingual_records/<YYYYMMDD>/<phrase>.md`，不存在的目录需创建，文件名需处理非法字符。
+- 最终请按照“输出格式”生成内容，并保存为 `/data/trilingual_records/<YYYYMMDD>/<phrase>.md`，不存在的目录需创建，文件名需处理非法文件名字符。
 - 注意 <YYYYMMDD> 必须是本日的日期，不存在路径一定要自动创建
 
 待处理短语：

@@ -12,8 +12,10 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
+const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
+
 class DatabaseService {
-  constructor(dbPath = './data/trilingual_records.db') {
+  constructor(dbPath = DEFAULT_DB_PATH) {
     // 确保data目录存在
     const dataDir = path.dirname(dbPath);
     if (!fs.existsSync(dataDir)) {
