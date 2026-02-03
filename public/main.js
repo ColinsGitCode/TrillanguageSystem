@@ -20,16 +20,6 @@ const progressStatus = document.getElementById('progressStatus');
 const promptText = document.getElementById('promptText');
 const progressTimer = document.getElementById('progressTimer');
 
-// Prompt Display Elements
-const promptDisplay = document.getElementById('promptDisplay');
-const promptContent = document.getElementById('promptContent');
-const togglePromptBtn = document.getElementById('togglePromptBtn');
-const outputDisplay = document.getElementById('outputDisplay');
-const outputContent = document.getElementById('outputContent');
-const toggleOutputBtn = document.getElementById('toggleOutputBtn');
-
-const enableCompareCheckbox = document.getElementById('enableCompare');
-
 // Timer state
 let timerInterval = null;
 let timerStartTime = null;
@@ -246,7 +236,8 @@ function showProgress(phrase) {
 function updateProgress(step, status, isActive = true) {
   progressBar.classList.remove('hidden');
 
-  const steps = ['ocr', 'generate', 'save', 'audio'];
+  // 新的细粒度步骤顺序
+  const steps = ['init', 'ocr', 'prompt', 'llm', 'parse', 'render', 'save', 'audio', 'complete'];
   const currentIndex = steps.indexOf(step);
 
   document.querySelectorAll('.progress-steps .step').forEach((el, i) => {
@@ -265,58 +256,6 @@ function hideProgress() {
   stopTimer();
   promptText.textContent = '';
 }
-
-// ========== Prompt Display Functions ==========
-
-function showFullPrompt(prompt) {
-  promptContent.textContent = prompt;
-  promptDisplay.classList.remove('hidden');
-  promptDisplay.classList.remove('collapsed');
-  togglePromptBtn.textContent = '收起';
-}
-
-function hideFullPrompt() {
-  promptDisplay.classList.add('hidden');
-}
-
-function togglePrompt() {
-  if (promptDisplay.classList.contains('collapsed')) {
-    promptDisplay.classList.remove('collapsed');
-    togglePromptBtn.textContent = '收起';
-  } else {
-    promptDisplay.classList.add('collapsed');
-    togglePromptBtn.textContent = '展开';
-  }
-}
-
-togglePromptBtn.addEventListener('click', togglePrompt);
-
-function showFullOutput(output) {
-  if (typeof output === 'string') {
-    outputContent.textContent = output;
-  } else {
-    outputContent.textContent = JSON.stringify(output, null, 2);
-  }
-  outputDisplay.classList.remove('hidden');
-  outputDisplay.classList.remove('collapsed');
-  toggleOutputBtn.textContent = '收起';
-}
-
-function hideFullOutput() {
-  outputDisplay.classList.add('hidden');
-}
-
-function toggleOutput() {
-  if (outputDisplay.classList.contains('collapsed')) {
-    outputDisplay.classList.remove('collapsed');
-    toggleOutputBtn.textContent = '收起';
-  } else {
-    outputDisplay.classList.add('collapsed');
-    toggleOutputBtn.textContent = '展开';
-  }
-}
-
-toggleOutputBtn.addEventListener('click', toggleOutput);
 
 // ========== Event Listeners for Image ==========
 
@@ -338,8 +277,6 @@ genBtn.addEventListener('click', async () => {
   const phrase = phraseInput.value.trim();
   if (!phrase) return;
 
-  const enableCompare = enableCompareCheckbox.checked;
-
   state.isGenerating = true;
   genBtn.disabled = true;
   genBtn.textContent = '...';
@@ -347,15 +284,21 @@ genBtn.addEventListener('click', async () => {
 
   try {
     showProgress(phrase);
-    updateProgress('generate', enableCompare ? '正在进行模型对比...' : '正在调用 LLM 生成三语内容...');
+    updateProgress('init', '初始化生成流程...');
+
+    // 短暂延迟以显示初始化状态
+    await new Promise(resolve => setTimeout(resolve, 100));
+    updateProgress('prompt', '构建优化 Prompt...');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    updateProgress('llm', '正在调用 LLM 生成三语内容...');
 
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phrase,
-        llm_provider: state.llmProvider,
-        enable_compare: enableCompare
+        llm_provider: state.llmProvider
       })
     });
 
@@ -367,20 +310,10 @@ genBtn.addEventListener('click', async () => {
       throw new Error(message || 'Generation failed');
     }
 
+    updateProgress('parse', '解析 LLM 响应...');
+
     // Save Observability Data
-    if (data.comparison) {
-        const comparisonPayload = {
-          phrase: data.phrase,
-          comparison: data.comparison,
-          gemini: data.gemini ? { success: data.gemini.success, error: data.gemini.error, observability: data.gemini.observability } : null,
-          local: data.local ? { success: data.local.success, error: data.local.error, observability: data.local.observability } : null,
-        };
-        try {
-          localStorage.setItem('latest_observability', JSON.stringify(comparisonPayload));
-        } catch (storageError) {
-          console.warn('保存对比观测数据失败，已跳过', storageError);
-        }
-    } else if (data.observability) {
+    if (data.observability) {
         try {
           localStorage.setItem('latest_observability', JSON.stringify(data.observability));
         } catch (storageError) {
@@ -388,51 +321,22 @@ genBtn.addEventListener('click', async () => {
         }
     }
 
-    if (enableCompare) {
-      if (!data.comparison) {
-        const fallbackObs = data.gemini?.observability || data.observability;
-        if (fallbackObs) {
-          try {
-            localStorage.setItem('latest_observability', JSON.stringify(fallbackObs));
-          } catch (storageError) {
-            console.warn('保存 Gemini 观测数据失败，已跳过', storageError);
-          }
-        }
-        hideProgress();
-        const reason = data.local?.error || data.error || '本地模型未返回对比结果';
-        alert(`对比未完成：${reason}\n已保存 Gemini 观测数据供 Mission Control 查看。`);
-        return;
-      }
-      hideProgress();
-      alert('对比完成！请访问 Mission Control (Dashboard) 查看详细分析数据。');
-      return;
-    }
+    updateProgress('render', '渲染 HTML 卡片...');
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // ===== Single Mode Success =====
-    updateProgress('save', '正在保存文件...');
-
-    // 显示完整 Prompt 与 LLM 输出
-    if (data.prompt) {
-      showFullPrompt(data.prompt);
-    } else {
-      hideFullPrompt();
-    }
-    if (data.llm_output) {
-      showFullOutput(data.llm_output);
-    } else {
-      hideFullOutput();
-    }
+    updateProgress('save', '保存文件到本地...');
 
     // 检查是否有音频生成
     if (data.audio && data.audio.results && data.audio.results.length > 0) {
-      updateProgress('audio', '音频生成完成');
+      updateProgress('audio', '正在生成音频...');
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    // 成功
+    // 完成
     stopTimer();
     const elapsed = getElapsedTime();
     const savedHtml = data.result.files.find((file) => file.endsWith('.html')) || data.result.files[0];
-    updateProgress('audio', `✓ 完成 (${elapsed}) - ${data.result.folder}/${savedHtml}`, false);
+    updateProgress('complete', `✓ 完成 (${elapsed}) - ${data.result.folder}/${savedHtml}`, false);
     phraseInput.value = '';
     clearImage();
 

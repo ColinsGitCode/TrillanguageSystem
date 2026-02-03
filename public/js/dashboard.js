@@ -107,6 +107,7 @@ function loadGenerationData() {
             renderTokenEconomics(primary.tokens, primary.cost);
             renderQuota(primary.quota); // Quota is global usually
             renderPromptInspector(primary.prompt);
+            renderLLMOutput(data.gemini.output);
             renderQualityBadge(primary.quality);
             
             // Visualize primary performance
@@ -119,6 +120,7 @@ function loadGenerationData() {
             renderTokenEconomics(data.tokens, data.cost);
             renderQuota(data.quota);
             renderPromptInspector(data.prompt);
+            renderLLMOutput(data.llm_output);
             renderQualityBadge(data.quality);
             
             if (data.performance) renderTimelineChart(data.performance);
@@ -368,38 +370,68 @@ function renderRadarChart(quality) {
 
 function renderPromptInspector(promptData) {
     if (!promptData) return;
-    
+
     const { structure, full } = promptData;
-    
-    document.getElementById('promptRole').textContent = structure.systemInstruction || 'N/A';
-    
+
+    // Full prompt display
+    document.getElementById('promptFullText').textContent = full || 'No prompt data available';
+
+    // Structured view
+    document.getElementById('promptRole').textContent = structure?.systemInstruction || 'N/A';
+
     const cotList = document.getElementById('promptCoTList');
     cotList.innerHTML = '';
-    (structure.chainOfThought || []).forEach(step => {
+    (structure?.chainOfThought || []).forEach(step => {
         const li = document.createElement('li');
         li.textContent = step;
         cotList.appendChild(li);
     });
-    
-    document.getElementById('promptRawText').textContent = full;
+}
+
+function renderLLMOutput(outputData) {
+    if (!outputData) return;
+
+    // Formatted JSON
+    try {
+        const formatted = typeof outputData === 'string'
+            ? JSON.stringify(JSON.parse(outputData), null, 2)
+            : JSON.stringify(outputData, null, 2);
+        document.getElementById('outputFormattedText').textContent = formatted;
+    } catch (e) {
+        document.getElementById('outputFormattedText').textContent = 'Invalid JSON format';
+    }
+
+    // Raw output
+    const raw = typeof outputData === 'string' ? outputData : JSON.stringify(outputData);
+    document.getElementById('outputRawText').textContent = raw;
 }
 
 function setupTabs() {
     const buttons = document.querySelectorAll('.tab');
     buttons.forEach(btn => {
         btn.addEventListener('click', () => {
-            // Reset
-            buttons.forEach(b => b.classList.remove('active'));
-            document.getElementById('promptViewStruct').classList.add('hidden');
-            document.getElementById('promptViewRaw').classList.add('hidden');
-
-            // Set
-            btn.classList.add('active');
             const target = btn.dataset.target;
-            if (target === 'struct') {
-                document.getElementById('promptViewStruct').classList.remove('hidden');
-            } else {
-                document.getElementById('promptViewRaw').classList.remove('hidden');
+            const card = btn.closest('.card');
+
+            // Reset tabs in this card
+            card.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+            card.querySelectorAll('.prompt-content').forEach(c => c.classList.add('hidden'));
+
+            // Activate selected tab
+            btn.classList.add('active');
+
+            // Show corresponding content
+            const contentMap = {
+                'promptFull': 'promptViewFull',
+                'promptStruct': 'promptViewStruct',
+                'outputFormatted': 'outputViewFormatted',
+                'outputRaw': 'outputViewRaw'
+            };
+
+            const contentId = contentMap[target];
+            if (contentId) {
+                const contentEl = document.getElementById(contentId);
+                if (contentEl) contentEl.classList.remove('hidden');
             }
         });
     });

@@ -71,24 +71,6 @@
               </div>
             </div>
 
-            <!-- Prompt 显示框 -->
-            <div id="promptDisplay" class="prompt-display hidden">
-              <div class="prompt-display-header">
-                <span class="prompt-display-title">📋 完整 Prompt</span>
-                <button id="togglePromptBtn" class="btn-text">收起</button>
-              </div>
-              <pre id="promptContent" class="prompt-content"></pre>
-            </div>
-
-            <!-- LLM 输出显示框 -->
-            <div id="outputDisplay" class="prompt-display hidden">
-              <div class="prompt-display-header">
-                <span class="prompt-display-title">🧾 完整 LLM 输出</span>
-                <button id="toggleOutputBtn" class="btn-text">收起</button>
-              </div>
-              <pre id="outputContent" class="prompt-content"></pre>
-            </div>
-
             <!-- 进度指示器 -->
             <div id="progressBar" class="progress-bar hidden">
               <div class="progress-header">
@@ -99,14 +81,34 @@
                 <div id="progressTimer" class="progress-timer">00:00</div>
               </div>
               <div class="progress-steps">
-                <div class="step" data-step="ocr">
+                <div class="step" data-step="init">
                   <div class="step-dot"></div>
-                  <div class="step-label">识别文字</div>
+                  <div class="step-label">初始化</div>
                 </div>
                 <div class="step-line"></div>
-                <div class="step" data-step="generate">
+                <div class="step" data-step="ocr">
                   <div class="step-dot"></div>
-                  <div class="step-label">生成内容</div>
+                  <div class="step-label">图像识别</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="prompt">
+                  <div class="step-dot"></div>
+                  <div class="step-label">构建Prompt</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="llm">
+                  <div class="step-dot"></div>
+                  <div class="step-label">LLM生成</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="parse">
+                  <div class="step-dot"></div>
+                  <div class="step-label">解析结果</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="render">
+                  <div class="step-dot"></div>
+                  <div class="step-label">渲染HTML</div>
                 </div>
                 <div class="step-line"></div>
                 <div class="step" data-step="save">
@@ -118,16 +120,13 @@
                   <div class="step-dot"></div>
                   <div class="step-label">生成音频</div>
                 </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="complete">
+                  <div class="step-dot"></div>
+                  <div class="step-label">完成</div>
+                </div>
               </div>
               <p id="progressStatus" class="progress-status"></p>
-            </div>
-
-            <!-- F9: 对比模式控件（已禁用 - Gemini已封存 2026-02-03） -->
-            <div class="comparison-controls" style="display: none;">
-              <label class="comparison-toggle">
-                <input type="checkbox" id="enableCompare" disabled />
-                <span style="opacity: 0.5;">⚠️ 对比模式已禁用（Gemini API已封存）</span>
-              </label>
             </div>
           </div>
 

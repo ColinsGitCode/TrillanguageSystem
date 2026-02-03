@@ -188,13 +188,16 @@
             <!-- Layer 4: Deep Dive -->
             <div class="card card-full" id="card-prompt">
                 <div class="card-header">
-                    <h3>Prompt Inspector</h3>
+                    <h3>📋 Complete Prompt</h3>
                     <div class="tabs">
-                        <button class="tab active" data-target="struct">Structure</button>
-                        <button class="tab" data-target="raw">Raw</button>
+                        <button class="tab active" data-target="promptFull">Full Prompt</button>
+                        <button class="tab" data-target="promptStruct">Structured</button>
                     </div>
                 </div>
-                <div class="prompt-content" id="promptViewStruct">
+                <div class="prompt-content" id="promptViewFull">
+                    <pre id="promptFullText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
+                </div>
+                <div class="prompt-content hidden" id="promptViewStruct">
                     <!-- Structured Prompt View -->
                     <div class="prompt-block">
                         <span class="block-label">Role</span>
@@ -205,8 +208,21 @@
                         <ul id="promptCoTList"></ul>
                     </div>
                 </div>
-                <div class="prompt-content hidden" id="promptViewRaw">
-                    <pre id="promptRawText"></pre>
+            </div>
+
+            <div class="card card-full" id="card-output">
+                <div class="card-header">
+                    <h3>🧾 LLM Raw Output</h3>
+                    <div class="tabs">
+                        <button class="tab active" data-target="outputFormatted">Formatted JSON</button>
+                        <button class="tab" data-target="outputRaw">Raw</button>
+                    </div>
+                </div>
+                <div class="prompt-content" id="outputViewFormatted">
+                    <pre id="outputFormattedText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
+                </div>
+                <div class="prompt-content hidden" id="outputViewRaw">
+                    <pre id="outputRawText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
                 </div>
             </div>
 
