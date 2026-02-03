@@ -7,6 +7,10 @@ CLAUDE.md
 
 # Generated data
 trilingual_records/
+data/
+*.db
+*.db-shm
+*.db-wal
 
 # Temporary documentation files
 Docs/**/*.bak

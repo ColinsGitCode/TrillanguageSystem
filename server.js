@@ -15,6 +15,10 @@ const { postProcessGeneratedContent } = require('./services/contentPostProcessor
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
 const { HealthCheckService } = require('./services/healthCheckService');
 
+// 数据库服务
+const dbService = require('./services/databaseService');
+const { prepareInsertData } = require('./services/databaseHelpers');
+
 const app = express();
 const PORT = process.env.PORT || 3010;
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
@@ -246,8 +250,36 @@ app.post('/api/generate', async (req, res) => {
     perf.mark('audioGenerate');
     observability.performance = perf.end(); // Finalize perf stats
 
+    // 插入数据库
+    let generationId = null;
+    try {
+      const dbData = prepareInsertData({
+        phrase,
+        provider: llm_provider,
+        model: observability.metadata?.model || llm_provider,
+        folderName,
+        baseName: result.baseName,
+        filePaths: {
+          md: result.absPaths.md,
+          html: result.absPaths.html,
+          meta: result.absPaths.meta
+        },
+        content,
+        observability,
+        prompt,
+        audioTasks: audio?.tasks || []
+      });
+
+      generationId = dbService.insertGeneration(dbData);
+      console.log('[Database] Inserted generation:', generationId);
+    } catch (dbError) {
+      console.error('[Database] Insert failed:', dbError.message);
+      // 数据库插入失败不影响主流程
+    }
+
     res.json({
         success: true,
+        generationId, // 返回数据库ID
         result,
         audio,
         prompt,
@@ -256,7 +288,25 @@ app.post('/api/generate', async (req, res) => {
     });
 
   } catch (err) {
-      console.error(err);
+      console.error('[Generate] Error:', err);
+
+      // 记录错误到数据库
+      try {
+        dbService.insertError({
+          phrase: req.body.phrase || 'unknown',
+          llmProvider: req.body.llm_provider || 'unknown',
+          requestId: null,
+          errorType: err.name || 'UnknownError',
+          errorMessage: err.message,
+          errorStack: err.stack,
+          prompt: null,
+          llmResponse: null,
+          validationErrors: null
+        });
+      } catch (dbErr) {
+        console.error('[Database] Error insert failed:', dbErr.message);
+      }
+
       res.status(500).json({ error: err.message });
   }
 });
@@ -278,6 +328,138 @@ app.get('/api/health', async (req, res) => {
         const status = await HealthCheckService.checkAll();
         res.json(status);
     } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ========== 数据库查询API ==========
+
+// 历史记录查询（分页）
+app.get('/api/history', (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search,
+            provider,
+            dateFrom,
+            dateTo
+        } = req.query;
+
+        const records = dbService.queryGenerations({
+            page: Number(page),
+            limit: Number(limit),
+            search,
+            provider,
+            dateFrom,
+            dateTo
+        });
+
+        const total = dbService.getTotalCount({
+            search,
+            provider,
+            dateFrom,
+            dateTo
+        });
+
+        res.json({
+            success: true,
+            records,
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total,
+                totalPages: Math.ceil(total / limit),
+                hasNext: Number(page) * Number(limit) < total,
+                hasPrev: Number(page) > 1
+            }
+        });
+    } catch (e) {
+        console.error('[API /history] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 获取单条记录详情
+app.get('/api/history/:id', (req, res) => {
+    try {
+        const record = dbService.getGenerationById(Number(req.params.id));
+
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        res.json({
+            success: true,
+            record
+        });
+    } catch (e) {
+        console.error('[API /history/:id] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 统计分析
+app.get('/api/statistics', (req, res) => {
+    try {
+        const {
+            provider,
+            dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            dateTo = new Date().toISOString().split('T')[0]
+        } = req.query;
+
+        const stats = dbService.getStatistics({
+            provider,
+            dateFrom,
+            dateTo
+        });
+
+        res.json({
+            success: true,
+            statistics: stats,
+            period: { dateFrom, dateTo }
+        });
+    } catch (e) {
+        console.error('[API /statistics] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 全文搜索
+app.get('/api/search', (req, res) => {
+    try {
+        const { q, limit = 20 } = req.query;
+
+        if (!q) {
+            return res.status(400).json({ error: 'Query parameter "q" is required' });
+        }
+
+        const results = dbService.fullTextSearch(q, Number(limit));
+
+        res.json({
+            success: true,
+            query: q,
+            results,
+            count: results.length
+        });
+    } catch (e) {
+        console.error('[API /search] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 最近记录
+app.get('/api/recent', (req, res) => {
+    try {
+        const { limit = 10 } = req.query;
+        const records = dbService.getRecentGenerations(Number(limit));
+
+        res.json({
+            success: true,
+            records
+        });
+    } catch (e) {
+        console.error('[API /recent] Error:', e);
         res.status(500).json({ error: e.message });
     }
 });
