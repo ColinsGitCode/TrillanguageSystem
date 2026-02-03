@@ -1150,3 +1150,144 @@ h1 {
     color: var(--neon-blue);
     border-left: 3px solid var(--neon-blue);
 }
+
+/* =========================================
+   🕵️‍♂️ Mission Intel HUD System
+   ========================================= */
+
+/* Grid Layout */
+.intel-hud-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto 1fr;
+  gap: 16px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background: radial-gradient(circle at 50% 30%, rgba(30, 41, 59, 0.4), transparent 70%);
+}
+
+/* 1. Core Reactor (Quality Score) */
+.hud-card-score {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 0.6) 50%, rgba(15, 23, 42, 0.6) 100%);
+  border-left: 4px solid var(--neon-green);
+  position: relative;
+  overflow: hidden;
+}
+
+.score-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.score-main {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--neon-green);
+  text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+  line-height: 1;
+}
+
+.score-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.2);
+  font-weight: 700;
+}
+
+.score-meta {
+  text-align: right;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.meta-label { color: var(--sci-text-muted); }
+.meta-val { color: var(--sci-text-main); font-weight: 600; }
+
+/* 2. Chrono & Token Panels */
+.hud-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--sci-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Charts Containers */
+.chart-box {
+  flex: 1;
+  position: relative;
+  min-height: 120px;
+}
+
+/* Token Bar Specifics */
+.token-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  margin-top: 8px;
+  color: var(--sci-text-muted);
+}
+
+.token-cost-tag {
+  margin-top: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--neon-green);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  text-align: center;
+  align-self: center;
+}
+
+/* 3. Radar (Full Width) */
+.hud-card-wide {
+  grid-column: span 2;
+  min-height: 200px;
+}
+
+/* D3 Tooltip */
+.hud-tooltip {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--sci-border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #fff;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}

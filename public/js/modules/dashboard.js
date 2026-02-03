@@ -1,453 +1,306 @@
 /**
- * Mission Control Dashboard (Overview)
+ * Mission Control Dashboard Logic
+ * Theme: Sci-Fi / Observability
  */
-import { formatDate } from './utils.js';
+import { formatTime, formatDate } from './utils.js';
+
+// D3 is loaded globally via script tag
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });
 
-const state = {
-    days: 30,
-};
-
 function initDashboard() {
-    updateTimestamp();
+    updateTicker();
+    setInterval(updateTicker, 1000);
+    
+    // Live polling
     fetchInfrastructureStatus();
-    setInterval(fetchInfrastructureStatus, 30000);
+    setInterval(fetchInfrastructureStatus, 10000); // Fast poll for status
 
-    loadDashboard(state.days);
-    setupTimeRangeButtons();
+    // Load Analytics
+    loadGenerationData(); // Local latest
+    loadHistoricalAnalytics(30);
+
+    setupInteractions();
 }
 
-function updateTimestamp() {
+function updateTicker() {
     const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-GB', { hour12: false }); // 24h format
     const el = document.getElementById('lastUpdatedTime');
-    if (el) el.textContent = now.toLocaleTimeString();
+    if (el) el.textContent = `T-SYNC ${timeStr}`;
 }
+
+// --- Layer 1: Infrastructure ---
 
 async function fetchInfrastructureStatus() {
     try {
         const res = await fetch('/api/health');
         if (!res.ok) throw new Error('Health check failed');
         const data = await res.json();
-
-        renderServiceMatrix(data.services || []);
+        
+        renderServiceMatrix(data);
         renderStorage(data.storage);
+        
+        // Mock Quota (since API doesn't fully support it yet)
+        const mockQuota = { percentage: 42 }; 
+        renderQuotaGauge(mockQuota);
 
-        updateTimestamp();
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-success)';
-        document.getElementById('systemStatusText').textContent = 'System Operational';
+        document.querySelector('.status-dot').style.backgroundColor = 'var(--neon-green)';
+        document.querySelector('.status-dot').style.boxShadow = '0 0 8px var(--neon-green)';
+        document.getElementById('systemStatusText').textContent = 'SYSTEM ONLINE';
+        document.getElementById('systemStatusText').style.color = 'var(--neon-green)';
+        
     } catch (err) {
         console.error('Infra fetch error:', err);
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-error)';
-        document.getElementById('systemStatusText').textContent = 'System Alert';
-        document.querySelector('.status-dot').style.animation = 'none';
+        document.querySelector('.status-dot').style.backgroundColor = 'var(--neon-red)';
+        document.querySelector('.status-dot').style.boxShadow = '0 0 8px var(--neon-red)';
+        document.getElementById('systemStatusText').textContent = 'SYSTEM ALERT';
+        document.getElementById('systemStatusText').style.color = 'var(--neon-red)';
     }
 }
 
-function renderServiceMatrix(services) {
+function renderServiceMatrix(healthData) {
     const container = document.getElementById('serviceMatrix');
-    container.innerHTML = '';
+    container.innerHTML = ''; 
 
-    if (!services.length) {
-        container.innerHTML = '<div class="empty-hint">No services</div>';
-        return;
-    }
-
-    services.forEach(svc => {
+    // Helper to render row
+    const renderRow = (label, status, meta) => {
+        const color = status === 'healthy' ? 'var(--neon-green)' : 'var(--neon-red)';
         const el = document.createElement('div');
-        el.className = 'service-item';
-
-        const statusClass = svc.status === 'online' ? 'svc-online' :
-            svc.status === 'degraded' ? 'svc-degraded' : 'svc-offline';
-        const latency = svc.latency ? `${svc.latency}ms` : '-';
-
+        el.style.display = 'flex';
+        el.style.justifyContent = 'space-between';
+        el.style.alignItems = 'center';
+        el.style.fontFamily = 'JetBrains Mono';
+        el.style.fontSize = '12px';
+        el.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        el.style.paddingBottom = '4px';
+        
         el.innerHTML = `
-            <div class="svc-name">${svc.name}</div>
-            <div class="svc-status">
-                <div class="svc-dot ${statusClass}"></div>
-                <span>${svc.status === 'online' ? latency : 'OFF'}</span>
+            <span style="color: var(--sci-text-muted);">${label}</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span style="color: var(--sci-text-main);">${meta || ''}</span>
+                <div style="width:6px; height:6px; border-radius:50%; background:${color}; box-shadow: 0 0 5px ${color};"></div>
             </div>
         `;
         container.appendChild(el);
-    });
+    };
+
+    renderRow('LLM CORE', healthData.llm?.status, healthData.llm?.model);
+    renderRow('TTS ENGINE (EN)', healthData.tts_en?.status, 'Kokoro');
+    renderRow('TTS ENGINE (JA)', healthData.tts_ja?.status, 'VoiceVox');
 }
 
 function renderStorage(storage) {
     if (!storage) return;
-
+    
     const gbUsed = (storage.used / (1024 * 1024 * 1024)).toFixed(2);
     document.getElementById('storageUsed').textContent = gbUsed;
-
-    const percent = Math.min(storage.percentage, 100);
+    
+    const percent = Math.min(storage.percentage * 100, 100); // Assuming percentage is 0-1
     const bar = document.getElementById('storageBar');
     bar.style.width = `${percent}%`;
+    
+    // Dynamic color
+    const color = percent > 90 ? 'var(--neon-red)' : percent > 70 ? 'var(--neon-amber)' : 'var(--neon-purple)';
+    bar.style.backgroundColor = color;
+    bar.style.boxShadow = `0 0 10px ${color}`;
 
-    if (percent > 90) bar.style.backgroundColor = 'var(--color-warning)';
-
-    document.getElementById('storageMeta').textContent = `${storage.recordsCount || 0} files total`;
+    document.getElementById('storageMeta').textContent = `${storage.records || 0} RECORDS`;
 }
 
-function setupTimeRangeButtons() {
-    const buttons = document.querySelectorAll('.time-btn');
-    buttons.forEach(btn => {
-        btn.onclick = () => {
-            buttons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const days = Number(btn.dataset.days || 30);
-            state.days = days;
-            loadDashboard(days);
-        };
-    });
+function renderQuotaGauge(quota) {
+    const container = document.getElementById('quotaChart');
+    container.innerHTML = '';
+    const width = 120, height = 80; // Half circle
+    const radius = 50;
+    
+    const svg = d3.select(container).append("svg")
+        .attr("width", width).attr("height", height)
+        .append("g").attr("transform", `translate(${width/2},${height - 10})`);
+        
+    const arc = d3.arc().innerRadius(radius - 8).outerRadius(radius).startAngle(-Math.PI/2);
+    
+    // Background Arc
+    svg.append("path")
+       .datum({endAngle: Math.PI/2})
+       .attr("d", arc)
+       .attr("fill", "rgba(255,255,255,0.1)");
+       
+    // Value Arc
+    const valAngle = -Math.PI/2 + (Math.PI * (quota.percentage / 100));
+    svg.append("path")
+       .datum({endAngle: valAngle})
+       .attr("d", arc)
+       .attr("fill", "var(--neon-blue)")
+       .style("filter", "drop-shadow(0 0 4px var(--neon-blue))");
+       
+    document.getElementById('quotaPercent').textContent = `${Math.round(quota.percentage)}%`;
 }
 
-async function loadDashboard(days) {
-    const { dateFrom, dateTo } = getDateRange(days);
+// --- Layer 2: Model Arena (Latest Request) ---
+
+function loadGenerationData() {
+    const raw = localStorage.getItem('latest_observability');
+    if (!raw) return;
 
     try {
-        const [historyRes, totalRes, statsRes] = await Promise.all([
-            fetchHistory({ limit: 200, dateFrom, dateTo }),
-            fetchHistory({ limit: 1 }),
-            fetchStatistics({ dateFrom, dateTo }),
-        ]);
+        const data = JSON.parse(raw);
+        // Assuming single generation for now, populate Local side as primary
+        // If comparison data exists, populate both.
+        
+        let localData = data;
+        let geminiData = null;
+        
+        if (data.comparison) {
+            localData = data.local?.observability;
+            geminiData = data.gemini?.observability;
+            
+            // Recommendation
+            document.getElementById('arenaRecommendation').textContent = 
+                `>> WINNER: ${data.comparison.winner.toUpperCase()} // ${data.comparison.recommendation}`;
+        } else {
+            // Single mode: Assume Local
+            document.getElementById('arenaRecommendation').textContent = ">> SINGLE MODE // LOCAL LLM ACTIVE";
+        }
 
-        const records = historyRes.records || [];
-        const totalCount = totalRes.pagination?.total || records.length;
-        const stats = statsRes.statistics || [];
+        // Render Local
+        if (localData) {
+            updateArenaStats('local', localData);
+            logLiveFeed(localData, 'LOCAL');
+        }
+        
+        // Render Gemini (if exists)
+        if (geminiData) {
+            updateArenaStats('gemini', geminiData);
+        } else {
+            // Reset Gemini UI to "OFFLINE" look
+            updateArenaStats('gemini', null);
+        }
 
-        const summary = aggregateStats(stats, records);
-
-        renderOverview({
-            totalCount,
-            avgQuality: summary.avgQuality,
-            avgTokens: summary.avgTokens,
-            avgLatency: summary.avgLatency,
-            days,
-        });
-
-        renderCostSummary({
-            totalCost: summary.totalCost,
-            avgCost: summary.avgCost,
-            currency: summary.currency,
-        });
-
-        renderProviderPie(stats, records);
-
-        renderQualityTrend(records, days);
-        renderTokenTrend(records, days);
-        renderLatencyTrend(records, days);
-
-        renderRecent(records);
-    } catch (err) {
-        console.error('Dashboard load error:', err);
+    } catch (e) {
+        console.error('Error parsing local observability data', e);
     }
 }
 
-async function fetchHistory({ limit = 200, dateFrom, dateTo } = {}) {
-    const params = new URLSearchParams();
-    params.set('page', '1');
-    params.set('limit', String(limit));
-    if (dateFrom) params.set('dateFrom', dateFrom);
-    if (dateTo) params.set('dateTo', dateTo);
-
-    const res = await fetch(`/api/history?${params.toString()}`);
-    if (!res.ok) throw new Error('History fetch failed');
-    return res.json();
-}
-
-async function fetchStatistics({ dateFrom, dateTo } = {}) {
-    const params = new URLSearchParams();
-    if (dateFrom) params.set('dateFrom', dateFrom);
-    if (dateTo) params.set('dateTo', dateTo);
-    const res = await fetch(`/api/statistics?${params.toString()}`);
-    if (!res.ok) throw new Error('Statistics fetch failed');
-    return res.json();
-}
-
-function getDateRange(days) {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - days + 1);
-    const dateFrom = start.toISOString().split('T')[0];
-    const dateTo = end.toISOString().split('T')[0];
-    return { dateFrom, dateTo };
-}
-
-function aggregateStats(stats, records) {
-    const totals = {
-        count: 0,
-        totalCost: 0,
-        totalTokens: 0,
-        totalQuality: 0,
-        totalLatency: 0,
-    };
-
-    if (stats && stats.length) {
-        stats.forEach(s => {
-            const count = Number(s.total_count || 0);
-            totals.count += count;
-            totals.totalCost += Number(s.total_cost || 0);
-            totals.totalTokens += Number(s.avg_tokens || 0) * count;
-            totals.totalQuality += Number(s.avg_quality || 0) * count;
-            totals.totalLatency += Number(s.avg_response_time || 0) * count;
-        });
-    } else if (records && records.length) {
-        records.forEach(r => {
-            totals.count += 1;
-            totals.totalCost += Number(r.cost_total || 0);
-            totals.totalTokens += Number(r.tokens_total || 0);
-            totals.totalQuality += Number(r.quality_score || 0);
-            totals.totalLatency += Number(r.performance_total_ms || 0);
-        });
-    }
-
-    const count = totals.count || 1;
-    return {
-        totalCost: totals.totalCost,
-        avgCost: totals.totalCost / count,
-        avgTokens: totals.totalTokens / count,
-        avgQuality: totals.totalQuality / count,
-        avgLatency: totals.totalLatency / count,
-        currency: 'USD',
-    };
-}
-
-function renderOverview({ totalCount, avgQuality, avgTokens, avgLatency, days }) {
-    setText('overviewTotal', formatNumber(totalCount));
-    setText('overviewAvgQuality', formatNumber(avgQuality, 1));
-    setText('overviewAvgTokens', formatNumber(avgTokens, 0));
-    setText('overviewAvgLatency', formatNumber(avgLatency, 0));
-    setText('overviewRange', days ? `Last ${days} days` : 'All time');
-}
-
-function renderCostSummary({ totalCost, avgCost, currency }) {
-    setText('costTotal', formatCurrency(totalCost, currency));
-    setText('costAvg', formatCurrency(avgCost, currency));
-    setText('costCurrency', currency || 'USD');
-}
-
-function renderProviderPie(stats, records) {
-    const container = document.getElementById('providerPieChart');
-    const legend = document.getElementById('providerLegend');
-    container.innerHTML = '';
-    legend.innerHTML = '';
-
-    const data = stats && stats.length
-        ? stats.map(s => ({ label: s.llm_provider || 'unknown', value: Number(s.total_count || 0) }))
-        : aggregateProvider(records);
-
-    if (!data.length) {
-        container.innerHTML = '<div class="empty-hint">No data</div>';
+function updateArenaStats(side, obs) {
+    const speedEl = document.getElementById(`${side}SpeedVal`);
+    const qualEl = document.getElementById(`${side}QualityVal`);
+    
+    if (!obs) {
+        speedEl.textContent = 'OFFLINE';
+        speedEl.style.color = 'var(--sci-text-muted)';
+        qualEl.textContent = '-';
         return;
     }
+    
+    speedEl.textContent = `${obs.performance?.totalTime || 0}ms`;
+    speedEl.style.color = 'var(--sci-text-main)';
+    
+    const score = obs.quality?.score || 0;
+    qualEl.textContent = score;
+    qualEl.style.color = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+    qualEl.style.textShadow = `0 0 10px ${qualEl.style.color}`;
+}
 
-    const width = container.clientWidth || 220;
-    const height = 220;
-    const radius = Math.min(width, height) / 2 - 10;
+function logLiveFeed(obs, provider) {
+    const feed = document.getElementById('liveFeed');
+    const row = document.createElement('div');
+    row.style.borderLeft = `2px solid ${provider === 'GEMINI' ? 'var(--neon-blue)' : 'var(--neon-purple)'}`;
+    row.style.paddingLeft = '8px';
+    
+    const time = new Date().toLocaleTimeString();
+    const score = obs.quality?.score || 0;
+    
+    row.innerHTML = `
+        <span style="color:var(--sci-text-muted)">[${time}]</span> 
+        <span style="color:#fff">GEN COMPLETE</span> 
+        <span style="color:var(--neon-green)">Q:${score}</span>
+    `;
+    
+    feed.prepend(row); // Add to top
+    if (feed.children.length > 8) feed.lastElementChild.remove();
+}
 
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-        .attr('transform', `translate(${width / 2},${height / 2})`);
+// --- Layer 3: Historical Analytics ---
 
-    const color = d3.scaleOrdinal()
-        .domain(data.map(d => d.label))
-        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
+async function loadHistoricalAnalytics(days) {
+    try {
+        const dateTo = new Date().toISOString().split('T')[0];
+        const dateFrom = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
-
-    svg.selectAll('path')
-        .data(pie(data))
-        .enter()
-        .append('path')
-        .attr('d', arc)
-        .attr('fill', d => color(d.data.label))
-        .attr('stroke', 'rgba(255,255,255,0.1)')
-        .attr('stroke-width', 1);
-
-    data.forEach(item => {
-        const row = document.createElement('div');
-        row.className = 'legend-item';
-        row.innerHTML = `
-            <span class="legend-dot" style="background:${color(item.label)}"></span>
-            <span class="legend-label">${item.label}</span>
-            <span class="legend-value">${item.value}</span>
-        `;
-        legend.appendChild(row);
-    });
+        const res = await fetch(`/api/history?limit=100&dateFrom=${dateFrom}&dateTo=${dateTo}`);
+        if (res.ok) {
+            const data = await res.json();
+            renderQualityTrend(data.records);
+        }
+    } catch (err) {
+        console.error('Analytics load failed', err);
+    }
 }
 
 function renderQualityTrend(records) {
-    const series = buildDailySeries(records, r => r.quality_score, 'avg');
-    renderLineChart('qualityTrendChart', series, '#10b981');
-}
-
-function renderTokenTrend(records) {
-    const series = buildDailySeries(records, r => r.tokens_total, 'avg');
-    renderLineChart('tokenTrendChart', series, '#3b82f6');
-}
-
-function renderLatencyTrend(records) {
-    const series = buildDailySeries(records, r => r.performance_total_ms, 'avg');
-    renderLineChart('latencyTrendChart', series, '#f59e0b');
-}
-
-function buildDailySeries(records, selector, mode = 'avg') {
-    const map = new Map();
-    records.forEach(r => {
-        const rawDate = r.created_at || r.generation_date;
-        if (!rawDate) return;
-        const day = new Date(rawDate).toISOString().split('T')[0];
-        const value = Number(selector(r));
-        if (Number.isNaN(value)) return;
-        if (!map.has(day)) map.set(day, []);
-        map.get(day).push(value);
-    });
-
-    return Array.from(map.entries())
-        .map(([day, values]) => {
-            const sum = values.reduce((a, b) => a + b, 0);
-            const val = mode === 'avg' ? sum / values.length : sum;
-            return { day, value: val, dateObj: new Date(day) };
-        })
-        .sort((a, b) => a.dateObj - b.dateObj);
-}
-
-function renderLineChart(containerId, data, color) {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById('qualityTrendChart');
     container.innerHTML = '';
-
-    if (!data.length) {
-        container.innerHTML = '<div class="empty-hint">No data</div>';
+    
+    if (!records || !records.length) {
+        container.innerHTML = '<div style="text-align:center; padding-top:40px; color:var(--sci-text-muted)">NO SIGNAL</div>';
         return;
     }
 
-    const width = container.clientWidth || 320;
-    const height = container.clientHeight || 180;
-    const padding = 28;
-
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
-
-    const x = d3.scaleTime()
-        .domain(d3.extent(data, d => d.dateObj))
-        .range([padding, width - padding]);
-
-    const maxY = d3.max(data, d => d.value) || 1;
-    const y = d3.scaleLinear()
-        .domain([0, maxY * 1.1])
-        .range([height - padding, padding]);
-
-    const line = d3.line()
-        .x(d => x(d.dateObj))
-        .y(d => y(d.value))
-        .curve(d3.curveMonotoneX);
-
-    svg.append('path')
-        .datum(data)
-        .attr('fill', 'none')
-        .attr('stroke', color)
-        .attr('stroke-width', 2)
-        .attr('d', line);
-
-    svg.selectAll('circle')
-        .data(data)
-        .enter()
-        .append('circle')
-        .attr('cx', d => x(d.dateObj))
-        .attr('cy', d => y(d.value))
-        .attr('r', 3)
-        .attr('fill', color);
-
-    const xAxis = d3.axisBottom(x).ticks(4).tickSizeOuter(0);
-    const yAxis = d3.axisLeft(y).ticks(4).tickSizeOuter(0);
-
-    svg.append('g')
-        .attr('transform', `translate(0,${height - padding})`)
-        .call(xAxis)
-        .selectAll('text')
-        .style('fill', '#94a3b8')
-        .style('font-size', '10px');
-
-    svg.append('g')
-        .attr('transform', `translate(${padding},0)`)
-        .call(yAxis)
-        .selectAll('text')
-        .style('fill', '#94a3b8')
-        .style('font-size', '10px');
-
-    svg.selectAll('path.domain, line').style('stroke', 'rgba(148,163,184,0.3)');
-}
-
-function renderRecent(records) {
-    const body = document.getElementById('recentTableBody');
-    const countEl = document.getElementById('recentCount');
-    body.innerHTML = '';
-
-    if (!records.length) {
-        body.innerHTML = '<tr><td colspan="6" class="empty-cell">No records</td></tr>';
-        if (countEl) countEl.textContent = '0';
-        return;
-    }
-
-    const top = records.slice(0, 8);
-    top.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${escapeCell(r.phrase)}</td>
-            <td><span class="pill">${escapeCell(r.llm_provider)}</span></td>
-            <td>${formatNumber(r.quality_score, 0)}</td>
-            <td>${formatNumber(r.tokens_total, 0)}</td>
-            <td>${formatCurrency(r.cost_total, 'USD')}</td>
-            <td>${formatDate(r.created_at)}</td>
-        `;
-        body.appendChild(tr);
-    });
-
-    if (countEl) countEl.textContent = `${top.length}`;
-}
-
-function aggregateProvider(records = []) {
-    const map = new Map();
+    const width = container.clientWidth;
+    const height = 200;
+    const margin = {top: 10, right: 10, bottom: 20, left: 30};
+    
+    // Process Data: Daily Average
+    const dateMap = {};
     records.forEach(r => {
-        const key = r.llm_provider || 'unknown';
-        map.set(key, (map.get(key) || 0) + 1);
+        const d = r.created_at.split('T')[0];
+        if (!dateMap[d]) dateMap[d] = { sum:0, count:0 };
+        dateMap[d].sum += r.quality_score;
+        dateMap[d].count++;
     });
-    return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
+    
+    const data = Object.entries(dateMap)
+        .map(([date, obj]) => ({ date: new Date(date), val: obj.sum/obj.count }))
+        .sort((a,b) => a.date - b.date);
+
+    const svg = d3.select(container).append("svg")
+        .attr("width", width).attr("height", height);
+        
+    const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear().domain([0, 100]).range([height - margin.bottom, margin.top]);
+    
+    // Gradient
+    const defs = svg.append("defs");
+    const grad = defs.append("linearGradient").attr("id", "areaGrad").attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%");
+    grad.append("stop").attr("offset", "0%").attr("stop-color", "var(--neon-blue)").attr("stop-opacity", 0.4);
+    grad.append("stop").attr("offset", "100%").attr("stop-color", "var(--neon-blue)").attr("stop-opacity", 0);
+    
+    // Area
+    svg.append("path")
+       .datum(data)
+       .attr("fill", "url(#areaGrad)")
+       .attr("d", d3.area().x(d => x(d.date)).y0(height - margin.bottom).y1(d => y(d.val)).curve(d3.curveMonotoneX));
+       
+    // Line
+    svg.append("path")
+       .datum(data)
+       .attr("fill", "none")
+       .attr("stroke", "var(--neon-blue)")
+       .attr("stroke-width", 2)
+       .style("filter", "drop-shadow(0 0 4px var(--neon-blue))")
+       .attr("d", d3.line().x(d => x(d.date)).y(d => y(d.val)).curve(d3.curveMonotoneX));
+       
+    // Axes (Simplified)
+    svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`)
+       .call(d3.axisBottom(x).ticks(5).tickSize(0))
+       .select(".domain").remove();
+       
+    svg.selectAll("text").attr("fill", "var(--sci-text-muted)").style("font-family", "JetBrains Mono");
 }
 
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-function formatNumber(value, digits = 0) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    return num.toFixed(digits);
-}
-
-function formatCurrency(value, currency) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    return `${num.toFixed(5)} ${currency || 'USD'}`;
-}
-
-function escapeCell(value) {
-    if (value === null || value === undefined) return '-';
-    return String(value).replace(/[&<>"']/g, (ch) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    }[ch]));
+function setupInteractions() {
+    // Add time range button logic if needed
 }

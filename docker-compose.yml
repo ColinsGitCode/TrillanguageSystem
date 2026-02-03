@@ -20,6 +20,8 @@ services:
       - "3010:3010"
     volumes:
       - trilingual_records:/data/trilingual_records
+      - .:/app
+      - /app/node_modules # prevent overwriting container node_modules with host ones
     restart: unless-stopped
 
   tts-en:

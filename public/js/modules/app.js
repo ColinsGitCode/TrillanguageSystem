@@ -456,7 +456,7 @@ function initModal() {
     });
 }
 
-function renderCardModal(markdown, title) {
+function renderCardModal(markdown, title, options = {}) {
     let displayTitle = title;
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
@@ -469,20 +469,43 @@ function renderCardModal(markdown, title) {
 
     const safeHtml = sanitizeHtml(processedHtml);
 
-    // 尝试获取 observability 数据
-    let obsData = null;
-    try {
-        const raw = localStorage.getItem('latest_observability');
-        if (raw) obsData = JSON.parse(raw);
-    } catch (e) {}
-
-    // Mock Intel Data if not found (for demo)
-    const metrics = obsData || {
+    // 尝试获取 observability 数据 (优先使用传入的 options.metrics，其次是 local storage)
+    let rawMetrics = options.metrics;
+    if (!rawMetrics) {
+        try {
+            const raw = localStorage.getItem('latest_observability');
+            if (raw) rawMetrics = JSON.parse(raw);
+        } catch (e) {}
+    }
+    
+    // Normalize metrics: Handle case where metrics is the whole DB record
+    let metrics = rawMetrics;
+    if (rawMetrics && rawMetrics.observability) {
+        // DB Record structure
+        const obs = rawMetrics.observability;
+        metrics = {
+            quality: { score: obs.quality_score },
+            tokens: { input: obs.tokens_input, output: obs.tokens_output, total: obs.tokens_total },
+            cost: { total: obs.cost_total },
+            performance: { totalTime: obs.performance_total_ms, phases: obs.performance_phases },
+            metadata: obs.metadata
+        };
+    }
+    
+    // Fallback defaults
+    metrics = metrics || {
         quality: { score: 0 },
-        performance: { totalTime: 0 },
-        tokens: { total: 0 },
+        performance: { totalTime: 0, phases: {} },
+        tokens: { total: 0, input: 0, output: 0 },
         cost: { total: 0 }
     };
+
+    const tokens = metrics.tokens || { input: 0, output: 0 };
+    
+    // Calculate Rank
+    const score = metrics.quality?.score || 0;
+    const rank = score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
+    const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel" style="background: rgba(15, 23, 42, 0.95);">
@@ -490,7 +513,7 @@ function renderCardModal(markdown, title) {
             
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
                 <div style="flex:1;">
-                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main); text-shadow: 0 0 10px rgba(255,255,255,0.1);">$${escapeHtml(displayTitle)}</h1>
+                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main); text-shadow: 0 0 10px rgba(255,255,255,0.1);">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono" style="color: var(--neon-blue);">
                         <span>TRILINGUAL</span>
                         <span>::</span>
@@ -498,7 +521,6 @@ function renderCardModal(markdown, title) {
                     </div>
                 </div>
                 
-                <!-- Tab Switcher -->
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
                     <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
@@ -510,35 +532,66 @@ function renderCardModal(markdown, title) {
                 ${safeHtml}
             </div>
 
-            <!-- Intel Tab -->
-            <div id="cardIntel" class="mc-body intel-container" style="display:none;">
-                <!-- 1. Scorecard -->
-                <div class="intel-score-card">
+            <!-- Intel Tab (HUD) -->
+            <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
+                
+                <!-- 1. Core Reactor -->
+                <div class="hud-card-score" style="border-left-color: ${rankColor};">
                     <div>
                         <div class="intel-label">QUALITY GRADE</div>
-                        <div class="score-big">${metrics.quality?.score || '-'}</div>
+                        <div class="score-value-container">
+                            <div class="score-main" style="color: ${rankColor}; text-shadow: 0 0 20px ${rankColor}66;">${score}</div>
+                            <div class="score-rank">RANK ${rank}</div>
+                        </div>
                     </div>
-                    <div class="intel-stat-grid">
-                        <div class="intel-stat-item">
-                            <div class="intel-label">LATENCY</div>
-                            <div class="intel-value" style="color: var(--neon-amber);">${metrics.performance?.totalTime || 0}ms</div>
+                    <div class="score-meta">
+                        <div class="meta-row">
+                            <span class="meta-label">PROVIDER</span>
+                            <span class="meta-val" style="color: var(--neon-purple);">${(store.get('llmProvider') || 'LOCAL').toUpperCase()}</span>
                         </div>
-                        <div class="intel-stat-item">
-                            <div class="intel-label">TOKENS</div>
-                            <div class="intel-value" style="color: var(--neon-blue);">${metrics.tokens?.total || 0}</div>
+                        <div class="meta-row">
+                            <span class="meta-label">MODEL</span>
+                            <span class="meta-val">${metrics.metadata?.model || 'UNKNOWN'}</span>
                         </div>
-                        <div class="intel-stat-item">
-                            <div class="intel-label">COST</div>
-                            <div class="intel-value" style="color: var(--neon-green);">${(metrics.cost?.total || 0).toFixed(5)}</div>
+                        <div class="meta-row">
+                            <span class="meta-label">LATENCY</span>
+                            <span class="meta-val">${metrics.performance?.totalTime || 0}ms</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- 2. Breakdown (Placeholder for D3) -->
-                <div class="intel-stat-item" style="grid-column: span 2; min-height: 150px;">
-                    <div class="intel-label" style="margin-bottom: 8px;">PERFORMANCE TRACE</div>
-                    <div id="intelTimeline" style="width:100%; height:120px;"></div>
+                <!-- 2. Chrono Waterfall -->
+                <div class="hud-card">
+                    <div class="hud-title">
+                        <span>CHRONO SEQUENCE</span>
+                        <span style="color: var(--neon-blue);">T-MINUS</span>
+                    </div>
+                    <div id="hudTimeline" class="chart-box"></div>
                 </div>
+
+                <!-- 3. Token Flux -->
+                <div class="hud-card">
+                    <div class="hud-title">
+                        <span>TOKEN FLUX</span>
+                        <span style="color: var(--neon-purple);">USAGE</span>
+                    </div>
+                    <div id="hudTokens" class="chart-box"></div>
+                    <div class="token-stat-row">
+                        <span>IN: ${tokens.input}</span>
+                        <span>OUT: ${tokens.output}</span>
+                    </div>
+                    <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
+                </div>
+
+                <!-- 4. Dimensions Radar -->
+                <div class="hud-card hud-card-wide">
+                    <div class="hud-title">
+                        <span>DIMENSIONAL SCAN</span>
+                        <span style="color: var(--neon-green);">ANALYSIS</span>
+                    </div>
+                    <div id="hudRadar" class="chart-box" style="height: 200px;"></div>
+                </div>
+
             </div>
         </div>
     `;
@@ -546,7 +599,7 @@ function renderCardModal(markdown, title) {
     // 绑定关闭按钮
     document.getElementById('mcCloseBtn').onclick = closeModal;
 
-    // 绑定 Tab 切换
+    // 绑定 Tab 切换 (带图表渲染触发)
     const tabs = els.modalContainer.querySelectorAll('.tab-btn');
     tabs.forEach(btn => {
         btn.onclick = () => {
@@ -555,7 +608,14 @@ function renderCardModal(markdown, title) {
             
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
-            els.modalContainer.querySelector('#cardIntel').style.display = targetId === 'cardIntel' ? 'grid' : 'none';
+            const intelTab = els.modalContainer.querySelector('#cardIntel');
+            
+            if (targetId === 'cardIntel') {
+                intelTab.style.display = 'grid';
+                requestAnimationFrame(() => renderIntelCharts(metrics));
+            } else {
+                intelTab.style.display = 'none';
+            }
         };
     });
 
@@ -573,131 +633,145 @@ function renderCardModal(markdown, title) {
     setTimeout(() => els.modalOverlay.classList.add('show'), 10);
 }
 
-function buildMetricsPanel(record) {
-    const obs = record?.observability || {};
-    const tokens = {
-        input: obs.tokens_input,
-        output: obs.tokens_output,
-        total: obs.tokens_total,
-        cached: obs.tokens_cached
-    };
-    const costCurrency = obs.cost_currency || 'USD';
-    const cost = {
-        input: obs.cost_input,
-        output: obs.cost_output,
-        total: obs.cost_total
-    };
-    const qualityScore = obs.quality_score;
-    const qualityWarnings = Array.isArray(obs.quality_warnings) ? obs.quality_warnings : [];
-    const qualityDims = obs.quality_dimensions || {};
-    const performanceTotal = obs.performance_total_ms;
-    const phases = obs.performance_phases || {};
-    const quota = {
-        used: obs.quota_used,
-        limit: obs.quota_limit,
-        remaining: obs.quota_remaining,
-        reset: obs.quota_reset_at,
-        percentage: obs.quota_percentage
-    };
+// 渲染 Intel 面板图表
+function renderIntelCharts(metrics) {
+    if (!window.d3) return; 
 
-    const phaseLabels = {
-        init: '初始化',
-        ocr: 'OCR',
-        promptBuild: 'Prompt构建',
-        llmCall: 'LLM调用',
-        jsonParse: '解析',
-        renderHtml: '渲染',
-        fileSave: '存储',
-        audioGenerate: 'TTS',
-    };
+    // 1. Timeline
+    {
+        const container = document.getElementById('hudTimeline');
+        container.innerHTML = '';
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        const phases = metrics.performance?.phases || {};
+        const data = [
+            { label: "PROMPT", start: 0, dur: phases.promptBuild || 10, color: "#3b82f6" },
+            { label: "LLM", start: phases.promptBuild || 10, dur: phases.llmCall || 100, color: "#a855f7" },
+            { label: "PARSE", start: (phases.promptBuild||10) + (phases.llmCall||100), dur: phases.jsonParse || 10, color: "#10b981" },
+            { label: "TTS", start: (phases.promptBuild||10) + (phases.llmCall||100) + (phases.jsonParse||10), dur: phases.audioGenerate || 0, color: "#f59e0b" }
+        ].filter(d => d.dur > 0);
+        
+        const total = metrics.performance?.totalTime || d3.max(data, d => d.start + d.dur) || 1000;
+        const svg = d3.select(container).append("svg").attr("width", width).attr("height", height);
+        
+        const x = d3.scaleLinear().domain([0, total]).range([0, width]);
+        const y = d3.scaleBand().domain(data.map(d => d.label)).range([0, height]).padding(0.4);
 
-    const phaseRows = Object.entries(phases).map(([key, value]) => {
-        const label = phaseLabels[key] || key;
-        return `
-            <div class="mc-kv">
-                <span>${escapeHtml(label)}</span>
-                <span>${formatMetric(value, 'ms')}</span>
-            </div>
-        `;
-    }).join('');
+        svg.selectAll("rect")
+           .data(data)
+           .enter().append("rect")
+           .attr("x", d => x(d.start))
+           .attr("y", d => y(d.label))
+           .attr("width", d => x(d.dur))
+           .attr("height", y.bandwidth())
+           .attr("rx", 4)
+           .attr("fill", d => d.color)
+           .style("filter", d => `drop-shadow(0 0 4px ${d.color})`);
 
-    const warningBadges = qualityWarnings.length
-        ? qualityWarnings.map(w => `<span class="mc-pill mc-pill-warn">${escapeHtml(String(w))}</span>`).join('')
-        : '<span class="mc-pill">无</span>';
+        svg.selectAll("text")
+           .data(data)
+           .enter().append("text")
+           .attr("x", d => x(d.start) + 4)
+           .attr("y", d => y(d.label) + y.bandwidth()/2 + 4)
+           .text(d => d.dur > 50 ? `${d.label} ${d.dur}ms` : '')
+           .attr("font-size", "10px")
+           .attr("fill", "#fff")
+           .style("font-family", "JetBrains Mono");
+    }
 
-    const dimBadges = Object.keys(qualityDims).length
-        ? Object.entries(qualityDims).map(([k, v]) => `<span class="mc-pill">${escapeHtml(k)}: ${formatMetric(v)}</span>`).join('')
-        : '<span class="mc-pill">-</span>';
+    // 2. Token Flux
+    {
+        const container = document.getElementById('hudTokens');
+        container.innerHTML = '';
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        const tokens = metrics.tokens || { input: 0, output: 0 };
+        const total = (tokens.input + tokens.output) || 1;
+        
+        const svg = d3.select(container).append("svg").attr("width", width).attr("height", height);
+        
+        const data = [
+            { type: "INPUT", val: tokens.input, color: "#3b82f6", x: 0, w: (tokens.input/total)*width },
+            { type: "OUTPUT", val: tokens.output, color: "#a855f7", x: (tokens.input/total)*width, w: (tokens.output/total)*width }
+        ];
 
-    return `
-        <div class="mc-metrics-grid">
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">质量评分</div>
-                <div class="mc-metric-value">${formatMetric(qualityScore)}</div>
-                <div class="mc-metric-meta">警告 ${qualityWarnings.length} 条</div>
-            </div>
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">Token</div>
-                <div class="mc-metric-value">${formatMetric(tokens.total)}</div>
-                <div class="mc-metric-meta">In ${formatMetric(tokens.input)} · Out ${formatMetric(tokens.output)}</div>
-            </div>
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">成本</div>
-                <div class="mc-metric-value">${formatCurrency(cost.total, costCurrency)}</div>
-                <div class="mc-metric-meta">In ${formatCurrency(cost.input, costCurrency)} · Out ${formatCurrency(cost.output, costCurrency)}</div>
-            </div>
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">总耗时</div>
-                <div class="mc-metric-value">${formatMetric(performanceTotal, 'ms')}</div>
-                <div class="mc-metric-meta">${escapeHtml(record.llm_provider || '-')} · ${escapeHtml(record.llm_model || '-')}</div>
-            </div>
-        </div>
+        svg.append("rect").attr("width", width).attr("height", 24).attr("y", height/2 - 12)
+           .attr("rx", 4).attr("fill", "rgba(255,255,255,0.05)");
 
-        <div class="mc-metric-block">
-            <div class="mc-metric-subtitle">阶段耗时</div>
-            <div class="mc-kv-grid">
-                ${phaseRows || '<span class="mc-empty">暂无阶段数据</span>'}
-            </div>
-        </div>
+        svg.selectAll("rect.bar")
+           .data(data)
+           .enter().append("rect")
+           .attr("class", "bar")
+           .attr("x", d => d.x)
+           .attr("y", height/2 - 12)
+           .attr("width", d => d.w)
+           .attr("height", 24)
+           .attr("fill", d => d.color)
+           .attr("rx", 2);
+           
+        svg.selectAll("text")
+           .data(data)
+           .enter().append("text")
+           .attr("x", d => d.x + d.w/2)
+           .attr("y", height/2 + 4)
+           .attr("text-anchor", "middle")
+           .text(d => d.w > 30 ? d.type : '')
+           .attr("font-size", "10px")
+           .attr("fill", "rgba(255,255,255,0.8)")
+           .style("font-family", "JetBrains Mono");
+    }
 
-        <div class="mc-metric-block">
-            <div class="mc-metric-subtitle">质量维度</div>
-            <div class="mc-pill-group">${dimBadges}</div>
-        </div>
-
-        <div class="mc-metric-block">
-            <div class="mc-metric-subtitle">质量警告</div>
-            <div class="mc-pill-group">${warningBadges}</div>
-        </div>
-
-        <div class="mc-metrics-grid mc-metrics-grid-compact">
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">配额</div>
-                <div class="mc-metric-value">${formatMetric(quota.percentage, '%')}</div>
-                <div class="mc-metric-meta">剩余 ${formatMetric(quota.remaining)}</div>
-            </div>
-            <div class="mc-metric-card">
-                <div class="mc-metric-title">请求信息</div>
-                <div class="mc-metric-value">${formatDate(record.created_at)}</div>
-                <div class="mc-metric-meta">${escapeHtml(record.request_id || '-')}</div>
-            </div>
-        </div>
-    `;
-}
-
-function formatMetric(value, suffix = '') {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    const rounded = suffix === 'ms' ? Math.round(num) : num;
-    return `${rounded}${suffix}`;
-}
-
-function formatCurrency(value, currency) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    return `${num.toFixed(5)} ${currency || 'USD'}`;
+    // 3. Radar
+    {
+        const container = document.getElementById('hudRadar');
+        container.innerHTML = '';
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        const margin = 30;
+        const radius = Math.min(width, height)/2 - margin;
+        
+        const svg = d3.select(container).append("svg").attr("width", width).attr("height", height)
+                      .append("g").attr("transform", `translate(${width/2},${height/2})`);
+        
+        const dims = metrics.quality?.dimensions || { completeness:0, accuracy:0, formatting:0 };
+        const data = Object.entries(dims).map(([k,v]) => ({ axis: k.toUpperCase(), value: v }));
+        const angleSlice = Math.PI * 2 / data.length;
+        const rScale = d3.scaleLinear().range([0, radius]).domain([0, 100]);
+        
+        [25, 50, 75, 100].forEach(level => {
+            svg.append("circle").attr("r", rScale(level)).attr("fill", "none")
+               .attr("stroke", "rgba(255,255,255,0.1)").attr("stroke-dasharray", "4,4");
+        });
+        
+        const axis = svg.selectAll(".axis").data(data).enter().append("g");
+        axis.append("line")
+            .attr("x1", 0).attr("y1", 0)
+            .attr("x2", (d, i) => rScale(100) * Math.cos(angleSlice * i - Math.PI/2))
+            .attr("y2", (d, i) => rScale(100) * Math.sin(angleSlice * i - Math.PI/2))
+            .attr("stroke", "rgba(255,255,255,0.1)");
+            
+        axis.append("text")
+            .attr("x", (d, i) => rScale(115) * Math.cos(angleSlice * i - Math.PI/2))
+            .attr("y", (d, i) => rScale(115) * Math.sin(angleSlice * i - Math.PI/2))
+            .text(d => d.axis)
+            .style("text-anchor", "middle")
+            .style("font-size", "10px")
+            .style("fill", "#94a3b8")
+            .style("font-family", "JetBrains Mono");
+            
+        const line = d3.lineRadial()
+            .angle((d,i) => i*angleSlice)
+            .radius(d => rScale(d.value))
+            .curve(d3.curveLinearClosed);
+            
+        svg.append("path")
+           .datum(data)
+           .attr("d", line)
+           .attr("fill", "rgba(16, 185, 129, 0.2)")
+           .attr("stroke", "#10b981")
+           .attr("stroke-width", 2)
+           .style("filter", "drop-shadow(0 0 8px rgba(16, 185, 129, 0.4))");
+    }
 }
 
 function closeModal() {
