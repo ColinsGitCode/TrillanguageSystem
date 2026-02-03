@@ -988,3 +988,165 @@ h1 {
     font-size: 11px;
   }
 }
+
+/* =========================================
+   🚀 Sci-Fi / Observability Theme System
+   ========================================= */
+
+:root {
+  /* Core Palette */
+  --sci-bg: #0f172a;
+  --sci-card-bg: rgba(30, 41, 59, 0.7);
+  --sci-border: rgba(148, 163, 184, 0.1);
+  --sci-text-main: #f1f5f9;
+  --sci-text-muted: #94a3b8;
+  
+  /* Neon Accents */
+  --neon-blue: #3b82f6;
+  --neon-purple: #a855f7;
+  --neon-green: #10b981;
+  --neon-amber: #f59e0b;
+  --neon-red: #ef4444;
+  
+  /* Effects */
+  --glass-blur: blur(12px);
+  --glow-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: var(--sci-card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--sci-border);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  color: var(--sci-text-main);
+}
+
+.glass-panel:hover {
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), var(--glow-shadow);
+}
+
+/* Typography Overrides for Sci-Fi Feel */
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.font-display {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* --- Intel Tab (Card Detail) Specifics --- */
+
+.intel-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.intel-score-card {
+  grid-column: span 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(15, 23, 42, 0) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.score-big {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--neon-green);
+  text-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+.intel-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.intel-stat-item {
+  background: rgba(15, 23, 42, 0.4);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--sci-border);
+}
+
+.intel-label {
+  font-size: 11px;
+  color: var(--sci-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.intel-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sci-text-main);
+}
+
+/* --- Dashboard Specifics --- */
+
+.dashboard-grid-v2 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: auto auto 1fr; /* Header, Status, Main */
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.hud-ticker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--neon-green);
+  overflow: hidden;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 2px solid var(--neon-green);
+}
+
+/* D3 Glow Filters */
+.glow-line {
+  filter: drop-shadow(0 0 4px var(--neon-blue));
+}
+.glow-area {
+  fill-opacity: 0.2;
+}
+
+/* --- Audio Player States (Re-defined for neon) --- */
+.audio-btn.playing {
+    color: var(--neon-blue);
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+    animation: pulse 2s infinite;
+}
+
+/* --- Virtual List Item (Re-defined for neon) --- */
+.list-item-btn {
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--sci-text-main); /* Dark theme text */
+    /* ... keep layout props ... */
+}
+
+.list-item-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.list-item-btn.active {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: var(--neon-blue);
+    border-left: 3px solid var(--neon-blue);
+}

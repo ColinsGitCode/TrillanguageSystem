@@ -456,8 +456,7 @@ function initModal() {
     });
 }
 
-function renderCardModal(markdown, title, options = {}) {
-    player.stop();
+function renderCardModal(markdown, title) {
     let displayTitle = title;
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
@@ -470,61 +469,93 @@ function renderCardModal(markdown, title, options = {}) {
 
     const safeHtml = sanitizeHtml(processedHtml);
 
-    const folderName = options.folder ?? null;
-    const baseName = options.baseName ?? null;
-    const canDelete = Boolean(folderName && baseName);
-    const metrics = options.metrics || null;
-    const hasMetrics = Boolean(metrics && metrics.observability);
-    const metricsHtml = hasMetrics ? buildMetricsPanel(metrics) : '<div class="mc-empty">暂无指标记录</div>';
+    // 尝试获取 observability 数据
+    let obsData = null;
+    try {
+        const raw = localStorage.getItem('latest_observability');
+        if (raw) obsData = JSON.parse(raw);
+    } catch (e) {}
+
+    // Mock Intel Data if not found (for demo)
+    const metrics = obsData || {
+        quality: { score: 0 },
+        performance: { totalTime: 0 },
+        tokens: { total: 0 },
+        cost: { total: 0 }
+    };
+
     els.modalContainer.innerHTML = `
-        <div class="modern-card">
+        <div class="modern-card glass-panel" style="background: rgba(15, 23, 42, 0.95);">
             <button class="mc-close" id="mcCloseBtn">×</button>
-            <button class="mc-delete" id="mcDeleteBtn" ${canDelete ? '' : 'disabled'} title="删除此学习卡片">🗑</button>
-            <div class="mc-header">
-                <h1 class="mc-phrase">${escapeHtml(displayTitle)}</h1>
-                <div class="mc-meta">
-                    <span>Trilingual</span>
-                    <span>${new Date().getFullYear()}</span>
+            
+            <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
+                <div style="flex:1;">
+                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main); text-shadow: 0 0 10px rgba(255,255,255,0.1);">$${escapeHtml(displayTitle)}</h1>
+                    <div class="mc-meta font-mono" style="color: var(--neon-blue);">
+                        <span>TRILINGUAL</span>
+                        <span>::</span>
+                        <span>${new Date().getFullYear()}</span>
+                    </div>
+                </div>
+                
+                <!-- Tab Switcher -->
+                <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 4px;">
+                    <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
+                    <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
                 </div>
             </div>
-            <div class="mc-tabs">
-                <button class="mc-tab active" data-tab="content">卡片内容</button>
-                <button class="mc-tab" data-tab="metrics" ${hasMetrics ? '' : 'disabled'}>MISSION 指标</button>
-            </div>
-            <div class="mc-body mc-content mc-panel mc-panel-content" data-panel="content">
+
+            <!-- Content Tab -->
+            <div id="cardContent" class="mc-body mc-content" style="display:block;">
                 ${safeHtml}
             </div>
-            <div class="mc-body mc-panel mc-panel-metrics hidden" data-panel="metrics">
-                ${metricsHtml}
+
+            <!-- Intel Tab -->
+            <div id="cardIntel" class="mc-body intel-container" style="display:none;">
+                <!-- 1. Scorecard -->
+                <div class="intel-score-card">
+                    <div>
+                        <div class="intel-label">QUALITY GRADE</div>
+                        <div class="score-big">${metrics.quality?.score || '-'}</div>
+                    </div>
+                    <div class="intel-stat-grid">
+                        <div class="intel-stat-item">
+                            <div class="intel-label">LATENCY</div>
+                            <div class="intel-value" style="color: var(--neon-amber);">${metrics.performance?.totalTime || 0}ms</div>
+                        </div>
+                        <div class="intel-stat-item">
+                            <div class="intel-label">TOKENS</div>
+                            <div class="intel-value" style="color: var(--neon-blue);">${metrics.tokens?.total || 0}</div>
+                        </div>
+                        <div class="intel-stat-item">
+                            <div class="intel-label">COST</div>
+                            <div class="intel-value" style="color: var(--neon-green);">${(metrics.cost?.total || 0).toFixed(5)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Breakdown (Placeholder for D3) -->
+                <div class="intel-stat-item" style="grid-column: span 2; min-height: 150px;">
+                    <div class="intel-label" style="margin-bottom: 8px;">PERFORMANCE TRACE</div>
+                    <div id="intelTimeline" style="width:100%; height:120px;"></div>
+                </div>
             </div>
         </div>
     `;
 
-    const closeBtn = document.getElementById('mcCloseBtn');
-    if (closeBtn) closeBtn.onclick = closeModal;
-    const deleteBtn = document.getElementById('mcDeleteBtn');
-    if (deleteBtn) {
-        deleteBtn.onclick = async () => {
-            if (!canDelete) return;
-            if (!confirm('确定删除此学习卡片及其所有文件吗？不可恢复。')) return;
-            await api.deleteRecordByFile(folderName, baseName);
-            await loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
-            closeModal();
-        };
-    }
+    // 绑定关闭按钮
+    document.getElementById('mcCloseBtn').onclick = closeModal;
 
-    // 绑定标签页
-    const tabs = els.modalContainer.querySelectorAll('.mc-tab');
-    const panels = els.modalContainer.querySelectorAll('.mc-panel');
-    tabs.forEach(tab => {
-        if (tab.disabled) return;
-        tab.onclick = () => {
+    // 绑定 Tab 切换
+    const tabs = els.modalContainer.querySelectorAll('.tab-btn');
+    tabs.forEach(btn => {
+        btn.onclick = () => {
             tabs.forEach(t => t.classList.remove('active'));
-            panels.forEach(p => p.classList.add('hidden'));
-            tab.classList.add('active');
-            const target = tab.dataset.tab;
-            const panel = els.modalContainer.querySelector(`[data-panel="${target}"]`);
-            if (panel) panel.classList.remove('hidden');
+            btn.classList.add('active');
+            
+            const targetId = btn.dataset.target;
+            els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
+            els.modalContainer.querySelector('#cardIntel').style.display = targetId === 'cardIntel' ? 'grid' : 'none';
         };
     });
 

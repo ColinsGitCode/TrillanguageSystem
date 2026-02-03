@@ -5,157 +5,167 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mission Control - Three LANS</title>
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <!-- Styles -->
+    <link rel="stylesheet" href="styles.css"> <!-- Reuse main styles for vars -->
     <link rel="stylesheet" href="css/dashboard.css">
     <!-- Libraries -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background-color: #0f172a; /* Fallback */
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+            color: #f1f5f9;
+        }
+        .dashboard-container {
+            padding: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card-header h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        .badge {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Header -->
-        <header class="dashboard-header">
-            <div class="header-left">
-                <a href="/" class="back-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M19 12H5M12 19l-7-7 7-7"/>
-                    </svg>
-                    Back to Generator
+        <!-- 1. Header -->
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <a href="/" style="color: #94a3b8; text-decoration: none; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono'; font-size: 13px;">
+                    <span style="font-size: 16px;">←</span> TERMINAL
                 </a>
-                <h1>Mission Control <span class="badge">LIVE</span></h1>
+                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em;">
+                    MISSION CONTROL <span style="color: var(--neon-blue);">// BRIDGE</span>
+                </h1>
             </div>
-            <div class="header-right">
-                <div class="status-indicator">
-                    <div class="status-dot"></div>
-                    <span id="systemStatusText">System Operational</span>
+            <div style="display: flex; align-items: center; gap: 24px;">
+                <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="status-dot" style="width: 8px; height: 8px; background: var(--neon-green); border-radius: 50%; box-shadow: 0 0 8px var(--neon-green);"></div>
+                    <span id="systemStatusText" style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--neon-green);">SYSTEM ONLINE</span>
                 </div>
-                <div class="last-updated">Last update: <span id="lastUpdatedTime">-</span></div>
             </div>
         </header>
 
-        <!-- Main Grid -->
-        <main class="bento-grid">
-            <!-- Infrastructure -->
-            <div class="card card-sm" id="card-services">
-                <div class="card-header">
-                    <h3>Service Matrix</h3>
-                    <div class="icon-pulse"></div>
-                </div>
-                <div class="service-matrix" id="serviceMatrix">
-                    <div class="skeleton-line"></div>
-                    <div class="skeleton-line"></div>
-                </div>
-            </div>
-
-            <div class="card card-sm" id="card-storage">
-                <div class="card-header"><h3>Storage</h3></div>
-                <div class="storage-info">
-                    <div class="storage-metric">
-                        <span class="metric-value" id="storageUsed">-</span>
-                        <span class="metric-unit">GB</span>
+        <!-- 2. Main Grid -->
+        <main class="dashboard-grid-v2">
+            
+            <!-- A. Status Matrix (Top Left) -->
+            <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <h3>Infrastructure</h3>
+                    <div style="width: 20px; height: 20px; border: 1px solid var(--neon-blue); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 6px; height: 6px; background: var(--neon-blue); border-radius: 50%;"></div>
                     </div>
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" id="storageBar" style="width: 0%"></div>
-                    </div>
-                    <div class="storage-meta" id="storageMeta">- files</div>
+                </div>
+                <div id="serviceMatrix" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Injected -->
                 </div>
             </div>
 
-            <div class="card card-sm" id="card-overview">
-                <div class="card-header"><h3>Overview</h3></div>
-                <div class="overview-grid">
-                    <div class="overview-item">
-                        <span class="overview-label">Total Records</span>
-                        <span class="overview-value" id="overviewTotal">-</span>
-                        <span class="overview-sub" id="overviewRange">All time</span>
-                    </div>
-                    <div class="overview-item">
-                        <span class="overview-label">Avg Quality</span>
-                        <span class="overview-value" id="overviewAvgQuality">-</span>
-                        <span class="overview-sub">Last 30 days</span>
-                    </div>
-                    <div class="overview-item">
-                        <span class="overview-label">Avg Tokens</span>
-                        <span class="overview-value" id="overviewAvgTokens">-</span>
-                        <span class="overview-sub">Per card</span>
-                    </div>
-                    <div class="overview-item">
-                        <span class="overview-label">Avg Latency</span>
-                        <span class="overview-value" id="overviewAvgLatency">-</span>
-                        <span class="overview-sub">ms</span>
+            <!-- B. Quota Gauge (Top Mid) -->
+            <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div class="card-header" style="width: 100%; margin-bottom: 8px;"><h3>API Fuel</h3></div>
+                <div style="position: relative; width: 120px; height: 80px;">
+                    <div id="quotaChart"></div>
+                    <div style="position: absolute; bottom: 0; width: 100%; text-align: center;">
+                        <span id="quotaPercent" style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; color: var(--sci-text-main);">0%</span>
                     </div>
                 </div>
             </div>
 
-            <div class="card card-sm" id="card-cost">
-                <div class="card-header"><h3>Cost Summary</h3></div>
-                <div class="cost-summary">
-                    <div class="cost-row">
-                        <span>Total Cost</span>
-                        <span id="costTotal">-</span>
-                    </div>
-                    <div class="cost-row">
-                        <span>Avg Cost</span>
-                        <span id="costAvg">-</span>
-                    </div>
-                    <div class="cost-row">
-                        <span>Currency</span>
-                        <span id="costCurrency">-</span>
-                    </div>
+            <!-- C. Storage (Top Right) -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <h3>Data Core</h3>
+                    <span class="badge" id="storageMeta">0 files</span>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;">
+                    <span id="storageUsed" style="font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; color: var(--sci-text-main);">0.00</span>
+                    <span style="color: var(--sci-text-muted); font-size: 14px;">GB USED</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; overflow: hidden;">
+                    <div id="storageBar" style="background: var(--neon-purple); height: 100%; width: 0%; box-shadow: 0 0 10px var(--neon-purple);"></div>
                 </div>
             </div>
 
-            <!-- Analytics -->
-            <div class="card card-wide" id="card-quality-trend">
-                <div class="card-header">
-                    <h3>Quality Trend</h3>
+            <!-- D. Model Arena (The Core) -->
+            <div class="glass-panel" id="card-arena" style="grid-column: span 2; grid-row: span 2; padding: 24px; border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div class="card-header" style="margin-bottom: 24px;">
+                    <h3 style="color: var(--neon-blue);">⚔️ Model Arena</h3>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center;">
+                    <!-- Gemini -->
+                    <div style="text-align: right;">
+                        <div style="font-family: 'Space Grotesk'; font-size: 20px; font-weight: 700; color: var(--neon-blue); margin-bottom: 16px;">GEMINI API</div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <span style="font-size: 12px; color: var(--sci-text-muted);">SPEED</span>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 18px;" id="geminiSpeedVal">-</div>
+                            </div>
+                            <div>
+                                <span style="font-size: 12px; color: var(--sci-text-muted);">QUALITY</span>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 18px; color: var(--neon-green);" id="geminiQualityVal">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- VS -->
+                    <div style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 800; color: rgba(255,255,255,0.2);">VS</div>
+                    
+                    <!-- Local -->
+                    <div style="text-align: left;">
+                        <div style="font-family: 'Space Grotesk'; font-size: 20px; font-weight: 700; color: var(--neon-purple); margin-bottom: 16px;">LOCAL LLM</div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <span style="font-size: 12px; color: var(--sci-text-muted);">SPEED</span>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 18px;" id="localSpeedVal">-</div>
+                            </div>
+                            <div>
+                                <span style="font-size: 12px; color: var(--sci-text-muted);">QUALITY</span>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 18px; color: var(--neon-green);" id="localQualityVal">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 32px; padding: 16px; background: rgba(0,0,0,0.3); border-radius: 8px; border-left: 4px solid var(--neon-amber);">
+                    <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--neon-amber);">RECOMMENDATION ENGINE</div>
+                    <div id="arenaRecommendation" style="margin-top: 4px; font-size: 14px;">Analyzing performance data...</div>
+                </div>
+            </div>
+
+            <!-- E. Quality Trend (Area Glow Chart) -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 24px; border-radius: 16px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <h3>Quality Signal</h3>
                     <div class="time-range-selector">
-                        <button class="time-btn" data-days="7">7D</button>
-                        <button class="time-btn active" data-days="30">30D</button>
-                        <button class="time-btn" data-days="90">90D</button>
+                        <!-- Buttons managed by JS -->
                     </div>
                 </div>
-                <div class="chart-container" id="qualityTrendChart"></div>
+                <div id="qualityTrendChart" style="width: 100%; height: 200px;"></div>
             </div>
 
-            <div class="card card-md" id="card-provider-stats">
-                <div class="card-header"><h3>Provider Distribution</h3></div>
-                <div class="chart-container" id="providerPieChart"></div>
-                <div class="legend-list" id="providerLegend"></div>
-            </div>
-
-            <div class="card card-md" id="card-token-trend">
-                <div class="card-header"><h3>Token Trend</h3></div>
-                <div class="chart-container" id="tokenTrendChart"></div>
-            </div>
-
-            <div class="card card-wide" id="card-latency-trend">
-                <div class="card-header">
-                    <h3>Latency Trend</h3>
-                    <span class="card-tag" id="latencyTag">Avg ms</span>
-                </div>
-                <div class="chart-container" id="latencyTrendChart"></div>
-            </div>
-
-            <div class="card card-wide" id="card-recent">
-                <div class="card-header">
-                    <h3>Recent Records</h3>
-                    <span class="card-tag" id="recentCount">-</span>
-                </div>
-                <div class="recent-table-wrap">
-                    <table class="recent-table">
-                        <thead>
-                            <tr>
-                                <th>Phrase</th>
-                                <th>Provider</th>
-                                <th>Quality</th>
-                                <th>Tokens</th>
-                                <th>Cost</th>
-                                <th>Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recentTableBody"></tbody>
-                    </table>
+            <!-- F. Live Feed (New!) -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px; overflow: hidden;">
+                <div class="card-header" style="margin-bottom: 12px;"><h3>Live Feed</h3></div>
+                <div id="liveFeed" style="font-family: 'JetBrains Mono'; font-size: 12px; display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto;">
+                    <div style="color: var(--sci-text-muted);">Waiting for stream...</div>
                 </div>
             </div>
 
