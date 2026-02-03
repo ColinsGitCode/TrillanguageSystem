@@ -85,6 +85,12 @@ function sanitizeHtml(html) {
   return html;
 }
 
+function withNoCache(url, noCache) {
+  if (!noCache) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}_ts=${Date.now()}`;
+}
+
 function rewriteAudioSources(html) {
   return html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src, post) => {
     const preloadAttr = /preload=/i.test(match) ? '' : ' preload="none"';
@@ -362,11 +368,12 @@ genBtn.addEventListener('click', async () => {
 });
 
 async function loadFolders(options = {}) {
-  const { keepSelection = false, refreshFiles = false, targetSelect = null } = options;
+  const { keepSelection = false, refreshFiles = false, targetSelect = null, noCache = false } = options;
   const prevSelectedFolder = state.selectedFolder;
   try {
     setStatus('加载文件夹列表中…');
-    const response = await fetch('/api/folders');
+    const url = withNoCache('/api/folders', noCache);
+    const response = await fetch(url, { cache: noCache ? 'no-store' : 'default' });
     if (!response.ok) throw new Error('无法获取文件夹列表');
     const data = await response.json();
     state.folders = data.folders || [];
@@ -391,7 +398,7 @@ async function loadFolders(options = {}) {
     if (targetSelect || !keepSelection || (keepSelection && !prevSelectedFolder)) {
          await selectFolder(folderToSelect);
     } else if (refreshFiles) {
-         await loadFiles(state.selectedFolder);
+         await loadFiles(state.selectedFolder, { noCache });
     }
 
   } catch (err) {
@@ -492,9 +499,11 @@ async function selectFolder(name) {
   await loadFiles(name);
 }
 
-async function loadFiles(folder) {
+async function loadFiles(folder, options = {}) {
+  const { noCache = false } = options;
   try {
-    const response = await fetch(`/api/folders/${encodeURIComponent(folder)}/files`);
+    const url = withNoCache(`/api/folders/${encodeURIComponent(folder)}/files`, noCache);
+    const response = await fetch(url, { cache: noCache ? 'no-store' : 'default' });
     if (!response.ok) throw new Error('无法获取文件列表');
     const data = await response.json();
     state.files = normalizeFiles(data.files || []);
@@ -742,7 +751,8 @@ const historyState = {
   loaded: false
 };
 
-async function loadHistory() {
+async function loadHistory(options = {}) {
+  const { noCache = false } = options;
   try {
     const params = new URLSearchParams({
       page: historyState.currentPage,
@@ -751,7 +761,8 @@ async function loadHistory() {
       provider: historyState.providerFilter
     });
 
-    const response = await fetch(`/api/history?${params}`);
+    const url = withNoCache(`/api/history?${params}`, noCache);
+    const response = await fetch(url, { cache: noCache ? 'no-store' : 'default' });
     if (!response.ok) throw new Error('Failed to load history');
 
     const data = await response.json();
@@ -966,13 +977,12 @@ async function handleDeleteRecord() {
     console.log('[Delete] Success:', result);
 
     // 从UI中移除
+    const refreshTasks = [];
+    refreshTasks.push(loadFolders({ keepSelection: true, refreshFiles: true, noCache: true }));
     if (target === 'history') {
-      // 刷新历史记录列表
-      await loadHistory();
-    } else if (target === 'file') {
-      // 刷新文件列表
-      await loadFiles(state.selectedFolder);
+      refreshTasks.push(loadHistory({ noCache: true }));
     }
+    await Promise.all(refreshTasks);
 
     alert(`删除成功！\n已删除 ${result.deletedFiles} 个文件`);
 
