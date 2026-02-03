@@ -820,6 +820,9 @@ function renderHistory() {
       viewHistoryDetail(id);
     });
   });
+
+  // Add context menu (right-click)
+  attachHistoryContextMenu();
 }
 
 function getQualityClass(score) {
@@ -892,6 +895,105 @@ historyNextBtn.addEventListener('click', () => {
     loadHistory();
   }
 });
+
+// ========== Context Menu (Right-Click Delete) ==========
+const contextMenu = document.getElementById('contextMenu');
+let contextMenuTarget = null;
+
+// 显示右键菜单
+function showContextMenu(e, target, data) {
+  e.preventDefault();
+
+  contextMenuTarget = { target, data };
+
+  // 定位菜单
+  contextMenu.style.left = `${e.pageX}px`;
+  contextMenu.style.top = `${e.pageY}px`;
+  contextMenu.classList.remove('hidden');
+}
+
+// 隐藏右键菜单
+function hideContextMenu() {
+  contextMenu.classList.add('hidden');
+  contextMenuTarget = null;
+}
+
+// 点击其他地方隐藏菜单
+document.addEventListener('click', (e) => {
+  if (!contextMenu.contains(e.target)) {
+    hideContextMenu();
+  }
+});
+
+// 菜单项点击事件
+contextMenu.addEventListener('click', async (e) => {
+  const item = e.target.closest('.context-menu-item');
+  if (!item || !contextMenuTarget) return;
+
+  const action = item.dataset.action;
+
+  if (action === 'delete') {
+    await handleDeleteRecord();
+  }
+
+  hideContextMenu();
+});
+
+// 删除记录
+async function handleDeleteRecord() {
+  if (!contextMenuTarget) return;
+
+  const { target, data } = contextMenuTarget;
+
+  // 确认对话框
+  const confirmMsg = `确定要删除这条记录吗？\n\n短语: ${data.phrase}\n\n此操作将同时删除：\n- 数据库记录\n- Markdown 文件\n- HTML 文件\n- 元数据文件\n- 所有音频文件\n\n此操作不可撤销！`;
+
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/records/${data.id}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Delete failed');
+    }
+
+    const result = await response.json();
+    console.log('[Delete] Success:', result);
+
+    // 从UI中移除
+    if (target === 'history') {
+      // 刷新历史记录列表
+      await loadHistory();
+    } else if (target === 'file') {
+      // 刷新文件列表
+      await loadFiles(state.selectedFolder);
+    }
+
+    alert(`删除成功！\n已删除 ${result.deletedFiles} 个文件`);
+
+  } catch (err) {
+    console.error('[Delete] Error:', err);
+    alert(`删除失败：${err.message}`);
+  }
+}
+
+// 为历史记录项添加右键菜单（在renderHistory函数中调用）
+function attachHistoryContextMenu() {
+  historyListEl.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('contextmenu', (e) => {
+      const id = item.dataset.id;
+      const record = historyState.records.find(r => r.id == id);
+      if (record) {
+        showContextMenu(e, 'history', { id: record.id, phrase: record.phrase });
+      }
+    });
+  });
+}
 
 // ========== Initialize ==========
 loadFolders();

@@ -865,6 +865,46 @@ h1 {
   color: #991b1b;
 }
 
+/* ========== Context Menu ========== */
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.3rem 0;
+  z-index: 10000;
+  min-width: 160px;
+}
+
+.context-menu.hidden {
+  display: none;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.context-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.context-menu-item[data-action="delete"]:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.context-menu-icon {
+  font-size: 16px;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .input-modes {

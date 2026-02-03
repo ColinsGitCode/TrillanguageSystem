@@ -499,6 +499,65 @@ app.get('/api/folders/:folder/files/:file', (req, res) => {
     } catch (e) { res.status(404).send('Not Found'); }
 });
 
+// 删除记录（数据库 + 文件）
+app.delete('/api/records/:id', async (req, res) => {
+    try {
+        const recordId = Number(req.params.id);
+
+        // 1. 从数据库获取记录详情
+        const record = dbService.getGenerationById(recordId);
+
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        // 2. 删除物理文件
+        const filesToDelete = [
+            record.md_file_path,
+            record.html_file_path,
+            record.meta_file_path
+        ].filter(Boolean);
+
+        // 获取音频文件路径
+        if (record.audioFiles && Array.isArray(record.audioFiles)) {
+            record.audioFiles.forEach(audio => {
+                if (audio.file_path) {
+                    filesToDelete.push(audio.file_path);
+                }
+            });
+        }
+
+        // 删除文件
+        let deletedCount = 0;
+        for (const filePath of filesToDelete) {
+            try {
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    deletedCount++;
+                    console.log(`[Delete] Removed file: ${filePath}`);
+                }
+            } catch (fileErr) {
+                console.warn(`[Delete] Failed to remove file: ${filePath}`, fileErr.message);
+            }
+        }
+
+        // 3. 从数据库删除记录（级联删除会自动删除音频和observability记录）
+        dbService.deleteGeneration(recordId);
+
+        console.log(`[Delete] Record ${recordId} deleted (${deletedCount} files removed)`);
+
+        res.json({
+            success: true,
+            message: 'Record deleted successfully',
+            deletedFiles: deletedCount
+        });
+
+    } catch (err) {
+        console.error('[API /records/:id DELETE] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Mission Control available at http://localhost:${PORT}/dashboard.html`);

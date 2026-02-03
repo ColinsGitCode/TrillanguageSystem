@@ -313,6 +313,21 @@ class DatabaseService {
   }
 
   /**
+   * 删除生成记录（级联删除关联的音频和observability记录）
+   */
+  deleteGeneration(id) {
+    const sql = 'DELETE FROM generations WHERE id = ?';
+    const result = this.db.prepare(sql).run(id);
+
+    if (result.changes === 0) {
+      throw new Error(`Generation with id ${id} not found`);
+    }
+
+    console.log(`[Database] Deleted generation id=${id} (changes=${result.changes})`);
+    return result.changes;
+  }
+
+  /**
    * 关闭数据库连接
    */
   close() {
