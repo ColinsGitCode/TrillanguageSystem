@@ -1,27 +1,23 @@
 /**
- * Mission Control Dashboard Logic
+ * Mission Control Dashboard (Overview)
  */
-import { formatTime } from './utils.js';
-
-// D3 is loaded globally via script tag in dashboard.html for now
-// In a bundler setup, we would import d3 from 'd3'
+import { formatDate } from './utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });
 
+const state = {
+    days: 30,
+};
+
 function initDashboard() {
     updateTimestamp();
-    
-    // Live polling
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
 
-    // Load Data
-    loadGenerationData();
-    loadHistoricalAnalytics(30);
-
-    setupTabs();
+    loadDashboard(state.days);
+    setupTimeRangeButtons();
 }
 
 function updateTimestamp() {
@@ -30,17 +26,15 @@ function updateTimestamp() {
     if (el) el.textContent = now.toLocaleTimeString();
 }
 
-// --- Layer 1: Infrastructure ---
-
 async function fetchInfrastructureStatus() {
     try {
         const res = await fetch('/api/health');
         if (!res.ok) throw new Error('Health check failed');
         const data = await res.json();
-        
-        renderServiceMatrix(data.services);
+
+        renderServiceMatrix(data.services || []);
         renderStorage(data.storage);
-        
+
         updateTimestamp();
         document.querySelector('.status-dot').style.backgroundColor = 'var(--color-success)';
         document.getElementById('systemStatusText').textContent = 'System Operational';
@@ -54,14 +48,19 @@ async function fetchInfrastructureStatus() {
 
 function renderServiceMatrix(services) {
     const container = document.getElementById('serviceMatrix');
-    container.innerHTML = ''; 
+    container.innerHTML = '';
+
+    if (!services.length) {
+        container.innerHTML = '<div class="empty-hint">No services</div>';
+        return;
+    }
 
     services.forEach(svc => {
         const el = document.createElement('div');
         el.className = 'service-item';
-        
-        const statusClass = svc.status === 'online' ? 'svc-online' : 
-                            svc.status === 'degraded' ? 'svc-degraded' : 'svc-offline';
+
+        const statusClass = svc.status === 'online' ? 'svc-online' :
+            svc.status === 'degraded' ? 'svc-degraded' : 'svc-offline';
         const latency = svc.latency ? `${svc.latency}ms` : '-';
 
         el.innerHTML = `
@@ -77,380 +76,378 @@ function renderServiceMatrix(services) {
 
 function renderStorage(storage) {
     if (!storage) return;
-    
+
     const gbUsed = (storage.used / (1024 * 1024 * 1024)).toFixed(2);
     document.getElementById('storageUsed').textContent = gbUsed;
-    
+
     const percent = Math.min(storage.percentage, 100);
     const bar = document.getElementById('storageBar');
     bar.style.width = `${percent}%`;
-    
+
     if (percent > 90) bar.style.backgroundColor = 'var(--color-warning)';
 
     document.getElementById('storageMeta').textContent = `${storage.recordsCount || 0} files total`;
 }
 
-// --- Layer 2: Generation Analytics ---
-
-function loadGenerationData() {
-    const raw = localStorage.getItem('latest_observability');
-    if (!raw) return;
-
-    try {
-        const data = JSON.parse(raw);
-        
-        if (data.comparison) {
-            document.getElementById('card-arena').classList.remove('hidden');
-            renderArena(data);
-            
-            const primary = data.gemini.observability;
-            renderTokenEconomics(primary.tokens, primary.cost);
-            renderQuota(primary.quota);
-            renderPromptInspector(primary.prompt);
-            renderLLMOutput(data.gemini.output);
-            renderQualityBadge(primary.quality);
-            
-            if (primary.performance) renderTimelineChart(primary.performance);
-            if (primary.quality) renderRadarChart(primary.quality);
-        } else {
-            document.getElementById('card-arena').classList.add('hidden');
-            renderTokenEconomics(data.tokens, data.cost);
-            renderQuota(data.quota);
-            renderPromptInspector(data.prompt);
-            renderLLMOutput(data.llm_output);
-            renderQualityBadge(data.quality);
-            
-            if (data.performance) renderTimelineChart(data.performance);
-            if (data.quality) renderRadarChart(data.quality);
-        }
-    } catch (e) {
-        console.error('Error parsing local observability data', e);
-    }
-}
-
-function renderArena(data) {
-    const comp = data.comparison;
-    const metrics = comp.metrics;
-    const normalizeCost = (v) => (typeof v === 'number' ? v : (v?.total || 0));
-    
-    const winnerBadge = document.getElementById('arenaWinner');
-    const winnerText = comp.winner === 'gemini' ? 'GEMINI WINS' : comp.winner === 'local' ? 'LOCAL WINS' : 'TIE';
-    winnerBadge.textContent = winnerText;
-    
-    const winColor = comp.winner === 'gemini' ? '#3b82f6' : comp.winner === 'local' ? '#10b981' : '#f59e0b';
-    winnerBadge.style.color = winColor;
-    winnerBadge.style.borderColor = winColor;
-    
-    const maxSpeed = Math.max(metrics.speed.gemini, metrics.speed.local);
-    
-    // Gemini
-    document.getElementById('geminiSpeedVal').textContent = `${metrics.speed.gemini}ms`;
-    document.getElementById('geminiSpeedBar').style.width = `${(metrics.speed.gemini / maxSpeed) * 100}%`;
-    document.getElementById('geminiQualityVal').textContent = metrics.quality.gemini;
-    document.getElementById('geminiQualityBar').style.width = `${metrics.quality.gemini}%`;
-    document.getElementById('geminiCostVal').textContent = `$${normalizeCost(metrics.cost.gemini).toFixed(5)}`;
-    
-    // Local
-    document.getElementById('localSpeedVal').textContent = `${metrics.speed.local}ms`;
-    document.getElementById('localSpeedBar').style.width = `${(metrics.speed.local / maxSpeed) * 100}%`;
-    document.getElementById('localQualityVal').textContent = metrics.quality.local;
-    document.getElementById('localQualityBar').style.width = `${metrics.quality.local}%`;
-    document.getElementById('localCostVal').textContent = `$${normalizeCost(metrics.cost.local).toFixed(5)}`;
-    
-    document.getElementById('arenaRecommendation').textContent = comp.recommendation;
-}
-
-function renderTokenEconomics(tokens, cost) {
-    if (!tokens) return;
-    document.getElementById('tokenInput').textContent = tokens.input;
-    document.getElementById('tokenOutput').textContent = tokens.output;
-    document.getElementById('tokenTotal').textContent = tokens.total;
-    if (cost) document.getElementById('tokenCost').textContent = `$${cost.total.toFixed(5)}`;
-}
-
-function renderQualityBadge(quality) {
-    if (!quality) return;
-    const badge = document.getElementById('qualityScoreBadge');
-    badge.textContent = `Score: ${quality.score}`;
-    
-    const color = quality.score >= 90 ? '#10b981' :
-                  quality.score >= 70 ? '#3b82f6' : 
-                  quality.score >= 50 ? '#f59e0b' : '#ef4444';
-    
-    badge.style.color = color;
-    badge.style.borderColor = color;
-}
-
-// --- D3 Charts Optimized ---
-
-function renderQuota(quota) {
-    if (!quota) return;
-    const width = 100, height = 100, margin = 10;
-    const radius = Math.min(width, height) / 2 - margin;
-    
-    const container = d3.select("#quotaChart");
-    let svg = container.select("svg");
-    
-    if (svg.empty()) {
-        svg = container.append("svg")
-            .attr("width", width)
-            .attr("height", height)
-            .append("g")
-            .attr("transform", `translate(${width/2},${height/2})`);
-    } else {
-        svg = svg.select("g");
-    }
-
-    const data = {a: quota.percentage, b: 100 - quota.percentage};
-    const color = d3.scaleOrdinal().domain(["a", "b"]).range(["#3b82f6", "rgba(255,255,255,0.1)"]);
-    const pie = d3.pie().value(d => d[1]);
-    const data_ready = pie(Object.entries(data));
-    
-    const u = svg.selectAll("path").data(data_ready);
-
-    u.join("path")
-        .transition().duration(1000)
-        .attr('d', d3.arc().innerRadius(radius - 6).outerRadius(radius))
-        .attr('fill', d => color(d.data[0]))
-        .style("stroke-width", "0px");
-
-    document.getElementById('quotaPercent').textContent = `${Math.round(quota.percentage)}%`;
-}
-
-function renderTimelineChart(performance) {
-    const container = document.getElementById('timelineChart');
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    let svg = d3.select("#timelineChart").select("svg");
-    if (svg.empty()) {
-        svg = d3.select("#timelineChart").append("svg")
-            .attr("width", width)
-            .attr("height", height);
-    }
-
-    const phases = performance.phases || {};
-    const data = [
-        { name: "Prompt", start: 0, dur: phases.promptBuild || 50, color: "#3b82f6" },
-        { name: "LLM", start: phases.promptBuild || 50, dur: phases.llmCall || 1000, color: "#8b5cf6" },
-        { name: "Parse", start: (phases.promptBuild||50) + (phases.llmCall||1000), dur: phases.jsonParse || 50, color: "#10b981" },
-        { name: "TTS", start: (phases.promptBuild||50) + (phases.llmCall||1000) + (phases.jsonParse||50), dur: phases.audioGenerate || 0, color: "#f59e0b" }
-    ].filter(d => d.dur > 0);
-
-    const totalTime = performance.totalTime || 2000;
-    const xScale = d3.scaleLinear().domain([0, totalTime]).range([0, width]);
-
-    // Bars
-    svg.selectAll("rect")
-        .data(data)
-        .join(
-            enter => enter.append("rect")
-                .attr("y", height / 2 - 10)
-                .attr("height", 20)
-                .attr("rx", 4)
-                .attr("fill", d => d.color)
-                .attr("x", d => xScale(d.start))
-                .attr("width", 0)
-                .call(enter => enter.transition().duration(800)
-                    .attr("width", d => xScale(d.start + d.dur) - xScale(d.start))),
-            update => update.transition().duration(800)
-                .attr("x", d => xScale(d.start))
-                .attr("width", d => xScale(d.start + d.dur) - xScale(d.start)),
-            exit => exit.remove()
-        );
-
-    // Labels
-    svg.selectAll("text.label")
-        .data(data)
-        .join(
-            enter => enter.append("text")
-                .attr("class", "label")
-                .attr("y", height / 2 - 15)
-                .attr("font-family", "Inter")
-                .attr("font-size", "10px")
-                .attr("fill", "#94a3b8")
-                .attr("x", d => xScale(d.start) + 2)
-                .text(d => d.dur > 50 ? d.name : ''),
-            update => update
-                .attr("x", d => xScale(d.start) + 2)
-                .text(d => d.dur > 50 ? d.name : '')
-        );
-
-    // Total Time
-    const totalText = svg.selectAll("text.total").data([totalTime]);
-    totalText.join(
-        enter => enter.append("text")
-            .attr("class", "total")
-            .attr("x", width - 10)
-            .attr("y", height - 10)
-            .attr("text-anchor", "end")
-            .attr("fill", "#e2e8f0")
-            .attr("font-size", "12px")
-            .attr("font-family", "JetBrains Mono")
-            .text(`Total: ${totalTime}ms`),
-        update => update.text(`Total: ${totalTime}ms`)
-    );
-}
-
-function renderRadarChart(quality) {
-    const container = document.getElementById('radarChart');
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    const margin = 30;
-    const radius = Math.min(width, height) / 2 - margin;
-    
-    let svg = d3.select("#radarChart").select("svg");
-    let g;
-    if (svg.empty()) {
-        svg = d3.select("#radarChart").append("svg")
-            .attr("width", width)
-            .attr("height", height);
-        g = svg.append("g").attr("transform", `translate(${width/2},${height/2})`);
-        
-        // Static Grid
-        const rScale = d3.scaleLinear().range([0, radius]).domain([0, 100]);
-        [25, 50, 75, 100].forEach(d => {
-            g.append("circle")
-               .attr("r", rScale(d))
-               .attr("fill", "none")
-               .attr("stroke", "rgba(255,255,255,0.1)")
-               .attr("stroke-dasharray", "4,4");
-        });
-    } else {
-        g = svg.select("g");
-    }
-
-    const dims = quality.dimensions || { structuralIntegrity: 0, contentRichness: 0, complianceWithStandards: 0, audioCompleteness: 0 };
-    const data = {
-        "Struct": dims.structuralIntegrity,
-        "Richness": dims.contentRichness,
-        "Compliance": dims.complianceWithStandards,
-        "Audio": dims.audioCompleteness
-    };
-    
-    const features = Object.keys(data);
-    const angleSlice = Math.PI * 2 / features.length;
-    const rScale = d3.scaleLinear().range([0, radius]).domain([0, 100]);
-    
-    const line = d3.lineRadial()
-        .angle((d, i) => i * angleSlice)
-        .radius(d => rScale(d[1]))
-        .curve(d3.curveLinearClosed);
-        
-    g.selectAll("path.radar-area")
-        .data([Object.entries(data)])
-        .join(
-            enter => enter.append("path")
-                .attr("class", "radar-area")
-                .attr("fill", "rgba(16, 185, 129, 0.2)")
-                .attr("stroke", "#10b981")
-                .attr("stroke-width", 2)
-                .attr("d", line),
-            update => update.transition().duration(1000).attr("d", line)
-        );
-        
-    // Axes labels (Static)
-    if (g.selectAll(".axis").empty()) {
-        const axis = g.selectAll(".axis")
-            .data(features)
-            .enter().append("g").attr("class", "axis");
-            
-        axis.append("line")
-            .attr("x1", 0).attr("y1", 0)
-            .attr("x2", (d, i) => rScale(100) * Math.cos(angleSlice * i - Math.PI/2))
-            .attr("y2", (d, i) => rScale(100) * Math.sin(angleSlice * i - Math.PI/2))
-            .attr("stroke", "rgba(255,255,255,0.1)");
-            
-        axis.append("text")
-            .attr("x", (d, i) => rScale(115) * Math.cos(angleSlice * i - Math.PI/2))
-            .attr("y", (d, i) => rScale(115) * Math.sin(angleSlice * i - Math.PI/2))
-            .text(d => d)
-            .style("text-anchor", "middle")
-            .style("font-size", "10px")
-            .style("fill", "#94a3b8");
-    }
-}
-
-// --- Layer 3: Details & Analytics ---
-
-function renderPromptInspector(promptData) {
-    if (!promptData) return;
-    document.getElementById('promptFullText').textContent = promptData.full || 'No data';
-    document.getElementById('promptRole').textContent = promptData.structure?.systemInstruction || 'N/A';
-    
-    const cotList = document.getElementById('promptCoTList');
-    cotList.innerHTML = '';
-    (promptData.structure?.chainOfThought || []).forEach(step => {
-        const li = document.createElement('li');
-        li.textContent = step;
-        cotList.appendChild(li);
+function setupTimeRangeButtons() {
+    const buttons = document.querySelectorAll('.time-btn');
+    buttons.forEach(btn => {
+        btn.onclick = () => {
+            buttons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const days = Number(btn.dataset.days || 30);
+            state.days = days;
+            loadDashboard(days);
+        };
     });
 }
 
-function renderLLMOutput(output) {
-    if (!output) return;
-    try {
-        const formatted = typeof output === 'string' ? JSON.stringify(JSON.parse(output), null, 2) : JSON.stringify(output, null, 2);
-        document.getElementById('outputFormattedText').textContent = formatted;
-    } catch (e) {
-        document.getElementById('outputFormattedText').textContent = 'Invalid JSON';
-    }
-    const raw = typeof output === 'string' ? output : JSON.stringify(output);
-    document.getElementById('outputRawText').textContent = raw;
-}
+async function loadDashboard(days) {
+    const { dateFrom, dateTo } = getDateRange(days);
 
-async function loadHistoricalAnalytics(days) {
     try {
-        const dateTo = new Date().toISOString().split('T')[0];
-        const dateFrom = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        const [statsRes, historyRes] = await Promise.all([
-            fetch(`/api/statistics?dateFrom=${dateFrom}&dateTo=${dateTo}`),
-            fetch(`/api/history?limit=100&dateFrom=${dateFrom}&dateTo=${dateTo}`)
+        const [historyRes, totalRes, statsRes] = await Promise.all([
+            fetchHistory({ limit: 200, dateFrom, dateTo }),
+            fetchHistory({ limit: 1 }),
+            fetchStatistics({ dateFrom, dateTo }),
         ]);
 
-        if (statsRes.ok && historyRes.ok) {
-            const stats = await statsRes.json();
-            const history = await historyRes.json();
-            renderQualityTrend(history.records);
-            renderProviderDistribution(stats.statistics);
-            renderTokenTrend(history.records);
-        }
+        const records = historyRes.records || [];
+        const totalCount = totalRes.pagination?.total || records.length;
+        const stats = statsRes.statistics || [];
+
+        const summary = aggregateStats(stats, records);
+
+        renderOverview({
+            totalCount,
+            avgQuality: summary.avgQuality,
+            avgTokens: summary.avgTokens,
+            avgLatency: summary.avgLatency,
+            days,
+        });
+
+        renderCostSummary({
+            totalCost: summary.totalCost,
+            avgCost: summary.avgCost,
+            currency: summary.currency,
+        });
+
+        renderProviderPie(stats, records);
+
+        renderQualityTrend(records, days);
+        renderTokenTrend(records, days);
+        renderLatencyTrend(records, days);
+
+        renderRecent(records);
     } catch (err) {
-        console.error('Analytics load failed', err);
+        console.error('Dashboard load error:', err);
     }
 }
 
-// Charts for Analytics (Simplified for brevity, assuming similar D3 join pattern)
-function renderQualityTrend(records) { /* Implementation similar to previous dashboard.js but with D3 join */ }
-function renderProviderDistribution(stats) { /* ... */ }
-function renderTokenTrend(records) { /* ... */ }
+async function fetchHistory({ limit = 200, dateFrom, dateTo } = {}) {
+    const params = new URLSearchParams();
+    params.set('page', '1');
+    params.set('limit', String(limit));
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
 
-function setupTabs() {
-    const buttons = document.querySelectorAll('.tab');
-    buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.target;
-            const card = btn.closest('.card');
-            card.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-            card.querySelectorAll('.prompt-content').forEach(c => c.classList.add('hidden'));
-            btn.classList.add('active');
-            
-            const contentMap = {
-                'promptFull': 'promptViewFull', 'promptStruct': 'promptViewStruct',
-                'outputFormatted': 'outputViewFormatted', 'outputRaw': 'outputViewRaw'
-            };
-            const el = document.getElementById(contentMap[target]);
-            if (el) el.classList.remove('hidden');
+    const res = await fetch(`/api/history?${params.toString()}`);
+    if (!res.ok) throw new Error('History fetch failed');
+    return res.json();
+}
+
+async function fetchStatistics({ dateFrom, dateTo } = {}) {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    const res = await fetch(`/api/statistics?${params.toString()}`);
+    if (!res.ok) throw new Error('Statistics fetch failed');
+    return res.json();
+}
+
+function getDateRange(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days + 1);
+    const dateFrom = start.toISOString().split('T')[0];
+    const dateTo = end.toISOString().split('T')[0];
+    return { dateFrom, dateTo };
+}
+
+function aggregateStats(stats, records) {
+    const totals = {
+        count: 0,
+        totalCost: 0,
+        totalTokens: 0,
+        totalQuality: 0,
+        totalLatency: 0,
+    };
+
+    if (stats && stats.length) {
+        stats.forEach(s => {
+            const count = Number(s.total_count || 0);
+            totals.count += count;
+            totals.totalCost += Number(s.total_cost || 0);
+            totals.totalTokens += Number(s.avg_tokens || 0) * count;
+            totals.totalQuality += Number(s.avg_quality || 0) * count;
+            totals.totalLatency += Number(s.avg_response_time || 0) * count;
         });
-    });
-    
-    const timeBtns = document.querySelectorAll('.time-btn');
-    timeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            timeBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadHistoricalAnalytics(parseInt(btn.dataset.days));
+    } else if (records && records.length) {
+        records.forEach(r => {
+            totals.count += 1;
+            totals.totalCost += Number(r.cost_total || 0);
+            totals.totalTokens += Number(r.tokens_total || 0);
+            totals.totalQuality += Number(r.quality_score || 0);
+            totals.totalLatency += Number(r.performance_total_ms || 0);
         });
+    }
+
+    const count = totals.count || 1;
+    return {
+        totalCost: totals.totalCost,
+        avgCost: totals.totalCost / count,
+        avgTokens: totals.totalTokens / count,
+        avgQuality: totals.totalQuality / count,
+        avgLatency: totals.totalLatency / count,
+        currency: 'USD',
+    };
+}
+
+function renderOverview({ totalCount, avgQuality, avgTokens, avgLatency, days }) {
+    setText('overviewTotal', formatNumber(totalCount));
+    setText('overviewAvgQuality', formatNumber(avgQuality, 1));
+    setText('overviewAvgTokens', formatNumber(avgTokens, 0));
+    setText('overviewAvgLatency', formatNumber(avgLatency, 0));
+    setText('overviewRange', days ? `Last ${days} days` : 'All time');
+}
+
+function renderCostSummary({ totalCost, avgCost, currency }) {
+    setText('costTotal', formatCurrency(totalCost, currency));
+    setText('costAvg', formatCurrency(avgCost, currency));
+    setText('costCurrency', currency || 'USD');
+}
+
+function renderProviderPie(stats, records) {
+    const container = document.getElementById('providerPieChart');
+    const legend = document.getElementById('providerLegend');
+    container.innerHTML = '';
+    legend.innerHTML = '';
+
+    const data = stats && stats.length
+        ? stats.map(s => ({ label: s.llm_provider || 'unknown', value: Number(s.total_count || 0) }))
+        : aggregateProvider(records);
+
+    if (!data.length) {
+        container.innerHTML = '<div class="empty-hint">No data</div>';
+        return;
+    }
+
+    const width = container.clientWidth || 220;
+    const height = 220;
+    const radius = Math.min(width, height) / 2 - 10;
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
+
+    const color = d3.scaleOrdinal()
+        .domain(data.map(d => d.label))
+        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
+
+    const pie = d3.pie().value(d => d.value);
+    const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
+
+    svg.selectAll('path')
+        .data(pie(data))
+        .enter()
+        .append('path')
+        .attr('d', arc)
+        .attr('fill', d => color(d.data.label))
+        .attr('stroke', 'rgba(255,255,255,0.1)')
+        .attr('stroke-width', 1);
+
+    data.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'legend-item';
+        row.innerHTML = `
+            <span class="legend-dot" style="background:${color(item.label)}"></span>
+            <span class="legend-label">${item.label}</span>
+            <span class="legend-value">${item.value}</span>
+        `;
+        legend.appendChild(row);
     });
+}
+
+function renderQualityTrend(records) {
+    const series = buildDailySeries(records, r => r.quality_score, 'avg');
+    renderLineChart('qualityTrendChart', series, '#10b981');
+}
+
+function renderTokenTrend(records) {
+    const series = buildDailySeries(records, r => r.tokens_total, 'avg');
+    renderLineChart('tokenTrendChart', series, '#3b82f6');
+}
+
+function renderLatencyTrend(records) {
+    const series = buildDailySeries(records, r => r.performance_total_ms, 'avg');
+    renderLineChart('latencyTrendChart', series, '#f59e0b');
+}
+
+function buildDailySeries(records, selector, mode = 'avg') {
+    const map = new Map();
+    records.forEach(r => {
+        const rawDate = r.created_at || r.generation_date;
+        if (!rawDate) return;
+        const day = new Date(rawDate).toISOString().split('T')[0];
+        const value = Number(selector(r));
+        if (Number.isNaN(value)) return;
+        if (!map.has(day)) map.set(day, []);
+        map.get(day).push(value);
+    });
+
+    return Array.from(map.entries())
+        .map(([day, values]) => {
+            const sum = values.reduce((a, b) => a + b, 0);
+            const val = mode === 'avg' ? sum / values.length : sum;
+            return { day, value: val, dateObj: new Date(day) };
+        })
+        .sort((a, b) => a.dateObj - b.dateObj);
+}
+
+function renderLineChart(containerId, data, color) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    if (!data.length) {
+        container.innerHTML = '<div class="empty-hint">No data</div>';
+        return;
+    }
+
+    const width = container.clientWidth || 320;
+    const height = container.clientHeight || 180;
+    const padding = 28;
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    const x = d3.scaleTime()
+        .domain(d3.extent(data, d => d.dateObj))
+        .range([padding, width - padding]);
+
+    const maxY = d3.max(data, d => d.value) || 1;
+    const y = d3.scaleLinear()
+        .domain([0, maxY * 1.1])
+        .range([height - padding, padding]);
+
+    const line = d3.line()
+        .x(d => x(d.dateObj))
+        .y(d => y(d.value))
+        .curve(d3.curveMonotoneX);
+
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 2)
+        .attr('d', line);
+
+    svg.selectAll('circle')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('cx', d => x(d.dateObj))
+        .attr('cy', d => y(d.value))
+        .attr('r', 3)
+        .attr('fill', color);
+
+    const xAxis = d3.axisBottom(x).ticks(4).tickSizeOuter(0);
+    const yAxis = d3.axisLeft(y).ticks(4).tickSizeOuter(0);
+
+    svg.append('g')
+        .attr('transform', `translate(0,${height - padding})`)
+        .call(xAxis)
+        .selectAll('text')
+        .style('fill', '#94a3b8')
+        .style('font-size', '10px');
+
+    svg.append('g')
+        .attr('transform', `translate(${padding},0)`)
+        .call(yAxis)
+        .selectAll('text')
+        .style('fill', '#94a3b8')
+        .style('font-size', '10px');
+
+    svg.selectAll('path.domain, line').style('stroke', 'rgba(148,163,184,0.3)');
+}
+
+function renderRecent(records) {
+    const body = document.getElementById('recentTableBody');
+    const countEl = document.getElementById('recentCount');
+    body.innerHTML = '';
+
+    if (!records.length) {
+        body.innerHTML = '<tr><td colspan="6" class="empty-cell">No records</td></tr>';
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+
+    const top = records.slice(0, 8);
+    top.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeCell(r.phrase)}</td>
+            <td><span class="pill">${escapeCell(r.llm_provider)}</span></td>
+            <td>${formatNumber(r.quality_score, 0)}</td>
+            <td>${formatNumber(r.tokens_total, 0)}</td>
+            <td>${formatCurrency(r.cost_total, 'USD')}</td>
+            <td>${formatDate(r.created_at)}</td>
+        `;
+        body.appendChild(tr);
+    });
+
+    if (countEl) countEl.textContent = `${top.length}`;
+}
+
+function aggregateProvider(records = []) {
+    const map = new Map();
+    records.forEach(r => {
+        const key = r.llm_provider || 'unknown';
+        map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function formatNumber(value, digits = 0) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    return num.toFixed(digits);
+}
+
+function formatCurrency(value, currency) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    return `${num.toFixed(5)} ${currency || 'USD'}`;
+}
+
+function escapeCell(value) {
+    if (value === null || value === undefined) return '-';
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
 }

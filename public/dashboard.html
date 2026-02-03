@@ -13,7 +13,7 @@
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- 1. Header -->
+        <!-- Header -->
         <header class="dashboard-header">
             <div class="header-left">
                 <a href="/" class="back-btn">
@@ -33,30 +33,17 @@
             </div>
         </header>
 
-        <!-- 2. Main Grid -->
+        <!-- Main Grid -->
         <main class="bento-grid">
-            
-            <!-- Layer 1: Infrastructure -->
+            <!-- Infrastructure -->
             <div class="card card-sm" id="card-services">
                 <div class="card-header">
                     <h3>Service Matrix</h3>
                     <div class="icon-pulse"></div>
                 </div>
                 <div class="service-matrix" id="serviceMatrix">
-                    <!-- Injected via JS -->
                     <div class="skeleton-line"></div>
                     <div class="skeleton-line"></div>
-                </div>
-            </div>
-
-            <div class="card card-sm" id="card-quota">
-                <div class="card-header"><h3>API Quota</h3></div>
-                <div class="quota-container">
-                    <div id="quotaChart"></div>
-                    <div class="quota-overlay">
-                        <span class="quota-percent" id="quotaPercent">-</span>
-                        <span class="quota-label">USED</span>
-                    </div>
                 </div>
             </div>
 
@@ -74,101 +61,57 @@
                 </div>
             </div>
 
-            <!-- Layer 2: Generation Analytics -->
-            <div class="card card-wide" id="card-performance">
-                <div class="card-header">
-                    <h3>Performance Waterfall</h3>
-                    <span class="card-tag">Latest Request</span>
-                </div>
-                <div class="chart-container" id="timelineChart"></div>
-            </div>
-
-            <div class="card card-md" id="card-quality">
-                <div class="card-header"><h3>Quality Radar</h3></div>
-                <div class="chart-container" id="radarChart"></div>
-                <div class="quality-score-badge" id="qualityScoreBadge">-</div>
-            </div>
-
-            <div class="card card-md" id="card-tokens">
-                <div class="card-header"><h3>Token Economics</h3></div>
-                <div class="token-metrics">
-                    <div class="token-row">
-                        <span class="label">Input</span>
-                        <span class="value" id="tokenInput">-</span>
+            <div class="card card-sm" id="card-overview">
+                <div class="card-header"><h3>Overview</h3></div>
+                <div class="overview-grid">
+                    <div class="overview-item">
+                        <span class="overview-label">Total Records</span>
+                        <span class="overview-value" id="overviewTotal">-</span>
+                        <span class="overview-sub" id="overviewRange">All time</span>
                     </div>
-                    <div class="token-row">
-                        <span class="label">Output</span>
-                        <span class="value" id="tokenOutput">-</span>
+                    <div class="overview-item">
+                        <span class="overview-label">Avg Quality</span>
+                        <span class="overview-value" id="overviewAvgQuality">-</span>
+                        <span class="overview-sub">Last 30 days</span>
                     </div>
-                    <div class="token-divider"></div>
-                    <div class="token-row total">
-                        <span class="label">Total</span>
-                        <span class="value highlight" id="tokenTotal">-</span>
+                    <div class="overview-item">
+                        <span class="overview-label">Avg Tokens</span>
+                        <span class="overview-value" id="overviewAvgTokens">-</span>
+                        <span class="overview-sub">Per card</span>
                     </div>
-                    <div class="cost-tag" id="tokenCost">$0.0000</div>
+                    <div class="overview-item">
+                        <span class="overview-label">Avg Latency</span>
+                        <span class="overview-value" id="overviewAvgLatency">-</span>
+                        <span class="overview-sub">ms</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Layer 2.5: Model Arena (Comparison) -->
-            <div class="card card-full hidden" id="card-arena">
-                <div class="card-header">
-                    <h3>Model Arena</h3>
-                    <span class="badge" id="arenaWinner">-</span>
-                </div>
-                <div class="arena-grid">
-                    <!-- Gemini Column -->
-                    <div class="arena-col">
-                        <div class="arena-title">🤖 Gemini API</div>
-                        <div class="arena-stat">
-                            <span class="label">Speed</span>
-                            <div class="bar-container"><div class="bar-fill" id="geminiSpeedBar" style="width: 0%"></div></div>
-                            <span class="val" id="geminiSpeedVal">-</span>
-                        </div>
-                        <div class="arena-stat">
-                            <span class="label">Quality</span>
-                            <div class="bar-container"><div class="bar-fill" id="geminiQualityBar" style="width: 0%"></div></div>
-                            <span class="val" id="geminiQualityVal">-</span>
-                        </div>
-                        <div class="arena-stat">
-                            <span class="label">Cost</span>
-                            <span class="val" id="geminiCostVal">-</span>
-                        </div>
+            <div class="card card-sm" id="card-cost">
+                <div class="card-header"><h3>Cost Summary</h3></div>
+                <div class="cost-summary">
+                    <div class="cost-row">
+                        <span>Total Cost</span>
+                        <span id="costTotal">-</span>
                     </div>
-                    
-                    <!-- VS Divider -->
-                    <div class="arena-vs">VS</div>
-
-                    <!-- Local Column -->
-                    <div class="arena-col">
-                        <div class="arena-title">🖥️ Local LLM</div>
-                        <div class="arena-stat">
-                            <span class="label">Speed</span>
-                            <div class="bar-container"><div class="bar-fill" id="localSpeedBar" style="width: 0%"></div></div>
-                            <span class="val" id="localSpeedVal">-</span>
-                        </div>
-                        <div class="arena-stat">
-                            <span class="label">Quality</span>
-                            <div class="bar-container"><div class="bar-fill" id="localQualityBar" style="width: 0%"></div></div>
-                            <span class="val" id="localQualityVal">-</span>
-                        </div>
-                        <div class="arena-stat">
-                            <span class="label">Cost</span>
-                            <span class="val" id="localCostVal">-</span>
-                        </div>
+                    <div class="cost-row">
+                        <span>Avg Cost</span>
+                        <span id="costAvg">-</span>
                     </div>
-                </div>
-                <div class="arena-footer">
-                    <p id="arenaRecommendation">Recommendation: -</p>
+                    <div class="cost-row">
+                        <span>Currency</span>
+                        <span id="costCurrency">-</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Layer 3: Historical Analytics -->
+            <!-- Analytics -->
             <div class="card card-wide" id="card-quality-trend">
                 <div class="card-header">
-                    <h3>Quality Trend (Last 30 Days)</h3>
+                    <h3>Quality Trend</h3>
                     <div class="time-range-selector">
-                        <button class="time-btn active" data-days="7">7D</button>
-                        <button class="time-btn" data-days="30">30D</button>
+                        <button class="time-btn" data-days="7">7D</button>
+                        <button class="time-btn active" data-days="30">30D</button>
                         <button class="time-btn" data-days="90">90D</button>
                     </div>
                 </div>
@@ -178,51 +121,41 @@
             <div class="card card-md" id="card-provider-stats">
                 <div class="card-header"><h3>Provider Distribution</h3></div>
                 <div class="chart-container" id="providerPieChart"></div>
+                <div class="legend-list" id="providerLegend"></div>
             </div>
 
             <div class="card card-md" id="card-token-trend">
-                <div class="card-header"><h3>Token Usage Trend</h3></div>
+                <div class="card-header"><h3>Token Trend</h3></div>
                 <div class="chart-container" id="tokenTrendChart"></div>
             </div>
 
-            <!-- Layer 4: Deep Dive -->
-            <div class="card card-full" id="card-prompt">
+            <div class="card card-wide" id="card-latency-trend">
                 <div class="card-header">
-                    <h3>📋 Complete Prompt</h3>
-                    <div class="tabs">
-                        <button class="tab active" data-target="promptFull">Full Prompt</button>
-                        <button class="tab" data-target="promptStruct">Structured</button>
-                    </div>
+                    <h3>Latency Trend</h3>
+                    <span class="card-tag" id="latencyTag">Avg ms</span>
                 </div>
-                <div class="prompt-content" id="promptViewFull">
-                    <pre id="promptFullText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
-                </div>
-                <div class="prompt-content hidden" id="promptViewStruct">
-                    <!-- Structured Prompt View -->
-                    <div class="prompt-block">
-                        <span class="block-label">Role</span>
-                        <p id="promptRole">-</p>
-                    </div>
-                    <div class="prompt-block">
-                        <span class="block-label">CoT Steps</span>
-                        <ul id="promptCoTList"></ul>
-                    </div>
-                </div>
+                <div class="chart-container" id="latencyTrendChart"></div>
             </div>
 
-            <div class="card card-full" id="card-output">
+            <div class="card card-wide" id="card-recent">
                 <div class="card-header">
-                    <h3>🧾 LLM Raw Output</h3>
-                    <div class="tabs">
-                        <button class="tab active" data-target="outputFormatted">Formatted JSON</button>
-                        <button class="tab" data-target="outputRaw">Raw</button>
-                    </div>
+                    <h3>Recent Records</h3>
+                    <span class="card-tag" id="recentCount">-</span>
                 </div>
-                <div class="prompt-content" id="outputViewFormatted">
-                    <pre id="outputFormattedText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
-                </div>
-                <div class="prompt-content hidden" id="outputViewRaw">
-                    <pre id="outputRawText" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">-</pre>
+                <div class="recent-table-wrap">
+                    <table class="recent-table">
+                        <thead>
+                            <tr>
+                                <th>Phrase</th>
+                                <th>Provider</th>
+                                <th>Quality</th>
+                                <th>Tokens</th>
+                                <th>Cost</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentTableBody"></tbody>
+                    </table>
                 </div>
             </div>
 

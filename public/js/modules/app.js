@@ -473,6 +473,9 @@ function renderCardModal(markdown, title, options = {}) {
     const folderName = options.folder ?? null;
     const baseName = options.baseName ?? null;
     const canDelete = Boolean(folderName && baseName);
+    const metrics = options.metrics || null;
+    const hasMetrics = Boolean(metrics && metrics.observability);
+    const metricsHtml = hasMetrics ? buildMetricsPanel(metrics) : '<div class="mc-empty">暂无指标记录</div>';
     els.modalContainer.innerHTML = `
         <div class="modern-card">
             <button class="mc-close" id="mcCloseBtn">×</button>
@@ -484,8 +487,15 @@ function renderCardModal(markdown, title, options = {}) {
                     <span>${new Date().getFullYear()}</span>
                 </div>
             </div>
-            <div class="mc-body mc-content">
+            <div class="mc-tabs">
+                <button class="mc-tab active" data-tab="content">卡片内容</button>
+                <button class="mc-tab" data-tab="metrics" ${hasMetrics ? '' : 'disabled'}>MISSION 指标</button>
+            </div>
+            <div class="mc-body mc-content mc-panel mc-panel-content" data-panel="content">
                 ${safeHtml}
+            </div>
+            <div class="mc-body mc-panel mc-panel-metrics hidden" data-panel="metrics">
+                ${metricsHtml}
             </div>
         </div>
     `;
@@ -503,6 +513,21 @@ function renderCardModal(markdown, title, options = {}) {
         };
     }
 
+    // 绑定标签页
+    const tabs = els.modalContainer.querySelectorAll('.mc-tab');
+    const panels = els.modalContainer.querySelectorAll('.mc-panel');
+    tabs.forEach(tab => {
+        if (tab.disabled) return;
+        tab.onclick = () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            panels.forEach(p => p.classList.add('hidden'));
+            tab.classList.add('active');
+            const target = tab.dataset.tab;
+            const panel = els.modalContainer.querySelector(`[data-panel="${target}"]`);
+            if (panel) panel.classList.remove('hidden');
+        };
+    });
+
     // 绑定音频按钮
     const folder = store.get('selectedFolder');
     els.modalContainer.querySelectorAll('.audio-btn').forEach(btn => {
@@ -515,6 +540,133 @@ function renderCardModal(markdown, title, options = {}) {
 
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => els.modalOverlay.classList.add('show'), 10);
+}
+
+function buildMetricsPanel(record) {
+    const obs = record?.observability || {};
+    const tokens = {
+        input: obs.tokens_input,
+        output: obs.tokens_output,
+        total: obs.tokens_total,
+        cached: obs.tokens_cached
+    };
+    const costCurrency = obs.cost_currency || 'USD';
+    const cost = {
+        input: obs.cost_input,
+        output: obs.cost_output,
+        total: obs.cost_total
+    };
+    const qualityScore = obs.quality_score;
+    const qualityWarnings = Array.isArray(obs.quality_warnings) ? obs.quality_warnings : [];
+    const qualityDims = obs.quality_dimensions || {};
+    const performanceTotal = obs.performance_total_ms;
+    const phases = obs.performance_phases || {};
+    const quota = {
+        used: obs.quota_used,
+        limit: obs.quota_limit,
+        remaining: obs.quota_remaining,
+        reset: obs.quota_reset_at,
+        percentage: obs.quota_percentage
+    };
+
+    const phaseLabels = {
+        init: '初始化',
+        ocr: 'OCR',
+        promptBuild: 'Prompt构建',
+        llmCall: 'LLM调用',
+        jsonParse: '解析',
+        renderHtml: '渲染',
+        fileSave: '存储',
+        audioGenerate: 'TTS',
+    };
+
+    const phaseRows = Object.entries(phases).map(([key, value]) => {
+        const label = phaseLabels[key] || key;
+        return `
+            <div class="mc-kv">
+                <span>${escapeHtml(label)}</span>
+                <span>${formatMetric(value, 'ms')}</span>
+            </div>
+        `;
+    }).join('');
+
+    const warningBadges = qualityWarnings.length
+        ? qualityWarnings.map(w => `<span class="mc-pill mc-pill-warn">${escapeHtml(String(w))}</span>`).join('')
+        : '<span class="mc-pill">无</span>';
+
+    const dimBadges = Object.keys(qualityDims).length
+        ? Object.entries(qualityDims).map(([k, v]) => `<span class="mc-pill">${escapeHtml(k)}: ${formatMetric(v)}</span>`).join('')
+        : '<span class="mc-pill">-</span>';
+
+    return `
+        <div class="mc-metrics-grid">
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">质量评分</div>
+                <div class="mc-metric-value">${formatMetric(qualityScore)}</div>
+                <div class="mc-metric-meta">警告 ${qualityWarnings.length} 条</div>
+            </div>
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">Token</div>
+                <div class="mc-metric-value">${formatMetric(tokens.total)}</div>
+                <div class="mc-metric-meta">In ${formatMetric(tokens.input)} · Out ${formatMetric(tokens.output)}</div>
+            </div>
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">成本</div>
+                <div class="mc-metric-value">${formatCurrency(cost.total, costCurrency)}</div>
+                <div class="mc-metric-meta">In ${formatCurrency(cost.input, costCurrency)} · Out ${formatCurrency(cost.output, costCurrency)}</div>
+            </div>
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">总耗时</div>
+                <div class="mc-metric-value">${formatMetric(performanceTotal, 'ms')}</div>
+                <div class="mc-metric-meta">${escapeHtml(record.llm_provider || '-')} · ${escapeHtml(record.llm_model || '-')}</div>
+            </div>
+        </div>
+
+        <div class="mc-metric-block">
+            <div class="mc-metric-subtitle">阶段耗时</div>
+            <div class="mc-kv-grid">
+                ${phaseRows || '<span class="mc-empty">暂无阶段数据</span>'}
+            </div>
+        </div>
+
+        <div class="mc-metric-block">
+            <div class="mc-metric-subtitle">质量维度</div>
+            <div class="mc-pill-group">${dimBadges}</div>
+        </div>
+
+        <div class="mc-metric-block">
+            <div class="mc-metric-subtitle">质量警告</div>
+            <div class="mc-pill-group">${warningBadges}</div>
+        </div>
+
+        <div class="mc-metrics-grid mc-metrics-grid-compact">
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">配额</div>
+                <div class="mc-metric-value">${formatMetric(quota.percentage, '%')}</div>
+                <div class="mc-metric-meta">剩余 ${formatMetric(quota.remaining)}</div>
+            </div>
+            <div class="mc-metric-card">
+                <div class="mc-metric-title">请求信息</div>
+                <div class="mc-metric-value">${formatDate(record.created_at)}</div>
+                <div class="mc-metric-meta">${escapeHtml(record.request_id || '-')}</div>
+            </div>
+        </div>
+    `;
+}
+
+function formatMetric(value, suffix = '') {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    const rounded = suffix === 'ms' ? Math.round(num) : num;
+    return `${rounded}${suffix}`;
+}
+
+function formatCurrency(value, currency) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    return `${num.toFixed(5)} ${currency || 'USD'}`;
 }
 
 function closeModal() {
@@ -654,9 +806,9 @@ function renderHistory(records) {
                 // 模拟选中文件夹以支持音频播放
                 store.setState({ selectedFolder: record.folder_name });
                 renderCardModal(mdContent, record.phrase, {
-                    recordId: record.id,
                     folder: record.folder_name,
-                    baseName: record.base_filename
+                    baseName: record.base_filename,
+                    metrics: record
                 });
             } catch (err) {
                 alert('无法加载记录详情');
