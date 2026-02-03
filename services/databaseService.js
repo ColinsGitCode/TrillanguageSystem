@@ -257,6 +257,20 @@ class DatabaseService {
   }
 
   /**
+   * 根据文件夹与基础文件名获取记录
+   */
+  getGenerationByFile(folderName, baseFilename) {
+    const generation = this.db.prepare(`
+      SELECT * FROM generations
+      WHERE folder_name = ? AND base_filename = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(folderName, baseFilename);
+
+    return generation || null;
+  }
+
+  /**
    * 统计分析
    */
   getStatistics({ provider, dateFrom, dateTo }) {

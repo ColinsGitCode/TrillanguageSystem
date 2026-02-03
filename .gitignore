@@ -20,3 +20,6 @@ Docs/**/*_with_d3.md
 Docs/diagram_tools/
 Docs/visualizations/
 Docs/assets/
+
+# UI build leftovers
+public/*.bak

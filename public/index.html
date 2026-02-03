@@ -32,15 +32,8 @@
 
       <section class="grid">
         <article class="card folders" aria-label="Folders">
-          <!-- Tab 切换 -->
-          <div class="panel-tabs">
-            <button class="tab-btn active" data-tab="generator">生成</button>
-            <button class="tab-btn" data-tab="folders">文件夹</button>
-            <button class="tab-btn" data-tab="history">历史记录</button>
-          </div>
-
           <!-- Generation Panel -->
-          <div class="gen-panel tab-content active" data-content="generator">
+          <div class="gen-panel">
             <p class="label">New Card</p>
 
             <div class="input-modes">
@@ -130,8 +123,14 @@
             </div>
           </div>
 
+          <!-- 资源区 Tabs -->
+          <div class="panel-tabs sub-tabs">
+            <button class="tab-btn active" data-tab="folders">文件夹</button>
+            <button class="tab-btn" data-tab="history">历史记录</button>
+          </div>
+
           <!-- Folders Panel -->
-          <div class="folders-panel tab-content" data-content="folders">
+          <div class="folders-panel tab-content active" data-content="folders">
             <div class="card-header">
               <div>
                 <p class="label">Path</p>
@@ -194,9 +193,6 @@
             </div>
             <div class="list file-list" id="fileList" role="listbox" aria-label="file list"></div>
           </div>
-          <div class="viewer-note">
-<!--            <p>选中文件后，内容会在全屏弹窗中展示。点击弹窗外即可关闭。</p>-->
-          </div>
         </article>
       </section>
 
@@ -214,6 +210,6 @@
         </div>
       </div>
     </div>
-    <script src="main.js" defer></script>
+    <script type="module" src="js/modules/app.js"></script>
   </body>
 </html>

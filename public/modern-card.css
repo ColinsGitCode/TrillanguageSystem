@@ -220,6 +220,36 @@ rt {
   color: var(--text-ink);
 }
 
+.mc-delete {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: #b91c1c;
+  transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+
+.mc-delete:hover {
+  background: #fecaca;
+  color: #991b1b;
+  transform: translateY(-1px);
+}
+
+.mc-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .mc-error .mc-header {
   background: linear-gradient(180deg, rgba(249, 115, 22, 0.16) 0%, #ffffff 100%);
 }

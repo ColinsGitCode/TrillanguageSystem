@@ -111,6 +111,43 @@ function readFileInFolder(folderName, filename) {
     return fs.readFileSync(filePath);
 }
 
+function escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function deleteRecordFiles(folderName, baseName) {
+    const folderPath = resolveFolder(folderName);
+    if (!folderPath) throw new Error('Folder not found');
+    const safeBase = String(baseName || '').trim();
+    if (!safeBase) throw new Error('Base name required');
+
+    const candidates = new Set([
+        `${safeBase}.md`,
+        `${safeBase}.html`,
+        `${safeBase}.meta.json`,
+    ]);
+
+    const audioRegex = new RegExp(`^${escapeRegex(safeBase)}_[\\w-]+\\.(wav|mp3|m4a)$`, 'i');
+    const files = fs.readdirSync(folderPath, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name);
+
+    const deleted = [];
+    for (const name of files) {
+        if (candidates.has(name) || audioRegex.test(name)) {
+            const filePath = path.join(folderPath, name);
+            try {
+                fs.unlinkSync(filePath);
+                deleted.push(filePath);
+            } catch (err) {
+                console.warn(`[Delete] Failed to remove file: ${filePath}`, err.message);
+            }
+        }
+    }
+
+    return deleted;
+}
+
 /**
  * Ensures the target directory for today exists (YYYYMMDD).
  * @returns {string} The full path to today's directory.
@@ -223,4 +260,5 @@ module.exports = {
     listFoldersWithHtml,
     listHtmlFilesInFolder,
     readFileInFolder,
+    deleteRecordFiles,
 };

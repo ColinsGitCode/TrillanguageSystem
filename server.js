@@ -499,6 +499,89 @@ app.get('/api/folders/:folder/files/:file', (req, res) => {
     } catch (e) { res.status(404).send('Not Found'); }
 });
 
+// 根据文件夹+文件名定位记录
+app.get('/api/records/by-file', (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const base = String(req.query.base || '').trim();
+        if (!folder || !base) {
+            return res.status(400).json({ error: 'folder and base are required' });
+        }
+
+        const record = dbService.getGenerationByFile(folder, base);
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        res.json({
+            record: {
+                id: record.id,
+                folder_name: record.folder_name,
+                base_filename: record.base_filename
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 按文件名删除记录与文件（支持无数据库记录的历史文件）
+app.delete('/api/records/by-file', (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const base = String(req.query.base || '').trim();
+        if (!folder || !base) {
+            return res.status(400).json({ error: 'folder and base are required' });
+        }
+
+        const { deleteRecordFiles } = require('./services/fileManager');
+        const deletedPaths = new Set();
+
+        // 1) 尝试按数据库记录删除
+        const record = dbService.getGenerationByFile(folder, base);
+        if (record) {
+            const recordDetail = dbService.getGenerationById(record.id);
+            const recordFiles = [
+                recordDetail?.md_file_path,
+                recordDetail?.html_file_path,
+                recordDetail?.meta_file_path,
+            ].filter(Boolean);
+
+            if (recordDetail?.audioFiles?.length) {
+                recordDetail.audioFiles.forEach((audio) => {
+                    if (audio.file_path) recordFiles.push(audio.file_path);
+                });
+            }
+
+            recordFiles.forEach((filePath) => {
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        deletedPaths.add(filePath);
+                    }
+                } catch (err) {
+                    console.warn(`[Delete] Failed to remove file: ${filePath}`, err.message);
+                }
+            });
+
+            dbService.deleteGeneration(record.id);
+        }
+
+        // 2) 兜底：按文件名扫描删除
+        const fallbackDeleted = deleteRecordFiles(folder, base);
+        fallbackDeleted.forEach((p) => deletedPaths.add(p));
+
+        res.json({
+            success: true,
+            deletedFiles: deletedPaths.size,
+            recordDeleted: Boolean(record)
+        });
+    } catch (err) {
+        console.error('[API /records/by-file DELETE] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 删除记录（数据库 + 文件）
 app.delete('/api/records/:id', async (req, res) => {
     try {
