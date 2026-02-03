@@ -6,9 +6,11 @@ require('dotenv').config();
 
 const { buildPrompt } = require('./services/promptEngine');
 const geminiService = require('./services/geminiService');
+const localLlmService = require('./services/localLlmService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
+const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
 const { HealthCheckService } = require('./services/healthCheckService');
@@ -211,6 +213,8 @@ app.post('/api/generate', async (req, res) => {
     const genResult = await generateWithProvider(phrase, llm_provider, perf);
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
 
+    postProcessGeneratedContent(content);
+
     // Validate
     const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true });
     if (validationErrors.length) {
@@ -262,7 +266,7 @@ app.post('/api/ocr', async (req, res) => {
     try {
         const { image } = req.body;
         if (!image) return res.status(400).json({ error: 'No image' });
-        const text = await geminiService.recognizeImage(image);
+        const text = await localLlmService.recognizeImage(image);
         res.json({ text: text || 'No text found' });
     } catch (e) {
         res.status(500).json({ error: e.message });

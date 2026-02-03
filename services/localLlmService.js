@@ -3,8 +3,10 @@ require('dotenv').config();
 const LLM_BASE_URL = process.env.LLM_BASE_URL || 'http://localhost:11434/v1'; // Default to Ollama port
 const LLM_API_KEY = process.env.LLM_API_KEY || 'EMPTY';
 const LLM_MODEL = process.env.LLM_MODEL || 'qwen2.5-coder:latest'; 
+const LLM_OCR_MODEL = process.env.LLM_OCR_MODEL || LLM_MODEL;
 
 const MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS || 2048);
+const OCR_MAX_TOKENS = Number(process.env.LLM_OCR_MAX_TOKENS || 512);
 const TEMPERATURE = Number(process.env.LLM_TEMPERATURE || 0.2);
 
 function parseJsonFromText(rawText) {
@@ -77,6 +79,61 @@ async function requestCompletion(prompt, maxTokens) {
   return response.json();
 }
 
+function buildImageUrl(image) {
+  if (!image) return null;
+  if (/^https?:\/\//i.test(image) || image.startsWith('data:')) return image;
+  return `data:image/jpeg;base64,${image}`;
+}
+
+function extractTextFromContent(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => part?.text || '').join('');
+  }
+  return '';
+}
+
+async function recognizeImage(base64Image) {
+  const imageUrl = buildImageUrl(base64Image);
+  if (!imageUrl) throw new Error('No image provided');
+
+  const prompt = 'Transcribe the text in this image exactly as is. Preserve original language and line breaks. No explanations.';
+
+  const response = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${LLM_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: LLM_OCR_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      temperature: 0,
+      max_tokens: OCR_MAX_TOKENS
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    const error = new Error(`Local LLM OCR Error (${response.status}): ${errText}`);
+    error.status = response.status;
+    error.raw = errText;
+    throw error;
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+  return extractTextFromContent(content).trim();
+}
+
 async function generateContent(prompt) {
   try {
     console.log(`[Local LLM] Sending request to ${LLM_BASE_URL}...`);
@@ -123,4 +180,4 @@ async function generateContent(prompt) {
   }
 }
 
-module.exports = { generateContent };
+module.exports = { generateContent, recognizeImage };
