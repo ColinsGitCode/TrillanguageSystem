@@ -517,3 +517,287 @@ class MyClass {}              // 大驼峰
 
 **维护者**: Three LANS Team
 **最后更新**: 2026-02-03
+
+---
+
+## 🎨 样式系统 (v2.1 - Light Theme)
+
+### 主题架构
+
+**全局变量定义** (`styles.css` + `dashboard.css`)
+```css
+:root {
+  /* Light Theme Colors */
+  --bg-page: #f8f9fa;
+  --bg-card: #ffffff;
+  --border-color: #e5e7eb;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  
+  /* Brand Colors (保持不变) */
+  --neon-blue: #3b82f6;
+  --neon-purple: #8b5cf6;
+  --neon-green: #10b981;
+  --neon-amber: #f59e0b;
+  --neon-red: #ef4444;
+  
+  /* Effects */
+  --glow-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+```
+
+### 视觉特性
+
+**卡片系统**
+- 纯白背景 (#ffffff)
+- 柔和边框 (#e5e7eb, 1px solid)
+- 清晰阴影 (0 1px 3px rgba(0,0,0,0.05))
+- 悬停增强：边框 #cbd5e1 + 阴影加深
+
+**交互反馈**
+- 平滑过渡：0.2s ease（所有颜色/边框/阴影变化）
+- 悬停效果：边框颜色变深 + 阴影增强
+- 按钮状态：opacity 渐变或背景色变化
+
+**滚动条样式**
+```css
+::-webkit-scrollbar-track { background: #f3f4f6; }
+::-webkit-scrollbar-thumb { background: #d1d5db; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+```
+
+---
+
+## 💬 Tooltip 系统
+
+### 实现架构
+
+**CSS 实现** (`dashboard.css`)
+```css
+.tooltip-trigger {
+  position: relative;
+  cursor: help;
+}
+
+.tooltip-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  
+  /* 样式 */
+  padding: 8px 12px;
+  background: #1f2937;
+  color: #ffffff;
+  font-size: 12px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  
+  /* 动画 */
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tooltip-trigger:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+```
+
+**HTML 用法**
+```html
+<!-- 简单 tooltip -->
+<h3 class="tooltip-trigger" data-tooltip="中文说明">标题</h3>
+
+<!-- 内联元素 tooltip -->
+<span class="tooltip-inline tooltip-trigger" data-tooltip="详细说明">
+  指标值
+</span>
+```
+
+### Tooltip 覆盖
+
+**Dashboard 页面** (13 个)
+1. Infrastructure - "基础设施状态 - Web/TTS 服务健康检查"
+2. API Fuel - "API 配额使用情况 - 每月限额 100 万 tokens"
+3. 配额百分比 - "当前配额使用百分比"
+4. Data Core - "本地存储数据使用量 - 包含所有生成的文件"
+5. 存储用量 - "已使用的存储空间"
+6. Model Arena - "模型性能对比 - 速度和质量综合评估"
+7. Quality Signal - "生成内容质量评分趋势"
+8. Live Feed - "实时生成动态"
+9. Provider Split - "服务供应商分布"
+10. Error Monitor - "错误发生统计"
+11. Token Trend - "Token 消耗趋势"
+12. Cost Trend - "API 调用成本趋势"
+13. Latency Trend - "API 响应延迟趋势"
+
+**INTEL 面板** (22+ 个)
+- 核心指标：Quality Grade、Dimensions、4个维度详情
+- 技术参数：Generation Config、Temperature、Max Tokens、Top P
+- 性能数据：Chrono Sequence、Token Flux、IN/OUT、Cost
+- 可视化：Radar Chart
+- 高级功能：Prompt Viewer、Output Viewer、Export 按钮
+
+---
+
+## 📊 Dashboard 增强功能 (v2.1)
+
+### 新增组件
+
+**1. Provider Distribution**
+- 横向条形图显示 Gemini vs Local 使用比例
+- 动态颜色：Gemini (紫色) / Local (蓝色)
+- 显示使用次数和百分比
+
+**2. Error Monitor**
+- 实时错误率显示
+- 错误类型分类统计
+- 状态指示器（绿色=正常，琥珀色=警告，红色=错误）
+
+**3. 趋势图表系统**
+- Token Trend（紫色 area chart）
+- Cost Trend（琥珀色 area chart）
+- Latency Trend（蓝色 area chart）
+- 使用 D3.js v7 绘制
+- 支持渐变填充 + 线条 + 数据点
+
+**4. Enhanced Live Feed**
+- 显示：时间 + 状态 + 短语 + provider + 质量 + tokens + 成本
+- 彩色状态图标（✓ 成功 / ✗ 失败）
+- 悬停高亮效果
+- 自动滚动到最新记录
+
+### 真实数据集成
+
+**配额计算**
+```javascript
+const MONTHLY_TOKEN_LIMIT = 1000000;
+const quota = {
+  used: tokenUsed,
+  limit: MONTHLY_TOKEN_LIMIT,
+  percentage: (tokenUsed / MONTHLY_TOKEN_LIMIT) * 100,
+  resetDate: '2026-03-01',  // 每月1号重置
+  estimatedDaysRemaining: Math.ceil((limit - used) / dailyRate)
+};
+```
+
+**质量评分系统**
+- completeness: 40分（结构完整性）
+- accuracy: 30分（翻译准确性）
+- exampleQuality: 20分（例句质量）
+- formatting: 10分（格式正确性）
+
+---
+
+## 🔍 单卡 INTEL 面板增强
+
+### 新增功能
+
+**1. 质量维度详细显示**
+- 4 个独立进度条，显示各维度得分
+- 颜色编码：绿色(>80%) / 琥珀色(60-80%) / 红色(<60%)
+- Tooltip 说明每个维度的含义
+
+**2. 生成配置显示**
+- Temperature（温度参数）
+- Max Tokens（最大输出长度）
+- Top P（采样概率阈值）
+- 每个参数附带 tooltip 说明
+
+**3. Prompt/Output 查看器**
+- 可折叠展开/收起
+- 深色代码框样式
+- 一键复制功能
+- 最大高度 200px，超出滚动
+
+**4. 导出功能**
+- Export JSON：完整结构化数据
+- Export CSV：适合 Excel 分析
+- 包含所有质量维度、token、成本、性能数据
+
+**5. 质量警告**
+- 当 quality score < 70 时显示警告框
+- 红色边框 + 警告图标
+- 提示检查质量维度
+
+---
+
+## 🎯 性能优化
+
+### 虚拟列表渲染 (`virtual-list.js`)
+- 用于历史记录长列表
+- 仅渲染可见区域 + 缓冲区
+- 支持滚动动态加载
+- 大幅减少 DOM 节点数量
+
+### 状态管理 (`store.js`)
+- 集中式状态存储
+- 避免 prop drilling
+- 简化组件间通信
+
+### API 缓存
+- localStorage 缓存 latest_observability
+- 减少重复数据请求
+- 提升页面响应速度
+
+---
+
+## 📱 响应式设计
+
+### 断点系统
+```css
+/* 桌面端: 默认 */
+@media (max-width: 1200px) {
+  /* 平板横屏 */
+  .dashboard-grid-v2 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  /* 移动端 */
+  .dashboard-grid-v2 { grid-template-columns: 1fr; }
+  .tooltip-trigger::after { 
+    font-size: 11px;
+    max-width: 180px;
+    white-space: normal;
+  }
+}
+```
+
+### 移动端优化
+- 单列布局
+- 触摸友好的按钮尺寸
+- 简化的 tooltip 样式
+- 自适应字体大小
+
+---
+
+## 📋 更新日志
+
+### 2026-02-05 - v2.1
+**主题改造**
+- ✅ 全局切换为 Light 主题
+- ✅ 223 行 CSS 样式修改
+- ✅ 4 个文件更新（styles.css、dashboard.css、dashboard.html、app.js）
+
+**Tooltip 系统**
+- ✅ 60 行 CSS 实现自定义 tooltip
+- ✅ 35+ 个中文说明覆盖所有指标
+- ✅ 响应式支持 + 平滑动画
+
+**Dashboard 增强**
+- ✅ 6 个新增可视化组件
+- ✅ 真实配额数据集成
+- ✅ D3.js 趋势图表系统
+
+**INTEL 面板增强**
+- ✅ Prompt/Output 查看器
+- ✅ 质量维度详细展示
+- ✅ 导出功能（JSON/CSV）
+- ✅ 配置参数显示
+
+**总计**
+- 前端文件修改：7 个
+- 新增代码：+580 行
+- 删除代码：-148 行

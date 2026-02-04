@@ -843,3 +843,311 @@ const db = require('better-sqlite3')(DB_PATH, { verbose: console.log });
 
 **维护者**: Three LANS Team
 **最后更新**: 2026-02-03
+
+---
+
+## 📊 可观测性服务增强 (v2.1)
+
+### observabilityService.js
+
+**质量维度标准化**
+
+旧系统（4个内部指标）：
+- structuralIntegrity
+- contentRichness  
+- complianceWithStandards
+- audioCompleteness
+
+新系统（4个用户友好指标）：
+```javascript
+dimensions: {
+  completeness: 40,    // 完整性（结构完整度）
+  accuracy: 30,        // 准确性（翻译准确度）
+  exampleQuality: 20,  // 例句质量（自然度和多样性）
+  formatting: 10       // 格式化（HTML和音频标签）
+}
+```
+
+**详细评分算法**
+
+**1. Completeness (40pts)**
+```javascript
+static calculateCompletenessScore(checks, content) {
+  let score = 0;
+  if (checks.jsonValid) score += 10;           // JSON 有效
+  if (checks.fieldsComplete) score += 15;      // 字段完整
+  if (checks.audioTasksGenerated) score += 10; // 音频任务生成
+  const markdown = content.markdown_content || '';
+  if (markdown.length > 500) score += 5;       // 内容充实
+  return score;
+}
+```
+
+**2. Accuracy (30pts)**
+```javascript
+static calculateAccuracyScore(content) {
+  let score = 30; // 起始满分
+  const markdown = content.markdown_content || '';
+  
+  // 检查必需结构
+  if (!markdown.includes('## 1. English')) score -= 8;
+  if (!markdown.includes('## 2. 中文')) score -= 8;
+  if (!markdown.includes('## 3. 日本語')) score -= 8;
+  if (!markdown.includes('### Definition')) score -= 3;
+  if (!markdown.includes('### Example')) score -= 3;
+  
+  return Math.max(score, 0);
+}
+```
+
+**3. Example Quality (20pts)**
+```javascript
+static calculateExampleScore(content) {
+  const markdown = content.markdown_content || '';
+  const sentences = markdown.match(/\d+\.\s+.+/g) || [];
+  
+  let score = 0;
+  
+  // 数量 (0-8pts)
+  score += Math.min(sentences.length * 2, 8);
+  
+  // 长度适中 (0-8pts)
+  const avgLength = sentences.reduce((sum, s) => 
+    sum + s.length, 0) / (sentences.length || 1);
+  if (avgLength >= 30 && avgLength <= 150) score += 8;
+  
+  // 多样性 (0-4pts)
+  const uniqueStarts = new Set(
+    sentences.map(s => s.trim().charAt(0))
+  );
+  if (uniqueStarts.size >= 3) score += 4;
+  
+  return Math.min(score, 20);
+}
+```
+
+**4. Formatting (10pts)**
+```javascript
+static calculateFormattingScore(checks, content) {
+  let score = 0;
+  const html = content.html_content || '';
+  
+  if (checks.htmlValid) score += 5;                // HTML有效
+  if (html.includes('<audio')) score += 3;         // 音频标签
+  if (content.audio_tasks?.length > 0) score += 2; // 音频任务
+  
+  return score;
+}
+```
+
+---
+
+## 💾 数据库服务增强 (v2.1)
+
+### databaseService.js
+
+**真实配额统计** (`getStatistics()`)
+
+```javascript
+async getStatistics() {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  // 本月 token 使用量
+  const monthlyStmt = this.db.prepare(`
+    SELECT COALESCE(SUM(tokens_total), 0) as total
+    FROM observability_metrics
+    WHERE date LIKE ?
+  `);
+  const tokenUsed = monthlyStmt.get(`${currentMonth}%`)?.total || 0;
+  
+  // 配额计算
+  const MONTHLY_TOKEN_LIMIT = 1000000;
+  const quota = {
+    used: tokenUsed,
+    limit: MONTHLY_TOKEN_LIMIT,
+    percentage: (tokenUsed / MONTHLY_TOKEN_LIMIT) * 100,
+    resetDate: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+                .toISOString().split('T')[0],
+    estimatedDaysRemaining: Math.ceil(
+      (MONTHLY_TOKEN_LIMIT - tokenUsed) / 
+      ((tokenUsed / now.getDate()) || 1)
+    )
+  };
+  
+  return { quota, /* ... other stats */ };
+}
+```
+
+**趋势分段支持**
+
+```javascript
+// 生成 7D/30D/90D 趋势数据
+const segmentTrend = (data, days) => {
+  const cutoffDate = new Date(
+    Date.now() - days * 24 * 60 * 60 * 1000
+  ).toISOString().split('T')[0];
+  return data.filter(row => row.date >= cutoffDate);
+};
+
+return {
+  tokenTrend: {
+    '7d': segmentTrend(dailyTokens, 7),
+    '30d': segmentTrend(dailyTokens, 30),
+    '90d': segmentTrend(dailyTokens, 90)
+  },
+  costTrend: { /* 同上 */ },
+  latencyTrend: { /* 同上 */ }
+};
+```
+
+**错误统计**
+
+```javascript
+// 总错误数
+const errorTotal = this.db.prepare(`
+  SELECT COUNT(*) as count FROM generation_errors
+`).get().count;
+
+// 错误率
+const errorRate = total > 0 ? errorTotal / total : 0;
+
+// 按类型分类
+const errorsByType = this.db.prepare(`
+  SELECT error_type, COUNT(*) as count
+  FROM generation_errors
+  GROUP BY error_type
+  ORDER BY count DESC
+`).all();
+
+// 最近错误
+const recentErrors = this.db.prepare(`
+  SELECT * FROM generation_errors
+  ORDER BY created_at DESC
+  LIMIT 10
+`).all();
+
+return {
+  errors: {
+    total: errorTotal,
+    rate: errorRate,
+    byType: errorsByType,
+    recent: recentErrors
+  }
+};
+```
+
+**Provider 分布统计**
+
+```javascript
+const providerDist = this.db.prepare(`
+  SELECT 
+    llm_provider,
+    COUNT(*) as count
+  FROM generations
+  GROUP BY llm_provider
+`).all();
+
+return {
+  providerDistribution: providerDist.reduce((acc, row) => {
+    acc[row.llm_provider] = row.count;
+    return acc;
+  }, {})
+};
+```
+
+---
+
+## 🔄 服务层数据流 (更新)
+
+### 完整生成链路
+
+```
+1. POST /api/generate
+   ↓
+2. promptEngine.buildPrompt()
+   - Chain of Thought 推理
+   - Few-shot 示例
+   - JSON Schema 约束
+   ↓
+3. geminiService.generate() / localLlmService.generate()
+   - API 调用
+   - JSON 解析
+   - Token 统计
+   ↓
+4. contentPostProcessor.process()
+   - 日文注音处理
+   - 标准化格式
+   - 质量检查
+   ↓
+5. htmlRenderer.render()
+   - Markdown → HTML
+   - Ruby 标签注入
+   - 音频按钮集成
+   ↓
+6. fileManager.saveFiles()
+   - 按日期文件夹组织
+   - 保存 .md/.html/.meta.json
+   - 重名处理
+   ↓
+7. ttsService.generateAudio()
+   - Kokoro (英语)
+   - VOICEVOX (日语)
+   - 顺序生成
+   ↓
+8. observabilityService.collectMetrics()
+   - Token 计数
+   - 成本估算
+   - 性能分段
+   - 质量评分 (新：4维度系统)
+   ↓
+9. databaseService.insertGeneration()
+   - 主记录入库
+   - 音频记录入库
+   - 指标数据入库
+   ↓
+10. 返回响应
+    - 文件路径
+    - 可观测性数据
+    - 音频生成状态
+```
+
+---
+
+## 📋 更新日志
+
+### 2026-02-05 - v2.1: Enhanced Observability
+
+**质量评分系统**
+- ✅ 4 维度标准化：completeness/accuracy/exampleQuality/formatting
+- ✅ 详细评分算法实现（4 个独立计算函数）
+- ✅ 总分 100 分制，权重分配更合理
+
+**数据库统计增强**
+- ✅ 真实配额计算（月度 token 限额 100万）
+- ✅ 配额重置日期和剩余天数估算
+- ✅ 7D/30D/90D 趋势数据分段
+- ✅ 错误统计（总数/率/分类/最近记录）
+- ✅ Provider 使用分布统计
+
+**性能优化**
+- ✅ SQL 查询优化（使用日期索引）
+- ✅ 数据聚合预计算
+- ✅ 缓存友好的统计结构
+
+**文件修改**
+- `services/observabilityService.js`: +151 行
+- `services/databaseService.js`: +177 行
+- 总计：+328 行后端代码
+
+### 2026-02-03 - v2.0: Database Integration
+- ✅ SQLite 数据库集成
+- ✅ 全文搜索 (FTS5)
+- ✅ 可观测性指标持久化
+- ✅ 历史记录管理
+
+### 2026-01-28 - v1.5: Gemini Migration
+- ✅ 迁移至 Gemini API
+- ✅ Prompt Engineering 优化
+- ✅ 本地 LLM 作为备选
+
