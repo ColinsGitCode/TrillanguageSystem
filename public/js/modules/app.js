@@ -508,20 +508,20 @@ function renderCardModal(markdown, title, options = {}) {
     const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
 
     els.modalContainer.innerHTML = `
-        <div class="modern-card glass-panel" style="background: rgba(15, 23, 42, 0.95);">
+        <div class="modern-card glass-panel" style="background: #ffffff;">
             <button class="mc-close" id="mcCloseBtn">×</button>
-            
+
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
                 <div style="flex:1;">
-                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main); text-shadow: 0 0 10px rgba(255,255,255,0.1);">${escapeHtml(displayTitle)}</h1>
+                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono" style="color: var(--neon-blue);">
                         <span>TRILINGUAL</span>
                         <span>::</span>
                         <span>${new Date().getFullYear()}</span>
                     </div>
                 </div>
-                
-                <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 4px;">
+
+                <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
                     <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
                 </div>
@@ -558,7 +558,7 @@ function renderCardModal(markdown, title, options = {}) {
                             <span class="meta-val">${metrics.performance?.totalTime || 0}ms</span>
                         </div>
                     </div>
-                    ${score < 70 ? `<div style="margin-top:12px; padding:8px; background:rgba(239,68,68,0.1); border:1px solid var(--neon-red); border-radius:4px; font-size:11px; color:var(--neon-red);">⚠ Quality below threshold. Check dimensions.</div>` : ''}
+                    ${score < 70 ? `<div style="margin-top:12px; padding:8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:4px; font-size:11px; color:#dc2626;">⚠ Quality below threshold. Check dimensions.</div>` : ''}
                 </div>
 
                 <!-- 2. Quality Dimensions (Enhanced) -->
@@ -626,8 +626,8 @@ function renderCardModal(markdown, title, options = {}) {
                         <span>📄 PROMPT TEXT</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
-                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#94a3b8; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.promptText || 'N/A')}</div>
-                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.promptText || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-blue); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">COPY</button>
+                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.promptText || 'N/A')}</div>
+                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.promptText || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-blue); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">COPY</button>
                 </div>
 
                 <!-- 8. Output Viewer (Collapsible) -->
@@ -636,8 +636,8 @@ function renderCardModal(markdown, title, options = {}) {
                         <span>📤 LLM OUTPUT</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
-                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#94a3b8; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.rawOutput || 'N/A')}</div>
-                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.rawOutput || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-purple); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">COPY</button>
+                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.rawOutput || 'N/A')}</div>
+                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.rawOutput || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-purple); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">COPY</button>
                 </div>
 
                 <!-- 9. Export Controls -->

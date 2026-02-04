@@ -1,11 +1,11 @@
 :root {
-    --bg-page: #0f172a;
-    --bg-card: rgba(30, 41, 59, 0.7);
-    --border-color: rgba(255, 255, 255, 0.1);
-    
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    
+    --bg-page: #f8f9fa;
+    --bg-card: #ffffff;
+    --border-color: #e5e7eb;
+
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-error: #ef4444;
@@ -32,14 +32,14 @@ body {
     height: 8px;
 }
 ::-webkit-scrollbar-track {
-    background: var(--bg-page); 
+    background: #f3f4f6;
 }
 ::-webkit-scrollbar-thumb {
-    background: #334155; 
+    background: #d1d5db;
     border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #475569; 
+    background: #9ca3af;
 }
 
 /* Layout */
@@ -135,14 +135,15 @@ h1 {
     border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 20px;
-    backdrop-filter: blur(10px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    transition: transform 0.2s, border-color 0.2s;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .card:hover {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .card-header {
@@ -176,7 +177,8 @@ h1 {
     flex: 1;
 }
 .service-item {
-    background: rgba(255, 255, 255, 0.03);
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 10px;
     display: flex;
@@ -231,7 +233,7 @@ h1 {
 }
 .progress-bar-bg {
     height: 6px;
-    background: rgba(255, 255, 255, 0.1);
+    background: #e5e7eb;
     border-radius: 3px;
     margin: 12px 0;
     overflow: hidden;
@@ -240,6 +242,7 @@ h1 {
     height: 100%;
     background: var(--color-accent);
     transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
 }
 .storage-meta { font-size: 0.8rem; color: var(--text-secondary); }
 
@@ -251,7 +254,7 @@ h1 {
 }
 
 .overview-item {
-    background: rgba(255, 255, 255, 0.04);
+    background: #f9fafb;
     border: 1px solid var(--border-color);
     border-radius: 10px;
     padding: 10px 12px;
@@ -365,7 +368,7 @@ h1 {
     border: 1px solid var(--border-color);
     font-size: 0.75rem;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.04);
+    background: #f9fafb;
 }
 
 .empty-hint {
@@ -449,7 +452,7 @@ svg { display: block; width: 100%; height: 100%; }
 .tabs { display: flex; gap: 10px; }
 .tab {
     background: transparent;
-    border: none;
+    border: 1px solid var(--border-color);
     color: var(--text-secondary);
     cursor: pointer;
     padding: 4px 8px;
@@ -457,11 +460,12 @@ svg { display: block; width: 100%; height: 100%; }
     transition: all 0.2s;
     font-size: 0.85rem;
 }
-.tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
-.tab.active { background: var(--color-accent); color: white; }
+.tab:hover { color: var(--text-primary); background: #f3f4f6; }
+.tab.active { background: var(--color-accent); color: white; border-color: var(--color-accent); }
 
 .prompt-content {
-    background: rgba(0, 0, 0, 0.3);
+    background: #f9fafb;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 16px;
     margin-top: 10px;
@@ -473,7 +477,7 @@ svg { display: block; width: 100%; height: 100%; }
 .prompt-content.hidden { display: none; }
 .prompt-block { margin-bottom: 16px; }
 .block-label { display: block; color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px; text-transform: uppercase; }
-pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #374151; }
 
 /* Animation */
 @keyframes pulse {
@@ -515,7 +519,8 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
 }
 
 .arena-col {
-    background: rgba(255,255,255,0.03);
+    background: #f9fafb;
+    border: 1px solid var(--border-color);
     padding: 16px;
     border-radius: 8px;
     display: flex;
@@ -558,7 +563,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
 
 .bar-container {
     height: 6px;
-    background: rgba(255,255,255,0.1);
+    background: #e5e7eb;
     border-radius: 3px;
     overflow: hidden;
 }
@@ -567,6 +572,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
     height: 100%;
     background: var(--color-accent);
     transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
 }
 
 .arena-footer {
@@ -597,14 +603,15 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
 
 /* Glass Panel Effect */
 .glass-panel {
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    transition: border-color 0.3s ease;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .glass-panel:hover {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 /* HUD Ticker */
@@ -613,9 +620,9 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
     font-size: 12px;
     color: var(--text-secondary);
     padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.3);
+    background: #f9fafb;
     border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-color);
 }
 
 /* Collapsible Content */
@@ -641,8 +648,8 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: #d1d5db; }
 }
 
 .hud-card {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #f9fafb;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 12px;
 }
@@ -784,7 +791,7 @@ button[onclick^="navigator.clipboard"]:hover {
 }
 
 .dimension-bar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: #e5e7eb;
     height: 6px;
     border-radius: 3px;
     overflow: hidden;

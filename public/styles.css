@@ -283,7 +283,7 @@ h1 {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -300,11 +300,11 @@ h1 {
 }
 
 .modal-content {
-  background: #0f141c;
+  background: #ffffff;
   border-radius: 16px;
   width: 90vw;
   height: 88vh;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -320,7 +320,7 @@ h1 {
 .modal-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(125, 211, 252, 0.16), rgba(28, 40, 56, 0.7));
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.08), rgba(248, 250, 252, 1));
 }
 
 .hidden {
@@ -527,7 +527,7 @@ h1 {
   margin-top: 1rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #1e293b;
+  background: #f9fafb;
   overflow: hidden;
 }
 
@@ -536,26 +536,26 @@ h1 {
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.75rem;
-  background: #334155;
-  border-bottom: 1px solid #475569;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .prompt-display-title {
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .prompt-display-header .btn-text {
-  color: #94a3b8;
+  color: #6b7280;
   font-size: 12px;
   padding: 0.2rem 0.5rem;
 }
 
 .prompt-display-header .btn-text:hover {
-  color: #e2e8f0;
+  color: #1f2937;
 }
 
 .prompt-content {
@@ -564,8 +564,8 @@ h1 {
   font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
   font-size: 11px;
   line-height: 1.5;
-  color: #e2e8f0;
-  background: #1e293b;
+  color: #374151;
+  background: #f9fafb;
   max-height: 300px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -577,11 +577,11 @@ h1 {
 }
 
 .prompt-content::-webkit-scrollbar-track {
-  background: #334155;
+  background: #e5e7eb;
 }
 
 .prompt-content::-webkit-scrollbar-thumb {
-  background: #64748b;
+  background: #9ca3af;
   border-radius: 3px;
 }
 
@@ -990,42 +990,40 @@ h1 {
 }
 
 /* =========================================
-   🚀 Sci-Fi / Observability Theme System
+   🎨 Modern Light Theme System
    ========================================= */
 
 :root {
   /* Core Palette */
-  --sci-bg: #0f172a;
-  --sci-card-bg: rgba(30, 41, 59, 0.7);
-  --sci-border: rgba(148, 163, 184, 0.1);
-  --sci-text-main: #f1f5f9;
-  --sci-text-muted: #94a3b8;
-  
-  /* Neon Accents */
+  --sci-bg: #f8f9fa;
+  --sci-card-bg: #ffffff;
+  --sci-border: #e5e7eb;
+  --sci-text-main: #1f2937;
+  --sci-text-muted: #6b7280;
+
+  /* Brand Colors */
   --neon-blue: #3b82f6;
-  --neon-purple: #a855f7;
+  --neon-purple: #8b5cf6;
   --neon-green: #10b981;
   --neon-amber: #f59e0b;
   --neon-red: #ef4444;
-  
+
   /* Effects */
-  --glass-blur: blur(12px);
-  --glow-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+  --glass-blur: none;
+  --glow-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
 }
 
-/* Glassmorphism Utilities */
+/* Card Utilities */
 .glass-panel {
   background: var(--sci-card-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--sci-border);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   color: var(--sci-text-main);
 }
 
 .glass-panel:hover {
-  border-color: rgba(148, 163, 184, 0.2);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), var(--glow-shadow);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), var(--glow-shadow);
 }
 
 /* Typography Overrides for Sci-Fi Feel */
@@ -1054,9 +1052,9 @@ h1 {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(15, 23, 42, 0) 100%);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(255, 255, 255, 1) 100%);
   border-radius: 12px;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid #e5e7eb;
 }
 
 .score-big {
@@ -1073,7 +1071,7 @@ h1 {
 }
 
 .intel-stat-item {
-  background: rgba(15, 23, 42, 0.4);
+  background: #f9fafb;
   padding: 10px;
   border-radius: 8px;
   border: 1px solid var(--sci-border);
@@ -1132,21 +1130,21 @@ h1 {
     animation: pulse 2s infinite;
 }
 
-/* --- Virtual List Item (Re-defined for neon) --- */
+/* --- Virtual List Item --- */
 .list-item-btn {
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.9rem;
-    color: var(--sci-text-main); /* Dark theme text */
+    color: var(--sci-text-main);
     /* ... keep layout props ... */
 }
 
 .list-item-btn:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: #f3f4f6;
 }
 
 .list-item-btn.active {
-    background-color: rgba(59, 130, 246, 0.15);
+    background-color: rgba(59, 130, 246, 0.08);
     color: var(--neon-blue);
     border-left: 3px solid var(--neon-blue);
 }
@@ -1164,7 +1162,7 @@ h1 {
   padding: 20px;
   height: 100%;
   overflow-y: auto;
-  background: radial-gradient(circle at 50% 30%, rgba(30, 41, 59, 0.4), transparent 70%);
+  background: radial-gradient(circle at 50% 30%, rgba(59, 130, 246, 0.03), transparent 70%);
 }
 
 /* 1. Core Reactor (Quality Score) */
@@ -1174,8 +1172,10 @@ h1 {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 0.6) 50%, rgba(15, 23, 42, 0.6) 100%);
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, #ffffff 50%, #ffffff 100%);
   border-left: 4px solid var(--neon-green);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   position: relative;
   overflow: hidden;
 }
@@ -1198,7 +1198,7 @@ h1 {
 .score-rank {
   font-family: 'JetBrains Mono', monospace;
   font-size: 24px;
-  color: rgba(255, 255, 255, 0.2);
+  color: #d1d5db;
   font-weight: 700;
 }
 
@@ -1220,8 +1220,8 @@ h1 {
 
 /* 2. Chrono & Token Panels */
 .hud-card {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 16px;
   display: flex;
@@ -1235,7 +1235,7 @@ h1 {
   color: var(--sci-text-muted);
   text-transform: uppercase;
   margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid #e5e7eb;
   padding-bottom: 8px;
   display: flex;
   justify-content: space-between;
@@ -1280,14 +1280,14 @@ h1 {
 /* D3 Tooltip */
 .hud-tooltip {
   position: absolute;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid var(--sci-border);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   padding: 4px 8px;
   border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  color: #fff;
+  color: #1f2937;
   pointer-events: none;
   z-index: 100;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
