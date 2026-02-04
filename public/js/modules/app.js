@@ -534,7 +534,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
-                
+
                 <!-- 1. Core Reactor -->
                 <div class="hud-card-score" style="border-left-color: ${rankColor};">
                     <div>
@@ -558,9 +558,37 @@ function renderCardModal(markdown, title, options = {}) {
                             <span class="meta-val">${metrics.performance?.totalTime || 0}ms</span>
                         </div>
                     </div>
+                    ${score < 70 ? `<div style="margin-top:12px; padding:8px; background:rgba(239,68,68,0.1); border:1px solid var(--neon-red); border-radius:4px; font-size:11px; color:var(--neon-red);">⚠ Quality below threshold. Check dimensions.</div>` : ''}
                 </div>
 
-                <!-- 2. Chrono Waterfall -->
+                <!-- 2. Quality Dimensions (Enhanced) -->
+                <div class="hud-card">
+                    <div class="hud-title">
+                        <span>DIMENSIONS</span>
+                        <span style="color: var(--neon-green);">4-AXIS</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+                        ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)')}
+                        ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)')}
+                        ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)')}
+                        ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)')}
+                    </div>
+                </div>
+
+                <!-- 3. Config Display -->
+                <div class="hud-card">
+                    <div class="hud-title">
+                        <span>GENERATION CONFIG</span>
+                        <span style="color: var(--neon-amber);">PARAMS</span>
+                    </div>
+                    <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
+                    </div>
+                </div>
+
+                <!-- 4. Chrono Waterfall -->
                 <div class="hud-card">
                     <div class="hud-title">
                         <span>CHRONO SEQUENCE</span>
@@ -569,7 +597,7 @@ function renderCardModal(markdown, title, options = {}) {
                     <div id="hudTimeline" class="chart-box"></div>
                 </div>
 
-                <!-- 3. Token Flux -->
+                <!-- 5. Token Flux -->
                 <div class="hud-card">
                     <div class="hud-title">
                         <span>TOKEN FLUX</span>
@@ -583,13 +611,43 @@ function renderCardModal(markdown, title, options = {}) {
                     <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
                 </div>
 
-                <!-- 4. Dimensions Radar -->
+                <!-- 6. Radar Chart -->
                 <div class="hud-card hud-card-wide">
                     <div class="hud-title">
                         <span>DIMENSIONAL SCAN</span>
-                        <span style="color: var(--neon-green);">ANALYSIS</span>
+                        <span style="color: var(--neon-green);">RADAR</span>
                     </div>
                     <div id="hudRadar" class="chart-box" style="height: 200px;"></div>
+                </div>
+
+                <!-- 7. Prompt Viewer (Collapsible) -->
+                <div class="hud-card hud-card-wide">
+                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                        <span>📄 PROMPT TEXT</span>
+                        <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
+                    </div>
+                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#94a3b8; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.promptText || 'N/A')}</div>
+                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.promptText || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-blue); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">COPY</button>
+                </div>
+
+                <!-- 8. Output Viewer (Collapsible) -->
+                <div class="hud-card hud-card-wide">
+                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                        <span>📤 LLM OUTPUT</span>
+                        <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
+                    </div>
+                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#94a3b8; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.rawOutput || 'N/A')}</div>
+                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.rawOutput || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-purple); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">COPY</button>
+                </div>
+
+                <!-- 9. Export Controls -->
+                <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
+                    <div class="hud-title">
+                        <span>EXPORT</span>
+                        <span style="color: var(--neon-amber);">DATA</span>
+                    </div>
+                    <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.2); border:1px solid var(--neon-green); border-radius:4px; color:var(--neon-green); font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
+                    <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.2); border:1px solid var(--neon-blue); border-radius:4px; color:var(--neon-blue); font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
                 </div>
 
             </div>
@@ -632,6 +690,72 @@ function renderCardModal(markdown, title, options = {}) {
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => els.modalOverlay.classList.add('show'), 10);
 }
+
+// 渲染质量维度条
+function renderDimensionBar(label, value, maxValue, color) {
+    const percentage = (value / maxValue) * 100;
+    const barColor = percentage >= 80 ? color : percentage >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+    return `
+        <div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
+                <span style="color:var(--sci-text-muted);">${label}</span>
+                <span style="color:${barColor}; font-family:'JetBrains Mono';">${value}/${maxValue}</span>
+            </div>
+            <div style="background:rgba(255,255,255,0.1); height:6px; border-radius:3px; overflow:hidden;">
+                <div style="background:${barColor}; height:100%; width:${percentage}%; box-shadow:0 0 8px ${barColor}; transition:width 0.3s;"></div>
+            </div>
+        </div>
+    `;
+}
+
+// 导出指标数据
+window.exportMetrics = function(format) {
+    try {
+        const raw = localStorage.getItem('latest_observability');
+        if (!raw) {
+            alert('No metrics data available');
+            return;
+        }
+        const data = JSON.parse(raw);
+
+        if (format === 'json') {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `metrics_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else if (format === 'csv') {
+            const csv = [
+                'Field,Value',
+                `Quality Score,${data.quality?.score || 0}`,
+                `Completeness,${data.quality?.dimensions?.completeness || 0}`,
+                `Accuracy,${data.quality?.dimensions?.accuracy || 0}`,
+                `Example Quality,${data.quality?.dimensions?.exampleQuality || 0}`,
+                `Formatting,${data.quality?.dimensions?.formatting || 0}`,
+                `Tokens Input,${data.tokens?.input || 0}`,
+                `Tokens Output,${data.tokens?.output || 0}`,
+                `Tokens Total,${data.tokens?.total || 0}`,
+                `Cost Total,${data.cost?.total || 0}`,
+                `Latency Total,${data.performance?.totalTime || 0}`,
+                `Provider,${data.metadata?.provider || 'N/A'}`,
+                `Model,${data.metadata?.model || 'N/A'}`
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `metrics_${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    } catch (err) {
+        console.error('Export failed:', err);
+        alert('Export failed: ' + err.message);
+    }
+};
 
 // 渲染 Intel 面板图表
 function renderIntelCharts(metrics) {

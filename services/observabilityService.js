@@ -175,12 +175,12 @@ class QualityChecker {
       audioTasksGenerated: this.hasAudioTasks(content)
     };
 
-    // 计算各维度得分
+    // 计算各维度得分（标准化维度名称）
     const dimensions = {
-      structuralIntegrity: this.calculateStructuralScore(checks),
-      contentRichness: this.calculateRichnessScore(content),
-      complianceWithStandards: this.calculateComplianceScore(content),
-      audioCompleteness: this.calculateAudioScore(content)
+      completeness: this.calculateCompletenessScore(checks, content),     // 完整性 (40分)
+      accuracy: this.calculateAccuracyScore(content, expectedPhrase),     // 准确性 (30分)
+      exampleQuality: this.calculateExampleScore(content),                 // 例句质量 (20分)
+      formatting: this.calculateFormattingScore(content)                   // 格式规范 (10分)
     };
 
     // 计算综合得分
@@ -270,83 +270,132 @@ class QualityChecker {
   }
 
   /**
-   * 计算结构完整性得分
+   * 计算完整性得分 (40分)
+   * 检查结构完整性和必需字段
    */
-  static calculateStructuralScore(checks) {
-    const weights = { jsonValid: 40, fieldsComplete: 60 };
+  static calculateCompletenessScore(checks, content) {
     let score = 0;
 
-    if (checks.jsonValid) score += weights.jsonValid;
-    if (checks.fieldsComplete) score += weights.fieldsComplete;
+    // JSON有效性 (10分)
+    if (checks.jsonValid) score += 10;
 
-    return score;
-  }
+    // 必需字段完整 (15分)
+    if (checks.fieldsComplete) score += 15;
 
-  /**
-   * 计算内容丰富度得分
-   */
-  static calculateRichnessScore(content) {
+    // 音频任务存在 (10分)
+    if (checks.audioTasksGenerated) score += 10;
+
+    // 内容长度合理 (5分)
     const markdown = content.markdown_content || '';
-
-    // 检查是否有多个章节（## 标题）
-    const sectionCount = (markdown.match(/##/g) || []).length;
-    const hasMultipleSections = sectionCount >= 3;
-
-    // 检查是否有足够的例句
-    const exampleCount = (markdown.match(/\d+\.\s+/g) || []).length;
-    const hasExamples = exampleCount >= 3;
-
-    // 检查是否有日文注音（括号标记）
-    const hasRuby = /\(.+?\)/.test(markdown);
-
-    let score = 0;
-    if (hasMultipleSections) score += 40;
-    if (hasExamples) score += 40;
-    if (hasRuby) score += 20;
+    if (markdown.length > 500) score += 5;
 
     return score;
   }
 
   /**
-   * 计算规范符合度得分
+   * 计算准确性得分 (30分)
+   * 评估翻译准确性和语言覆盖
    */
-  static calculateComplianceScore(content) {
-    const quality = this.checkExampleQuality(content);
-    const qualityMap = {
-      excellent: 100,
-      good: 80,
-      fair: 60,
-      poor: 40
-    };
+  static calculateAccuracyScore(content, phrase) {
+    const markdown = content.markdown_content || '';
+    let score = 0;
 
-    return qualityMap[quality] || 50;
+    // 包含原短语 (5分)
+    if (markdown.toLowerCase().includes(phrase.toLowerCase())) {
+      score += 5;
+    }
+
+    // 三语覆盖 (15分)
+    const hasChinese = /[\u4e00-\u9fa5]/.test(markdown);
+    const hasEnglish = /[a-zA-Z]/.test(markdown);
+    const hasJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(markdown);
+    const languageCount = [hasChinese, hasEnglish, hasJapanese].filter(Boolean).length;
+
+    if (languageCount === 3) score += 15;
+    else if (languageCount === 2) score += 10;
+    else if (languageCount === 1) score += 5;
+
+    // 结构化章节 (10分)
+    const sectionCount = (markdown.match(/##/g) || []).length;
+    if (sectionCount >= 3) score += 10;
+    else if (sectionCount >= 2) score += 5;
+
+    return score;
   }
 
   /**
-   * 计算音频完整性得分
+   * 计算例句质量得分 (20分)
+   * 评估例句数量、长度和质量
    */
-  static calculateAudioScore(content) {
-    return this.hasAudioTasks(content) ? 100 : 0;
+  static calculateExampleScore(content) {
+    const markdown = content.markdown_content || '';
+    const sentences = markdown.match(/\d+\.\s+.+/g) || [];
+    let score = 0;
+
+    // 例句数量 (8分)
+    if (sentences.length >= 3) score += 8;
+    else if (sentences.length >= 2) score += 5;
+    else if (sentences.length >= 1) score += 2;
+
+    // 平均长度合理 (8分)
+    if (sentences.length > 0) {
+      const avgLength = sentences.reduce((sum, s) => {
+        const words = s.split(/\s+/).length;
+        return sum + words;
+      }, 0) / sentences.length;
+
+      // 理想长度：8-20 个单词
+      if (avgLength >= 8 && avgLength <= 20) score += 8;
+      else if (avgLength >= 5 && avgLength <= 25) score += 5;
+      else score += 2;
+    }
+
+    // 例句多样性 (4分)
+    if (sentences.length > 0) {
+      const uniqueStarts = new Set(sentences.map(s => s.split(/\s+/)[1]?.toLowerCase()));
+      if (uniqueStarts.size >= sentences.length * 0.8) score += 4;
+      else if (uniqueStarts.size >= sentences.length * 0.6) score += 2;
+    }
+
+    return score;
   }
 
   /**
-   * 计算综合得分
+   * 计算格式规范得分 (10分)
+   * 检查格式化和特殊标记
+   */
+  static calculateFormattingScore(content) {
+    const markdown = content.markdown_content || '';
+    let score = 0;
+
+    // 日文注音（Ruby标记） (5分)
+    const hasRuby = /\(.+?\)/.test(markdown);
+    if (hasRuby) score += 5;
+
+    // 标题层级结构 (3分)
+    const hasH1 = /#\s+/.test(markdown);
+    const hasH2 = /##\s+/.test(markdown);
+    if (hasH1 && hasH2) score += 3;
+    else if (hasH1 || hasH2) score += 1;
+
+    // 音频标记格式 (2分)
+    const hasAudioMarks = /\{\{[a-z]{2}-audio-\d+\}\}/.test(markdown);
+    if (hasAudioMarks) score += 2;
+
+    return score;
+  }
+
+  /**
+   * 计算综合得分 (总分100)
    */
   static calculateOverallScore(dimensions) {
-    const weights = {
-      structuralIntegrity: 0.3,
-      contentRichness: 0.3,
-      complianceWithStandards: 0.3,
-      audioCompleteness: 0.1
-    };
+    // 直接求和，因为各维度已经按满分设计
+    const score = dimensions.completeness +
+                  dimensions.accuracy +
+                  dimensions.exampleQuality +
+                  dimensions.formatting;
 
-    const score =
-      dimensions.structuralIntegrity * weights.structuralIntegrity +
-      dimensions.contentRichness * weights.contentRichness +
-      dimensions.complianceWithStandards * weights.complianceWithStandards +
-      dimensions.audioCompleteness * weights.audioCompleteness;
-
-    return Math.round(score);
+    return Math.min(100, Math.max(0, Math.round(score)));
   }
 
   /**

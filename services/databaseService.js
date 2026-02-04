@@ -271,28 +271,181 @@ class DatabaseService {
   }
 
   /**
-   * 统计分析
+   * 统计分析（增强版）
    */
   getStatistics({ provider, dateFrom, dateTo }) {
-    const sql = `
+    // 基础统计
+    const basicSql = `
       SELECT
-        g.llm_provider,
-        g.llm_model,
-        COUNT(*) as total_count,
-        AVG(om.tokens_total) as avg_tokens,
-        AVG(om.cost_total) as avg_cost,
-        AVG(om.quality_score) as avg_quality,
-        AVG(om.performance_total_ms) as avg_response_time,
-        SUM(om.cost_total) as total_cost
+        COUNT(*) as totalCount,
+        AVG(om.tokens_total) as avgTokensTotal,
+        AVG(om.cost_total) as avgCost,
+        AVG(om.quality_score) as avgQualityScore,
+        AVG(om.performance_total_ms) as avgLatencyMs,
+        SUM(om.cost_total) as totalCost,
+        SUM(om.tokens_total) as totalTokens
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
         ${provider ? 'AND g.llm_provider = @provider' : ''}
-      GROUP BY g.llm_provider, g.llm_model
-      ORDER BY total_count DESC
     `;
+    const basicStats = this.db.prepare(basicSql).get({ dateFrom, dateTo, provider });
 
-    return this.db.prepare(sql).all({ dateFrom, dateTo, provider });
+    // Provider 分布
+    const providerSql = `
+      SELECT
+        g.llm_provider,
+        COUNT(*) as count
+      FROM generations g
+      WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+      GROUP BY g.llm_provider
+    `;
+    const providerData = this.db.prepare(providerSql).all({ dateFrom, dateTo });
+    const providerDistribution = {};
+    providerData.forEach(row => {
+      providerDistribution[row.llm_provider] = row.count;
+    });
+
+    // 质量趋势（按天聚合）
+    const qualityTrendSql = `
+      SELECT
+        g.generation_date as date,
+        AVG(om.quality_score) as avgScore,
+        COUNT(*) as count
+      FROM generations g
+      LEFT JOIN observability_metrics om ON g.id = om.generation_id
+      WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        ${provider ? 'AND g.llm_provider = @provider' : ''}
+      GROUP BY g.generation_date
+      ORDER BY g.generation_date DESC
+    `;
+    const qualityTrendData = this.db.prepare(qualityTrendSql).all({ dateFrom, dateTo, provider });
+
+    // Token 趋势
+    const tokenTrendSql = `
+      SELECT
+        g.generation_date as date,
+        AVG(om.tokens_total) as avgTokens,
+        COUNT(*) as count
+      FROM generations g
+      LEFT JOIN observability_metrics om ON g.id = om.generation_id
+      WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        ${provider ? 'AND g.llm_provider = @provider' : ''}
+      GROUP BY g.generation_date
+      ORDER BY g.generation_date DESC
+    `;
+    const tokenTrendData = this.db.prepare(tokenTrendSql).all({ dateFrom, dateTo, provider });
+
+    // Latency 趋势
+    const latencyTrendSql = `
+      SELECT
+        g.generation_date as date,
+        AVG(om.performance_total_ms) as avgMs,
+        COUNT(*) as count
+      FROM generations g
+      LEFT JOIN observability_metrics om ON g.id = om.generation_id
+      WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        ${provider ? 'AND g.llm_provider = @provider' : ''}
+      GROUP BY g.generation_date
+      ORDER BY g.generation_date DESC
+    `;
+    const latencyTrendData = this.db.prepare(latencyTrendSql).all({ dateFrom, dateTo, provider });
+
+    // 错误统计
+    const errorSql = `
+      SELECT
+        COUNT(*) as total,
+        error_type,
+        COUNT(*) as count
+      FROM generation_errors
+      WHERE created_at BETWEEN @dateFrom AND @dateTo
+      GROUP BY error_type
+    `;
+    const errorData = this.db.prepare(errorSql).all({ dateFrom, dateTo });
+    const errorTotal = errorData.reduce((sum, row) => sum + row.count, 0);
+    const errorsByType = {};
+    errorData.forEach(row => {
+      errorsByType[row.error_type || 'unknown'] = row.count;
+    });
+
+    const totalGenerations = (basicStats.totalCount || 0) + errorTotal;
+    const errorRate = totalGenerations > 0 ? errorTotal / totalGenerations : 0;
+
+    // 最近错误
+    const recentErrorsSql = `
+      SELECT phrase, error_type, error_message, created_at
+      FROM generation_errors
+      WHERE created_at BETWEEN @dateFrom AND @dateTo
+      ORDER BY created_at DESC
+      LIMIT 5
+    `;
+    const recentErrors = this.db.prepare(recentErrorsSql).all({ dateFrom, dateTo });
+
+    // 配额信息（基于当月token使用）
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const monthTokensSql = `
+      SELECT SUM(om.tokens_total) as used
+      FROM generations g
+      LEFT JOIN observability_metrics om ON g.id = om.generation_id
+      WHERE g.generation_date BETWEEN @monthStart AND @monthEnd
+    `;
+    const monthTokens = this.db.prepare(monthTokensSql).get({ monthStart, monthEnd });
+
+    const MONTHLY_TOKEN_LIMIT = 1000000; // 1M tokens per month (configurable)
+    const tokenUsed = monthTokens.used || 0;
+    const quota = {
+      used: tokenUsed,
+      limit: MONTHLY_TOKEN_LIMIT,
+      percentage: (tokenUsed / MONTHLY_TOKEN_LIMIT) * 100,
+      resetDate: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0],
+      estimatedDaysRemaining: Math.ceil((MONTHLY_TOKEN_LIMIT - tokenUsed) / ((tokenUsed / now.getDate()) || 1))
+    };
+
+    // 分段趋势（7D/30D/90D）
+    const segmentTrend = (data, days) => {
+      const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      return data.filter(row => row.date >= cutoffDate);
+    };
+
+    return {
+      totalCount: basicStats.totalCount || 0,
+      avgQualityScore: Math.round((basicStats.avgQualityScore || 0) * 10) / 10,
+      avgTokensTotal: Math.round(basicStats.avgTokensTotal || 0),
+      avgLatencyMs: Math.round(basicStats.avgLatencyMs || 0),
+      totalCost: (basicStats.totalCost || 0).toFixed(6),
+
+      providerDistribution,
+
+      qualityTrend: {
+        '7d': segmentTrend(qualityTrendData, 7),
+        '30d': segmentTrend(qualityTrendData, 30),
+        '90d': segmentTrend(qualityTrendData, 90)
+      },
+
+      tokenTrend: {
+        '7d': segmentTrend(tokenTrendData, 7),
+        '30d': segmentTrend(tokenTrendData, 30),
+        '90d': segmentTrend(tokenTrendData, 90)
+      },
+
+      latencyTrend: {
+        '7d': segmentTrend(latencyTrendData, 7),
+        '30d': segmentTrend(latencyTrendData, 30),
+        '90d': segmentTrend(latencyTrendData, 90)
+      },
+
+      errors: {
+        total: errorTotal,
+        rate: errorRate,
+        byType: errorsByType,
+        recent: recentErrors
+      },
+
+      quota
+    };
   }
 
   /**
