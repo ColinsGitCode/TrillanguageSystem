@@ -10,6 +10,24 @@ import { formatTime, formatDate } from './utils.js';
 let currentTrendPeriod = '30d';
 let latestPhraseForFeed = null;
 
+// 中文指标说明映射
+const METRIC_TOOLTIPS = {
+    quota: 'API 配额使用情况 - 每月限额 100 万 tokens',
+    storage: '本地存储数据使用量 - 包含所有生成的文件',
+    quality: '生成内容质量评分 - 基于 4 维度综合计算',
+    tokens: 'Token 消耗趋势 - 输入+输出 tokens 统计',
+    cost: 'API 调用成本趋势 - 按 tokens 计费',
+    latency: 'API 响应延迟趋势 - 从请求到响应的时间',
+    provider: '服务供应商分布 - Gemini API vs 本地模型',
+    errors: '错误发生统计 - 失败率和错误类型分析',
+    liveFeed: '实时生成动态 - 显示最近的生成记录',
+    infrastructure: '基础设施状态 - Web/TTS 服务健康检查',
+    arena: '模型性能对比 - 速度和质量综合评估',
+    webService: 'Web 服务状态 - 主应用后端服务',
+    ttsEn: '英语 TTS 服务 - Kokoro 语音合成',
+    ttsJa: '日语 TTS 服务 - VOICEVOX 语音合成'
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });

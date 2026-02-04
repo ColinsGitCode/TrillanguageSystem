@@ -536,7 +536,7 @@ function renderCardModal(markdown, title, options = {}) {
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
 
                 <!-- 1. Core Reactor -->
-                <div class="hud-card-score" style="border-left-color: ${rankColor};">
+                <div class="hud-card-score tooltip-trigger" data-tooltip="综合质量评分 - 满分 100 分" style="border-left-color: ${rankColor};">
                     <div>
                         <div class="intel-label">QUALITY GRADE</div>
                         <div class="score-value-container">
@@ -563,34 +563,34 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 2. Quality Dimensions (Enhanced) -->
                 <div class="hud-card">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="质量 4 维度评分 - 完整性/准确性/例句/格式">
                         <span>DIMENSIONS</span>
                         <span style="color: var(--neon-green);">4-AXIS</span>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
-                        ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)')}
-                        ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)')}
-                        ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)')}
-                        ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)')}
+                        ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)', '完整性 - 内容结构完整度')}
+                        ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)', '准确性 - 翻译和定义准确度')}
+                        ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)', '例句质量 - 例句自然度和多样性')}
+                        ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)', '格式化 - HTML 和音频标签正确性')}
                     </div>
                 </div>
 
                 <!-- 3. Config Display -->
                 <div class="hud-card">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="生成配置参数 - 控制 AI 输出的随机性和长度">
                         <span>GENERATION CONFIG</span>
                         <span style="color: var(--neon-amber);">PARAMS</span>
                     </div>
                     <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
+                        <div class="tooltip-trigger" data-tooltip="温度参数 - 控制输出随机性 (0-1)" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
+                        <div class="tooltip-trigger" data-tooltip="最大输出长度 - 限制生成的 token 数量" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
+                        <div class="tooltip-trigger" data-tooltip="Top-P 采样 - 核心采样概率阈值" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
                     </div>
                 </div>
 
                 <!-- 4. Chrono Waterfall -->
                 <div class="hud-card">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="时序分析 - 各阶段耗时分布">
                         <span>CHRONO SEQUENCE</span>
                         <span style="color: var(--neon-blue);">T-MINUS</span>
                     </div>
@@ -599,21 +599,21 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 5. Token Flux -->
                 <div class="hud-card">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="Token 使用情况 - 输入和输出 token 统计">
                         <span>TOKEN FLUX</span>
                         <span style="color: var(--neon-purple);">USAGE</span>
                     </div>
                     <div id="hudTokens" class="chart-box"></div>
                     <div class="token-stat-row">
-                        <span>IN: ${tokens.input}</span>
-                        <span>OUT: ${tokens.output}</span>
+                        <span class="tooltip-inline tooltip-trigger" data-tooltip="输入 tokens">IN: ${tokens.input}</span>
+                        <span class="tooltip-inline tooltip-trigger" data-tooltip="输出 tokens">OUT: ${tokens.output}</span>
                     </div>
-                    <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
+                    <div class="token-cost-tag tooltip-trigger" data-tooltip="本次生成成本 - 基于 token 使用量计费">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
                 </div>
 
                 <!-- 6. Radar Chart -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="质量维度雷达图 - 可视化各维度表现">
                         <span>DIMENSIONAL SCAN</span>
                         <span style="color: var(--neon-green);">RADAR</span>
                     </div>
@@ -622,7 +622,7 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 7. Prompt Viewer (Collapsible) -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                    <div class="hud-title tooltip-trigger" data-tooltip="完整 Prompt 文本 - 点击展开查看发送给 AI 的完整提示词" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
                         <span>📄 PROMPT TEXT</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
@@ -632,7 +632,7 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 8. Output Viewer (Collapsible) -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                    <div class="hud-title tooltip-trigger" data-tooltip="AI 原始输出 - 点击展开查看 AI 返回的原始 JSON 数据" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
                         <span>📤 LLM OUTPUT</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
@@ -642,12 +642,12 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 9. Export Controls -->
                 <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
-                    <div class="hud-title">
+                    <div class="hud-title tooltip-trigger" data-tooltip="导出指标数据 - 以 JSON 或 CSV 格式保存">
                         <span>EXPORT</span>
                         <span style="color: var(--neon-amber);">DATA</span>
                     </div>
-                    <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.2); border:1px solid var(--neon-green); border-radius:4px; color:var(--neon-green); font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
-                    <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.2); border:1px solid var(--neon-blue); border-radius:4px; color:var(--neon-blue); font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
+                    <button class="tooltip-trigger" data-tooltip="导出为 JSON 格式 - 包含完整结构化数据" onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
+                    <button class="tooltip-trigger" data-tooltip="导出为 CSV 格式 - 适合导入 Excel 分析" onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
                 </div>
 
             </div>
@@ -692,16 +692,17 @@ function renderCardModal(markdown, title, options = {}) {
 }
 
 // 渲染质量维度条
-function renderDimensionBar(label, value, maxValue, color) {
+function renderDimensionBar(label, value, maxValue, color, tooltip = '') {
     const percentage = (value / maxValue) * 100;
     const barColor = percentage >= 80 ? color : percentage >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+    const tooltipAttr = tooltip ? `class="tooltip-trigger" data-tooltip="${tooltip}"` : '';
     return `
-        <div>
+        <div ${tooltipAttr}>
             <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
                 <span style="color:var(--sci-text-muted);">${label}</span>
                 <span style="color:${barColor}; font-family:'JetBrains Mono';">${value}/${maxValue}</span>
             </div>
-            <div style="background:rgba(255,255,255,0.1); height:6px; border-radius:3px; overflow:hidden;">
+            <div style="background:#e5e7eb; height:6px; border-radius:3px; overflow:hidden;">
                 <div style="background:${barColor}; height:100%; width:${percentage}%; box-shadow:0 0 8px ${barColor}; transition:width 0.3s;"></div>
             </div>
         </div>
