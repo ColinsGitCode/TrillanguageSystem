@@ -942,6 +942,7 @@ function renderCardModal(markdown, title, options = {}) {
     
     // Calculate Rank
     const score = metrics.quality?.score || 0;
+    const templateCompliance = metrics.quality?.templateCompliance ?? metrics.quality?.checks?.templateCompliance ?? 0;
     const rank = score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
     const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
 
@@ -1024,6 +1025,7 @@ function renderCardModal(markdown, title, options = {}) {
                         <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
                         <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
                         <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Template:</span><span>${templateCompliance}</span></div>
                     </div>
                 </div>
 
@@ -1250,6 +1252,7 @@ window.exportMetrics = function(format) {
                 `Accuracy,${data.quality?.dimensions?.accuracy || 0}`,
                 `Example Quality,${data.quality?.dimensions?.exampleQuality || 0}`,
                 `Formatting,${data.quality?.dimensions?.formatting || 0}`,
+                `Template Compliance,${data.quality?.templateCompliance ?? data.quality?.checks?.templateCompliance ?? 0}`,
                 `Tokens Input,${data.tokens?.input || 0}`,
                 `Tokens Output,${data.tokens?.output || 0}`,
                 `Tokens Total,${data.tokens?.total || 0}`,

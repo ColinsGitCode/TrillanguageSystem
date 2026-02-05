@@ -91,9 +91,12 @@ async function generateWithProvider(phrase, provider, perf) {
   const { targetDir, folderName } = ensureTodayDirectory();
   const baseName = buildBaseName(phrase, targetDir);
   const geminiMode = (process.env.GEMINI_MODE || 'cli').toLowerCase();
+  const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
-  const prompt = (useGeminiCli || useGeminiProxy)
+  const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
+  const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
+  const prompt = useMarkdownOutput
       ? buildMarkdownPrompt({ phrase, filenameBase: baseName })
       : buildPrompt({ phrase, filenameBase: baseName });
 
@@ -159,8 +162,11 @@ async function generateWithProvider(phrase, provider, perf) {
               : (useGeminiProxy ? (process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
             : process.env.LLM_MODEL,
         promptText: prompt,  // 在 metadata 中也保存一份
-        rawOutput: (useGeminiCli || useGeminiProxy) ? (response.rawOutput || '') : JSON.stringify(content, null, 2),
-        outputStructured: (useGeminiCli || useGeminiProxy) ? JSON.stringify(content, null, 2) : undefined
+        outputMode: useMarkdownOutput ? 'markdown' : 'json',
+        rawOutput: useMarkdownOutput
+          ? (response.rawOutput || content?.markdown_content || '')
+          : JSON.stringify(content, null, 2),
+        outputStructured: useMarkdownOutput ? JSON.stringify(content, null, 2) : undefined
       }
     }
   };

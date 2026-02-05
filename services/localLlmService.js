@@ -4,6 +4,7 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || 'http://localhost:11434/v1'; //
 const LLM_API_KEY = process.env.LLM_API_KEY || 'EMPTY';
 const LLM_MODEL = process.env.LLM_MODEL || 'qwen2.5-coder:latest'; 
 const LLM_OCR_MODEL = process.env.LLM_OCR_MODEL || LLM_MODEL;
+const LLM_OUTPUT_MODE = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
 
 const MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS || 2048);
 const OCR_MAX_TOKENS = Number(process.env.LLM_OCR_MAX_TOKENS || 512);
@@ -52,20 +53,24 @@ function extractTokenLimits(errorText) {
   return null;
 }
 
-async function requestCompletion(prompt, maxTokens) {
+async function requestCompletion(prompt, maxTokens, outputMode = 'json') {
+  const body = {
+    model: LLM_MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: TEMPERATURE,
+    max_tokens: maxTokens
+  };
+  if (outputMode === 'json') {
+    body.response_format = { type: "json_object" }; // Force JSON if supported (Ollama/vLLM)
+  }
+
   const response = await fetch(`${LLM_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${LLM_API_KEY}`
     },
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: TEMPERATURE,
-      max_tokens: maxTokens,
-      response_format: { type: "json_object" } // Force JSON if supported (Ollama/vLLM)
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
@@ -141,8 +146,10 @@ async function generateContent(prompt) {
     let maxTokens = MAX_TOKENS;
     let data;
 
+    const outputMode = LLM_OUTPUT_MODE;
+
     try {
-      data = await requestCompletion(prompt, maxTokens);
+      data = await requestCompletion(prompt, maxTokens, outputMode);
     } catch (error) {
       const limits = error?.status === 400 ? extractTokenLimits(error.raw) : null;
       if (!limits) throw error;
@@ -154,14 +161,29 @@ async function generateContent(prompt) {
 
       maxTokens = Math.max(128, Math.min(maxTokens, available));
       console.warn(`[Local LLM] Retrying with max_tokens=${maxTokens} (context ${limits.context}, input ${limits.input}).`);
-      data = await requestCompletion(prompt, maxTokens);
+      data = await requestCompletion(prompt, maxTokens, outputMode);
     }
 
-    const text = data.choices[0].message.content;
+    const text = extractTextFromContent(data?.choices?.[0]?.message?.content || '');
     const usage = data.usage;
 
     console.log('[Local LLM] Response received.');
     console.log('[Local LLM] Usage:', usage);
+
+    if (outputMode === 'markdown') {
+      return {
+        content: {
+          markdown_content: String(text || '').trim(),
+          html_content: '',
+          audio_tasks: []
+        },
+        usage: {
+          input: usage?.prompt_tokens || 0,
+          output: usage?.completion_tokens || 0,
+          total: usage?.total_tokens || 0
+        }
+      };
+    }
 
     const content = parseJsonFromText(text);
 

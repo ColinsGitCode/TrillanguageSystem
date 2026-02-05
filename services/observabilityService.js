@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { parseTrilingualMarkdown } = require('./markdownParser');
 
 /**
  * 可观测性服务 - 统一管理 Token、性能、质量等指标
@@ -166,21 +167,25 @@ class QualityChecker {
    * @returns {Object} 质量评估结果
    */
   static check(content, expectedPhrase) {
+    const parsed = parseTrilingualMarkdown(content?.markdown_content || '');
+    const templateCompliance = this.calculateTemplateCompliance(parsed);
+
     // 执行各项检查
     const checks = {
       jsonValid: this.isValidJSON(content),
       fieldsComplete: this.hasRequiredFields(content),
       translationAccuracy: this.checkTranslation(content, expectedPhrase),
       exampleSentenceQuality: this.checkExampleQuality(content),
-      audioTasksGenerated: this.hasAudioTasks(content)
+      audioTasksGenerated: this.hasAudioTasks(content),
+      templateCompliance
     };
 
     // 计算各维度得分（标准化维度名称）
     const dimensions = {
       completeness: this.calculateCompletenessScore(checks, content),     // 完整性 (40分)
       accuracy: this.calculateAccuracyScore(content, expectedPhrase),     // 准确性 (30分)
-      exampleQuality: this.calculateExampleScore(content),                 // 例句质量 (20分)
-      formatting: this.calculateFormattingScore(content)                   // 格式规范 (10分)
+      exampleQuality: this.calculateExampleScore(content, parsed),          // 例句质量 (20分)
+      formatting: this.calculateFormattingScore(content, parsed, templateCompliance) // 格式规范 (10分)
     };
 
     // 计算综合得分
@@ -194,6 +199,7 @@ class QualityChecker {
       score,
       checks,
       dimensions,
+      templateCompliance,
       warnings,
       suggestions
     };
@@ -221,17 +227,14 @@ class QualityChecker {
    */
   static checkTranslation(content, phrase) {
     const markdown = content.markdown_content || '';
-    const hasPhrase = markdown.toLowerCase().includes(phrase.toLowerCase());
-
-    // 简单检查：markdown 内容是否包含原短语
+    const hasPhrase = markdown.toLowerCase().includes(String(phrase || '').toLowerCase());
     if (!hasPhrase) return 'poor';
 
-    // 检查是否有翻译标记（中文、英文、日文）
-    const hasChinese = /[\u4e00-\u9fa5]/.test(markdown);
-    const hasEnglish = /[a-zA-Z]/.test(markdown);
-    const hasJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(markdown);
-
-    const languageCount = [hasChinese, hasEnglish, hasJapanese].filter(Boolean).length;
+    const parsed = parseTrilingualMarkdown(markdown);
+    const hasEn = !!parsed.sections.en.translation;
+    const hasJa = !!parsed.sections.ja.translation;
+    const hasZh = !!parsed.sections.zh.translation;
+    const languageCount = [hasEn, hasJa, hasZh].filter(Boolean).length;
 
     if (languageCount >= 3) return 'excellent';
     if (languageCount >= 2) return 'good';
@@ -242,21 +245,23 @@ class QualityChecker {
    * 检查例句质量
    */
   static checkExampleQuality(content) {
-    const markdown = content.markdown_content || '';
+    const parsed = parseTrilingualMarkdown(content?.markdown_content || '');
+    const examples = [
+      ...(parsed.sections.en.examples || []),
+      ...(parsed.sections.ja.examples || [])
+    ];
 
-    // 提取例句（假设格式为 "1. ", "2. " 等）
-    const sentences = markdown.match(/\d+\.\s+.+/g) || [];
+    if (examples.length < 2) return 'poor';
+    if (examples.length < 3) return 'fair';
 
-    if (sentences.length < 2) return 'poor';
-    if (sentences.length < 3) return 'fair';
+    const avgLength = examples.reduce((sum, ex) => {
+      const text = ex.text || '';
+      if (/[a-zA-Z]/.test(text)) {
+        return sum + text.split(/\s+/).filter(Boolean).length;
+      }
+      return sum + text.length;
+    }, 0) / examples.length;
 
-    // 计算平均长度
-    const avgLength = sentences.reduce((sum, s) => {
-      const words = s.split(/\s+/).length;
-      return sum + words;
-    }, 0) / sentences.length;
-
-    // 理想长度：8-20 个单词
     if (avgLength >= 8 && avgLength <= 20) return 'excellent';
     if (avgLength >= 5 && avgLength <= 25) return 'good';
     return 'fair';
@@ -327,22 +332,27 @@ class QualityChecker {
    * 计算例句质量得分 (20分)
    * 评估例句数量、长度和质量
    */
-  static calculateExampleScore(content) {
-    const markdown = content.markdown_content || '';
-    const sentences = markdown.match(/\d+\.\s+.+/g) || [];
+  static calculateExampleScore(content, parsed) {
+    const examples = [
+      ...(parsed?.sections?.en?.examples || []),
+      ...(parsed?.sections?.ja?.examples || [])
+    ];
     let score = 0;
 
     // 例句数量 (8分)
-    if (sentences.length >= 3) score += 8;
-    else if (sentences.length >= 2) score += 5;
-    else if (sentences.length >= 1) score += 2;
+    if (examples.length >= 3) score += 8;
+    else if (examples.length >= 2) score += 5;
+    else if (examples.length >= 1) score += 2;
 
     // 平均长度合理 (8分)
-    if (sentences.length > 0) {
-      const avgLength = sentences.reduce((sum, s) => {
-        const words = s.split(/\s+/).length;
-        return sum + words;
-      }, 0) / sentences.length;
+    if (examples.length > 0) {
+      const avgLength = examples.reduce((sum, ex) => {
+        const text = ex.text || '';
+        if (/[a-zA-Z]/.test(text)) {
+          return sum + text.split(/\s+/).filter(Boolean).length;
+        }
+        return sum + text.length;
+      }, 0) / examples.length;
 
       // 理想长度：8-20 个单词
       if (avgLength >= 8 && avgLength <= 20) score += 8;
@@ -351,10 +361,10 @@ class QualityChecker {
     }
 
     // 例句多样性 (4分)
-    if (sentences.length > 0) {
-      const uniqueStarts = new Set(sentences.map(s => s.split(/\s+/)[1]?.toLowerCase()));
-      if (uniqueStarts.size >= sentences.length * 0.8) score += 4;
-      else if (uniqueStarts.size >= sentences.length * 0.6) score += 2;
+    if (examples.length > 0) {
+      const uniqueStarts = new Set(examples.map(ex => (ex.text || '').split(/\s+/)[0]?.toLowerCase()));
+      if (uniqueStarts.size >= examples.length * 0.8) score += 4;
+      else if (uniqueStarts.size >= examples.length * 0.6) score += 2;
     }
 
     return score;
@@ -364,25 +374,53 @@ class QualityChecker {
    * 计算格式规范得分 (10分)
    * 检查格式化和特殊标记
    */
-  static calculateFormattingScore(content) {
+  static calculateFormattingScore(content, parsed, templateCompliance) {
     const markdown = content.markdown_content || '';
     let score = 0;
 
-    // 日文注音（Ruby标记） (5分)
-    const hasRuby = /\(.+?\)/.test(markdown);
-    if (hasRuby) score += 5;
+    // 模板一致性 (4分)
+    if (typeof templateCompliance === 'number') {
+      score += Math.round((templateCompliance / 100) * 4);
+    }
 
-    // 标题层级结构 (3分)
+    // 日文注音（Ruby标记） (3分)
+    const hasRuby = /\(.+?\)/.test(markdown);
+    if (hasRuby) score += 3;
+
+    // 标题层级结构 (2分)
     const hasH1 = /#\s+/.test(markdown);
     const hasH2 = /##\s+/.test(markdown);
-    if (hasH1 && hasH2) score += 3;
+    if (hasH1 && hasH2) score += 2;
     else if (hasH1 || hasH2) score += 1;
 
-    // 音频标记格式 (2分)
+    // 音频标记格式 (1分)
     const hasAudioMarks = /\{\{[a-z]{2}-audio-\d+\}\}/.test(markdown);
-    if (hasAudioMarks) score += 2;
+    if (hasAudioMarks) score += 1;
 
-    return score;
+    return Math.min(10, score);
+  }
+
+  static calculateTemplateCompliance(parsed) {
+    const required = [];
+    required.push(parsed?.title);
+
+    const en = parsed?.sections?.en || {};
+    const ja = parsed?.sections?.ja || {};
+    const zh = parsed?.sections?.zh || {};
+
+    required.push(en.translation, en.explanation);
+    required.push(en.examples?.[0]?.text, en.examples?.[0]?.translation);
+    required.push(en.examples?.[1]?.text, en.examples?.[1]?.translation);
+
+    required.push(ja.translation, ja.explanation);
+    required.push(ja.examples?.[0]?.text, ja.examples?.[0]?.translation);
+    required.push(ja.examples?.[1]?.text, ja.examples?.[1]?.translation);
+
+    required.push(zh.translation, zh.explanation);
+
+    const filled = required.filter(Boolean).length;
+    const total = required.length || 1;
+    return Math.round((filled / total) * 100);
   }
 
   /**
@@ -409,6 +447,9 @@ class QualityChecker {
     if (checks.translationAccuracy === 'poor') warnings.push('翻译准确性较低');
     if (checks.exampleSentenceQuality === 'poor') warnings.push('例句质量不佳');
     if (!checks.audioTasksGenerated) warnings.push('未生成音频任务');
+    if (typeof checks.templateCompliance === 'number' && checks.templateCompliance < 80) {
+      warnings.push('模板一致性不足');
+    }
     if (dimensions.contentRichness < 60) warnings.push('内容丰富度偏低');
 
     return warnings;
@@ -429,6 +470,9 @@ class QualityChecker {
       }
       if (warning.includes('音频')) {
         suggestions.push('确认 audio_tasks 字段生成逻辑');
+      }
+      if (warning.includes('模板一致性')) {
+        suggestions.push('强化 Markdown 模板约束，确保字段与例句完整');
       }
       if (warning.includes('丰富度')) {
         suggestions.push('增加 Few-shot 示例的复杂度');
