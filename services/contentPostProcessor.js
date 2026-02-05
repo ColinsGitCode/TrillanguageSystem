@@ -1,5 +1,7 @@
 const KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]/g;
 const KANA_PAREN_REGEX = /[（(][\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\u30FC\s]+[）)]/g;
+const LOANWORD_PAREN_REGEX = /([\u30A0-\u30FF\u30FC]+)\(([A-Za-z0-9][A-Za-z0-9\s._-]*)\)/g;
+const LOANWORD_LABEL = '外来语标注';
 
 function stripRuby(text) {
   if (!text) return '';
@@ -46,7 +48,8 @@ function cleanJapaneseTranslations(markdown) {
 
     const translationMatch = line.match(/^(\s*-\s+)(.*)$/);
     const isLabeled = /\*\*[^*]+?\*\*:\s*/.test(line);
-    if (translationMatch && !isLabeled) {
+    const isLoanwordLine = line.includes(LOANWORD_LABEL);
+    if (translationMatch && !isLabeled && !isLoanwordLine) {
       const prefix = translationMatch[1];
       const content = translationMatch[2];
       const cleaned = cleanChineseTranslation(content);
@@ -57,6 +60,71 @@ function cleanJapaneseTranslations(markdown) {
     output.push(line);
   }
 
+  return output.join('\n');
+}
+
+function relocateLoanwordAnnotations(markdown) {
+  if (!markdown) return markdown;
+  const lines = String(markdown).split(/\r?\n/);
+  const output = [];
+  let inJapanese = false;
+  let pending = null;
+  let pendingIndent = '  - ';
+
+  function flushPending() {
+    if (!pending || !pending.length) return;
+    pending.forEach((item) => {
+      output.push(`${pendingIndent}${LOANWORD_LABEL}: ${item.en} = ${item.ja}`);
+    });
+    pending = null;
+  }
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^\s*##\s*(\d+)\.\s*(.+)$/);
+    if (headerMatch) {
+      if (pending) flushPending();
+      const headerText = headerMatch[2];
+      inJapanese = /日本語|日语/.test(headerText);
+      output.push(line);
+      continue;
+    }
+
+    if (!inJapanese) {
+      output.push(line);
+      continue;
+    }
+
+    const exampleMatch = line.match(/^(\s*-\s*\*\*例句(\d+)\*\*:\s*)(.+)$/);
+    if (exampleMatch) {
+      if (pending) flushPending();
+      const prefix = exampleMatch[1];
+      let content = exampleMatch[3];
+      const extracted = [];
+      content = content.replace(LOANWORD_PAREN_REGEX, (full, ja, en) => {
+        extracted.push({ ja, en: en.trim() });
+        return ja;
+      });
+      pending = extracted.length ? extracted : null;
+      pendingIndent = '  - ';
+      output.push(`${prefix}${content}`);
+      continue;
+    }
+
+    const translationMatch = line.match(/^(\s*-\s+)(.*)$/);
+    const isLabeled = /\*\*[^*]+?\*\*:\s*/.test(line);
+    if (translationMatch && !isLabeled) {
+      output.push(line);
+      if (pending) {
+        pendingIndent = translationMatch[1];
+        flushPending();
+      }
+      continue;
+    }
+
+    output.push(line);
+  }
+
+  if (pending) flushPending();
   return output.join('\n');
 }
 
@@ -104,7 +172,11 @@ function sanitizeAudioTasks(tasks = []) {
       text = text.replace(/[.!?。！？]+$/g, '');
     }
     if (normalized.lang === 'ja') {
-      text = text.replace(KANA_PAREN_REGEX, '').replace(/\s+/g, ' ').trim();
+      text = text
+        .replace(KANA_PAREN_REGEX, '')
+        .replace(/\([A-Za-z0-9][A-Za-z0-9\s._-]*\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
     normalized.text = text;
     return normalized;
@@ -114,6 +186,7 @@ function sanitizeAudioTasks(tasks = []) {
 function postProcessGeneratedContent(content) {
   if (!content || typeof content !== 'object') return content;
   let markdown = content.markdown_content || '';
+  markdown = relocateLoanwordAnnotations(markdown);
   markdown = cleanJapaneseTranslations(markdown);
   markdown = dedupeTechSection(markdown);
   content.markdown_content = markdown;
