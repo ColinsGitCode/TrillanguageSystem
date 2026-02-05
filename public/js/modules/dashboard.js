@@ -2,6 +2,7 @@
  * Mission Control Dashboard (Overview)
  */
 import { formatDate } from './utils.js';
+import { initInfoModal, bindInfoButtons } from './info-modal.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
@@ -13,6 +14,8 @@ const state = {
 
 function initDashboard() {
     updateTimestamp();
+    initInfoModal(); // Init info modal
+    bindInfoButtons(); // Bind static buttons
 
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
@@ -214,10 +217,26 @@ function renderCostSummary({ totalCost, avgCost, currency }) {
 }
 
 function renderProviderPie(providerDistribution, records) {
-    const container = document.getElementById('providerPieChart');
-    const legend = document.getElementById('providerLegend');
+    const container = document.getElementById('providerDistribution');
+    if (!container) return;
+    
     container.innerHTML = '';
-    legend.innerHTML = '';
+    
+    // Create Layout for Chart + Legend
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+
+    const chartDiv = document.createElement('div');
+    container.appendChild(chartDiv);
+    
+    const legendDiv = document.createElement('div');
+    legendDiv.className = 'legend-container';
+    legendDiv.style.display = 'flex';
+    legendDiv.style.gap = '12px';
+    legendDiv.style.marginTop = '12px';
+    legendDiv.style.fontSize = '12px';
+    container.appendChild(legendDiv);
 
     const data = providerDistribution
         ? Object.entries(providerDistribution).map(([label, value]) => ({ label, value }))
@@ -228,11 +247,11 @@ function renderProviderPie(providerDistribution, records) {
         return;
     }
 
-    const width = container.clientWidth || 220;
-    const height = 220;
+    const width = 200;
+    const height = 200;
     const radius = Math.min(width, height) / 2 - 10;
 
-    const svg = d3.select(container)
+    const svg = d3.select(chartDiv)
         .append('svg')
         .attr('width', width)
         .attr('height', height)
@@ -244,7 +263,7 @@ function renderProviderPie(providerDistribution, records) {
         .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
 
     const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
+    const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
 
     svg.selectAll('path')
         .data(pie(data))
@@ -257,13 +276,15 @@ function renderProviderPie(providerDistribution, records) {
 
     data.forEach(item => {
         const row = document.createElement('div');
-        row.className = 'legend-item';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '4px';
         row.innerHTML = `
-            <span class="legend-dot" style="background:${color(item.label)}"></span>
-            <span class="legend-label">${item.label}</span>
-            <span class="legend-value">${item.value}</span>
+            <span style="width:8px; height:8px; border-radius:50%; background:${color(item.label)}"></span>
+            <span style="color:var(--text-slate);">${item.label}</span>
+            <span style="font-weight:600;">${item.value}</span>
         `;
-        legend.appendChild(row);
+        legendDiv.appendChild(row);
     });
 }
 
@@ -396,31 +417,40 @@ function renderLineChart(containerId, data, color) {
 }
 
 function renderRecent(records) {
-    const body = document.getElementById('recentTableBody');
-    const countEl = document.getElementById('recentCount');
-    body.innerHTML = '';
+    const container = document.getElementById('liveFeed');
+    if (!container) return;
+    
+    container.innerHTML = '';
 
     if (!records.length) {
-        body.innerHTML = '<tr><td colspan="6" class="empty-cell">No records</td></tr>';
-        if (countEl) countEl.textContent = '0';
+        container.innerHTML = '<div style="color:var(--text-muted); padding:8px;">No recent records</div>';
         return;
     }
 
-    const top = records.slice(0, 8);
+    const top = records.slice(0, 10);
     top.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${escapeCell(r.phrase)}</td>
-            <td><span class="pill">${escapeCell(r.llm_provider)}</span></td>
-            <td>${formatNumber(r.quality_score, 0)}</td>
-            <td>${formatNumber(r.tokens_total, 0)}</td>
-            <td>${formatCurrency(r.cost_total, 'USD')}</td>
-            <td>${formatDate(r.created_at)}</td>
+        const div = document.createElement('div');
+        div.style.padding = '8px';
+        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        
+        const score = r.quality_score || 0;
+        const color = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+        
+        div.innerHTML = `
+            <div style="display:flex; flex-direction:column;">
+                <span style="color:var(--text); font-weight:600;">${escapeCell(r.phrase)}</span>
+                <span style="font-size:10px; color:var(--muted);">${formatDate(r.created_at)}</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span class="badge" style="font-size:10px;">${escapeCell(r.llm_provider)}</span>
+                <span style="font-family:'JetBrains Mono'; color:${color}; font-size:11px;">${formatNumber(score, 0)}</span>
+            </div>
         `;
-        body.appendChild(tr);
+        container.appendChild(div);
     });
-
-    if (countEl) countEl.textContent = `${top.length}`;
 }
 
 function aggregateProvider(records = []) {

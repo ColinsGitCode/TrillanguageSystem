@@ -13,7 +13,8 @@ public/
 ├── index.html                    # 主应用页面
 ├── dashboard.html                # Mission Control 仪表盘（统计大盘）
 ├── styles.css                    # 主样式
-├── modern-card.css               # 学习卡片弹窗样式
+├── modern-card.css               # 学习卡片弹窗与指标样式
+├── observability.css             # 可观测性通用样式
 ├── css/
 │   └── dashboard.css             # 仪表盘样式
 └── js/
@@ -22,6 +23,7 @@ public/
         ├── app.js                # 主应用入口
         ├── dashboard.js          # Mission Control 逻辑
         ├── api.js                # API 封装
+        ├── info-modal.js         # 指标说明弹窗模块 (NEW)
         ├── store.js              # 状态管理
         ├── utils.js              # 工具函数
         ├── audio-player.js       # 音频播放器
@@ -52,10 +54,11 @@ public/
   - 文件夹：按日期分组
   - 历史记录：搜索/过滤/分页
 - **Phrase List**：多列网格卡片视图
-- **弹窗**：
-  - Tab1：卡片内容
-  - Tab2：MISSION 指标（质量/Token/成本/性能/配额）
-  - 左上角删除按钮（删除该卡片所有文件 + 数据库记录）
+- **弹窗交互**：
+  - **Tab1：卡片内容**
+  - **Tab2：MISSION 指标** (HUD 仪表盘风格)
+  - **指标详情**：点击指标名后的 `?` 按钮弹出详细中文说明 (取代旧版 Tooltip)
+  - **记录删除**：左上角红色 `🗑️` 按钮，支持物理文件与数据库同步删除
 
 ---
 
@@ -64,12 +67,12 @@ public/
 **定位**：整体统计大盘（非单卡调试）
 
 **模块**：
-- Overview（总量/平均质量/平均 Token/平均延迟）
-- Cost Summary
+- Overview / Cost Summary
 - Quality / Token / Latency 趋势
-- Provider 分布
-- Recent Records
-- Infrastructure（服务状态 + 存储）
+- Provider 分布 (D3.js 饼图)
+- Live Feed (实时动态流)
+- Infrastructure (服务健康检查)
+- **全局交互**：所有指标标题均配有 `?` 按钮，点击查看定义的业务含义。
 
 ---
 

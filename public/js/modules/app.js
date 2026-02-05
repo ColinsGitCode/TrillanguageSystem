@@ -5,6 +5,7 @@ import { api } from './api.js';
 import { store } from './store.js';
 import { player } from './audio-player.js';
 import { escapeHtml, sanitizeHtml, formatTime, formatDate, debounce } from './utils.js';
+import { initInfoModal, createInfoBtn, bindInfoButtons } from './info-modal.js';
 
 // DOM Elements
 const els = {
@@ -63,6 +64,7 @@ function init() {
     initGenerator();
     initModal();
     initHistory();
+    initInfoModal(); // Initialize Info Modal
     ensureFileListState();
     // 加载初始数据
     loadFolders();
@@ -239,8 +241,17 @@ async function selectFile(file, title) {
 
     try {
         const baseName = file.replace(/\.html$/i, '');
-        const mdContent = await api.getFileContent(folder, `${baseName}.md`);
-        renderCardModal(mdContent, title || baseName, { folder, baseName });
+        // Fetch content and metadata in parallel
+        const [mdContent, recordData] = await Promise.all([
+            api.getFileContent(folder, `${baseName}.md`),
+            api.getRecordByFile(folder, baseName).catch(e => {
+                console.warn('Fetch record meta failed:', e);
+                return null;
+            })
+        ]);
+
+        const metrics = recordData ? recordData.record : null;
+        renderCardModal(mdContent, title || baseName, { folder, baseName, metrics });
     } catch (err) {
         console.error('Render card failed:', err);
         alert('无法加载文件内容');
@@ -722,6 +733,7 @@ function renderCardModal(markdown, title, options = {}) {
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel" style="background: #ffffff;">
+            <button class="mc-delete" id="mcDeleteBtn" title="Delete Record">🗑️</button>
             <button class="mc-close" id="mcCloseBtn">×</button>
 
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
@@ -749,9 +761,9 @@ function renderCardModal(markdown, title, options = {}) {
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
 
                 <!-- 1. Core Reactor -->
-                <div class="hud-card-score tooltip-trigger" data-tooltip="综合质量评分 - 满分 100 分" style="border-left-color: ${rankColor};">
+                <div class="hud-card-score" style="border-left-color: ${rankColor};">
                     <div>
-                        <div class="intel-label">QUALITY GRADE</div>
+                        <div class="intel-label">QUALITY GRADE ${createInfoBtn('QUALITY_GRADE')}</div>
                         <div class="score-value-container">
                             <div class="score-main" style="color: ${rankColor}; text-shadow: 0 0 20px ${rankColor}66;">${score}</div>
                             <div class="score-rank">RANK ${rank}</div>
@@ -776,8 +788,8 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 2. Quality Dimensions (Enhanced) -->
                 <div class="hud-card">
-                    <div class="hud-title tooltip-trigger" data-tooltip="质量 4 维度评分 - 完整性/准确性/例句/格式">
-                        <span>DIMENSIONS</span>
+                    <div class="hud-title">
+                        <span>DIMENSIONS ${createInfoBtn('DIMENSIONS')}</span>
                         <span style="color: var(--neon-green);">4-AXIS</span>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
@@ -790,21 +802,21 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 3. Config Display -->
                 <div class="hud-card">
-                    <div class="hud-title tooltip-trigger" data-tooltip="生成配置参数 - 控制 AI 输出的随机性和长度">
-                        <span>GENERATION CONFIG</span>
+                    <div class="hud-title">
+                        <span>GENERATION CONFIG ${createInfoBtn('GENERATION_CONFIG')}</span>
                         <span style="color: var(--neon-amber);">PARAMS</span>
                     </div>
                     <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
-                        <div class="tooltip-trigger" data-tooltip="温度参数 - 控制输出随机性 (0-1)" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
-                        <div class="tooltip-trigger" data-tooltip="最大输出长度 - 限制生成的 token 数量" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
-                        <div class="tooltip-trigger" data-tooltip="Top-P 采样 - 核心采样概率阈值" style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
                     </div>
                 </div>
 
                 <!-- 4. Chrono Waterfall -->
                 <div class="hud-card">
-                    <div class="hud-title tooltip-trigger" data-tooltip="时序分析 - 各阶段耗时分布">
-                        <span>CHRONO SEQUENCE</span>
+                    <div class="hud-title">
+                        <span>CHRONO SEQUENCE ${createInfoBtn('CHRONO_SEQUENCE')}</span>
                         <span style="color: var(--neon-blue);">T-MINUS</span>
                     </div>
                     <div id="hudTimeline" class="chart-box"></div>
@@ -812,22 +824,22 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 5. Token Flux -->
                 <div class="hud-card">
-                    <div class="hud-title tooltip-trigger" data-tooltip="Token 使用情况 - 输入和输出 token 统计">
-                        <span>TOKEN FLUX</span>
+                    <div class="hud-title">
+                        <span>TOKEN FLUX ${createInfoBtn('TOKEN_FLUX')}</span>
                         <span style="color: var(--neon-purple);">USAGE</span>
                     </div>
                     <div id="hudTokens" class="chart-box"></div>
                     <div class="token-stat-row">
-                        <span class="tooltip-inline tooltip-trigger" data-tooltip="输入 tokens">IN: ${tokens.input}</span>
-                        <span class="tooltip-inline tooltip-trigger" data-tooltip="输出 tokens">OUT: ${tokens.output}</span>
+                        <span class="tooltip-inline">IN: ${tokens.input}</span>
+                        <span class="tooltip-inline">OUT: ${tokens.output}</span>
                     </div>
-                    <div class="token-cost-tag tooltip-trigger" data-tooltip="本次生成成本 - 基于 token 使用量计费">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
+                    <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
                 </div>
 
                 <!-- 6. Radar Chart -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title tooltip-trigger" data-tooltip="质量维度雷达图 - 可视化各维度表现">
-                        <span>DIMENSIONAL SCAN</span>
+                    <div class="hud-title">
+                        <span>DIMENSIONAL SCAN ${createInfoBtn('DIMENSIONAL_SCAN')}</span>
                         <span style="color: var(--neon-green);">RADAR</span>
                     </div>
                     <div id="hudRadar" class="chart-box" style="height: 200px;"></div>
@@ -835,8 +847,8 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 7. Prompt Viewer (Collapsible) -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title tooltip-trigger" data-tooltip="完整 Prompt 文本 - 点击展开查看发送给 AI 的完整提示词" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
-                        <span>📄 PROMPT TEXT</span>
+                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                        <span>📄 PROMPT TEXT ${createInfoBtn('PROMPT_TEXT')}</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
                     <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.promptText || 'N/A')}</div>
@@ -845,8 +857,8 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 8. Output Viewer (Collapsible) -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title tooltip-trigger" data-tooltip="AI 原始输出 - 点击展开查看 AI 返回的原始 JSON 数据" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
-                        <span>📤 LLM OUTPUT</span>
+                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                        <span>📤 LLM OUTPUT ${createInfoBtn('LLM_OUTPUT')}</span>
                         <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
                     </div>
                     <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.rawOutput || 'N/A')}</div>
@@ -855,17 +867,39 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <!-- 9. Export Controls -->
                 <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
-                    <div class="hud-title tooltip-trigger" data-tooltip="导出指标数据 - 以 JSON 或 CSV 格式保存">
-                        <span>EXPORT</span>
+                    <div class="hud-title">
+                        <span>EXPORT ${createInfoBtn('EXPORT_DATA')}</span>
                         <span style="color: var(--neon-amber);">DATA</span>
                     </div>
-                    <button class="tooltip-trigger" data-tooltip="导出为 JSON 格式 - 包含完整结构化数据" onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
-                    <button class="tooltip-trigger" data-tooltip="导出为 CSV 格式 - 适合导入 Excel 分析" onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
+                    <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
+                    <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
                 </div>
 
             </div>
         </div>
     `;
+
+    // 绑定删除按钮
+    const deleteBtn = document.getElementById('mcDeleteBtn');
+    if (deleteBtn) {
+        deleteBtn.onclick = async () => {
+            if (confirm('Are you sure you want to delete this record? This cannot be undone.')) {
+                try {
+                    if (options.metrics && options.metrics.id) {
+                        await api.deleteRecord(options.metrics.id);
+                    } else if (options.folder && options.baseName) {
+                        await api.deleteRecordByFile(options.folder, options.baseName);
+                    } else {
+                        throw new Error('Cannot identify record to delete');
+                    }
+                    closeModal();
+                    loadFolders({ refreshFiles: true, noCache: true });
+                } catch (e) {
+                    alert('Delete failed: ' + e.message);
+                }
+            }
+        };
+    }
 
     // 绑定关闭按钮
     document.getElementById('mcCloseBtn').onclick = closeModal;
@@ -901,16 +935,19 @@ function renderCardModal(markdown, title, options = {}) {
     });
 
     els.modalOverlay.classList.remove('hidden');
-    setTimeout(() => els.modalOverlay.classList.add('show'), 10);
+    setTimeout(() => {
+        els.modalOverlay.classList.add('show');
+        bindInfoButtons(els.modalContainer);
+    }, 10);
 }
 
 // 渲染质量维度条
 function renderDimensionBar(label, value, maxValue, color, tooltip = '') {
     const percentage = (value / maxValue) * 100;
     const barColor = percentage >= 80 ? color : percentage >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
-    const tooltipAttr = tooltip ? `class="tooltip-trigger" data-tooltip="${tooltip}"` : '';
+    // const tooltipAttr = tooltip ? `class="tooltip-trigger" data-tooltip="${tooltip}"` : '';
     return `
-        <div ${tooltipAttr}>
+        <div>
             <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
                 <span style="color:var(--sci-text-muted);">${label}</span>
                 <span style="color:${barColor}; font-family:'JetBrains Mono';">${value}/${maxValue}</span>

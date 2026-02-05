@@ -75,6 +75,11 @@ class ApiService {
         return this.fetchJson(`/api/records/${id}`, { method: 'DELETE' });
     }
 
+    async getRecordByFile(folder, base) {
+        const url = `/api/records/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(base)}`;
+        return this.fetchJson(url);
+    }
+
     async deleteRecordByFile(folder, base) {
         const url = `/api/records/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(base)}`;
         return this.fetchJson(url, { method: 'DELETE' });

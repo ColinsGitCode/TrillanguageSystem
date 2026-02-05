@@ -400,3 +400,294 @@ rt {
   .mc-body { padding: 1.5rem 1.5rem; }
   .mc-phrase { font-size: 1.8rem; }
 }
+
+/* =========================================
+   🕵️‍♂️ Mission Intel HUD System (Recovered)
+   ========================================= */
+
+/* Grid Layout */
+.intel-hud-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto 1fr;
+  gap: 16px;
+  padding: 24px;
+  /* background: radial-gradient(circle at 50% 30%, rgba(59, 130, 246, 0.03), transparent 70%); */
+}
+
+/* 1. Core Reactor (Quality Score) */
+.hud-card-score {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, #ffffff 50%, #ffffff 100%);
+  border-left: 4px solid var(--neon-green);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.score-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.score-main {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--neon-green);
+  text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+  line-height: 1;
+}
+
+.score-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  color: #d1d5db;
+  font-weight: 700;
+}
+
+.score-meta {
+  text-align: right;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.meta-label { color: var(--sci-text-muted); }
+.meta-val { color: var(--sci-text-main); font-weight: 600; }
+
+/* 2. Chrono & Token Panels */
+.hud-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--sci-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Charts Containers */
+.chart-box {
+  flex: 1;
+  position: relative;
+  min-height: 60px;
+}
+
+/* Token Bar Specifics */
+.token-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  margin-top: 8px;
+  color: var(--sci-text-muted);
+}
+
+.token-cost-tag {
+  margin-top: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--neon-green);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  text-align: center;
+  align-self: center;
+}
+
+/* 3. Radar (Full Width) */
+.hud-card-wide {
+  grid-column: span 3;
+  min-height: 200px;
+}
+
+/* D3 Tooltip */
+.hud-tooltip {
+  position: absolute;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #1f2937;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.collapsible-content {
+    transition: all 0.2s ease-in-out;
+}
+.collapsible-content.hidden {
+    display: none;
+}
+
+/* =========================================
+   ❓ Info Modal & Buttons
+   ========================================= */
+
+.info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(107, 114, 128, 0.1);
+    color: var(--text-muted);
+    border: none;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: all 0.2s;
+}
+
+.info-btn:hover {
+    background: var(--accent-en);
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Info Modal Overlay */
+.info-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999; /* Highest priority */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.2s;
+}
+
+.info-modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.info-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+}
+
+.info-modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 500px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+    animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Remove default .modern-card border/shadow overrides if conflicting */
+    font-family: var(--font-sans);
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.info-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+    border-radius: 12px 12px 0 0;
+}
+
+.info-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-ink);
+}
+
+.info-close-btn {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.info-close-btn:hover {
+    background: #f3f4f6;
+    color: var(--text-ink);
+}
+
+.info-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-slate);
+}
+
+.info-modal-body ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.info-modal-body li {
+    margin-bottom: 6px;
+}
+
+.info-modal-body strong {
+    color: var(--text-ink);
+    font-weight: 600;
+}
+
+
