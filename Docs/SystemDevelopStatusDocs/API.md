@@ -71,7 +71,7 @@ Content-Type: application/json
 
 ## 生成接口
 
-### 1. 生成三语学习卡片
+### 1. 生成三语学习卡片（单模型）
 
 **请求**
 
@@ -130,14 +130,77 @@ Content-Type: application/json
     "quality": { "score": 88, "dimensions": { "completeness": 36 } },
     "performance": { "totalTime": 2350, "phases": { "llmCall": 1850 } },
     "prompt": { "full": "...", "sections": { "ROLE": "..." } },
-    "metadata": { "provider": "local", "model": "qwen2.5-coder:latest" }
+    "metadata": {
+      "provider": "local",
+      "model": "qwen2.5-coder:latest",
+      "promptText": "...",
+      "promptParsed": { "full": "...", "sections": { "ROLE": "..." } },
+      "outputMode": "json",
+      "rawOutput": "{...}",
+      "outputStructured": "{...}"
+    }
   }
 }
 ```
 
+### 2. 生成三语学习卡片（双模型对比）
+
+**请求**
+
+```http
+POST /api/generate
+Content-Type: application/json
+```
+
+**请求体**
+
+```json
+{
+  "phrase": "对比模式输入测试_20260205_03",
+  "llm_provider": "local",
+  "enable_compare": true
+}
+```
+
+**响应 (200 OK)**
+
+```json
+{
+  "phrase": "对比模式输入测试_20260205_03",
+  "gemini": {
+    "success": true,
+    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_gemini" },
+    "output": { "markdown_content": "...", "html_content": "...", "audio_tasks": [] },
+    "observability": { "tokens": {}, "cost": {}, "quality": {}, "performance": {}, "metadata": {} },
+    "audio": { "results": [], "errors": [] }
+  },
+  "local": {
+    "success": true,
+    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_local" },
+    "output": { "markdown_content": "...", "html_content": "...", "audio_tasks": [] },
+    "observability": { "tokens": {}, "cost": {}, "quality": {}, "performance": {}, "metadata": {} },
+    "audio": { "results": [], "errors": [] }
+  },
+  "input": {
+    "success": true,
+    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_input" }
+  },
+  "comparison": {
+    "metrics": { "speed": {}, "quality": {}, "tokens": {}, "cost": {} },
+    "winner": "gemini",
+    "recommendation": "Gemini wins on speed/quality balance.",
+    "promptComparison": { "similarity": "identical", "geminiLength": 1200, "localLength": 1180 }
+  }
+}
+```
+
+**说明**
+- 对比模式会生成三份文件记录：`gemini`、`local`、`input`（输入卡片）。
+- 输入卡片用于保留原始输入，标题显示为 `【输入】{phrase}`。
+
 ---
 
-### 2. OCR 图像识别
+### 3. OCR 图像识别
 
 **请求**
 

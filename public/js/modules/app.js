@@ -560,11 +560,29 @@ function handleCompareResult(data) {
     // 清空输入
     els.phraseInput.value = '';
     clearImage();
+
+    // 对比模式也保存文件，刷新列表
+    const targetFolder = gemini?.result?.folder || local?.result?.folder;
+    if (targetFolder) {
+        loadFolders({ targetSelect: targetFolder, refreshFiles: true, noCache: true });
+    }
 }
 
 function renderCompareModal(phrase, geminiResult, localResult, comparison) {
     const geminiOk = geminiResult?.success;
     const localOk = localResult?.success;
+    const geminiFolder = geminiResult?.result?.folder || store.get('selectedFolder');
+    const localFolder = localResult?.result?.folder || store.get('selectedFolder');
+    const geminiBase = geminiResult?.result?.baseName;
+    const localBase = localResult?.result?.baseName;
+
+    const renderFallbackContent = (result) => {
+        const raw = result?.observability?.metadata?.rawOutput || '';
+        if (raw) {
+            return `<pre class="raw-fallback">${escapeHtml(raw)}</pre>`;
+        }
+        return `<div class="empty-hint">暂无内容</div>`;
+    };
 
     let comparisonSection = '';
     if (comparison) {
@@ -590,6 +608,24 @@ function renderCompareModal(phrase, geminiResult, localResult, comparison) {
         `;
     }
 
+    const geminiContent = geminiOk
+        ? (geminiResult.output?.markdown_content
+            ? renderMarkdownWithAudioButtons(geminiResult.output?.markdown_content || '', { folder: geminiFolder })
+            : renderFallbackContent(geminiResult))
+        : `<div class="error-box">${escapeHtml(geminiResult?.error || 'Generation failed')}</div>`;
+    const localContent = localOk
+        ? (localResult.output?.markdown_content
+            ? renderMarkdownWithAudioButtons(localResult.output?.markdown_content || '', { folder: localFolder })
+            : renderFallbackContent(localResult))
+        : `<div class="error-box">${escapeHtml(localResult?.error || 'Generation failed')}</div>`;
+
+    const geminiIntel = geminiOk
+        ? buildIntelHud(geminiResult.observability || {}, { idSuffix: 'gemini', providerLabel: 'GEMINI', modelLabel: geminiResult.observability?.metadata?.model })
+        : `<div class="error-box">${escapeHtml(geminiResult?.error || 'Intel unavailable')}</div>`;
+    const localIntel = localOk
+        ? buildIntelHud(localResult.observability || {}, { idSuffix: 'local', providerLabel: 'LOCAL', modelLabel: localResult.observability?.metadata?.model })
+        : `<div class="error-box">${escapeHtml(localResult?.error || 'Intel unavailable')}</div>`;
+
     const html = `
         <div class="modern-card glass-panel compare-modal">
             <button class="mc-close" id="mcCloseBtn">×</button>
@@ -603,30 +639,61 @@ function renderCompareModal(phrase, geminiResult, localResult, comparison) {
                         <span>DUAL OUTPUT</span>
                     </div>
                 </div>
+
+                <div class="panel-tabs sub-tabs compare-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
+                    <button class="tab-btn active" data-target="compareContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
+                    <button class="tab-btn" data-target="compareIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
+                </div>
             </div>
 
-            <div class="mc-body" style="padding: 24px;">
+            <div class="mc-body compare-body">
                 ${comparisonSection}
 
-                <div class="compare-columns">
-                    <!-- GEMINI Column -->
-                    <div class="compare-column">
-                        <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
-                            <span class="model-icon">🤖</span>
-                            <span>GEMINI</span>
-                            ${!geminiOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                <div id="compareContent" class="compare-pane" style="display:block;">
+                    <div class="compare-columns compare-content-grid">
+                        <div class="compare-column">
+                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
+                                <span class="model-icon">🤖</span>
+                                <span>GEMINI</span>
+                                ${geminiBase && geminiFolder ? `<button class="compare-delete" data-folder="${geminiFolder}" data-base="${geminiBase}" title="删除该学习卡片">🗑️</button>` : ''}
+                                ${!geminiOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                            </div>
+                            <div class="compare-card-body">
+                                ${geminiContent}
+                            </div>
                         </div>
-                        ${geminiOk ? renderCompareContent(geminiResult) : `<div class="error-box">${escapeHtml(geminiResult.error)}</div>`}
+                        <div class="compare-column">
+                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
+                                <span class="model-icon">🏠</span>
+                                <span>LOCAL LLM</span>
+                                ${localBase && localFolder ? `<button class="compare-delete" data-folder="${localFolder}" data-base="${localBase}" title="删除该学习卡片">🗑️</button>` : ''}
+                                ${!localOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                            </div>
+                            <div class="compare-card-body">
+                                ${localContent}
+                            </div>
+                        </div>
                     </div>
+                </div>
 
-                    <!-- LOCAL Column -->
-                    <div class="compare-column">
-                        <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
-                            <span class="model-icon">🏠</span>
-                            <span>LOCAL LLM</span>
-                            ${!localOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                <div id="compareIntel" class="compare-pane" style="display:none;">
+                    <div class="compare-columns compare-intel-grid">
+                        <div class="compare-column">
+                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
+                                <span class="model-icon">🤖</span>
+                                <span>GEMINI</span>
+                                ${geminiBase && geminiFolder ? `<button class="compare-delete" data-folder="${geminiFolder}" data-base="${geminiBase}" title="删除该学习卡片">🗑️</button>` : ''}
+                            </div>
+                            ${geminiIntel}
                         </div>
-                        ${localOk ? renderCompareContent(localResult) : `<div class="error-box">${escapeHtml(localResult.error)}</div>`}
+                        <div class="compare-column">
+                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
+                                <span class="model-icon">🏠</span>
+                                <span>LOCAL LLM</span>
+                                ${localBase && localFolder ? `<button class="compare-delete" data-folder="${localFolder}" data-base="${localBase}" title="删除该学习卡片">🗑️</button>` : ''}
+                            </div>
+                            ${localIntel}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -635,8 +702,63 @@ function renderCompareModal(phrase, geminiResult, localResult, comparison) {
 
     els.modalContainer.innerHTML = html;
     document.getElementById('mcCloseBtn').onclick = closeModal;
+
+    const tabs = els.modalContainer.querySelectorAll('.compare-tabs .tab-btn');
+    tabs.forEach(btn => {
+        btn.onclick = () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            const targetId = btn.dataset.target;
+            const contentPane = els.modalContainer.querySelector('#compareContent');
+            const intelPane = els.modalContainer.querySelector('#compareIntel');
+            if (targetId === 'compareIntel') {
+                contentPane.style.display = 'none';
+                intelPane.style.display = 'block';
+                requestAnimationFrame(() => {
+                    renderIntelCharts(geminiResult?.observability || {}, 'gemini');
+                    renderIntelCharts(localResult?.observability || {}, 'local');
+                });
+            } else {
+                intelPane.style.display = 'none';
+                contentPane.style.display = 'block';
+            }
+        };
+    });
+
+    bindAudioButtons(els.modalContainer);
+    const deleteButtons = els.modalContainer.querySelectorAll('.compare-delete');
+    deleteButtons.forEach(btn => {
+        btn.onclick = async (e) => {
+            e.stopPropagation();
+            const folder = btn.dataset.folder;
+            const base = btn.dataset.base;
+            if (!folder || !base) return;
+            if (!confirm('确定删除该学习卡片及其相关文件吗？此操作不可恢复。')) return;
+            btn.disabled = true;
+            try {
+                await api.deleteRecordByFile(folder, base);
+                btn.textContent = 'DELETED';
+                const column = btn.closest('.compare-column');
+                if (column) {
+                    const body = column.querySelector('.compare-card-body');
+                    if (body) body.innerHTML = '<div class="empty-hint">已删除</div>';
+                    const intel = column.querySelector('.compare-intel-panel');
+                    if (intel) intel.innerHTML = '<div class="empty-hint">已删除</div>';
+                }
+                loadFolders({ targetSelect: folder, refreshFiles: true, noCache: true });
+            } catch (err) {
+                alert('Delete failed: ' + err.message);
+                btn.disabled = false;
+            }
+        };
+    });
+
     els.modalOverlay.classList.remove('hidden');
-    setTimeout(() => els.modalOverlay.classList.add('show'), 10);
+    setTimeout(() => {
+        els.modalOverlay.classList.add('show');
+        bindInfoButtons(els.modalContainer);
+        bindIntelViewers(els.modalContainer);
+    }, 10);
 }
 
 function renderCompareMetric(label, geminiVal, localVal, unit, lowerIsBetter) {
@@ -661,54 +783,8 @@ function renderCompareMetric(label, geminiVal, localVal, unit, lowerIsBetter) {
     `;
 }
 
-function renderCompareContent(result) {
-    const obs = result.observability || {};
-    const output = result.output || {};
-    const mdContent = output.markdown_content || 'N/A';
-
-    // 简化版 Markdown 渲染
-    const htmlContent = marked.parse(mdContent);
-    const safeHtml = sanitizeHtml(htmlContent);
-
-    return `
-        <div class="compare-content-section">
-            <div class="compare-section">
-                <div class="section-title">📝 Generated Content</div>
-                <div class="content-preview">
-                    ${safeHtml}
-                </div>
-            </div>
-
-            <div class="compare-section">
-                <div class="section-title">📊 Metrics</div>
-                <div class="metrics-mini">
-                    <div class="mini-metric">
-                        <span>Quality:</span>
-                        <span style="color: var(--neon-green); font-weight: 600;">${obs.quality?.score || 0}</span>
-                    </div>
-                    <div class="mini-metric">
-                        <span>Tokens:</span>
-                        <span>${obs.tokens?.total || 0}</span>
-                    </div>
-                    <div class="mini-metric">
-                        <span>Time:</span>
-                        <span>${obs.performance?.totalTime || 0}ms</span>
-                    </div>
-                    <div class="mini-metric">
-                        <span>Cost:</span>
-                        <span>$${(obs.cost?.total || 0).toFixed(6)}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="compare-section">
-                <div class="section-title">📋 Prompt</div>
-                <div class="prompt-preview">
-                    ${escapeHtml((obs.metadata?.promptText || obs.prompt?.full || obs.prompt?.text || '').substring(0, 300))}...
-                </div>
-            </div>
-        </div>
-    `;
+function renderCompareContent() {
+    return '';
 }
 
 // ==========================================
@@ -857,18 +933,188 @@ function initModal() {
     });
 }
 
+function renderMarkdownWithAudioButtons(markdown, options = {}) {
+    const folder = options.folder || '';
+    const html = marked.parse(markdown || '');
+    const processedHtml = html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src) => {
+        const folderAttr = folder ? ` data-folder="${folder}"` : '';
+        return `<button class="audio-btn" data-src="${src}"${folderAttr}>▶</button>`;
+    });
+    return sanitizeHtml(processedHtml);
+}
+
+function bindAudioButtons(container, defaultFolder = null) {
+    const fallback = defaultFolder || store.get('selectedFolder');
+    container.querySelectorAll('.audio-btn').forEach(btn => {
+        const src = btn.dataset.src;
+        const folder = btn.dataset.folder || fallback;
+        if (!src || !folder) return;
+        const url = `/api/folders/${encodeURIComponent(folder)}/files/${encodeURIComponent(src)}`;
+        btn.onclick = () => player.play(url, btn);
+    });
+}
+
+function buildIntelHud(metrics, options = {}) {
+    const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
+    const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'LOCAL').toUpperCase();
+    const modelLabel = options.modelLabel || metrics.metadata?.model || 'UNKNOWN';
+    const templateCompliance = metrics.quality?.templateCompliance ?? metrics.quality?.checks?.templateCompliance ?? 0;
+
+    const toText = (val) => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') return val;
+        try { return JSON.stringify(val, null, 2); } catch (e) { return String(val); }
+    };
+    const promptRawText = toText(metrics.metadata?.promptText);
+    const promptStructText = toText(metrics.metadata?.promptParsed);
+    const outputRawText = toText(metrics.metadata?.rawOutput);
+    let outputStructText = toText(metrics.metadata?.outputStructured);
+    if (!outputStructText && outputRawText) {
+        try { outputStructText = JSON.stringify(JSON.parse(outputRawText), null, 2); } catch (e) {}
+    }
+    const promptDefaultView = promptRawText ? 'raw' : 'structured';
+    const outputDefaultView = outputRawText ? 'raw' : 'structured';
+
+    const score = metrics.quality?.score || 0;
+    const rank = score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
+    const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+    const tokens = metrics.tokens || { input: 0, output: 0 };
+
+    return `
+        <div class="intel-hud-grid compare-intel-panel">
+            <div class="hud-card-score" style="border-left-color: ${rankColor};">
+                <div>
+                    <div class="intel-label">QUALITY GRADE ${createInfoBtn('QUALITY_GRADE')}</div>
+                    <div class="score-value-container">
+                        <div class="score-main" style="color: ${rankColor}; text-shadow: 0 0 20px ${rankColor}66;">${score}</div>
+                        <div class="score-rank">RANK ${rank}</div>
+                    </div>
+                </div>
+                <div class="score-meta">
+                    <div class="meta-row">
+                        <span class="meta-label">PROVIDER</span>
+                        <span class="meta-val" style="color: var(--neon-purple);">${providerLabel}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">MODEL</span>
+                        <span class="meta-val">${modelLabel}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">LATENCY</span>
+                        <span class="meta-val">${metrics.performance?.totalTime || 0}ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hud-card">
+                <div class="hud-title">
+                    <span>DIMENSIONS ${createInfoBtn('DIMENSIONS')}</span>
+                    <span style="color: var(--neon-green);">4-AXIS</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+                    ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)', '完整性 - 内容结构完整度')}
+                    ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)', '准确性 - 翻译和定义准确度')}
+                    ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)', '例句质量 - 例句自然度和多样性')}
+                    ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)', '格式化 - HTML 和音频标签正确性')}
+                </div>
+            </div>
+
+            <div class="hud-card">
+                <div class="hud-title">
+                    <span>GENERATION CONFIG ${createInfoBtn('GENERATION_CONFIG')}</span>
+                    <span style="color: var(--neon-amber);">PARAMS</span>
+                </div>
+                <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Template:</span><span>${templateCompliance}</span></div>
+                </div>
+            </div>
+
+            <div class="hud-card">
+                <div class="hud-title">
+                    <span>CHRONO SEQUENCE ${createInfoBtn('CHRONO_SEQUENCE')}</span>
+                    <span style="color: var(--neon-blue);">T-MINUS</span>
+                </div>
+                <div id="hudTimeline${idSuffix}" class="chart-box"></div>
+            </div>
+
+            <div class="hud-card">
+                <div class="hud-title">
+                    <span>TOKEN FLUX ${createInfoBtn('TOKEN_FLUX')}</span>
+                    <span style="color: var(--neon-purple);">USAGE</span>
+                </div>
+                <div id="hudTokens${idSuffix}" class="chart-box"></div>
+                <div class="token-stat-row">
+                    <span class="tooltip-inline">IN: ${tokens.input}</span>
+                    <span class="tooltip-inline">OUT: ${tokens.output}</span>
+                </div>
+                <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
+            </div>
+
+            <div class="hud-card hud-card-wide">
+                <div class="hud-title">
+                    <span>DIMENSIONAL SCAN ${createInfoBtn('DIMENSIONAL_SCAN')}</span>
+                    <span style="color: var(--neon-green);">RADAR</span>
+                </div>
+                <div id="hudRadar${idSuffix}" class="chart-box" style="height: 200px;"></div>
+            </div>
+
+            <div class="hud-card hud-card-wide">
+                <div class="hud-title">
+                    <span>📄 PROMPT TEXT ${createInfoBtn('PROMPT_TEXT')}</span>
+                    <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
+                </div>
+                <div class="intel-viewer" data-viewer="prompt">
+                    <div class="viewer-tabs">
+                        <button class="viewer-tab ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
+                        <button class="viewer-tab ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
+                        <button class="viewer-copy" type="button">COPY</button>
+                    </div>
+                    <div class="viewer-body">
+                        <pre class="viewer-panel ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(promptRawText || 'N/A')}</pre>
+                        <pre class="viewer-panel ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(promptStructText || 'N/A')}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hud-card hud-card-wide">
+                <div class="hud-title">
+                    <span>📤 LLM OUTPUT ${createInfoBtn('LLM_OUTPUT')}</span>
+                    <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
+                </div>
+                <div class="intel-viewer" data-viewer="output">
+                    <div class="viewer-tabs">
+                        <button class="viewer-tab ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
+                        <button class="viewer-tab ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
+                        <button class="viewer-copy" type="button">COPY</button>
+                    </div>
+                    <div class="viewer-body">
+                        <pre class="viewer-panel ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(outputRawText || 'N/A')}</pre>
+                        <pre class="viewer-panel ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(outputStructText || 'N/A')}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
+                <div class="hud-title">
+                    <span>EXPORT ${createInfoBtn('EXPORT_DATA')}</span>
+                    <span style="color: var(--neon-amber);">DATA</span>
+                </div>
+                <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
+                <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
+            </div>
+        </div>
+    `;
+}
+
 function renderCardModal(markdown, title, options = {}) {
     let displayTitle = title;
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
 
-    const html = marked.parse(markdown);
-    // 处理音频标签
-    const processedHtml = html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src, post) => {
-        return `<button class="audio-btn" data-src="${src}">▶</button>`;
-    });
-
-    const safeHtml = sanitizeHtml(processedHtml);
+    const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder: options.folder || store.get('selectedFolder') });
 
     // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
     let rawMetrics = options.metrics || null;
@@ -1159,14 +1405,7 @@ function renderCardModal(markdown, title, options = {}) {
     });
 
     // 绑定音频按钮
-    const folder = store.get('selectedFolder');
-    els.modalContainer.querySelectorAll('.audio-btn').forEach(btn => {
-        const src = btn.dataset.src;
-        if (src) {
-            const url = `/api/folders/${encodeURIComponent(folder)}/files/${encodeURIComponent(src)}`;
-            btn.onclick = () => player.play(url, btn);
-        }
-    });
+    bindAudioButtons(els.modalContainer, options.folder || store.get('selectedFolder'));
 
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => {
@@ -1277,16 +1516,21 @@ window.exportMetrics = function(format) {
 };
 
 // 渲染 Intel 面板图表
-function renderIntelCharts(metrics) {
+function renderIntelCharts(metrics, suffix = '') {
     if (!window.d3) return; 
+    const idSuffix = suffix ? `-${suffix}` : '';
 
     // 1. Timeline
     {
-        const container = document.getElementById('hudTimeline');
+        const container = document.getElementById(`hudTimeline${idSuffix}`);
+        if (!container) return;
         container.innerHTML = '';
         const width = container.clientWidth;
         const height = container.clientHeight;
-        const phases = metrics.performance?.phases || {};
+        let phases = metrics.performance?.phases || {};
+        if (typeof phases === 'string') {
+            try { phases = JSON.parse(phases || '{}'); } catch (e) { phases = {}; }
+        }
         const data = [
             { label: "PROMPT", start: 0, dur: phases.promptBuild || 10, color: "#3b82f6" },
             { label: "LLM", start: phases.promptBuild || 10, dur: phases.llmCall || 100, color: "#a855f7" },
@@ -1324,7 +1568,8 @@ function renderIntelCharts(metrics) {
 
     // 2. Token Flux
     {
-        const container = document.getElementById('hudTokens');
+        const container = document.getElementById(`hudTokens${idSuffix}`);
+        if (!container) return;
         container.innerHTML = '';
         const width = container.clientWidth;
         const height = container.clientHeight;
@@ -1366,7 +1611,8 @@ function renderIntelCharts(metrics) {
 
     // 3. Radar
     {
-        const container = document.getElementById('hudRadar');
+        const container = document.getElementById(`hudRadar${idSuffix}`);
+        if (!container) return;
         container.innerHTML = '';
         const width = container.clientWidth;
         const height = container.clientHeight;

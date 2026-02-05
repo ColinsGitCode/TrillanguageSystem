@@ -162,11 +162,12 @@ async function generateWithProvider(phrase, provider, perf) {
               : (useGeminiProxy ? (process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
             : process.env.LLM_MODEL,
         promptText: prompt,  // 在 metadata 中也保存一份
+        promptParsed: promptData,
         outputMode: useMarkdownOutput ? 'markdown' : 'json',
         rawOutput: useMarkdownOutput
           ? (response.rawOutput || content?.markdown_content || '')
           : JSON.stringify(content, null, 2),
-        outputStructured: useMarkdownOutput ? JSON.stringify(content, null, 2) : undefined
+        outputStructured: JSON.stringify(content, null, 2)
       }
     }
   };
@@ -190,44 +191,129 @@ async function handleComparisonMode(phrase) {
     generateWithProvider(phrase, 'local', perfLocal)
   ]);
 
-  if (geminiResult.status === 'fulfilled') {
-    const perfData = perfGemini.end();
-    const promptData = geminiResult.value.prompt;
-    results.gemini = {
-      success: true,
-      output: geminiResult.value.output,
-      observability: {
-        ...geminiResult.value.observability,
-        performance: perfData,
-        metadata: {
-          ...geminiResult.value.observability.metadata,
-          promptText: promptData,
-          rawOutput: JSON.stringify(geminiResult.value.output, null, 2)
-        }
-      }
+  const createInputCard = async (baseInfo) => {
+    if (!baseInfo) return null;
+    const inputBaseName = `${baseInfo.baseName}_input`;
+    const inputMarkdown = `# ${phrase}\n\n## 原始输入\n- ${phrase}\n\n> 模式: 双模型对比`;
+    const htmlContent = await renderHtmlFromMarkdown(inputMarkdown, { baseName: inputBaseName, audioTasks: [] });
+    const content = {
+      markdown_content: inputMarkdown,
+      html_content: htmlContent,
+      audio_tasks: []
     };
+    try {
+      return saveGeneratedFiles(`【输入】${phrase}`, content, {
+        baseName: inputBaseName,
+        targetDir: baseInfo.targetDir,
+        folderName: baseInfo.folderName
+      });
+    } catch (err) {
+      console.warn('[Comparison] Input card save failed:', err.message);
+      return null;
+    }
+  };
+
+  const finalizeSide = async (label, genValue, perf) => {
+    const { output: content, prompt, observability, baseName, targetDir, folderName } = genValue;
+
+    postProcessGeneratedContent(content);
+    const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true });
+    if (validationErrors.length) {
+      throw new Error(`Validation failed: ${validationErrors.join('; ')}`);
+    }
+
+    const derivedAudioTasks = buildAudioTasksFromMarkdown(content.markdown_content);
+    if (!Array.isArray(content.audio_tasks) || !content.audio_tasks.length) {
+      content.audio_tasks = derivedAudioTasks;
+    }
+
+    const compareBaseName = `${baseName}_${label}`;
+    const preparedMarkdown = await prepareMarkdownForCard(content.markdown_content, { baseName: compareBaseName, audioTasks: content.audio_tasks });
+    content.markdown_content = preparedMarkdown;
+    content.html_content = await renderHtmlFromMarkdown(preparedMarkdown, { baseName: compareBaseName, audioTasks: content.audio_tasks });
+
+    perf.mark('fileSave');
+    let fileResult = null;
+    try {
+      fileResult = saveGeneratedFiles(phrase, content, { baseName: compareBaseName, targetDir, folderName });
+    } catch (e) {
+      console.error(`[Comparison] Save failed (${label}):`, e.message);
+    }
+
+    let audio = null;
+    const hasTtsEndpoint = process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT;
+    if (hasTtsEndpoint && content.audio_tasks.length && fileResult) {
+      const audioTasks = normalizeAudioTasks(content.audio_tasks, fileResult.baseName);
+      audio = await generateAudioBatch(audioTasks, { outputDir: fileResult.targetDir, baseName: fileResult.baseName, extension: 'wav' });
+    }
+
+    perf.mark('audioGenerate');
+    observability.performance = perf.end();
+    const outputStructured = observability.metadata?.outputMode === 'markdown'
+      ? JSON.stringify(content, null, 2)
+      : (observability.metadata?.outputStructured || JSON.stringify(content, null, 2));
+    observability.metadata = {
+      ...(observability.metadata || {}),
+      promptText: prompt,
+      outputStructured
+    };
+
+    if (fileResult) {
+      try {
+        const dbData = prepareInsertData({
+          phrase,
+          provider: label,
+          model: observability.metadata?.model || label,
+          folderName,
+          baseName: fileResult.baseName,
+          filePaths: fileResult.absPaths,
+          content,
+          observability,
+          prompt,
+          audioTasks: content.audio_tasks
+        });
+        dbService.insertGeneration(dbData);
+      } catch (dbErr) {
+        console.error('[Database] Compare insert failed:', dbErr.message);
+      }
+    }
+
+    return { output: content, observability, result: fileResult, audio };
+  };
+
+  if (geminiResult.status === 'fulfilled') {
+    try {
+      const finalized = await finalizeSide('gemini', geminiResult.value, perfGemini);
+      results.gemini = { success: true, ...finalized };
+    } catch (err) {
+      results.gemini = { success: false, error: err.message };
+    }
   } else {
     results.gemini = { success: false, error: geminiResult.reason.message };
   }
 
   if (localResult.status === 'fulfilled') {
-    const perfData = perfLocal.end();
-    const promptData = localResult.value.prompt;
-    results.local = {
-      success: true,
-      output: localResult.value.output,
-      observability: {
-        ...localResult.value.observability,
-        performance: perfData,
-        metadata: {
-          ...localResult.value.observability.metadata,
-          promptText: promptData,
-          rawOutput: JSON.stringify(localResult.value.output, null, 2)
-        }
-      }
-    };
+    try {
+      const finalized = await finalizeSide('local', localResult.value, perfLocal);
+      results.local = { success: true, ...finalized };
+    } catch (err) {
+      results.local = { success: false, error: err.message };
+    }
   } else {
     results.local = { success: false, error: localResult.reason.message };
+  }
+
+  // Create an input card for comparison mode
+  try {
+    const baseInfo = geminiResult.status === 'fulfilled'
+      ? geminiResult.value
+      : (localResult.status === 'fulfilled' ? localResult.value : null);
+    if (baseInfo) {
+      const inputCard = await createInputCard(baseInfo);
+      if (inputCard) results.input = { success: true, result: inputCard };
+    }
+  } catch (err) {
+    console.warn('[Comparison] Input card generation failed:', err.message);
   }
 
   // Comparison Logic

@@ -1,7 +1,7 @@
 # 🔧 后端架构文档
 
 **项目**: Trilingual Records
-**版本**: 2.3
+**版本**: 2.4
 **更新日期**: 2026-02-05
 
 ---
@@ -156,8 +156,9 @@ VOICEVOX_SPEAKER=2
 
 - 默认使用本地 LLM；Gemini 仅在配置时启用。
 - Gemini 推荐模式：Host Proxy（宿主机 Gemini CLI 认证与调用，容器仅发起 HTTP 请求）。
-- 支持 `enable_compare` 参数进行双模型对比（API 级别，不在 UI 暴露）。
+- 支持 `enable_compare` 双模型对比（UI 已暴露入口，生成 gemini/local + 输入卡片）。
 - `/api/statistics` 返回完整趋势/配额/错误统计，用于大盘展示。
+- 可观测性 metadata 统一提供 `promptParsed` / `rawOutput` / `outputStructured`，保证 INTEL 页面可切换 RAW/STRUCT。
 
 ---
 

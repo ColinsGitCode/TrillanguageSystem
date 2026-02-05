@@ -1508,10 +1508,12 @@ h1 {
 
 /* 对比模态框 */
 .compare-modal {
-  max-width: 95vw !important;
-  width: 1400px !important;
-  max-height: 90vh;
-  overflow-y: auto;
+  max-width: 98vw !important;
+  width: min(2016px, 98vw) !important;
+  height: 96vh;
+  max-height: 98vh;
+  overflow: hidden;
+  font-size: 0.9rem;
 }
 
 .compare-summary {
@@ -1593,7 +1595,7 @@ h1 {
 }
 
 .compare-column-header {
-  padding: 16px;
+  padding: 16px 52px 16px 16px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
   font-weight: 700;
@@ -1602,16 +1604,120 @@ h1 {
   justify-content: center;
   gap: 8px;
   letter-spacing: 0.1em;
+  position: relative;
 }
 
-.compare-content-section {
-  padding: 16px;
-  max-height: 600px;
+.compare-body {
+  padding: 20px;
+  height: calc(96vh - 160px);
+  overflow: hidden;
+}
+
+.compare-pane {
+  height: 100%;
+}
+
+.compare-card-body {
+  padding: 16px 18px;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  max-height: 68vh;
   overflow-y: auto;
+}
+
+.compare-content-grid .compare-column {
+  background: #fff;
+}
+
+.compare-intel-grid .compare-column {
+  background: #fff;
+}
+
+.compare-intel-panel {
+  padding: 16px;
+  font-size: 0.88rem;
+}
+
+.compare-modal .mc-phrase {
+  font-size: 1.7rem;
+}
+
+.compare-modal .intel-hud-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  font-size: 0.85rem;
+}
+
+.compare-modal .hud-card-score {
+  grid-column: span 2;
+  min-height: 100px;
+  padding: 16px 18px;
+}
+
+.compare-modal .score-main {
+  font-size: 36px;
+}
+
+.compare-modal .score-rank {
+  font-size: 16px;
+}
+
+.compare-modal .hud-title {
+  font-size: 11px;
+}
+
+.compare-modal .hud-card {
+  padding: 12px;
+}
+
+.compare-modal .hud-card-wide {
+  grid-column: span 2;
 }
 
 .compare-section {
   margin-bottom: 20px;
+}
+
+.compare-delete {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.compare-delete:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.compare-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.raw-fallback {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  background: #0b1220;
+  color: #e5e7eb;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .section-title {
