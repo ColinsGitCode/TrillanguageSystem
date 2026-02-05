@@ -118,8 +118,14 @@ async function generateWithProvider(phrase, provider, perf) {
       tokens: usage,
       cost,
       quality,
-      prompt: promptData,
-      metadata: { provider, timestamp: Date.now() }
+      prompt: promptData,  // 已包含 full 字段
+      metadata: {
+        provider,
+        timestamp: Date.now(),
+        model: provider === 'gemini' ? process.env.GEMINI_MODEL : process.env.LLM_MODEL,
+        promptText: prompt,  // 在 metadata 中也保存一份
+        rawOutput: JSON.stringify(content, null, 2)
+      }
     }
   };
 }
@@ -144,10 +150,19 @@ async function handleComparisonMode(phrase) {
 
   if (geminiResult.status === 'fulfilled') {
     const perfData = perfGemini.end();
+    const promptData = geminiResult.value.prompt;
     results.gemini = {
       success: true,
       output: geminiResult.value.output,
-      observability: { ...geminiResult.value.observability, performance: perfData }
+      observability: {
+        ...geminiResult.value.observability,
+        performance: perfData,
+        metadata: {
+          ...geminiResult.value.observability.metadata,
+          promptText: promptData,
+          rawOutput: JSON.stringify(geminiResult.value.output, null, 2)
+        }
+      }
     };
   } else {
     results.gemini = { success: false, error: geminiResult.reason.message };
@@ -155,10 +170,19 @@ async function handleComparisonMode(phrase) {
 
   if (localResult.status === 'fulfilled') {
     const perfData = perfLocal.end();
+    const promptData = localResult.value.prompt;
     results.local = {
       success: true,
       output: localResult.value.output,
-      observability: { ...localResult.value.observability, performance: perfData }
+      observability: {
+        ...localResult.value.observability,
+        performance: perfData,
+        metadata: {
+          ...localResult.value.observability.metadata,
+          promptText: promptData,
+          rawOutput: JSON.stringify(localResult.value.output, null, 2)
+        }
+      }
     };
   } else {
     results.local = { success: false, error: localResult.reason.message };
@@ -177,6 +201,11 @@ async function handleComparisonMode(phrase) {
     if (geminiScore > localScore + 5) winner = 'gemini';
     if (localScore > geminiScore + 5) winner = 'local';
 
+    // 提示词差异分析（简单的长度比较）
+    const geminiPromptLen = geminiObs.prompt?.text?.length || 0;
+    const localPromptLen = localObs.prompt?.text?.length || 0;
+    const promptSimilarity = Math.abs(geminiPromptLen - localPromptLen) < 100 ? 'identical' : 'different';
+
     results.comparison = {
       metrics: {
         speed: { gemini: geminiObs.performance.totalTime, local: localObs.performance.totalTime },
@@ -188,8 +217,13 @@ async function handleComparisonMode(phrase) {
         }
       },
       winner,
-      recommendation: winner === 'gemini' ? 'Gemini wins on speed/quality balance.' : 
-                      winner === 'local' ? 'Local LLM wins on speed/quality balance.' : 'Tie.'
+      recommendation: winner === 'gemini' ? 'Gemini wins on speed/quality balance.' :
+                      winner === 'local' ? 'Local LLM wins on speed/quality balance.' : 'Tie.',
+      promptComparison: {
+        similarity: promptSimilarity,
+        geminiLength: geminiPromptLen,
+        localLength: localPromptLen
+      }
     };
   }
 

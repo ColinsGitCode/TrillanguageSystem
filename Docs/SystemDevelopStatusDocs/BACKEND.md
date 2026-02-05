@@ -1151,3 +1151,190 @@ return {
 - ✅ Prompt Engineering 优化
 - ✅ 本地 LLM 作为备选
 
+### 2026-02-05 - v2.2: Model Comparison System
+
+**核心功能**
+- ✅ 双模型并行对比（Gemini vs Local LLM）
+- ✅ 三种生成模式切换（LOCAL / GEMINI / COMPARE）
+- ✅ 智能 Winner 判定算法
+- ✅ 4 维度指标对比可视化
+
+**后端增强**
+
+**1. 对比模式处理 (`handleComparisonMode`)**
+```javascript
+async function handleComparisonMode(phrase) {
+  // 并行调用双模型
+  const [geminiResult, localResult] = await Promise.allSettled([
+    generateWithProvider(phrase, 'gemini', perfGemini),
+    generateWithProvider(phrase, 'local', perfLocal)
+  ]);
+
+  // 对比分析
+  const comparison = {
+    metrics: {
+      speed: { gemini, local },
+      quality: { gemini, local },
+      tokens: { gemini, local },
+      cost: { gemini, local }
+    },
+    winner: calculateWinner(geminiScore, localScore),
+    recommendation: generateRecommendation(winner),
+    promptComparison: {
+      similarity: analyzePromptSimilarity(geminiPrompt, localPrompt),
+      geminiLength, localLength
+    }
+  };
+}
+```
+
+**特性**:
+- 容错设计：一个模型失败不影响另一个
+- 完整 observability 数据包含 prompt 文本
+- Prompt 相似度分析
+
+**2. 评分算法**
+```javascript
+// Winner 判定
+score = quality * 0.7 + speedScore * 0.3
+winner = abs(scoreA - scoreB) > 5 ? higherScore : 'tie'
+```
+
+**权重分配**:
+- 70% - 质量评分 (0-100)
+- 30% - 速度归一化分数
+- 判定阈值：5 分
+
+**3. API 扩展**
+
+**请求参数**:
+```json
+{
+  "phrase": "hello world",
+  "llm_provider": "local",
+  "enable_compare": true  // 新增参数
+}
+```
+
+**响应结构**:
+```json
+{
+  "phrase": "hello world",
+  "gemini": {
+    "success": true,
+    "output": { "markdown_content": "...", "audio_tasks": [...] },
+    "observability": {
+      "tokens": { "input": 450, "output": 820, "total": 1270 },
+      "cost": { "total": 0 },
+      "quality": { "score": 95 },
+      "performance": { "totalTime": 1234 },
+      "prompt": { "text": "...", "full": "..." },
+      "metadata": {
+        "provider": "gemini",
+        "model": "gemini-1.5-flash",
+        "promptText": "...",
+        "rawOutput": "..."
+      }
+    }
+  },
+  "local": { /* 同上结构 */ },
+  "comparison": {
+    "metrics": {
+      "speed": { "gemini": 1234, "local": 2456 },
+      "quality": { "gemini": 95, "local": 88 },
+      "tokens": { "gemini": 1270, "local": 1450 },
+      "cost": { "gemini": 0, "local": 0 }
+    },
+    "winner": "gemini",
+    "recommendation": "Gemini wins on speed/quality balance.",
+    "promptComparison": {
+      "similarity": "identical",
+      "geminiLength": 1095,
+      "localLength": 1095
+    }
+  }
+}
+```
+
+**4. Observability 数据增强**
+
+新增字段：
+- `prompt.text` - 完整 prompt 文本
+- `metadata.promptText` - 元数据中的 prompt 副本
+- `metadata.rawOutput` - LLM 原始输出 JSON
+- `metadata.model` - 模型名称
+
+**前端集成**
+
+**UI 组件**:
+- 模型选择器（3 按钮：LOCAL / GEMINI / COMPARE）
+- 对比弹窗（双列布局）
+- Winner Badge（自动判定）
+- 指标对比卡片
+
+**状态管理**:
+```javascript
+// store.js
+state = {
+  modelMode: 'local' | 'gemini' | 'compare',
+  llmProvider: 'local' | 'gemini',
+  isGenerating: boolean
+}
+```
+
+**性能优化**
+
+**并行处理**:
+- 使用 `Promise.allSettled` 并行调用
+- 总耗时 ≈ max(geminiTime, localTime)
+- 相比顺序调用节省 ~50% 时间
+
+**容错设计**:
+- 一个模型失败不影响另一个
+- 部分成功时仍返回可用数据
+- 完整的错误信息传递
+
+**安全性**
+
+**速率限制**:
+- 对比模式沿用现有 4 秒/次限制
+- 单次请求计费 1 次（虽然调用 2 个模型）
+
+**文件修改**
+- `server.js`: +85 行（对比逻辑增强）
+- `services/observabilityService.js`: 修改数据结构
+- 总计：+85 行后端代码
+
+**配置要求**
+
+启用 Gemini 对比需要：
+```bash
+GEMINI_API_KEY=your_api_key
+GEMINI_MODEL=gemini-1.5-flash-latest
+```
+
+本地 LLM（默认启用）：
+```bash
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen2.5:7b
+```
+
+**相关文档**
+- [完整功能文档](../../docs/MODEL_COMPARISON_FEATURE.md)
+- [快速上手指南](../../docs/QUICK_START_COMPARISON.md)
+- [版本更新说明](../../docs/FEATURE_UPDATE_v2.1.md)
+
+---
+
+**架构改进总结**
+
+本次更新保持了向后兼容性，所有现有功能不受影响。新增的对比模式是完全可选的功能，通过 `enable_compare` 参数控制。
+
+核心设计原则：
+1. **模块化** - 对比逻辑独立于单模型生成
+2. **容错性** - 部分失败不影响整体
+3. **可观测** - 完整的指标收集和对比
+4. **性能优先** - 并行处理最小化耗时
+
+---
+

@@ -40,11 +40,15 @@ class ApiService {
         return res.text(); // Return text (Markdown/HTML)
     }
 
-    async generate(phrase, provider) {
+    async generate(phrase, provider, enableCompare = false) {
         return this.fetchJson('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phrase, llm_provider: provider })
+            body: JSON.stringify({
+                phrase,
+                llm_provider: provider,
+                enable_compare: enableCompare
+            })
         });
     }
 

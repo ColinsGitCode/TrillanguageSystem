@@ -59,13 +59,14 @@ let timerStartTime = null;
 function init() {
     initTabs();
     initImageHandlers();
+    initModelSelector();
     initGenerator();
     initModal();
     initHistory();
     ensureFileListState();
     // 加载初始数据
     loadFolders();
-    
+
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
 }
@@ -247,6 +248,39 @@ async function selectFile(file, title) {
 }
 
 // ==========================================
+// 模型选择器
+// ==========================================
+
+function initModelSelector() {
+    const buttons = document.querySelectorAll('.model-btn');
+    const hint = document.getElementById('modelHint');
+
+    // 初始化选中状态
+    const currentMode = store.get('modelMode');
+    updateModelUI(currentMode);
+
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+            store.setState({ modelMode: mode });
+            updateModelUI(mode);
+        });
+    });
+
+    function updateModelUI(mode) {
+        buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+        const hints = {
+            local: 'LOCAL LLM (Qwen)',
+            gemini: 'GEMINI API',
+            compare: '双模型对比 ⚡'
+        };
+        hint.textContent = hints[mode] || 'LOCAL LLM';
+        hint.className = 'selector-hint mode-' + mode;
+    }
+}
+
+// ==========================================
 // 生成器逻辑 (Optimized)
 // ==========================================
 
@@ -255,6 +289,9 @@ function initGenerator() {
         const phrase = els.phraseInput.value.trim();
         if (!phrase) return;
 
+        const mode = store.get('modelMode');
+        const isCompare = mode === 'compare';
+
         store.setState({ isGenerating: true });
         updateGenUI(true);
         startProgress(phrase);
@@ -262,14 +299,24 @@ function initGenerator() {
         try {
             updateStep('init', '初始化...');
             await new Promise(r => setTimeout(r, 100));
-            
+
             updateStep('prompt', '构建优化 Prompt...');
-            updateStep('llm', 'AI 思考中...');
-            
-            const data = await api.generate(phrase, store.get('llmProvider'));
-            
+            updateStep('llm', isCompare ? '双模型并行生成中...' : 'AI 思考中...');
+
+            const provider = mode === 'gemini' ? 'gemini' : 'local';
+            const data = await api.generate(phrase, provider, isCompare);
+
+            // 对比模式处理
+            if (isCompare) {
+                handleCompareResult(data);
+                updateStep('complete', '对比完成!', false);
+                setTimeout(hideProgress, 3000);
+                return;
+            }
+
+            // 单模式处理
             updateStep('parse', '解析结果...');
-            
+
             // 保存可观测性数据
             if (data.observability) {
                 localStorage.setItem('latest_observability', JSON.stringify(data.observability));
@@ -277,19 +324,19 @@ function initGenerator() {
 
             updateStep('render', '渲染 HTML...');
             updateStep('save', '保存文件...');
-            
+
             if (data.audio?.results?.length) {
                 updateStep('audio', '生成 TTS 音频...');
             }
 
             updateStep('complete', '完成!', false);
-            
+
             els.phraseInput.value = '';
             clearImage();
-            
+
             // 自动跳转到新结果并刷新
             await loadFolders({ targetSelect: data.result.folder, noCache: true });
-            
+
             setTimeout(hideProgress, 3000);
 
         } catch (err) {
@@ -308,6 +355,172 @@ function updateGenUI(isGenerating) {
     els.genBtn.disabled = isGenerating;
     els.genBtn.textContent = isGenerating ? 'Generating...' : 'Generate';
     els.ocrBtn.disabled = isGenerating || !store.get('imageBase64');
+}
+
+// ==========================================
+// 对比模式处理
+// ==========================================
+
+function handleCompareResult(data) {
+    console.log('[Compare] Result:', data);
+
+    const { phrase, gemini, local, comparison } = data;
+
+    // 构建对比弹窗
+    renderCompareModal(phrase, gemini, local, comparison);
+
+    // 清空输入
+    els.phraseInput.value = '';
+    clearImage();
+}
+
+function renderCompareModal(phrase, geminiResult, localResult, comparison) {
+    const geminiOk = geminiResult?.success;
+    const localOk = localResult?.success;
+
+    let comparisonSection = '';
+    if (comparison) {
+        const winner = comparison.winner;
+        const metrics = comparison.metrics;
+
+        comparisonSection = `
+            <div class="compare-summary">
+                <h3 style="color: var(--neon-green); margin-bottom: 16px;">📊 对比分析</h3>
+                <div class="winner-badge" style="background: ${winner === 'gemini' ? 'var(--neon-blue)' : winner === 'local' ? 'var(--neon-purple)' : 'var(--neon-amber)'}; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 16px;">
+                    <div style="font-size: 14px; opacity: 0.9;">🏆 Winner</div>
+                    <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono';">${winner.toUpperCase()}</div>
+                    <div style="font-size: 12px; margin-top: 4px; opacity: 0.8;">${comparison.recommendation}</div>
+                </div>
+
+                <div class="compare-metrics-grid">
+                    ${renderCompareMetric('⚡ Speed', metrics.speed.gemini, metrics.speed.local, 'ms', true)}
+                    ${renderCompareMetric('✨ Quality', metrics.quality.gemini, metrics.quality.local, '', false)}
+                    ${renderCompareMetric('🔢 Tokens', metrics.tokens.gemini, metrics.tokens.local, '', false)}
+                    ${renderCompareMetric('💰 Cost', metrics.cost.gemini.toFixed(6), metrics.cost.local.toFixed(6), '$', true)}
+                </div>
+            </div>
+        `;
+    }
+
+    const html = `
+        <div class="modern-card glass-panel compare-modal">
+            <button class="mc-close" id="mcCloseBtn">×</button>
+
+            <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
+                <div style="flex:1;">
+                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);">${escapeHtml(phrase)}</h1>
+                    <div class="mc-meta font-mono" style="color: var(--neon-purple);">
+                        <span>MODEL COMPARISON</span>
+                        <span>::</span>
+                        <span>DUAL OUTPUT</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mc-body" style="padding: 24px;">
+                ${comparisonSection}
+
+                <div class="compare-columns">
+                    <!-- GEMINI Column -->
+                    <div class="compare-column">
+                        <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
+                            <span class="model-icon">🤖</span>
+                            <span>GEMINI</span>
+                            ${!geminiOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                        </div>
+                        ${geminiOk ? renderCompareContent(geminiResult) : `<div class="error-box">${escapeHtml(geminiResult.error)}</div>`}
+                    </div>
+
+                    <!-- LOCAL Column -->
+                    <div class="compare-column">
+                        <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
+                            <span class="model-icon">🏠</span>
+                            <span>LOCAL LLM</span>
+                            ${!localOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
+                        </div>
+                        ${localOk ? renderCompareContent(localResult) : `<div class="error-box">${escapeHtml(localResult.error)}</div>`}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    els.modalContainer.innerHTML = html;
+    document.getElementById('mcCloseBtn').onclick = closeModal;
+    els.modalOverlay.classList.remove('hidden');
+    setTimeout(() => els.modalOverlay.classList.add('show'), 10);
+}
+
+function renderCompareMetric(label, geminiVal, localVal, unit, lowerIsBetter) {
+    const geminiNum = Number(geminiVal);
+    const localNum = Number(localVal);
+    const geminiWins = lowerIsBetter ? geminiNum < localNum : geminiNum > localNum;
+    const localWins = lowerIsBetter ? localNum < geminiNum : localNum > geminiNum;
+
+    return `
+        <div class="metric-row">
+            <div class="metric-label">${label}</div>
+            <div class="metric-values">
+                <div class="metric-val ${geminiWins ? 'winner' : ''}" style="color: var(--neon-blue);">
+                    ${geminiWins ? '🏆 ' : ''}${geminiVal}${unit}
+                </div>
+                <div class="vs-divider">vs</div>
+                <div class="metric-val ${localWins ? 'winner' : ''}" style="color: var(--neon-green);">
+                    ${localWins ? '🏆 ' : ''}${localVal}${unit}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderCompareContent(result) {
+    const obs = result.observability || {};
+    const output = result.output || {};
+    const mdContent = output.markdown_content || 'N/A';
+
+    // 简化版 Markdown 渲染
+    const htmlContent = marked.parse(mdContent);
+    const safeHtml = sanitizeHtml(htmlContent);
+
+    return `
+        <div class="compare-content-section">
+            <div class="compare-section">
+                <div class="section-title">📝 Generated Content</div>
+                <div class="content-preview">
+                    ${safeHtml}
+                </div>
+            </div>
+
+            <div class="compare-section">
+                <div class="section-title">📊 Metrics</div>
+                <div class="metrics-mini">
+                    <div class="mini-metric">
+                        <span>Quality:</span>
+                        <span style="color: var(--neon-green); font-weight: 600;">${obs.quality?.score || 0}</span>
+                    </div>
+                    <div class="mini-metric">
+                        <span>Tokens:</span>
+                        <span>${obs.tokens?.total || 0}</span>
+                    </div>
+                    <div class="mini-metric">
+                        <span>Time:</span>
+                        <span>${obs.performance?.totalTime || 0}ms</span>
+                    </div>
+                    <div class="mini-metric">
+                        <span>Cost:</span>
+                        <span>$${(obs.cost?.total || 0).toFixed(6)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="compare-section">
+                <div class="section-title">📋 Prompt</div>
+                <div class="prompt-preview">
+                    ${escapeHtml((obs.metadata?.promptText || obs.prompt?.full || obs.prompt?.text || '').substring(0, 300))}...
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // ==========================================

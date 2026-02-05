@@ -14,7 +14,9 @@ class Store {
             imageBase64: null,
             isGenerating: false,
             llmProvider: localStorage.getItem('llm_provider') || 'local',
-            
+            compareMode: localStorage.getItem('compare_mode') === 'true' || false,
+            modelMode: localStorage.getItem('model_mode') || 'local', // 'local', 'gemini', 'compare'
+
             // 历史记录相关
             history: {
                 records: [],
@@ -52,6 +54,14 @@ class Store {
                 this.state[key] = partialState[key];
             }
         });
+
+        // 持久化关键状态到 localStorage
+        if ('modelMode' in partialState) {
+            localStorage.setItem('model_mode', partialState.modelMode);
+        }
+        if ('llmProvider' in partialState) {
+            localStorage.setItem('llm_provider', partialState.llmProvider);
+        }
 
         // 触发订阅
         this.listeners.forEach((callback, key) => {
