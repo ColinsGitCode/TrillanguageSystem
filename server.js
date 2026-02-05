@@ -546,14 +546,8 @@ app.get('/api/records/by-file', (req, res) => {
         if (!record) {
             return res.status(404).json({ error: 'Record not found' });
         }
-
-        res.json({
-            record: {
-                id: record.id,
-                folder_name: record.folder_name,
-                base_filename: record.base_filename
-            }
-        });
+        const fullRecord = dbService.getGenerationById(record.id);
+        res.json({ record: fullRecord || record });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
