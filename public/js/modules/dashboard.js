@@ -1,60 +1,31 @@
 /**
- * Mission Control Dashboard Logic (Enhanced)
- * Theme: Sci-Fi / Observability
- * Version: 2.0 with Full Analytics
+ * Mission Control Dashboard (Overview)
  */
-import { formatTime, formatDate } from './utils.js';
-
-// D3 is loaded globally via script tag
-
-let currentTrendPeriod = '30d';
-let latestPhraseForFeed = null;
-
-// 中文指标说明映射
-const METRIC_TOOLTIPS = {
-    quota: 'API 配额使用情况 - 每月限额 100 万 tokens',
-    storage: '本地存储数据使用量 - 包含所有生成的文件',
-    quality: '生成内容质量评分 - 基于 4 维度综合计算',
-    tokens: 'Token 消耗趋势 - 输入+输出 tokens 统计',
-    cost: 'API 调用成本趋势 - 按 tokens 计费',
-    latency: 'API 响应延迟趋势 - 从请求到响应的时间',
-    provider: '服务供应商分布 - Gemini API vs 本地模型',
-    errors: '错误发生统计 - 失败率和错误类型分析',
-    liveFeed: '实时生成动态 - 显示最近的生成记录',
-    infrastructure: '基础设施状态 - Web/TTS 服务健康检查',
-    arena: '模型性能对比 - 速度和质量综合评估',
-    webService: 'Web 服务状态 - 主应用后端服务',
-    ttsEn: '英语 TTS 服务 - Kokoro 语音合成',
-    ttsJa: '日语 TTS 服务 - VOICEVOX 语音合成'
-};
+import { formatDate } from './utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });
 
+const state = {
+    days: 30,
+};
+
 function initDashboard() {
-    updateTicker();
-    setInterval(updateTicker, 1000);
+    updateTimestamp();
 
-    // Live polling
     fetchInfrastructureStatus();
-    setInterval(fetchInfrastructureStatus, 10000);
+    setInterval(fetchInfrastructureStatus, 30000);
 
-    // Load Analytics with real statistics
-    loadGenerationData();
-    loadRealStatistics();
-
-    setupInteractions();
+    loadDashboard(state.days);
+    setupTimeRangeButtons();
 }
 
-function updateTicker() {
+function updateTimestamp() {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-GB', { hour12: false });
     const el = document.getElementById('lastUpdatedTime');
-    if (el) el.textContent = `T-SYNC ${timeStr}`;
+    if (el) el.textContent = now.toLocaleTimeString();
 }
-
-// --- Layer 1: Infrastructure ---
 
 async function fetchInfrastructureStatus() {
     try {
@@ -62,51 +33,49 @@ async function fetchInfrastructureStatus() {
         if (!res.ok) throw new Error('Health check failed');
         const data = await res.json();
 
-        renderServiceMatrix(data);
-        renderStorage(data.storage);
+        const services = data.services || [];
+        renderServiceMatrix(services);
 
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--neon-green)';
-        document.querySelector('.status-dot').style.boxShadow = '0 0 8px var(--neon-green)';
-        document.getElementById('systemStatusText').textContent = 'SYSTEM ONLINE';
-        document.getElementById('systemStatusText').style.color = 'var(--neon-green)';
+        const storageService = services.find(s => s.type === 'storage' || s.name === 'Storage');
+        renderStorage(storageService?.details || data.storage);
 
+        updateTimestamp();
+        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-success)';
+        document.getElementById('systemStatusText').textContent = 'System Operational';
     } catch (err) {
         console.error('Infra fetch error:', err);
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--neon-red)';
-        document.querySelector('.status-dot').style.boxShadow = '0 0 8px var(--neon-red)';
-        document.getElementById('systemStatusText').textContent = 'SYSTEM ALERT';
-        document.getElementById('systemStatusText').style.color = 'var(--neon-red)';
+        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-error)';
+        document.getElementById('systemStatusText').textContent = 'System Alert';
+        document.querySelector('.status-dot').style.animation = 'none';
     }
 }
 
-function renderServiceMatrix(healthData) {
+function renderServiceMatrix(services) {
     const container = document.getElementById('serviceMatrix');
     container.innerHTML = '';
 
-    const renderRow = (label, status, meta) => {
-        const color = status === 'healthy' ? 'var(--neon-green)' : 'var(--neon-red)';
+    if (!services.length) {
+        container.innerHTML = '<div class="empty-hint">No services</div>';
+        return;
+    }
+
+    services.forEach(svc => {
         const el = document.createElement('div');
-        el.style.display = 'flex';
-        el.style.justifyContent = 'space-between';
-        el.style.alignItems = 'center';
-        el.style.fontFamily = 'JetBrains Mono';
-        el.style.fontSize = '12px';
-        el.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        el.style.paddingBottom = '4px';
+        el.className = 'service-item';
+
+        const statusClass = svc.status === 'online' ? 'svc-online' :
+            svc.status === 'degraded' ? 'svc-degraded' : 'svc-offline';
+        const latency = svc.latency ? `${svc.latency}ms` : '-';
 
         el.innerHTML = `
-            <span style="color: var(--sci-text-muted);">${label}</span>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span style="color: var(--sci-text-main);">${meta || ''}</span>
-                <div style="width:6px; height:6px; border-radius:50%; background:${color}; box-shadow: 0 0 5px ${color};"></div>
+            <div class="svc-name">${svc.name}</div>
+            <div class="svc-status">
+                <div class="svc-dot ${statusClass}"></div>
+                <span>${svc.status === 'online' ? latency : 'OFF'}</span>
             </div>
         `;
         container.appendChild(el);
-    };
-
-    renderRow('LLM CORE', healthData.llm?.status, healthData.llm?.model);
-    renderRow('TTS ENGINE (EN)', healthData.tts_en?.status, 'Kokoro');
-    renderRow('TTS ENGINE (JA)', healthData.tts_ja?.status, 'VoiceVox');
+    });
 }
 
 function renderStorage(storage) {
@@ -115,432 +84,392 @@ function renderStorage(storage) {
     const gbUsed = (storage.used / (1024 * 1024 * 1024)).toFixed(2);
     document.getElementById('storageUsed').textContent = gbUsed;
 
-    const percent = Math.min(storage.percentage * 100, 100);
+    const percent = Math.min(storage.percentage || 0, 100);
     const bar = document.getElementById('storageBar');
     bar.style.width = `${percent}%`;
 
-    const color = percent > 90 ? 'var(--neon-red)' : percent > 70 ? 'var(--neon-amber)' : 'var(--neon-purple)';
-    bar.style.backgroundColor = color;
-    bar.style.boxShadow = `0 0 10px ${color}`;
+    if (percent > 90) bar.style.backgroundColor = 'var(--color-warning)';
 
-    document.getElementById('storageMeta').textContent = `${storage.records || 0} RECORDS`;
+    document.getElementById('storageMeta').textContent = `${storage.recordsCount || 0} files total`;
 }
 
-// Use REAL quota data from statistics
-function renderQuotaGauge(quota) {
-    const container = document.getElementById('quotaChart');
-    container.innerHTML = '';
-    const width = 120, height = 80;
-    const radius = 50;
-
-    const svg = d3.select(container).append("svg")
-        .attr("width", width).attr("height", height)
-        .append("g").attr("transform", `translate(${width/2},${height - 10})`);
-
-    const arc = d3.arc().innerRadius(radius - 8).outerRadius(radius).startAngle(-Math.PI/2);
-
-    svg.append("path")
-       .datum({endAngle: Math.PI/2})
-       .attr("d", arc)
-       .attr("fill", "rgba(255,255,255,0.1)");
-
-    const percentage = Math.min(quota.percentage || 0, 100);
-    const valAngle = -Math.PI/2 + (Math.PI * (percentage / 100));
-
-    const color = percentage > 90 ? 'var(--neon-red)' : percentage > 70 ? 'var(--neon-amber)' : 'var(--neon-blue)';
-
-    svg.append("path")
-       .datum({endAngle: valAngle})
-       .attr("d", arc)
-       .attr("fill", color)
-       .style("filter", `drop-shadow(0 0 4px ${color})`);
-
-    document.getElementById('quotaPercent').textContent = `${Math.round(percentage)}%`;
-
-    // Quota warning
-    if (percentage > 80) {
-        const warning = document.createElement('div');
-        warning.style.cssText = 'font-size:10px; color:var(--neon-amber); margin-top:4px; text-align:center;';
-        warning.textContent = `⚠ ${quota.estimatedDaysRemaining || 0}d remaining`;
-        container.appendChild(warning);
-    }
-}
-
-// --- Layer 2: Model Arena ---
-
-function loadGenerationData() {
-    const raw = localStorage.getItem('latest_observability');
-    if (!raw) return;
-
-    try {
-        const data = JSON.parse(raw);
-        let localData = data;
-        let geminiData = null;
-
-        if (data.comparison) {
-            localData = data.local?.observability;
-            geminiData = data.gemini?.observability;
-            document.getElementById('arenaRecommendation').textContent =
-                `>> WINNER: ${data.comparison.winner.toUpperCase()} // ${data.comparison.recommendation}`;
-        } else {
-            document.getElementById('arenaRecommendation').textContent = ">> SINGLE MODE // LOCAL LLM ACTIVE";
-        }
-
-        if (localData) {
-            updateArenaStats('local', localData);
-            // Enhanced live feed
-            const phrase = localStorage.getItem('latest_phrase') || 'unknown';
-            logLiveFeed(localData, 'LOCAL', phrase, 'success');
-        }
-
-        if (geminiData) {
-            updateArenaStats('gemini', geminiData);
-        } else {
-            updateArenaStats('gemini', null);
-        }
-
-    } catch (e) {
-        console.error('Error parsing local observability data', e);
-    }
-}
-
-function updateArenaStats(side, obs) {
-    const speedEl = document.getElementById(`${side}SpeedVal`);
-    const qualEl = document.getElementById(`${side}QualityVal`);
-
-    if (!obs) {
-        speedEl.textContent = 'OFFLINE';
-        speedEl.style.color = 'var(--sci-text-muted)';
-        qualEl.textContent = '-';
-        return;
-    }
-
-    speedEl.textContent = `${obs.performance?.totalTime || 0}ms`;
-    speedEl.style.color = 'var(--sci-text-main)';
-
-    const score = obs.quality?.score || 0;
-    qualEl.textContent = score;
-    qualEl.style.color = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
-    qualEl.style.textShadow = `0 0 10px ${qualEl.style.color}`;
-}
-
-// Enhanced Live Feed
-function logLiveFeed(obs, provider, phrase, status = 'success') {
-    const feed = document.getElementById('liveFeed');
-    const row = document.createElement('div');
-    row.className = 'feed-row';
-
-    const color = provider === 'GEMINI' ? 'var(--neon-blue)' : 'var(--neon-purple)';
-    const statusColor = status === 'success' ? 'var(--neon-green)' : 'var(--neon-red)';
-    const statusIcon = status === 'success' ? '✓' : '✗';
-
-    row.style.cssText = `
-        border-left: 2px solid ${color};
-        padding-left: 8px;
-        margin-bottom: 4px;
-        font-size: 11px;
-        cursor: pointer;
-        transition: background 0.2s;
-    `;
-    row.onmouseenter = () => row.style.background = 'rgba(255,255,255,0.05)';
-    row.onmouseleave = () => row.style.background = 'transparent';
-
-    const time = new Date().toLocaleTimeString();
-    const score = obs?.quality?.score || 0;
-    const tokens = obs?.tokens?.total || 0;
-    const cost = obs?.cost?.total || 0;
-    const phraseShort = phrase.substring(0, 20) + (phrase.length > 20 ? '...' : '');
-
-    row.innerHTML = `
-        <span style="color:var(--sci-text-muted)">[${time}]</span>
-        <span style="color:${statusColor}">${statusIcon}</span>
-        <span style="color:#fff">${phraseShort}</span>
-        <span style="color:${color}">${provider}</span>
-        ${status === 'success' ? `
-            <span style="color:var(--neon-green)">Q:${score}</span>
-            <span style="color:var(--sci-text-muted)">T:${tokens}</span>
-            <span style="color:var(--neon-amber)">$${cost.toFixed(5)}</span>
-        ` : `
-            <span style="color:var(--neon-red)">${obs?.error || 'ERROR'}</span>
-        `}
-    `;
-
-    feed.prepend(row);
-    if (feed.children.length > 12) feed.lastElementChild.remove();
-}
-
-// --- Layer 3: Real Statistics with All Trends ---
-
-async function loadRealStatistics() {
-    try {
-        const dateTo = new Date().toISOString().split('T')[0];
-        const dateFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        const res = await fetch(`/api/statistics?dateFrom=${dateFrom}&dateTo=${dateTo}`);
-        if (!res.ok) throw new Error('Statistics fetch failed');
-
-        const data = await res.json();
-        const stats = data.statistics;
-
-        // Render all components with real data
-        renderQuotaGauge(stats.quota);
-        renderProviderDistribution(stats.providerDistribution);
-        renderErrorMonitor(stats.errors);
-
-        // Render all trend charts
-        renderQualityTrend(stats.qualityTrend[currentTrendPeriod]);
-        renderTokenTrend(stats.tokenTrend[currentTrendPeriod]);
-        renderCostTrend(stats.tokenTrend[currentTrendPeriod], stats.totalCost); // Reuse token data
-        renderLatencyTrend(stats.latencyTrend[currentTrendPeriod]);
-
-    } catch (err) {
-        console.error('Statistics load failed:', err);
-    }
-}
-
-// Provider Distribution (NEW)
-function renderProviderDistribution(distribution) {
-    const container = document.getElementById('providerDistribution');
-    if (!container) return;
-
-    container.innerHTML = '';
-    const total = Object.values(distribution).reduce((sum, count) => sum + count, 0);
-
-    Object.entries(distribution).forEach(([provider, count]) => {
-        const percentage = total > 0 ? (count / total) * 100 : 0;
-        const color = provider === 'local' ? 'var(--neon-purple)' : 'var(--neon-blue)';
-
-        const row = document.createElement('div');
-        row.style.cssText = 'margin-bottom: 8px;';
-        row.innerHTML = `
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                <span style="color:var(--sci-text-main); text-transform:uppercase;">${provider}</span>
-                <span style="color:${color};">${percentage.toFixed(1)}%</span>
-            </div>
-            <div style="height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden;">
-                <div style="height:100%; width:${percentage}%; background:${color}; box-shadow: 0 0 8px ${color};"></div>
-            </div>
-        `;
-        container.appendChild(row);
+function setupTimeRangeButtons() {
+    const buttons = document.querySelectorAll('.time-btn');
+    buttons.forEach(btn => {
+        btn.onclick = () => {
+            buttons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const days = Number(btn.dataset.days || 30);
+            state.days = days;
+            loadDashboard(days);
+        };
     });
 }
 
-// Error Monitor (NEW)
-function renderErrorMonitor(errors) {
-    const container = document.getElementById('errorMonitor');
-    if (!container) return;
+async function loadDashboard(days) {
+    const { dateFrom, dateTo } = getDateRange(days);
 
-    container.innerHTML = '';
+    try {
+        const [historyRes, statsRes] = await Promise.all([
+            fetchHistory({ limit: 200, dateFrom, dateTo }),
+            fetchStatistics({ dateFrom, dateTo }),
+        ]);
 
-    const totalClass = errors.rate > 0.05 ? 'error-high' : 'error-normal';
-    const statusColor = errors.rate > 0.05 ? 'var(--neon-red)' : 'var(--neon-amber)';
+        const records = historyRes.records || [];
+        const stats = statsRes.statistics || null;
 
-    const summary = document.createElement('div');
-    summary.style.cssText = `
-        padding: 8px;
-        background: rgba(255,255,255,0.05);
-        border-left: 3px solid ${statusColor};
-        margin-bottom: 8px;
-        font-size: 12px;
-    `;
-    summary.innerHTML = `
-        <span style="color:${statusColor}; margin-right:8px;">⚠</span>
-        <span style="color:var(--sci-text-main);">Failed: ${errors.total} (${(errors.rate * 100).toFixed(1)}%)</span>
-    `;
-    container.appendChild(summary);
+        const summary = computeSummary(stats, records, historyRes.pagination?.total);
 
-    if (Object.keys(errors.byType).length > 0) {
-        const breakdown = document.createElement('div');
-        breakdown.style.cssText = 'font-size:11px; padding-left:8px;';
-
-        Object.entries(errors.byType).forEach(([type, count]) => {
-            const row = document.createElement('div');
-            row.style.cssText = 'margin-bottom:4px; color:var(--sci-text-muted);';
-            row.innerHTML = `<span style="color:var(--neon-red);">•</span> ${type.replace('_', ' ')}: ${count}`;
-            breakdown.appendChild(row);
+        renderOverview({
+            totalCount: summary.totalCount,
+            avgQuality: summary.avgQuality,
+            avgTokens: summary.avgTokens,
+            avgLatency: summary.avgLatency,
+            days,
         });
 
-        container.appendChild(breakdown);
+        renderCostSummary({
+            totalCost: summary.totalCost,
+            avgCost: summary.avgCost,
+            currency: summary.currency,
+        });
+
+        renderProviderPie(stats?.providerDistribution, records);
+        renderQualityTrend(stats?.qualityTrend, records, days);
+        renderTokenTrend(stats?.tokenTrend, records, days);
+        renderLatencyTrend(stats?.latencyTrend, records, days);
+
+        renderRecent(records);
+    } catch (err) {
+        console.error('Dashboard load error:', err);
     }
 }
 
-// Quality Trend (Enhanced)
-function renderQualityTrend(trendData) {
-    const container = document.getElementById('qualityTrendChart');
-    if (!container) return;
+async function fetchHistory({ limit = 200, dateFrom, dateTo } = {}) {
+    const params = new URLSearchParams();
+    params.set('page', '1');
+    params.set('limit', String(limit));
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
 
+    const res = await fetch(`/api/history?${params.toString()}`);
+    if (!res.ok) throw new Error('History fetch failed');
+    return res.json();
+}
+
+async function fetchStatistics({ dateFrom, dateTo } = {}) {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    const res = await fetch(`/api/statistics?${params.toString()}`);
+    if (!res.ok) throw new Error('Statistics fetch failed');
+    return res.json();
+}
+
+function getDateRange(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days + 1);
+    const dateFrom = start.toISOString().split('T')[0];
+    const dateTo = end.toISOString().split('T')[0];
+    return { dateFrom, dateTo };
+}
+
+function computeSummary(stats, records, totalFromPagination) {
+    if (stats) {
+        return {
+            totalCount: stats.totalCount ?? totalFromPagination ?? records.length,
+            avgQuality: stats.avgQualityScore ?? average(records, r => r.quality_score),
+            avgTokens: stats.avgTokensTotal ?? average(records, r => r.tokens_total),
+            avgLatency: stats.avgLatencyMs ?? average(records, r => r.performance_total_ms),
+            totalCost: stats.totalCost ?? sum(records, r => r.cost_total),
+            avgCost: stats.avgCost ?? average(records, r => r.cost_total),
+            currency: 'USD',
+        };
+    }
+
+    return {
+        totalCount: totalFromPagination ?? records.length,
+        avgQuality: average(records, r => r.quality_score),
+        avgTokens: average(records, r => r.tokens_total),
+        avgLatency: average(records, r => r.performance_total_ms),
+        totalCost: sum(records, r => r.cost_total),
+        avgCost: average(records, r => r.cost_total),
+        currency: 'USD',
+    };
+}
+
+function renderOverview({ totalCount, avgQuality, avgTokens, avgLatency, days }) {
+    setText('overviewTotal', formatNumber(totalCount));
+    setText('overviewAvgQuality', formatNumber(avgQuality, 1));
+    setText('overviewAvgTokens', formatNumber(avgTokens, 0));
+    setText('overviewAvgLatency', formatNumber(avgLatency, 0));
+    setText('overviewRange', days ? `Last ${days} days` : 'All time');
+}
+
+function renderCostSummary({ totalCost, avgCost, currency }) {
+    setText('costTotal', formatCurrency(totalCost, currency));
+    setText('costAvg', formatCurrency(avgCost, currency));
+    setText('costCurrency', currency || 'USD');
+}
+
+function renderProviderPie(providerDistribution, records) {
+    const container = document.getElementById('providerPieChart');
+    const legend = document.getElementById('providerLegend');
     container.innerHTML = '';
+    legend.innerHTML = '';
 
-    if (!trendData || !trendData.length) {
-        container.innerHTML = '<div style="text-align:center; padding-top:40px; color:var(--sci-text-muted)">NO SIGNAL</div>';
+    const data = providerDistribution
+        ? Object.entries(providerDistribution).map(([label, value]) => ({ label, value }))
+        : aggregateProvider(records);
+
+    if (!data.length) {
+        container.innerHTML = '<div class="empty-hint">No data</div>';
         return;
     }
 
-    renderTrendChart(container, trendData, {
-        valueKey: 'avgScore',
-        yDomain: [0, 100],
-        color: 'var(--neon-green)',
-        gradientId: 'qualityGrad'
+    const width = container.clientWidth || 220;
+    const height = 220;
+    const radius = Math.min(width, height) / 2 - 10;
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
+
+    const color = d3.scaleOrdinal()
+        .domain(data.map(d => d.label))
+        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
+
+    const pie = d3.pie().value(d => d.value);
+    const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
+
+    svg.selectAll('path')
+        .data(pie(data))
+        .enter()
+        .append('path')
+        .attr('d', arc)
+        .attr('fill', d => color(d.data.label))
+        .attr('stroke', 'rgba(255,255,255,0.1)')
+        .attr('stroke-width', 1);
+
+    data.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'legend-item';
+        row.innerHTML = `
+            <span class="legend-dot" style="background:${color(item.label)}"></span>
+            <span class="legend-label">${item.label}</span>
+            <span class="legend-value">${item.value}</span>
+        `;
+        legend.appendChild(row);
     });
 }
 
-// Token Trend (NEW)
-function renderTokenTrend(trendData) {
-    const container = document.getElementById('tokenTrendChart');
-    if (!container) return;
+function renderQualityTrend(trend, records, days) {
+    const data = buildTrendSeries(trend, records, days, 'quality');
+    renderLineChart('qualityTrendChart', data, '#10b981');
+}
 
+function renderTokenTrend(trend, records, days) {
+    const data = buildTrendSeries(trend, records, days, 'tokens');
+    renderLineChart('tokenTrendChart', data, '#3b82f6');
+}
+
+function renderLatencyTrend(trend, records, days) {
+    const data = buildTrendSeries(trend, records, days, 'latency');
+    renderLineChart('latencyTrendChart', data, '#f59e0b');
+}
+
+function buildTrendSeries(trend, records, days, type) {
+    const key = `${days}d`;
+    if (trend && trend[key]) {
+        const mapped = trend[key].map(row => {
+            const value = type === 'quality' ? row.avgScore :
+                type === 'tokens' ? row.avgTokens : row.avgMs;
+            return {
+                day: row.date,
+                value,
+                dateObj: new Date(row.date)
+            };
+        });
+        return mapped.sort((a, b) => a.dateObj - b.dateObj);
+    }
+
+    const selector = type === 'quality'
+        ? r => r.quality_score
+        : type === 'tokens'
+            ? r => r.tokens_total
+            : r => r.performance_total_ms;
+
+    return buildDailySeries(records, selector);
+}
+
+function buildDailySeries(records, selector) {
+    const map = new Map();
+    records.forEach(r => {
+        const rawDate = r.created_at || r.generation_date;
+        if (!rawDate) return;
+        const day = new Date(rawDate).toISOString().split('T')[0];
+        const value = Number(selector(r));
+        if (Number.isNaN(value)) return;
+        if (!map.has(day)) map.set(day, []);
+        map.get(day).push(value);
+    });
+
+    return Array.from(map.entries())
+        .map(([day, values]) => {
+            const sumValues = values.reduce((a, b) => a + b, 0);
+            const avgValue = sumValues / values.length;
+            return { day, value: avgValue, dateObj: new Date(day) };
+        })
+        .sort((a, b) => a.dateObj - b.dateObj);
+}
+
+function renderLineChart(containerId, data, color) {
+    const container = document.getElementById(containerId);
     container.innerHTML = '';
 
-    if (!trendData || !trendData.length) {
-        container.innerHTML = '<div style="text-align:center; padding-top:40px; color:var(--sci-text-muted)">NO SIGNAL</div>';
+    if (!data.length) {
+        container.innerHTML = '<div class="empty-hint">No data</div>';
         return;
     }
 
-    const maxTokens = d3.max(trendData, d => d.avgTokens) || 2000;
+    const width = container.clientWidth || 320;
+    const height = container.clientHeight || 180;
+    const padding = 28;
 
-    renderTrendChart(container, trendData, {
-        valueKey: 'avgTokens',
-        yDomain: [0, maxTokens * 1.2],
-        color: 'var(--neon-purple)',
-        gradientId: 'tokenGrad'
-    });
-}
-
-// Cost Trend (NEW) - Cumulative
-function renderCostTrend(trendData, totalCost) {
-    const container = document.getElementById('costTrendChart');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    if (!trendData || !trendData.length) {
-        container.innerHTML = '<div style="text-align:center; padding-top:40px; color:var(--sci-text-muted)">NO SIGNAL</div>';
-        return;
-    }
-
-    // Calculate cumulative cost
-    let cumulative = 0;
-    const costData = trendData.map(d => {
-        cumulative += (d.avgTokens || 0) * 0.00001; // Rough estimate
-        return { date: d.date, cumulative, count: d.count };
-    });
-
-    renderTrendChart(container, costData, {
-        valueKey: 'cumulative',
-        yDomain: [0, d3.max(costData, d => d.cumulative) * 1.2 || 1],
-        color: 'var(--neon-amber)',
-        gradientId: 'costGrad',
-        isCumulative: true
-    });
-}
-
-// Latency Trend (NEW)
-function renderLatencyTrend(trendData) {
-    const container = document.getElementById('latencyTrendChart');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    if (!trendData || !trendData.length) {
-        container.innerHTML = '<div style="text-align:center; padding-top:40px; color:var(--sci-text-muted)">NO SIGNAL</div>';
-        return;
-    }
-
-    const maxLatency = d3.max(trendData, d => d.avgMs) || 3000;
-
-    renderTrendChart(container, trendData, {
-        valueKey: 'avgMs',
-        yDomain: [0, maxLatency * 1.2],
-        color: 'var(--neon-blue)',
-        gradientId: 'latencyGrad'
-    });
-}
-
-// Generic Trend Chart Renderer
-function renderTrendChart(container, data, options) {
-    const { valueKey, yDomain, color, gradientId, isCumulative = false } = options;
-
-    const width = container.clientWidth;
-    const height = 200;
-    const margin = {top: 10, right: 10, bottom: 20, left: 40};
-
-    const processedData = data.map(d => ({
-        date: new Date(d.date),
-        val: d[valueKey] || 0,
-        count: d.count || 0
-    })).sort((a,b) => a.date - b.date);
-
-    const svg = d3.select(container).append("svg")
-        .attr("width", width).attr("height", height);
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
 
     const x = d3.scaleTime()
-        .domain(d3.extent(processedData, d => d.date))
-        .range([margin.left, width - margin.right]);
+        .domain(d3.extent(data, d => d.dateObj))
+        .range([padding, width - padding]);
 
+    const maxY = d3.max(data, d => d.value) || 1;
     const y = d3.scaleLinear()
-        .domain(yDomain)
-        .range([height - margin.bottom, margin.top]);
+        .domain([0, maxY * 1.1])
+        .range([height - padding, padding]);
 
-    // Gradient
-    const defs = svg.append("defs");
-    const grad = defs.append("linearGradient")
-        .attr("id", gradientId)
-        .attr("x1", "0%").attr("y1", "0%")
-        .attr("x2", "0%").attr("y2", "100%");
-    grad.append("stop").attr("offset", "0%").attr("stop-color", color).attr("stop-opacity", 0.4);
-    grad.append("stop").attr("offset", "100%").attr("stop-color", color).attr("stop-opacity", 0);
+    const line = d3.line()
+        .x(d => x(d.dateObj))
+        .y(d => y(d.value))
+        .curve(d3.curveMonotoneX);
 
-    // Area
-    svg.append("path")
-       .datum(processedData)
-       .attr("fill", `url(#${gradientId})`)
-       .attr("d", d3.area()
-           .x(d => x(d.date))
-           .y0(height - margin.bottom)
-           .y1(d => y(d.val))
-           .curve(d3.curveMonotoneX));
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 2)
+        .attr('d', line);
 
-    // Line
-    svg.append("path")
-       .datum(processedData)
-       .attr("fill", "none")
-       .attr("stroke", color)
-       .attr("stroke-width", 2)
-       .style("filter", `drop-shadow(0 0 4px ${color})`)
-       .attr("d", d3.line()
-           .x(d => x(d.date))
-           .y(d => y(d.val))
-           .curve(d3.curveMonotoneX));
+    svg.selectAll('circle')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('cx', d => x(d.dateObj))
+        .attr('cy', d => y(d.value))
+        .attr('r', 3)
+        .attr('fill', color);
 
-    // Axes
-    svg.append("g")
-       .attr("transform", `translate(0,${height - margin.bottom})`)
-       .call(d3.axisBottom(x).ticks(5).tickSize(0))
-       .select(".domain").remove();
+    const xAxis = d3.axisBottom(x).ticks(4).tickSizeOuter(0);
+    const yAxis = d3.axisLeft(y).ticks(4).tickSizeOuter(0);
 
-    svg.append("g")
-       .attr("transform", `translate(${margin.left},0)`)
-       .call(d3.axisLeft(y).ticks(4).tickSize(0))
-       .select(".domain").remove();
+    svg.append('g')
+        .attr('transform', `translate(0,${height - padding})`)
+        .call(xAxis)
+        .selectAll('text')
+        .style('fill', '#94a3b8')
+        .style('font-size', '10px');
 
-    svg.selectAll("text")
-       .attr("fill", "var(--sci-text-muted)")
-       .style("font-family", "JetBrains Mono")
-       .style("font-size", "10px");
+    svg.append('g')
+        .attr('transform', `translate(${padding},0)`)
+        .call(yAxis)
+        .selectAll('text')
+        .style('fill', '#94a3b8')
+        .style('font-size', '10px');
+
+    svg.selectAll('path.domain, line').style('stroke', 'rgba(148,163,184,0.3)');
 }
 
-function setupInteractions() {
-    // Period selector buttons (if implemented in HTML)
-    const periodBtns = document.querySelectorAll('[data-period]');
-    periodBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            currentTrendPeriod = btn.dataset.period;
-            periodBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadRealStatistics();
-        });
+function renderRecent(records) {
+    const body = document.getElementById('recentTableBody');
+    const countEl = document.getElementById('recentCount');
+    body.innerHTML = '';
+
+    if (!records.length) {
+        body.innerHTML = '<tr><td colspan="6" class="empty-cell">No records</td></tr>';
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+
+    const top = records.slice(0, 8);
+    top.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeCell(r.phrase)}</td>
+            <td><span class="pill">${escapeCell(r.llm_provider)}</span></td>
+            <td>${formatNumber(r.quality_score, 0)}</td>
+            <td>${formatNumber(r.tokens_total, 0)}</td>
+            <td>${formatCurrency(r.cost_total, 'USD')}</td>
+            <td>${formatDate(r.created_at)}</td>
+        `;
+        body.appendChild(tr);
     });
+
+    if (countEl) countEl.textContent = `${top.length}`;
 }
 
-// Export for external use (like from app.js when generation completes)
-window.dashboardLogFeed = logLiveFeed;
+function aggregateProvider(records = []) {
+    const map = new Map();
+    records.forEach(r => {
+        const key = r.llm_provider || 'unknown';
+        map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
+}
+
+function average(records, selector) {
+    if (!records.length) return 0;
+    const values = records.map(selector).map(Number).filter(v => !Number.isNaN(v));
+    if (!values.length) return 0;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function sum(records, selector) {
+    if (!records.length) return 0;
+    return records.map(selector).map(Number).filter(v => !Number.isNaN(v)).reduce((a, b) => a + b, 0);
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function formatNumber(value, digits = 0) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    return num.toFixed(digits);
+}
+
+function formatCurrency(value, currency) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return '-';
+    return `${num.toFixed(5)} ${currency || 'USD'}`;
+}
+
+function escapeCell(value) {
+    if (value === null || value === undefined) return '-';
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+}

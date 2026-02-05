@@ -410,12 +410,18 @@ class DatabaseService {
       return data.filter(row => row.date >= cutoffDate);
     };
 
+    const avgCost = basicStats.avgCost || 0;
+    const totalCost = basicStats.totalCost || 0;
+    const totalTokens = basicStats.totalTokens || 0;
+
     return {
       totalCount: basicStats.totalCount || 0,
       avgQualityScore: Math.round((basicStats.avgQualityScore || 0) * 10) / 10,
       avgTokensTotal: Math.round(basicStats.avgTokensTotal || 0),
       avgLatencyMs: Math.round(basicStats.avgLatencyMs || 0),
-      totalCost: (basicStats.totalCost || 0).toFixed(6),
+      avgCost: Number(avgCost.toFixed(6)),
+      totalCost: Number(totalCost.toFixed(6)),
+      totalTokens: Math.round(totalTokens || 0),
 
       providerDistribution,
 
