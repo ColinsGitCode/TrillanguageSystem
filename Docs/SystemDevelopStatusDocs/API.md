@@ -15,7 +15,8 @@
 5. [删除接口](#删除接口)
 6. [文件系统接口](#文件系统接口)
 7. [健康检查接口](#健康检查接口)
-8. [错误码](#错误码)
+8. [Gemini CLI 认证接口](#gemini-cli-认证接口)
+9. [错误码](#错误码)
 
 ---
 
@@ -46,6 +47,10 @@
 | | GET | `/folders/:folder/files/:file` | 获取文件内容 |
 | | GET | `/records/by-file` | 根据文件定位记录 |
 | **健康** | GET | `/health` | 系统健康检查 |
+| **Gemini** | GET | `/gemini/auth/status` | Gemini CLI 认证状态 |
+| | POST | `/gemini/auth/start` | 启动 Gemini CLI 认证 |
+| | POST | `/gemini/auth/submit` | 提交授权码 |
+| | POST | `/gemini/auth/cancel` | 取消认证会话 |
 
 ---
 
@@ -394,6 +399,78 @@ GET /api/health
   ],
   "system": { "uptime": 86400, "version": "1.0.0", "lastRestart": 1738730000000 }
 }
+```
+
+---
+
+## Gemini CLI 认证接口
+
+> 说明：仅在 `GEMINI_MODE=cli` 时启用，用于容器内 Gemini CLI 认证初始化；当使用 **host-proxy** 模式时可忽略。
+
+### 1. 获取认证状态
+
+```http
+GET /api/gemini/auth/status
+```
+
+**响应**
+
+```json
+{
+  "enabled": true,
+  "authenticated": false,
+  "pending": true,
+  "url": "https://accounts.google.com/o/oauth2/...",
+  "message": "waiting_for_code"
+}
+```
+
+### 2. 启动认证
+
+```http
+POST /api/gemini/auth/start
+```
+
+**响应**
+
+```json
+{
+  "enabled": true,
+  "authenticated": false,
+  "pending": true,
+  "url": "https://accounts.google.com/o/oauth2/..."
+}
+```
+
+### 3. 提交授权码
+
+```http
+POST /api/gemini/auth/submit
+Content-Type: application/json
+```
+
+**请求体**
+
+```json
+{ "code": "4/0ASc..." }
+```
+
+**响应**
+
+```json
+{ "status": "success" }
+```
+
+### 4. 取消认证
+
+```http
+POST /api/gemini/auth/cancel
+```
+
+**响应**
+
+```json
+{ "cancelled": true }
 ```
 
 ---

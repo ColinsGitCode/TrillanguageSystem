@@ -9,6 +9,7 @@
 
 - API 端点与响应结构 (包含按文件查询记录接口)
 - LLM 默认策略（Local LLM 为主，Gemini 可选）
+- Gemini Host Proxy 模式与宿主机代理脚本
 - Mission Control 作为统计大盘的定位与模块
 - 主界面布局与弹窗 Tab（卡片内容 / MISSION 指标）
 - **交互规范**：全量指标说明已从 Tooltip 切换为 `info-modal.js` 驱动的弹窗模式

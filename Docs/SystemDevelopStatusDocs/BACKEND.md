@@ -1,7 +1,7 @@
 # 🔧 后端架构文档
 
 **项目**: Trilingual Records
-**版本**: 2.2
+**版本**: 2.3
 **更新日期**: 2026-02-05
 
 ---
@@ -14,6 +14,9 @@
 ├── services/                          # 业务服务层
 │   ├── localLlmService.js            # 本地 LLM（OpenAI 兼容）
 │   ├── geminiService.js              # Gemini API（可选）
+│   ├── geminiCliService.js           # Gemini CLI（容器内直连）
+│   ├── geminiProxyService.js         # Gemini CLI Host Proxy（推荐）
+│   ├── geminiAuthService.js          # Gemini CLI 认证会话管理
 │   ├── promptEngine.js               # Prompt 构建
 │   ├── contentPostProcessor.js       # 内容后处理
 │   ├── htmlRenderer.js               # HTML 渲染
@@ -27,7 +30,9 @@
 ├── database/
 │   └── schema.sql                     # SQLite Schema
 └── scripts/
-    └── migrateRecords.js             # 历史数据迁移
+    ├── migrateRecords.js             # 历史数据迁移
+    ├── gemini-host-proxy.js          # 宿主机 Gemini CLI 代理
+    └── bootstrap_stack.py            # 一键启动/状态/停止控制脚本
 ```
 
 ---
@@ -40,7 +45,7 @@
 - **数据库**: SQLite 3（better-sqlite3）
 - **LLM 集成**:
   - 本地 LLM（OpenAI 兼容，默认）
-  - Gemini（可选，需配置 API Key）
+  - Gemini（可选，**默认通过宿主机 Gemini CLI Host Proxy**）
 - **TTS 服务**:
   - 英语：Kokoro
   - 日语：VOICEVOX
@@ -57,9 +62,9 @@
 
 ```
 1. POST /api/generate
-2. promptEngine.buildPrompt()
-3. localLlmService.generateContent()
-4. JSON 校验与结构化验证
+2. promptEngine.buildPrompt() / buildMarkdownPrompt()
+3. localLlmService.generateContent() / geminiProxyService.runGeminiProxy()
+4. Markdown 结构校验与解析
 5. contentPostProcessor.postProcessGeneratedContent()
 6. htmlRenderer.prepareMarkdownForCard()
 7. htmlRenderer.renderHtmlFromMarkdown()
@@ -79,6 +84,7 @@
 
 ### promptEngine.js
 - Prompt 模板与结构化输出约束
+- 支持 Markdown Prompt（Gemini CLI / Host Proxy）
 
 ### contentPostProcessor.js
 - 日文注音处理
@@ -132,8 +138,10 @@ LLM_MAX_TOKENS=2048
 LLM_TEMPERATURE=0.2
 
 # Gemini (可选)
-# GEMINI_API_KEY=your-key
-# GEMINI_MODEL=gemini-1.5-flash-latest
+# GEMINI_MODE=host-proxy
+# GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
+# GEMINI_PROXY_MODEL=gemini-cli
+# MARKDOWN_PROMPT_PATH=./prompts/phrase_3LANS_markdown.md
 
 # TTS
 TTS_EN_ENDPOINT=http://tts-en:8000
@@ -147,6 +155,7 @@ VOICEVOX_SPEAKER=2
 ## ✅ 现状说明
 
 - 默认使用本地 LLM；Gemini 仅在配置时启用。
+- Gemini 推荐模式：Host Proxy（宿主机 Gemini CLI 认证与调用，容器仅发起 HTTP 请求）。
 - 支持 `enable_compare` 参数进行双模型对比（API 级别，不在 UI 暴露）。
 - `/api/statistics` 返回完整趋势/配额/错误统计，用于大盘展示。
 
