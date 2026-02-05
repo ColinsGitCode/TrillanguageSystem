@@ -693,9 +693,10 @@ function renderCardModal(markdown, title, options = {}) {
 
     const safeHtml = sanitizeHtml(processedHtml);
 
-    // 尝试获取 observability 数据 (优先使用传入的 options.metrics，其次是 local storage)
-    let rawMetrics = options.metrics;
-    if (!rawMetrics) {
+    // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
+    let rawMetrics = options.metrics || null;
+    const allowLatest = options.useLatestObservability === true;
+    if (!rawMetrics && allowLatest) {
         try {
             const raw = localStorage.getItem('latest_observability');
             if (raw) rawMetrics = JSON.parse(raw);
@@ -707,13 +708,32 @@ function renderCardModal(markdown, title, options = {}) {
     if (rawMetrics && rawMetrics.observability) {
         // DB Record structure
         const obs = rawMetrics.observability;
+        const metadata = { ...(obs.metadata || {}) };
+        if (!metadata.promptParsed && obs.prompt_parsed) metadata.promptParsed = obs.prompt_parsed;
+        if (!metadata.promptText && obs.prompt_full) metadata.promptText = obs.prompt_full;
+        if (!metadata.rawOutput && obs.llm_output) {
+            let rawOutput = obs.llm_output;
+            if (typeof rawOutput === 'string') {
+                try {
+                    rawOutput = JSON.stringify(JSON.parse(rawOutput), null, 2);
+                } catch (e) {}
+            }
+            metadata.rawOutput = rawOutput;
+        }
+        if (!metadata.model && rawMetrics.llm_model) metadata.model = rawMetrics.llm_model;
+        if (!metadata.provider && rawMetrics.llm_provider) metadata.provider = rawMetrics.llm_provider;
+
         metrics = {
+            id: rawMetrics.id,
             quality: { score: obs.quality_score },
             tokens: { input: obs.tokens_input, output: obs.tokens_output, total: obs.tokens_total },
-            cost: { total: obs.cost_total },
+            cost: { total: obs.cost_total, input: obs.cost_input, output: obs.cost_output, currency: obs.cost_currency },
             performance: { totalTime: obs.performance_total_ms, phases: obs.performance_phases },
-            metadata: obs.metadata
+            metadata
         };
+        if (obs.quality_dimensions) metrics.quality.dimensions = obs.quality_dimensions;
+        if (obs.quality_warnings) metrics.quality.warnings = obs.quality_warnings;
+        if (obs.quality_checks) metrics.quality.checks = obs.quality_checks;
     }
     
     // Fallback defaults
@@ -725,6 +745,23 @@ function renderCardModal(markdown, title, options = {}) {
     };
 
     const tokens = metrics.tokens || { input: 0, output: 0 };
+    const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'local').toUpperCase();
+    const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
+
+    const toText = (val) => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') return val;
+        try { return JSON.stringify(val, null, 2); } catch (e) { return String(val); }
+    };
+    const promptRawText = toText(metrics.metadata?.promptText);
+    const promptStructText = toText(metrics.metadata?.promptParsed);
+    const outputRawText = toText(metrics.metadata?.rawOutput);
+    let outputStructText = '';
+    if (outputRawText) {
+        try { outputStructText = JSON.stringify(JSON.parse(outputRawText), null, 2); } catch (e) {}
+    }
+    const promptDefaultView = promptRawText ? 'raw' : 'structured';
+    const outputDefaultView = outputRawText ? 'raw' : 'structured';
     
     // Calculate Rank
     const score = metrics.quality?.score || 0;
@@ -772,11 +809,11 @@ function renderCardModal(markdown, title, options = {}) {
                     <div class="score-meta">
                         <div class="meta-row">
                             <span class="meta-label">PROVIDER</span>
-                            <span class="meta-val" style="color: var(--neon-purple);">${(store.get('llmProvider') || 'LOCAL').toUpperCase()}</span>
+                            <span class="meta-val" style="color: var(--neon-purple);">${providerLabel}</span>
                         </div>
                         <div class="meta-row">
                             <span class="meta-label">MODEL</span>
-                            <span class="meta-val">${metrics.metadata?.model || 'UNKNOWN'}</span>
+                            <span class="meta-val">${modelLabel}</span>
                         </div>
                         <div class="meta-row">
                             <span class="meta-label">LATENCY</span>
@@ -845,24 +882,42 @@ function renderCardModal(markdown, title, options = {}) {
                     <div id="hudRadar" class="chart-box" style="height: 200px;"></div>
                 </div>
 
-                <!-- 7. Prompt Viewer (Collapsible) -->
+                <!-- 7. Prompt Viewer -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                    <div class="hud-title">
                         <span>📄 PROMPT TEXT ${createInfoBtn('PROMPT_TEXT')}</span>
-                        <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
+                        <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
                     </div>
-                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.promptText || 'N/A')}</div>
-                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.promptText || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-blue); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">COPY</button>
+                    <div class="intel-viewer" data-viewer="prompt">
+                        <div class="viewer-tabs">
+                            <button class="viewer-tab ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
+                            <button class="viewer-tab ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
+                            <button class="viewer-copy" type="button">COPY</button>
+                        </div>
+                        <div class="viewer-body">
+                            <pre class="viewer-panel ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(promptRawText || 'N/A')}</pre>
+                            <pre class="viewer-panel ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(promptStructText || 'N/A')}</pre>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- 8. Output Viewer (Collapsible) -->
+                <!-- 8. Output Viewer -->
                 <div class="hud-card hud-card-wide">
-                    <div class="hud-title" style="cursor:pointer;" onclick="this.parentElement.querySelector('.collapsible-content').classList.toggle('hidden')">
+                    <div class="hud-title">
                         <span>📤 LLM OUTPUT ${createInfoBtn('LLM_OUTPUT')}</span>
-                        <span style="color: var(--sci-text-muted); font-size:11px;">CLICK TO EXPAND</span>
+                        <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
                     </div>
-                    <div class="collapsible-content hidden" style="margin-top:12px; max-height:200px; overflow-y:auto; background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:4px; font-family:'JetBrains Mono'; font-size:11px; line-height:1.4; color:#4b5563; white-space:pre-wrap; word-wrap:break-word;">${escapeHtml(metrics.metadata?.rawOutput || 'N/A')}</div>
-                    <button onclick="navigator.clipboard.writeText('${(metrics.metadata?.rawOutput || '').replace(/'/g, "\\'")}'); alert('Copied!')" style="margin-top:8px; padding:6px 12px; background:var(--neon-purple); border:none; border-radius:4px; color:#fff; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">COPY</button>
+                    <div class="intel-viewer" data-viewer="output">
+                        <div class="viewer-tabs">
+                            <button class="viewer-tab ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
+                            <button class="viewer-tab ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
+                            <button class="viewer-copy" type="button">COPY</button>
+                        </div>
+                        <div class="viewer-body">
+                            <pre class="viewer-panel ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(outputRawText || 'N/A')}</pre>
+                            <pre class="viewer-panel ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(outputStructText || 'N/A')}</pre>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 9. Export Controls -->
@@ -938,7 +993,40 @@ function renderCardModal(markdown, title, options = {}) {
     setTimeout(() => {
         els.modalOverlay.classList.add('show');
         bindInfoButtons(els.modalContainer);
+        bindIntelViewers(els.modalContainer);
     }, 10);
+}
+
+function bindIntelViewers(container) {
+    const viewers = container.querySelectorAll('.intel-viewer');
+    viewers.forEach(viewer => {
+        const tabs = viewer.querySelectorAll('.viewer-tab');
+        const panels = viewer.querySelectorAll('.viewer-panel');
+        const copyBtn = viewer.querySelector('.viewer-copy');
+
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                const view = tab.dataset.view;
+                tabs.forEach(t => t.classList.toggle('active', t === tab));
+                panels.forEach(p => p.classList.toggle('active', p.dataset.view === view));
+            };
+        });
+
+        if (copyBtn) {
+            copyBtn.onclick = async () => {
+                const active = viewer.querySelector('.viewer-panel.active');
+                const text = active ? active.textContent : '';
+                try {
+                    await navigator.clipboard.writeText(text || '');
+                    const prev = copyBtn.textContent;
+                    copyBtn.textContent = 'COPIED';
+                    setTimeout(() => { copyBtn.textContent = prev; }, 1200);
+                } catch (e) {
+                    alert('Copy failed');
+                }
+            };
+        }
+    });
 }
 
 // 渲染质量维度条
