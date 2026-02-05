@@ -88,6 +88,26 @@ class ApiService {
     async checkHealth() {
         return this.fetchJson('/api/health');
     }
+
+    async getGeminiAuthStatus() {
+        return this.fetchJson('/api/gemini/auth/status');
+    }
+
+    async startGeminiAuth() {
+        return this.fetchJson('/api/gemini/auth/start', { method: 'POST' });
+    }
+
+    async submitGeminiAuth(code) {
+        return this.fetchJson('/api/gemini/auth/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        });
+    }
+
+    async cancelGeminiAuth() {
+        return this.fetchJson('/api/gemini/auth/cancel', { method: 'POST' });
+    }
 }
 
 export const api = new ApiService();

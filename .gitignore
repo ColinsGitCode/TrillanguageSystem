@@ -3,6 +3,7 @@ npm-debug.log*
 server.log
 .DS_Store
 .env
+logs/
 
 CLAUDE.md
 

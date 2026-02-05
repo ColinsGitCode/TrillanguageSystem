@@ -44,7 +44,11 @@ const els = {
     historyPageInfo: document.getElementById('historyPageInfo'),
 
     // Context Menu
-    contextMenu: document.getElementById('contextMenu')
+    contextMenu: document.getElementById('contextMenu'),
+
+    // Setup
+    setupOverlay: document.getElementById('setupOverlay'),
+    setupCard: document.getElementById('setupCard')
 };
 
 let fileListState = null;
@@ -66,11 +70,184 @@ function init() {
     initHistory();
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
+    initGeminiSetup();
     // 加载初始数据
     loadFolders();
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
+}
+
+// ==========================================
+// Gemini CLI 初始化设置
+// ==========================================
+
+let setupPollTimer = null;
+
+async function initGeminiSetup() {
+    try {
+        const status = await api.getGeminiAuthStatus();
+        if (!status.enabled || status.authenticated) return;
+        renderSetupOverlay(status);
+        startSetupPolling();
+    } catch (err) {
+        console.error('Gemini setup status failed:', err);
+    }
+}
+
+function renderSetupOverlay(status = {}) {
+    if (!els.setupOverlay || !els.setupCard) return;
+    els.setupOverlay.classList.remove('hidden');
+    els.setupCard.innerHTML = `
+      <div class="setup-header">
+        <div>
+          <h2 class="setup-title">初始化设置 · Gemini CLI 认证</h2>
+          <p class="setup-subtitle">首次使用需要登录 Google 账号以启用 Gemini CLI。</p>
+        </div>
+      </div>
+      <ol class="setup-steps">
+        <li>点击“开始认证”生成登录链接</li>
+        <li>浏览器完成登录后复制授权码</li>
+        <li>粘贴授权码并提交</li>
+      </ol>
+      <div class="setup-actions">
+        <button class="btn-secondary" id="setupStartBtn">开始认证</button>
+        <button class="btn-text" id="setupRefreshBtn">刷新状态</button>
+      </div>
+      <div class="setup-status" id="setupStatus">等待开始认证。</div>
+      <div class="setup-auth hidden" id="setupAuthBlock">
+        <div class="setup-field">
+          <label>登录链接</label>
+          <div class="setup-input-row">
+            <input id="setupAuthUrl" readonly placeholder="点击开始认证获取链接" />
+            <button class="btn-primary" id="setupOpenBtn">打开</button>
+          </div>
+        </div>
+        <div class="setup-field">
+          <label>授权码</label>
+          <div class="setup-input-row">
+            <input id="setupAuthCode" placeholder="粘贴授权码" />
+            <button class="btn-secondary" id="setupSubmitBtn">提交</button>
+          </div>
+        </div>
+        <div class="setup-help">如果提示授权码失效，请重新点击“开始认证”获取新链接。</div>
+      </div>
+    `;
+
+    bindSetupEvents();
+    if (status.url) {
+        updateSetupAuthBlock(status.url);
+        updateSetupStatus('已生成登录链接，请完成授权。');
+    }
+}
+
+function bindSetupEvents() {
+    const startBtn = document.getElementById('setupStartBtn');
+    const refreshBtn = document.getElementById('setupRefreshBtn');
+    const openBtn = document.getElementById('setupOpenBtn');
+    const submitBtn = document.getElementById('setupSubmitBtn');
+
+    if (startBtn) startBtn.onclick = handleSetupStart;
+    if (refreshBtn) refreshBtn.onclick = handleSetupRefresh;
+    if (openBtn) openBtn.onclick = handleSetupOpen;
+    if (submitBtn) submitBtn.onclick = handleSetupSubmit;
+}
+
+function updateSetupStatus(text) {
+    const statusEl = document.getElementById('setupStatus');
+    if (statusEl) statusEl.textContent = text;
+}
+
+function updateSetupAuthBlock(url) {
+    const block = document.getElementById('setupAuthBlock');
+    const input = document.getElementById('setupAuthUrl');
+    if (block) block.classList.remove('hidden');
+    if (input) input.value = url || '';
+}
+
+async function handleSetupStart() {
+    updateSetupStatus('正在生成登录链接...');
+    try {
+        const data = await api.startGeminiAuth();
+        if (data.url) {
+            updateSetupAuthBlock(data.url);
+            updateSetupStatus('登录链接已生成，请完成授权并提交授权码。');
+        } else if (data.authenticated) {
+            finishSetup();
+        }
+    } catch (err) {
+        updateSetupStatus(`启动失败：${err.message}`);
+    }
+}
+
+async function handleSetupRefresh() {
+    updateSetupStatus('正在刷新状态...');
+    try {
+        const data = await api.getGeminiAuthStatus();
+        if (data.authenticated) {
+            finishSetup();
+            return;
+        }
+        if (data.url) updateSetupAuthBlock(data.url);
+        updateSetupStatus(data.url ? '等待授权码提交。' : '请点击开始认证生成链接。');
+    } catch (err) {
+        updateSetupStatus(`刷新失败：${err.message}`);
+    }
+}
+
+function handleSetupOpen() {
+    const input = document.getElementById('setupAuthUrl');
+    if (input && input.value) {
+        window.open(input.value, '_blank', 'noopener');
+    }
+}
+
+async function handleSetupSubmit() {
+    const input = document.getElementById('setupAuthCode');
+    const code = input ? input.value.trim() : '';
+    if (!code) {
+        updateSetupStatus('请输入授权码。');
+        return;
+    }
+    updateSetupStatus('正在提交授权码...');
+    try {
+        const result = await api.submitGeminiAuth(code);
+        if (result.status === 'success') {
+            finishSetup();
+        } else if (result.status === 'retry') {
+            updateSetupAuthBlock(result.url);
+            updateSetupStatus('授权码失效，请重新登录获取新授权码。');
+        } else {
+            updateSetupStatus('授权处理中，请稍后刷新状态。');
+        }
+    } catch (err) {
+        updateSetupStatus(`提交失败：${err.message}`);
+    }
+}
+
+function startSetupPolling() {
+    if (setupPollTimer) return;
+    setupPollTimer = setInterval(async () => {
+        try {
+            const status = await api.getGeminiAuthStatus();
+            if (status.authenticated) {
+                finishSetup();
+                return;
+            }
+            if (status.url) updateSetupAuthBlock(status.url);
+        } catch (err) {
+            console.error('Gemini auth polling failed:', err);
+        }
+    }, 3000);
+}
+
+function finishSetup() {
+    if (setupPollTimer) {
+        clearInterval(setupPollTimer);
+        setupPollTimer = null;
+    }
+    if (els.setupOverlay) els.setupOverlay.classList.add('hidden');
+    updateSetupStatus('认证完成。');
 }
 
 // ==========================================
@@ -756,8 +933,8 @@ function renderCardModal(markdown, title, options = {}) {
     const promptRawText = toText(metrics.metadata?.promptText);
     const promptStructText = toText(metrics.metadata?.promptParsed);
     const outputRawText = toText(metrics.metadata?.rawOutput);
-    let outputStructText = '';
-    if (outputRawText) {
+    let outputStructText = toText(metrics.metadata?.outputStructured);
+    if (!outputStructText && outputRawText) {
         try { outputStructText = JSON.stringify(JSON.parse(outputRawText), null, 2); } catch (e) {}
     }
     const promptDefaultView = promptRawText ? 'raw' : 'structured';

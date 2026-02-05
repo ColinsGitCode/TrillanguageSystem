@@ -4,7 +4,8 @@
   "description": "Simple web viewer for local trilingual HTML records",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "gemini-proxy": "node scripts/gemini-host-proxy.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

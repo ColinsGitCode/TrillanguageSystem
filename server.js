@@ -4,13 +4,16 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-const { buildPrompt } = require('./services/promptEngine');
+const { buildPrompt, buildMarkdownPrompt } = require('./services/promptEngine');
 const geminiService = require('./services/geminiService');
+const { runGeminiCli } = require('./services/geminiCliService');
+const { runGeminiProxy } = require('./services/geminiProxyService');
 const localLlmService = require('./services/localLlmService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
+const geminiAuthService = require('./services/geminiAuthService');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
 const { HealthCheckService } = require('./services/healthCheckService');
@@ -87,15 +90,43 @@ async function generateWithProvider(phrase, provider, perf) {
   perf.mark('promptBuild');
   const { targetDir, folderName } = ensureTodayDirectory();
   const baseName = buildBaseName(phrase, targetDir);
-  const prompt = buildPrompt({ phrase, filenameBase: baseName });
+  const geminiMode = (process.env.GEMINI_MODE || 'cli').toLowerCase();
+  const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
+  const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
+  const prompt = (useGeminiCli || useGeminiProxy)
+      ? buildMarkdownPrompt({ phrase, filenameBase: baseName })
+      : buildPrompt({ phrase, filenameBase: baseName });
 
   perf.mark('llmCall');
-  // Expecting { content, usage } structure
-  const response = await llmService.generateContent(prompt);
+  let response;
+  if (useGeminiCli) {
+      response = await runGeminiCli(prompt, {
+          baseName,
+          outputDir: process.env.GEMINI_CLI_OUTPUT_DIR || path.join(RECORDS_PATH, 'cli_suggestions')
+      });
+  } else if (useGeminiProxy) {
+      response = await runGeminiProxy(prompt, { baseName });
+  } else {
+      // Expecting { content, usage } structure
+      response = await llmService.generateContent(prompt);
+  }
   
   // Normalize response structure
   let content, usage;
-  if (response.content && response.usage) {
+  if (useGeminiCli || useGeminiProxy) {
+      const markdown = response.markdown || '';
+      const audioTasks = buildAudioTasksFromMarkdown(markdown);
+      const preparedMarkdown = await prepareMarkdownForCard(markdown, { baseName, audioTasks });
+      const htmlContent = await renderHtmlFromMarkdown(preparedMarkdown, { baseName, audioTasks, prepared: true });
+      content = {
+          markdown_content: preparedMarkdown,
+          html_content: htmlContent,
+          audio_tasks: audioTasks
+      };
+      const inputTokens = TokenCounter.estimate(prompt);
+      const outputTokens = TokenCounter.estimate(markdown);
+      usage = { input: inputTokens, output: outputTokens, total: inputTokens + outputTokens };
+  } else if (response.content && response.usage) {
       content = response.content;
       usage = response.usage;
   } else {
@@ -122,9 +153,14 @@ async function generateWithProvider(phrase, provider, perf) {
       metadata: {
         provider,
         timestamp: Date.now(),
-        model: provider === 'gemini' ? process.env.GEMINI_MODEL : process.env.LLM_MODEL,
+        model: provider === 'gemini'
+            ? (useGeminiCli
+              ? (process.env.GEMINI_CLI_MODEL || 'gemini-cli')
+              : (useGeminiProxy ? (process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
+            : process.env.LLM_MODEL,
         promptText: prompt,  // 在 metadata 中也保存一份
-        rawOutput: JSON.stringify(content, null, 2)
+        rawOutput: (useGeminiCli || useGeminiProxy) ? (response.rawOutput || '') : JSON.stringify(content, null, 2),
+        outputStructured: (useGeminiCli || useGeminiProxy) ? JSON.stringify(content, null, 2) : undefined
       }
     }
   };
@@ -364,6 +400,40 @@ app.get('/api/health', async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// ========== Gemini CLI Auth ==========
+app.get('/api/gemini/auth/status', (req, res) => {
+  const enabled = (process.env.GEMINI_MODE || 'cli').toLowerCase() === 'cli';
+  const status = geminiAuthService.getStatus();
+  res.json({ enabled, ...status });
+});
+
+app.post('/api/gemini/auth/start', async (req, res) => {
+  const enabled = (process.env.GEMINI_MODE || 'cli').toLowerCase() === 'cli';
+  if (!enabled) return res.status(400).json({ error: 'Gemini CLI not enabled' });
+  try {
+    const status = await geminiAuthService.startAuth();
+    res.json({ enabled, ...status });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/gemini/auth/submit', async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Missing authorization code' });
+  try {
+    const result = await geminiAuthService.submitCode(code);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/gemini/auth/cancel', (req, res) => {
+  const result = geminiAuthService.cancelAuth();
+  res.json(result);
 });
 
 // ========== 数据库查询API ==========

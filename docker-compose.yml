@@ -7,6 +7,9 @@ services:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
       - DB_PATH=/data/trilingual_records/trilingual_records.db
+      - GEMINI_MODE=host-proxy
+      - GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
+      - GEMINI_PROXY_MODEL=gemini-cli
       - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
       - TTS_EN_TYPE=kokoro
       - TTS_EN_SPEED=1.0
@@ -16,6 +19,8 @@ services:
       - TTS_JA_ENDPOINT=http://tts-ja:50021
       - TTS_JA_TYPE=voicevox
       - VOICEVOX_SPEAKER=2
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
     ports:
       - "3010:3010"
     volumes:
@@ -23,6 +28,8 @@ services:
       - .:/app
       - /app/node_modules # prevent overwriting container node_modules with host ones
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   tts-en:
     image: dlaszlo/speech-service:cpu-latest

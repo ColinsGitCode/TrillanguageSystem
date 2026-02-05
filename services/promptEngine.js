@@ -118,4 +118,18 @@ JSON 结构:
     return strictCompactPrompt;
 }
 
-module.exports = { buildPrompt };
+function buildMarkdownPrompt(args) {
+    const phrase = args.phrase || '';
+    const templatePath = process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_3LANS_markdown.md');
+    let template = '';
+    try {
+        template = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+        // Fallback to minimal inline prompt if template missing
+        template = `你是中英日三语学习卡片生成器。\n输入短语: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+    }
+
+    return template.replace(/\{\{\s*phrase\s*\}\}/g, phrase);
+}
+
+module.exports = { buildPrompt, buildMarkdownPrompt };
