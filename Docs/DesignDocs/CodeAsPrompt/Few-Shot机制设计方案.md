@@ -316,3 +316,63 @@ docker compose restart viewer
 - 新增配置项（.env / docker-compose）
 - `scripts/batch-test.sh` + `scripts/compare-results.js`
 - 更新 BACKEND/API 文档
+
+---
+
+## 11. 可执行清单（Round 曲线实验）
+
+### 11.1 目标
+- 产出“本地 LLM 随迭代轮次提升”的可复现实验曲线（质量、teacher gap、token、时延）。
+- 所有实验数据入库，可追溯到单条样本与具体 Prompt/Few-shot 配置。
+
+### 11.2 任务清单与验收
+
+1. **扩展数据库结构（轮次/样本/Teacher）**
+- 新增表：`experiment_rounds`、`experiment_samples`、`teacher_references`
+- 新增索引：`experiment_id + round_number`、`phrase`、`created_at`
+- 验收：`sqlite` 可查询到 3 张表且索引存在
+
+2. **生成链路写入轮次数据**
+- `/api/generate` 支持：`experiment_round`、`is_teacher_reference`、`fewshot_options`
+- 成功生成后写入 `experiment_samples`
+- 如果 `is_teacher_reference=true`，写入/更新 `teacher_references`
+- 验收：调用 `/api/generate` 后，样本可在 DB 查到
+
+3. **实验聚合 API**
+- 扩展 `/api/experiments/:id`：返回 `rounds`、`samples`、`teacherRefs`、`trend`
+- trend 包含：`avgQuality`、`avgTokens`、`avgLatency`、`teacherGap`
+- 验收：同一实验 ID 可直接拉取画图数据
+
+4. **批量轮次实验脚本**
+- 新增 `scripts/run_fewshot_rounds.js`
+- 输入：`phrases.txt`、`experiment_id`、轮次配置 JSON
+- 输出：每轮 `jsonl`、总 `summary.json`
+- 验收：可一次性跑完 baseline->fewshot 多轮
+
+5. **图表数据与 D3 绘图脚本**
+- 新增 `scripts/export_round_trend_dataset.js`
+- 新增 `d3/render_round_trend_charts.mjs`
+- 输出 SVG：质量折线、teacher gap 折线、质量-token 双轴趋势
+- 验收：`Docs/TestDocs/charts/` 生成可用 SVG
+
+6. **测试与回归**
+- 迁移测试：`node scripts/migrate_fewshot_tables.js`
+- 语法测试：`node -e "require('./services/databaseService')"`
+- 端到端：跑 2 轮 × N 条短语，校验 API+图表
+- 验收：报告可直接引用曲线图
+
+### 11.3 执行命令（标准流程）
+
+```bash
+# 1) 迁移
+node scripts/migrate_fewshot_tables.js
+
+# 2) 运行轮次实验
+node scripts/run_fewshot_rounds.js phrases.txt exp_round_demo
+
+# 3) 导出趋势数据
+node scripts/export_round_trend_dataset.js exp_round_demo Docs/TestDocs/data
+
+# 4) 渲染 D3 图
+node d3/render_round_trend_charts.mjs
+```

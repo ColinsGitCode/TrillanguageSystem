@@ -16,6 +16,7 @@ const { postProcessGeneratedContent } = require('./services/contentPostProcessor
 const geminiAuthService = require('./services/geminiAuthService');
 const goldenExamplesService = require('./services/goldenExamplesService');
 const fewShotMetricsService = require('./services/fewShotMetricsService');
+const experimentTrackingService = require('./services/experimentTrackingService');
 const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -78,6 +79,11 @@ function truncateExamplesForBudget(examples, outputMode, maxChars) {
     });
 }
 
+function toNumberOr(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 function normalizeAudioTasks(tasks, baseName) {
   if (!Array.isArray(tasks)) return [];
   return tasks.map((task, index) => {
@@ -113,7 +119,7 @@ function validateGeneratedContent(content, options = {}) {
 
 // ========== Core Logic ==========
 
-async function generateWithProvider(phrase, provider, perf) {
+async function generateWithProvider(phrase, provider, perf, options = {}) {
   let llmService;
   try {
       llmService = provider === 'gemini' ? geminiService : require('./services/localLlmService');
@@ -128,19 +134,25 @@ async function generateWithProvider(phrase, provider, perf) {
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
+  const resolvedGeminiCliModel = options.modelOverride || process.env.GEMINI_CLI_MODEL || '';
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   let prompt = useMarkdownOutput
       ? buildMarkdownPrompt({ phrase, filenameBase: baseName })
       : buildPrompt({ phrase, filenameBase: baseName });
 
+  const reqFewShot = options.fewshotOptions || {};
+  const envFewshotEnabled = String(process.env.ENABLE_GOLDEN_EXAMPLES || '').toLowerCase() === 'true';
+  const enabledOverride = typeof reqFewShot.enabled === 'boolean' ? reqFewShot.enabled : null;
   const fewShotConfig = {
-      enabled: provider === 'local' && String(process.env.ENABLE_GOLDEN_EXAMPLES || '').toLowerCase() === 'true',
-      strategy: process.env.GOLDEN_EXAMPLES_STRATEGY || 'HIGH_QUALITY_GEMINI',
-      count: Number(process.env.GOLDEN_EXAMPLES_COUNT || 3),
-      minScore: Number(process.env.GOLDEN_EXAMPLES_MIN_SCORE || 85),
-      contextWindow: Number(process.env.LLM_CONTEXT_WINDOW || 4096),
-      tokenBudgetRatio: Number(process.env.FEWSHOT_TOKEN_BUDGET_RATIO || 0.25)
+      enabled: provider === 'local' && (enabledOverride !== null ? enabledOverride : envFewshotEnabled),
+      strategy: reqFewShot.strategy || process.env.GOLDEN_EXAMPLES_STRATEGY || 'HIGH_QUALITY_GEMINI',
+      count: toNumberOr(reqFewShot.count ?? process.env.GOLDEN_EXAMPLES_COUNT ?? 3, 3),
+      minScore: toNumberOr(reqFewShot.minScore ?? process.env.GOLDEN_EXAMPLES_MIN_SCORE ?? 85, 85),
+      contextWindow: toNumberOr(reqFewShot.contextWindow ?? process.env.LLM_CONTEXT_WINDOW ?? 4096, 4096),
+      tokenBudgetRatio: toNumberOr(reqFewShot.tokenBudgetRatio ?? process.env.FEWSHOT_TOKEN_BUDGET_RATIO ?? 0.25, 0.25),
+      exampleMaxChars: toNumberOr(reqFewShot.exampleMaxChars ?? process.env.GOLDEN_EXAMPLE_MAX_CHARS ?? 900, 900),
+      teacherFirst: reqFewShot.teacherFirst !== false
   };
 
   const basePromptTokens = TokenCounter.estimate(prompt);
@@ -152,6 +164,7 @@ async function generateWithProvider(phrase, provider, perf) {
       minScore: fewShotConfig.minScore,
       contextWindow: fewShotConfig.contextWindow,
       tokenBudgetRatio: fewShotConfig.tokenBudgetRatio,
+      exampleMaxChars: fewShotConfig.exampleMaxChars,
       basePromptTokens,
       fewshotPromptTokens: 0,
       totalPromptTokensEst: basePromptTokens,
@@ -165,7 +178,11 @@ async function generateWithProvider(phrase, provider, perf) {
       const outputMode = useMarkdownOutput ? 'markdown' : 'json';
       let examples = await goldenExamplesService.getRelevantExamples(phrase, fewShotConfig.count, {
           outputMode,
-          minQualityScore: fewShotConfig.minScore
+          minQualityScore: fewShotConfig.minScore,
+          experimentId: options.experimentId || '',
+          roundNumber: options.experimentRound || 0,
+          maxOutputChars: fewShotConfig.exampleMaxChars,
+          teacherFirst: fewShotConfig.teacherFirst
       });
       let enhancedPrompt = prompt;
       let fallbackReason = null;
@@ -173,6 +190,7 @@ async function generateWithProvider(phrase, provider, perf) {
       if (!examples.length) {
           fallbackReason = 'no_examples';
       } else {
+          examples = truncateExamplesForBudget(examples, outputMode, fewShotConfig.exampleMaxChars);
           enhancedPrompt = goldenExamplesService.buildEnhancedPrompt(prompt, examples);
           let totalTokens = TokenCounter.estimate(enhancedPrompt);
           let fewshotTokens = Math.max(0, totalTokens - basePromptTokens);
@@ -234,10 +252,11 @@ async function generateWithProvider(phrase, provider, perf) {
   if (useGeminiCli) {
       response = await runGeminiCli(prompt, {
           baseName,
-          outputDir: process.env.GEMINI_CLI_OUTPUT_DIR || path.join(RECORDS_PATH, 'cli_suggestions')
+          outputDir: process.env.GEMINI_CLI_OUTPUT_DIR || path.join(RECORDS_PATH, 'cli_suggestions'),
+          model: resolvedGeminiCliModel
       });
   } else if (useGeminiProxy) {
-      response = await runGeminiProxy(prompt, { baseName });
+      response = await runGeminiProxy(prompt, { baseName, model: resolvedGeminiCliModel });
   } else {
       // Expecting { content, usage } structure
       response = await llmService.generateContent(prompt);
@@ -288,8 +307,8 @@ async function generateWithProvider(phrase, provider, perf) {
         timestamp: Date.now(),
         model: provider === 'gemini'
             ? (useGeminiCli
-              ? (process.env.GEMINI_CLI_MODEL || 'gemini-cli')
-              : (useGeminiProxy ? (process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
+              ? (response.model || resolvedGeminiCliModel || 'gemini-cli')
+              : (useGeminiProxy ? (response.model || resolvedGeminiCliModel || process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
             : process.env.LLM_MODEL,
         promptText: prompt,  // 在 metadata 中也保存一份
         promptParsed: promptData,
@@ -306,6 +325,7 @@ async function generateWithProvider(phrase, provider, perf) {
           minScore: fewShotMeta.minScore,
           contextWindow: fewShotMeta.contextWindow,
           tokenBudgetRatio: fewShotMeta.tokenBudgetRatio,
+          exampleMaxChars: fewShotMeta.exampleMaxChars,
           basePromptTokens: fewShotMeta.basePromptTokens,
           fewshotPromptTokens: fewShotMeta.fewshotPromptTokens,
           totalPromptTokensEst: fewShotMeta.totalPromptTokensEst,
@@ -331,8 +351,17 @@ async function handleComparisonMode(phrase, options = {}) {
   const perfLocal = new PerformanceMonitor().start();
 
   const [geminiResult, localResult] = await Promise.allSettled([
-    generateWithProvider(phrase, 'gemini', perfGemini),
-    generateWithProvider(phrase, 'local', perfLocal)
+    generateWithProvider(phrase, 'gemini', perfGemini, {
+      ...(options.geminiOptions || {}),
+      experimentId: options.experimentId,
+      experimentRound: options.experimentRound
+    }),
+    generateWithProvider(phrase, 'local', perfLocal, {
+      ...(options.localOptions || {}),
+      fewshotOptions: options.fewshotOptions || {},
+      experimentId: options.experimentId,
+      experimentRound: options.experimentRound
+    })
   ]);
 
   const createInputCard = async (baseInfo) => {
@@ -447,6 +476,21 @@ async function handleComparisonMode(phrase, options = {}) {
             if (runId && Array.isArray(fewShot.examples) && fewShot.examples.length) {
               fewShotMetricsService.insertFewShotExamples(runId, fewShot.examples);
             }
+
+            experimentTrackingService.recordExperimentSample({
+              generationId,
+              phrase,
+              provider: label,
+              experimentId,
+              roundNumber: options.experimentRound || 0,
+              roundName: options.roundName || null,
+              variant,
+              isTeacherReference: Boolean(options.isTeacherReference && label === 'gemini'),
+              observability,
+              fewShot,
+              promptText: prompt,
+              content
+            });
           } catch (fsErr) {
             console.warn('[FewShot] Compare run record failed:', fsErr.message);
           }
@@ -544,18 +588,45 @@ app.post('/api/generate', async (req, res) => {
     if (!canGenerate(req)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
     // 默认使用本地LLM（Gemini已封存）
-    const { phrase, llm_provider = 'local', enable_compare = false, experiment_id, variant } = req.body;
+    const {
+      phrase,
+      llm_provider = 'local',
+      enable_compare = false,
+      experiment_id,
+      variant,
+      experiment_round = 0,
+      round_name,
+      is_teacher_reference = false,
+      fewshot_options = {},
+      llm_model
+    } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
+
+    const roundNumber = Number.isFinite(Number(experiment_round))
+      ? Math.max(0, Math.floor(Number(experiment_round)))
+      : 0;
 
     // Mode: Comparison
     if (enable_compare) {
         const expId = experiment_id || createExperimentId();
-        const result = await handleComparisonMode(phrase, { experimentId: expId, variantBase: variant || 'compare' });
+        const result = await handleComparisonMode(phrase, {
+          experimentId: expId,
+          experimentRound: roundNumber,
+          roundName: round_name || null,
+          isTeacherReference: Boolean(is_teacher_reference),
+          variantBase: variant || 'compare',
+          fewshotOptions: fewshot_options
+        });
         return res.json(result);
     }
 
     // Mode: Single
-    const genResult = await generateWithProvider(phrase, llm_provider, perf);
+    const genResult = await generateWithProvider(phrase, llm_provider, perf, {
+      fewshotOptions: fewshot_options,
+      experimentId: experiment_id || '',
+      experimentRound: roundNumber,
+      modelOverride: llm_model || null
+    });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
 
     postProcessGeneratedContent(content);
@@ -619,9 +690,9 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // Few-shot run record (baseline/fewshot)
+    const expId = experiment_id || createExperimentId();
     if (generationId) {
       try {
-        const expId = experiment_id || createExperimentId();
         const runVariant = variant || (genResult.fewShot?.enabled ? 'fewshot' : 'baseline');
         const fewShot = genResult.fewShot || {};
         const runId = fewShotMetricsService.insertFewShotRun({
@@ -649,6 +720,21 @@ app.post('/api/generate', async (req, res) => {
         if (runId && Array.isArray(fewShot.examples) && fewShot.examples.length) {
           fewShotMetricsService.insertFewShotExamples(runId, fewShot.examples);
         }
+
+        experimentTrackingService.recordExperimentSample({
+          generationId,
+          phrase,
+          provider: llm_provider,
+          experimentId: expId,
+          roundNumber,
+          roundName: round_name || null,
+          variant: runVariant,
+          isTeacherReference: Boolean(is_teacher_reference),
+          observability,
+          fewShot,
+          promptText: genResult.prompt,
+          content
+        });
       } catch (fsErr) {
         console.warn('[FewShot] Run record failed:', fsErr.message);
       }
@@ -656,6 +742,8 @@ app.post('/api/generate', async (req, res) => {
 
     res.json({
         success: true,
+        experiment_id: expId,
+        experiment_round: roundNumber,
         generationId, // 返回数据库ID
         result,
         audio,
@@ -666,6 +754,43 @@ app.post('/api/generate', async (req, res) => {
 
   } catch (err) {
       console.error('[Generate] Error:', err);
+
+      try {
+        const {
+          experiment_id,
+          experiment_round = 0,
+          round_name,
+          variant,
+          llm_provider = 'local',
+          is_teacher_reference = false,
+          llm_model
+        } = req.body || {};
+        if (experiment_id && req.body?.phrase) {
+          experimentTrackingService.recordExperimentSample({
+            generationId: null,
+            phrase: req.body.phrase,
+            provider: llm_provider,
+            experimentId: experiment_id,
+            roundNumber: experiment_round,
+            roundName: round_name || null,
+            variant: variant || 'error',
+            isTeacherReference: Boolean(is_teacher_reference),
+            observability: {
+              quality: { score: 0, dimensions: {} },
+              tokens: { total: 0 },
+              performance: { totalTime: 0 },
+              metadata: { model: llm_model || (llm_provider === 'local' ? process.env.LLM_MODEL : process.env.GEMINI_MODEL) }
+            },
+            fewShot: { enabled: false, countUsed: 0 },
+            promptText: '',
+            content: '',
+            success: false,
+            errorMessage: err.message
+          });
+        }
+      } catch (trackErr) {
+        console.warn('[Experiment] Failed to record error sample:', trackErr.message);
+      }
 
       // 记录错误到数据库
       try {
@@ -996,7 +1121,32 @@ app.get('/api/experiments/:id', (req, res) => {
         }
         const runs = dbService.getFewShotRuns(experimentId);
         const examples = dbService.getFewShotExamples(runs.map(r => r.id));
-        res.json({ experimentId, runs, examples });
+        const rounds = dbService.getExperimentRoundTrend(experimentId);
+        const samples = dbService.getExperimentSamples(experimentId);
+        const teacherRefs = dbService.getTeacherReferences(experimentId);
+        const baseline = rounds.find((r) => Number(r.roundNumber) === 0) || rounds[0] || null;
+        const deltas = rounds.map((round) => ({
+            roundNumber: round.roundNumber,
+            roundName: round.roundName,
+            deltaQuality: baseline ? (Number(round.avgQualityScore || 0) - Number(baseline.avgQualityScore || 0)) : 0,
+            deltaTokens: baseline ? (Number(round.avgTokensTotal || 0) - Number(baseline.avgTokensTotal || 0)) : 0,
+            deltaLatency: baseline ? (Number(round.avgLatencyMs || 0) - Number(baseline.avgLatencyMs || 0)) : 0,
+            deltaTeacherGap: baseline ? (Number(round.teacherGap || 0) - Number(baseline.teacherGap || 0)) : 0
+        }));
+        res.json({
+            experimentId,
+            runs,
+            examples,
+            rounds,
+            samples,
+            teacherRefs,
+            deltas,
+            trend: {
+                roundCount: rounds.length,
+                sampleCount: samples.length,
+                hasTeacher: teacherRefs.length > 0
+            }
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

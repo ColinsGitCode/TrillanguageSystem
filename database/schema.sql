@@ -348,5 +348,93 @@ CREATE TABLE IF NOT EXISTS few_shot_examples (
 CREATE INDEX IF NOT EXISTS idx_fse_run_id ON few_shot_examples(run_id);
 
 -- ========================================
+-- 表 9: experiment_rounds（实验轮次配置与聚合）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS experiment_rounds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  round_name TEXT,
+  variant TEXT,
+  llm_model TEXT,
+  fewshot_enabled INTEGER DEFAULT 0,
+  fewshot_strategy TEXT,
+  fewshot_count INTEGER DEFAULT 0,
+  fewshot_min_score INTEGER,
+  token_budget_ratio REAL,
+  context_window INTEGER,
+  sample_count INTEGER DEFAULT 0,
+  success_count INTEGER DEFAULT 0,
+  avg_quality_score REAL,
+  avg_tokens_total REAL,
+  avg_latency_ms REAL,
+  teacher_avg_quality REAL,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(experiment_id, round_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_er_experiment ON experiment_rounds(experiment_id);
+CREATE INDEX IF NOT EXISTS idx_er_created_at ON experiment_rounds(created_at);
+
+-- ========================================
+-- 表 10: teacher_references（Teacher 标准答案快照）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS teacher_references (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  phrase TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  generation_id INTEGER,
+  quality_score REAL,
+  output_hash TEXT,
+  output_text TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(experiment_id, round_number, phrase),
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tr_experiment_round ON teacher_references(experiment_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_tr_phrase ON teacher_references(phrase);
+
+-- ========================================
+-- 表 11: experiment_samples（实验样本明细）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS experiment_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  generation_id INTEGER,
+  phrase TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  variant TEXT,
+  is_teacher INTEGER DEFAULT 0,
+  quality_score REAL,
+  quality_dimensions TEXT,
+  tokens_total INTEGER,
+  latency_ms INTEGER,
+  prompt_hash TEXT,
+  fewshot_enabled INTEGER DEFAULT 0,
+  success INTEGER DEFAULT 1,
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_es_experiment_round ON experiment_samples(experiment_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_es_phrase ON experiment_samples(phrase);
+CREATE INDEX IF NOT EXISTS idx_es_provider ON experiment_samples(provider);
+CREATE INDEX IF NOT EXISTS idx_es_created_at ON experiment_samples(created_at);
+
+-- ========================================
 -- 完成初始化
 -- ========================================

@@ -19,6 +19,10 @@ function stripFence(text) {
 function runGeminiCli(prompt, options = {}) {
   const {
     bin = process.env.GEMINI_CLI_BIN || 'gemini',
+    model = options.model || process.env.GEMINI_CLI_MODEL || '',
+    modelArg = process.env.GEMINI_CLI_MODEL_ARG || '--model',
+    promptArg = process.env.GEMINI_CLI_PROMPT_ARG || '-p',
+    extraArgs = [],
     timeoutMs = Number(process.env.GEMINI_CLI_TIMEOUT_MS || 90000),
     outputDir = process.env.GEMINI_CLI_OUTPUT_DIR || '',
     baseName = 'suggestion'
@@ -28,7 +32,16 @@ function runGeminiCli(prompt, options = {}) {
     let stdout = '';
     let stderr = '';
 
-    const proc = spawn(bin, ['-p', prompt], {
+    const args = [];
+    if (model) {
+      args.push(modelArg, model);
+    }
+    if (Array.isArray(extraArgs) && extraArgs.length) {
+      args.push(...extraArgs.map((item) => String(item)));
+    }
+    args.push(promptArg, prompt);
+
+    const proc = spawn(bin, args, {
       shell: false,
       env: { ...process.env, NO_COLOR: '1' }
     });
@@ -56,7 +69,7 @@ function runGeminiCli(prompt, options = {}) {
         fs.writeFileSync(path.join(outputDir, filename), cleaned, 'utf8');
       }
 
-      resolve({ markdown: cleaned, rawOutput: cleaned });
+      resolve({ markdown: cleaned, rawOutput: cleaned, model: model || null });
     });
   });
 }

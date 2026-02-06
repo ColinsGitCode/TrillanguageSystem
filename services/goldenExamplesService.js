@@ -34,6 +34,16 @@ const EXTRACTION_STRATEGIES = {
   }
 };
 
+const DEFAULT_MAX_OUTPUT_CHARS = Number(process.env.GOLDEN_EXAMPLE_MAX_CHARS || 900);
+
+function clipText(raw, maxChars = DEFAULT_MAX_OUTPUT_CHARS) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  if (text.length <= maxChars) return text;
+  const safe = Math.max(120, maxChars - 3);
+  return `${text.slice(0, safe)}...`;
+}
+
 /**
  * 从数据库提取 Golden Examples
  * @param {string} strategy - 提取策略
@@ -80,7 +90,10 @@ async function extractGoldenExamples(strategy = 'HIGH_QUALITY_GEMINI', options =
       limit
     );
 
-    return examples.map(ex => formatExample(ex, { outputMode }));
+    return examples.map((ex) => formatExample(ex, {
+      outputMode,
+      maxOutputChars: Number(options.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS)
+    }));
   } catch (error) {
     console.error('[GoldenExamples] Error extracting examples:', error);
     return [];
@@ -96,23 +109,24 @@ function safeJsonParse(text) {
   }
 }
 
-function normalizeExampleOutput(record, outputMode) {
+function normalizeExampleOutput(record, outputMode, options = {}) {
+  const maxOutputChars = Number(options.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS);
   if (outputMode === 'markdown') {
-    const markdown = record.markdown_content || '';
+    const markdown = clipText(record.markdown_content || record.llm_output || '', maxOutputChars);
     return { outputText: markdown, outputObject: null };
   }
 
   const parsed = safeJsonParse(record.llm_output);
   if (parsed && typeof parsed === 'object') {
     const minimal = {
-      markdown_content: parsed.markdown_content || record.markdown_content || '',
-      audio_tasks: Array.isArray(parsed.audio_tasks) ? parsed.audio_tasks : []
+      markdown_content: clipText(parsed.markdown_content || record.markdown_content || '', maxOutputChars),
+      audio_tasks: Array.isArray(parsed.audio_tasks) ? parsed.audio_tasks.slice(0, 6) : []
     };
     return { outputText: JSON.stringify(minimal, null, 2), outputObject: minimal };
   }
 
   const fallback = {
-    markdown_content: record.markdown_content || '',
+    markdown_content: clipText(record.markdown_content || record.llm_output || '', maxOutputChars),
     audio_tasks: []
   };
   return { outputText: JSON.stringify(fallback, null, 2), outputObject: fallback };
@@ -123,7 +137,7 @@ function normalizeExampleOutput(record, outputMode) {
  */
 function formatExample(record, options = {}) {
   const outputMode = (options.outputMode || 'json').toLowerCase();
-  const { outputText } = normalizeExampleOutput(record, outputMode);
+  const { outputText } = normalizeExampleOutput(record, outputMode, options);
   return {
     input: record.phrase,
     output: outputText,
@@ -145,22 +159,65 @@ function formatExample(record, options = {}) {
  */
 async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
   try {
-    // 策略：优先选择与当前短语相似的高质量示例
-    // 可以基于：1) 短语长度 2) 语言类型 3) 复杂度
-
     const phraseLength = currentPhrase.length;
     const isEnglish = /^[a-zA-Z\s]+$/.test(currentPhrase);
     const outputMode = (options.outputMode || 'json').toLowerCase();
     const minScore = Number(options.minQualityScore || 85);
     const provider = options.provider || 'gemini';
+    const experimentId = String(options.experimentId || '').trim();
+    const roundNumber = Number(options.roundNumber || 0);
+    const maxOutputChars = Number(options.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS);
+    const teacherFirst = options.teacherFirst !== false;
+
+    // 优先复用同实验的 teacher 样本
+    if (teacherFirst && experimentId) {
+      const teacherQuery = `
+        SELECT
+          tr.id,
+          tr.phrase,
+          tr.provider AS llm_provider,
+          tr.quality_score,
+          tr.output_text AS llm_output,
+          tr.output_text AS markdown_content,
+          tr.created_at,
+          NULL AS tokens_total
+        FROM teacher_references tr
+        WHERE tr.experiment_id = ?
+          AND tr.round_number <= ?
+          AND tr.quality_score >= ?
+        ORDER BY
+          ABS(LENGTH(tr.phrase) - ?) ASC,
+          tr.quality_score DESC,
+          tr.updated_at DESC
+        LIMIT ?
+      `;
+
+      const teacherExamples = dbService.db.prepare(teacherQuery).all(
+        experimentId,
+        roundNumber,
+        minScore,
+        phraseLength,
+        count
+      );
+
+      if (teacherExamples.length) {
+        return teacherExamples.map((ex) => formatExample(ex, {
+          outputMode,
+          maxOutputChars
+        }));
+      }
+    }
 
     let query = `
       SELECT
         g.id,
+        g.llm_provider,
         g.phrase,
         g.markdown_content,
+        g.created_at,
         om.quality_score,
         om.llm_output,
+        om.tokens_total,
         LENGTH(g.phrase) as phrase_length
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
@@ -182,7 +239,10 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
     `;
 
     const examples = dbService.db.prepare(query).all(provider, minScore, phraseLength, count);
-    return examples.map(ex => formatExample(ex, { outputMode }));
+    return examples.map((ex) => formatExample(ex, {
+      outputMode,
+      maxOutputChars
+    }));
   } catch (error) {
     console.error('[GoldenExamples] Error getting relevant examples:', error);
     return [];
@@ -249,23 +309,25 @@ function buildEnhancedPrompt(basePrompt, examples) {
     return basePrompt;
   }
 
-  const fewShotSection = `
-以下是 ${examples.length} 个高质量生成示例（评分 > 85），请参考它们的格式和详细程度：
+  const exampleBlocks = examples.map((ex, idx) => [
+    `### 示例 ${idx + 1}（质量评分: ${ex.qualityScore || 'N/A'}）`,
+    `输入: ${String(ex.input || '').trim()}`,
+    '输出示例:',
+    String(ex.output || '').trim()
+  ].join('\n')).join('\n\n');
 
-${examples.map((ex, idx) => `
-### 示例 ${idx + 1}（质量评分: ${ex.qualityScore}）
-**输入**: ${ex.input}
+  const fewShotSection = [
+    `请参考以下 ${examples.length} 个高质量示例，仅学习结构与细节层级，不要照抄具体文本。`,
+    '严格遵循输出格式，并保证字段完整。',
+    '',
+    exampleBlocks,
+    '',
+    '---',
+    '',
+    '现在请基于下面任务生成结果：'
+  ].join('\n');
 
-**输出**:
-${ex.output}
-`).join('\n')}
-
----
-
-现在请按照上述示例的质量标准，为以下短语生成学习卡片：
-`;
-
-  return fewShotSection + '\n\n' + basePrompt;
+  return `${fewShotSection}\n\n${basePrompt}`;
 }
 
 module.exports = {

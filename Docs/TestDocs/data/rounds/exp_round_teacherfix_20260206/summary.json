@@ -1,0 +1,110 @@
+{
+  "experimentId": "exp_round_teacherfix_20260206",
+  "apiBase": "http://localhost:3010",
+  "phrases": [
+    "提示词工程",
+    "API Gateway",
+    "多模型对比"
+  ],
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "provider": "local",
+      "variant": "baseline",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 82,
+      "avgTokens": 1095,
+      "avgLatency": 54065.333333333336
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "teacher_seed_r1",
+      "provider": "gemini",
+      "variant": "teacher_seed_r1",
+      "isTeacherReference": true,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 96,
+      "avgTokens": 452.6666666666667,
+      "avgLatency": 34563.666666666664
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "fewshot_r1",
+      "provider": "local",
+      "variant": "fewshot_r1",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 1,
+        "minScore": 70,
+        "tokenBudgetRatio": 0.15,
+        "exampleMaxChars": 420,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 79,
+      "avgTokens": 1352.6666666666667,
+      "avgLatency": 59930
+    },
+    {
+      "roundNumber": 2,
+      "roundName": "fewshot_r2",
+      "provider": "local",
+      "variant": "fewshot_r2",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 75,
+        "tokenBudgetRatio": 0.18,
+        "exampleMaxChars": 460,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 80.33333333333333,
+      "avgTokens": 1527.3333333333333,
+      "avgLatency": 56732.666666666664
+    },
+    {
+      "roundNumber": 3,
+      "roundName": "fewshot_r3",
+      "provider": "local",
+      "variant": "fewshot_r3",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 3,
+        "minScore": 75,
+        "tokenBudgetRatio": 0.2,
+        "exampleMaxChars": 500,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 79.33333333333333,
+      "avgTokens": 1548.3333333333333,
+      "avgLatency": 56561.666666666664
+    }
+  ],
+  "generatedAt": "2026-02-06T06:26:27.316Z"
+}

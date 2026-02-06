@@ -7,6 +7,9 @@ const PORT = Number(process.env.GEMINI_PROXY_PORT || 3210);
 const GEMINI_BIN = process.env.GEMINI_PROXY_BIN || 'gemini';
 const TIMEOUT_MS = Number(process.env.GEMINI_PROXY_TIMEOUT_MS || 90000);
 const OUTPUT_DIR = process.env.GEMINI_PROXY_OUTPUT_DIR || '';
+const DEFAULT_MODEL = process.env.GEMINI_PROXY_MODEL || '';
+const MODEL_ARG = process.env.GEMINI_PROXY_MODEL_ARG || '--model';
+const PROMPT_ARG = process.env.GEMINI_PROXY_PROMPT_ARG || '-p';
 
 function ensureDir(dir) {
   if (!dir) return;
@@ -22,11 +25,17 @@ function stripFence(text) {
   return cleaned;
 }
 
-function runGemini(prompt, baseName = 'suggestion') {
+function runGemini(prompt, baseName = 'suggestion', modelOverride = '') {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
-    const proc = spawn(GEMINI_BIN, ['-p', prompt], {
+    const selectedModel = String(modelOverride || DEFAULT_MODEL || '').trim();
+    const args = [];
+    if (selectedModel) {
+      args.push(MODEL_ARG, selectedModel);
+    }
+    args.push(PROMPT_ARG, prompt);
+    const proc = spawn(GEMINI_BIN, args, {
       shell: false,
       env: { ...process.env, NO_COLOR: '1' }
     });
@@ -51,7 +60,7 @@ function runGemini(prompt, baseName = 'suggestion') {
         const filename = `${Date.now()}_${safeBase}_suggestion.txt`;
         fs.writeFileSync(path.join(OUTPUT_DIR, filename), cleaned, 'utf8');
       }
-      resolve({ markdown: cleaned, rawOutput: cleaned });
+      resolve({ markdown: cleaned, rawOutput: cleaned, model: selectedModel || null });
     });
   });
 }
@@ -93,7 +102,7 @@ const server = http.createServer(async (req, res) => {
       if (!prompt) {
         return sendJson(res, 400, { error: 'Missing prompt' });
       }
-      const result = await runGemini(prompt, data.baseName);
+      const result = await runGemini(prompt, data.baseName, data.model);
       return sendJson(res, 200, result);
     } catch (err) {
       return sendJson(res, 500, { error: err.message });

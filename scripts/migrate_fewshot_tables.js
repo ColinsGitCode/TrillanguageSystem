@@ -18,7 +18,7 @@ db.pragma('foreign_keys = ON');
 
 try {
   db.exec(schema);
-  console.log('[migrate] few_shot tables ensured.');
+  console.log('[migrate] few-shot + experiment tracking tables ensured.');
 } catch (err) {
   console.error('[migrate] failed:', err.message);
   process.exit(1);

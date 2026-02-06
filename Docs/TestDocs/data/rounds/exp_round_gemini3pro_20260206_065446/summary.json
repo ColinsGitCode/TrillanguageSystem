@@ -1,0 +1,132 @@
+{
+  "experimentId": "exp_round_gemini3pro_20260206_065446",
+  "apiBase": "http://localhost:3010",
+  "phrases": [
+    "提示词工程",
+    "API Gateway",
+    "多模型对比"
+  ],
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "provider": "local",
+      "model": "",
+      "variant": "baseline",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 78,
+      "avgTokens": 1102.3333333333333,
+      "avgLatency": 53406.333333333336
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "teacher_seed_r1",
+      "provider": "gemini",
+      "model": "gemini-3-pro",
+      "variant": "teacher_seed_r1",
+      "isTeacherReference": true,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 98,
+      "avgTokens": 451.3333333333333,
+      "avgLatency": 33372.333333333336
+    },
+    {
+      "roundNumber": 2,
+      "roundName": "fewshot_r1",
+      "provider": "local",
+      "model": "",
+      "variant": "fewshot_r1",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 1,
+        "minScore": 80,
+        "tokenBudgetRatio": 0.15,
+        "exampleMaxChars": 320,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 78,
+      "avgTokens": 1324.3333333333333,
+      "avgLatency": 60296.333333333336
+    },
+    {
+      "roundNumber": 3,
+      "roundName": "teacher_seed_r2",
+      "provider": "gemini",
+      "model": "gemini-3-pro",
+      "variant": "teacher_seed_r2",
+      "isTeacherReference": true,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 97,
+      "avgTokens": 455,
+      "avgLatency": 41489
+    },
+    {
+      "roundNumber": 4,
+      "roundName": "fewshot_r2",
+      "provider": "local",
+      "model": "",
+      "variant": "fewshot_r2",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 82,
+        "tokenBudgetRatio": 0.18,
+        "exampleMaxChars": 360,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 80,
+      "avgTokens": 1482.6666666666667,
+      "avgLatency": 61759.333333333336
+    },
+    {
+      "roundNumber": 5,
+      "roundName": "fewshot_r3",
+      "provider": "local",
+      "model": "",
+      "variant": "fewshot_r3",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 3,
+        "minScore": 85,
+        "tokenBudgetRatio": 0.2,
+        "exampleMaxChars": 420,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 82.33333333333333,
+      "avgTokens": 1749.3333333333333,
+      "avgLatency": 65226
+    }
+  ],
+  "generatedAt": "2026-02-06T07:11:49.022Z"
+}

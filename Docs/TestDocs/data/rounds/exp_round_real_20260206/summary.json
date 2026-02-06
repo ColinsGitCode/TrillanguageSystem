@@ -1,0 +1,85 @@
+{
+  "experimentId": "exp_round_real_20260206",
+  "apiBase": "http://localhost:3010",
+  "phrases": [
+    "提示词工程",
+    "API Gateway",
+    "多模型对比"
+  ],
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "provider": "local",
+      "variant": "baseline",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 79,
+      "avgTokens": 1108.6666666666667,
+      "avgLatency": 54916.333333333336
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "fewshot_r1",
+      "provider": "local",
+      "variant": "fewshot_r1",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 1,
+        "minScore": 80,
+        "tokenBudgetRatio": 0.2
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 79,
+      "avgTokens": 1115,
+      "avgLatency": 54836.666666666664
+    },
+    {
+      "roundNumber": 2,
+      "roundName": "fewshot_r2",
+      "provider": "local",
+      "variant": "fewshot_r2",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 82,
+        "tokenBudgetRatio": 0.22
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 80,
+      "avgTokens": 1104.6666666666667,
+      "avgLatency": 55087.666666666664
+    },
+    {
+      "roundNumber": 3,
+      "roundName": "fewshot_r3",
+      "provider": "local",
+      "variant": "fewshot_r3",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 3,
+        "minScore": 85,
+        "tokenBudgetRatio": 0.25
+      },
+      "count": 3,
+      "successCount": 3,
+      "failCount": 0,
+      "avgQuality": 79,
+      "avgTokens": 1120.6666666666667,
+      "avgLatency": 55974.333333333336
+    }
+  ],
+  "generatedAt": "2026-02-06T05:45:15.863Z"
+}

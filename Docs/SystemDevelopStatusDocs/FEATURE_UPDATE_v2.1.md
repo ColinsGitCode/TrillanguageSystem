@@ -1,4 +1,11 @@
-# 🎉 功能更新 v2.1 - 模型对比系统
+# 功能更新 v2.1 - 模型对比系统（历史归档）
+
+> 说明：本文档描述的是 `v2.1` 发布时状态，仅作为历史记录。  
+> 当前最新实现请优先参考：
+> - `Docs/SystemDevelopStatusDocs/repo_status.md`
+> - `Docs/SystemDevelopStatusDocs/BACKEND.md`
+> - `Docs/SystemDevelopStatusDocs/API.md`
+> - `Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
 
 **发布日期:** 2026-02-05
 **版本:** v2.1.0

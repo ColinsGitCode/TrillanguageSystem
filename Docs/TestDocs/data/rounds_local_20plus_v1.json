@@ -1,0 +1,30 @@
+{
+  "name": "local_20plus_v1",
+  "description": "20+ 样本本地LLM基线与few-shot对比",
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "variant": "baseline",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": { "enabled": false }
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "fewshot_r1",
+      "variant": "fewshot_r1",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 80,
+        "tokenBudgetRatio": 0.18,
+        "exampleMaxChars": 360,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      }
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "experimentId": "exp_round_local20plus_20260206_073637",
+  "apiBase": "http://localhost:3010",
+  "phrases": [
+    "提示词工程",
+    "API Gateway",
+    "多模型对比",
+    "上下文窗口",
+    "函数调用",
+    "结构化输出",
+    "检索增强生成",
+    "延迟优化",
+    "吞吐量评估",
+    "质量评分",
+    "few-shot 示例注入",
+    "Teacher 样本池",
+    "成本与精度权衡",
+    "多语言语义一致性",
+    "日语例句自然度",
+    "音频任务一致性",
+    "JSON 解析稳定性",
+    "错误恢复机制",
+    "实验可复现性",
+    "模型对齐率",
+    "生产可观测性"
+  ],
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "provider": "local",
+      "model": "",
+      "variant": "baseline",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": false
+      },
+      "count": 21,
+      "successCount": 19,
+      "failCount": 2,
+      "avgQuality": 79.57894736842105,
+      "avgTokens": 1082.8947368421052,
+      "avgLatency": 63655.52631578947
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "fewshot_r1",
+      "provider": "local",
+      "model": "",
+      "variant": "fewshot_r1",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 80,
+        "tokenBudgetRatio": 0.18,
+        "exampleMaxChars": 360,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      },
+      "count": 21,
+      "successCount": 21,
+      "failCount": 0,
+      "avgQuality": 79.33333333333333,
+      "avgTokens": 1498.4761904761904,
+      "avgLatency": 59163
+    }
+  ],
+  "generatedAt": "2026-02-06T08:26:31.395Z"
+}

@@ -1,0 +1,5 @@
+roundNumber,roundName,deltaQuality,deltaTokens,deltaLatency,deltaTeacherGap
+0,"baseline",0,0,0,0
+1,"fewshot_r1",2,42.333333333333485,4998.3333333333285,0
+2,"fewshot_r2",0,23.666666666666742,1016.3333333333285,0
+3,"fewshot_r3",0,10.333333333333485,-1029.6666666666715,0

@@ -1,169 +1,147 @@
-# 🔧 后端架构文档
+# 后端架构文档
 
-**项目**: Trilingual Records
-**版本**: 2.4
-**更新日期**: 2026-02-05
+**项目**: Trilingual Records  
+**版本**: 2.8  
+**更新日期**: 2026-02-06
 
----
+## 后端目录（核心）
 
-## 📂 后端文件结构
-
-```
-.
-├── server.js                          # Express 服务器入口
-├── services/                          # 业务服务层
-│   ├── localLlmService.js            # 本地 LLM（OpenAI 兼容）
-│   ├── geminiService.js              # Gemini API（可选）
-│   ├── geminiCliService.js           # Gemini CLI（容器内直连）
-│   ├── geminiProxyService.js         # Gemini CLI Host Proxy（推荐）
-│   ├── geminiAuthService.js          # Gemini CLI 认证会话管理
-│   ├── promptEngine.js               # Prompt 构建
-│   ├── contentPostProcessor.js       # 内容后处理
-│   ├── htmlRenderer.js               # HTML 渲染
-│   ├── japaneseFurigana.js          # 日文注音
-│   ├── ttsService.js                 # TTS 音频生成
-│   ├── fileManager.js                # 文件系统管理
-│   ├── observabilityService.js       # 可观测性指标
-│   ├── databaseService.js            # SQLite 访问
-│   ├── databaseHelpers.js            # 数据库辅助
-│   ├── fewShotMetricsService.js      # Few-shot 实验记录写入
-│   └── healthCheckService.js         # 健康检查
-├── database/
-│   └── schema.sql                     # SQLite Schema
-└── scripts/
-    ├── migrateRecords.js             # 历史数据迁移
-    ├── gemini-host-proxy.js          # 宿主机 Gemini CLI 代理
-    └── bootstrap_stack.py            # 一键启动/状态/停止控制脚本
-```
-
----
-
-## 🏗️ 架构设计
-
-### 技术栈
-- **运行时**: Node.js 20+
-- **框架**: Express 4.x
-- **数据库**: SQLite 3（better-sqlite3）
-- **LLM 集成**:
-  - 本地 LLM（OpenAI 兼容，默认）
-  - Gemini（可选，**默认通过宿主机 Gemini CLI Host Proxy**）
-- **TTS 服务**:
-  - 英语：Kokoro
-  - 日语：VOICEVOX
-
-### 架构原则
-1. 服务层模块化
-2. 可观测性优先（Token/成本/质量/性能）
-3. 文件系统 + 数据库双存储
-4. 异常不中断主流程（TTS/DB 失败不阻塞生成）
-
----
-
-## 🔄 生成链路（10步）
-
-```
-1. POST /api/generate
-2. promptEngine.buildPrompt() / buildMarkdownPrompt()
-3. localLlmService.generateContent() / geminiProxyService.runGeminiProxy()
-4. Markdown 结构校验与解析
-5. contentPostProcessor.postProcessGeneratedContent()
-6. htmlRenderer.prepareMarkdownForCard()
-7. htmlRenderer.renderHtmlFromMarkdown()
-8. fileManager.saveGeneratedFiles()
-9. ttsService.generateAudioBatch()
-10. databaseService.insertGeneration()
+```text
+server.js
+services/
+  localLlmService.js
+  geminiService.js
+  geminiCliService.js
+  geminiProxyService.js
+  promptEngine.js
+  contentPostProcessor.js
+  htmlRenderer.js
+  ttsService.js
+  fileManager.js
+  observabilityService.js
+  databaseService.js
+  databaseHelpers.js
+  goldenExamplesService.js
+  fewShotMetricsService.js
+  experimentTrackingService.js
+  geminiAuthService.js
+  healthCheckService.js
+database/schema.sql
+scripts/
+  gemini-host-proxy.js
+  start-gemini-proxy.sh
+  run_fewshot_rounds.js
+  export_round_trend_dataset.js
+  generate_round_kpi_report.js
+  migrate_fewshot_tables.js
 ```
 
----
+## 运行栈与职责
 
-## 📦 核心模块
+- Node.js + Express：API 编排与业务路由
+- SQLite（better-sqlite3）：记录、指标、实验数据持久化
+- 文件系统：学习卡片与音频资产存储
+- 本地 LLM：OpenAI 兼容接口（默认主链路）
+- Gemini：支持 `cli` 或 `host-proxy`（推荐 host-proxy）
+- TTS：英语 Kokoro + 日语 VOICEVOX
 
-### localLlmService.js
-- OpenAI 兼容接口调用
-- JSON 解析与修复
-- OCR 图片识别
+## 生成链路（单模型）
 
-### promptEngine.js
-- Prompt 模板与结构化输出约束
-- 支持 Markdown Prompt（Gemini CLI / Host Proxy）
+1. `POST /api/generate` 进入生成请求
+2. 根据 provider/mode 构建 prompt（JSON 或 Markdown 输出模式）
+3. local/gemini 执行推理（gemini 支持 `llm_model` 覆盖）
+4. 解析与后处理：结构校验、注音、内容修正
+5. HTML 渲染与音频任务提取
+6. 保存 `md/html/meta` 到日期目录
+7. 生成英语/日语音频（如 TTS 服务可用）
+8. 写入 `generations + observability_metrics + audio_files`
+9. 写入 `few_shot_runs + few_shot_examples + experiment_samples`
 
-### contentPostProcessor.js
-- 日文注音处理
-- 内容清洗与质量检查
+## 对比链路（enable_compare）
 
-### htmlRenderer.js
-- Markdown → HTML
-- 音频标记注入
-- 音频任务提取
+- 并行执行 `gemini/local` 两路生成
+- 分别保存文件与观测数据
+- 自动生成 `input` 输入卡片
+- 返回 `comparison.metrics`（speed/quality/tokens/cost）与 winner
+- 双路结果可分别删除（按文件或按记录）
 
-### observabilityService.js
-- Token 统计与成本估算
-- 性能分段（prompt/LLM/解析/渲染/存储/TTS）
-- 质量评分（4 维度）
-  - completeness / accuracy / exampleQuality / formatting
+## Few-shot 机制（当前实现）
 
-### databaseService.js
-- 记录入库（generations + audio_files + observability_metrics）
-- FTS5 全文搜索
-- 统计聚合（趋势/分布/错误/配额）
+- 生效范围：`provider=local` 且 few-shot enabled
+- 示例来源优先级：
+  1. `teacher_references`（同实验、round<=当前 round，且分数达阈值）
+  2. 历史高质量生成记录（默认 provider=gemini，可切换）
+- 预算控制：
+  - 预算 = `contextWindow * tokenBudgetRatio`
+  - 回退链路：`budget_reduction -> budget_truncate -> budget_exceeded_disable`
+- 追踪字段：
+  - `countRequested/countUsed`
+  - `basePromptTokens/fewshotPromptTokens/totalPromptTokensEst`
+  - `fallbackReason/exampleIds`
 
-### fileManager.js
-- 日期文件夹组织（YYYYMMDD）
-- 文件读写、重名处理
-- 按文件名删除记录与音频
+## Gemini Host Proxy（当前推荐模式）
 
----
+- `services/geminiProxyService.js` 请求体包含：`prompt/baseName/model`
+- `scripts/gemini-host-proxy.js` 支持 `model` 透传为 CLI 参数（默认 `--model`）
+- `server.js` 透传请求 `llm_model` 到 proxy 调用路径
+- 说明：容器当前不要求安装 Gemini CLI，执行可在宿主机完成
 
-## 🗄️ 数据库设计（摘要）
+## 数据模型（重点）
 
-- `generations`: 生成主记录
-- `audio_files`: 音频任务与文件
-- `observability_metrics`: 指标数据
-- `few_shot_runs`: Few-shot 实验运行记录
-- `few_shot_examples`: Few-shot 示例映射
-- `generation_errors`: 错误记录
-- `generations_fts`: FTS5 搜索
+- 核心业务表：
+  - `generations`
+  - `audio_files`
+  - `observability_metrics`
+  - `generation_errors`
+- few-shot/实验表：
+  - `few_shot_runs`
+  - `few_shot_examples`
+  - `experiment_rounds`
+  - `experiment_samples`
+  - `teacher_references`
 
----
-
-## ⚙️ 环境变量（关键项）
+## 环境变量（关键）
 
 ```bash
 PORT=3010
 RECORDS_PATH=/data/trilingual_records
 DB_PATH=/data/trilingual_records/trilingual_records.db
 
-# Local LLM (默认)
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL=qwen2.5-coder:latest
-LLM_OCR_MODEL=qwen2.5-coder:latest
+# Local LLM
+LLM_BASE_URL=http://localhost:15800/v1
+LLM_MODEL=qwen2_5_vl
+LLM_OCR_MODEL=qwen2_5_vl
 LLM_MAX_TOKENS=2048
 LLM_TEMPERATURE=0.2
 
-# Gemini (可选)
+# Gemini (推荐 host-proxy)
 # GEMINI_MODE=host-proxy
 # GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
-# GEMINI_PROXY_MODEL=gemini-cli
-# MARKDOWN_PROMPT_PATH=./prompts/phrase_3LANS_markdown.md
+# GEMINI_PROXY_MODEL=gemini-3-pro
+# GEMINI_CLI_MODEL=gemini-3-pro
+# GEMINI_TEACHER_MODEL=gemini-3-pro
+
+# Few-shot
+# ENABLE_GOLDEN_EXAMPLES=true
+# GOLDEN_EXAMPLES_STRATEGY=HIGH_QUALITY_GEMINI
+# GOLDEN_EXAMPLES_COUNT=3
+# GOLDEN_EXAMPLES_MIN_SCORE=85
+# LLM_CONTEXT_WINDOW=4096
+# FEWSHOT_TOKEN_BUDGET_RATIO=0.25
+# GOLDEN_EXAMPLE_MAX_CHARS=900
 
 # TTS
-TTS_EN_ENDPOINT=http://tts-en:8000
+TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
 TTS_JA_ENDPOINT=http://tts-ja:50021
-TTS_EN_MODEL=hexgrad/Kokoro-82M
-VOICEVOX_SPEAKER=2
 ```
 
----
+## 当前状态结论
 
-## ✅ 现状说明
-
-- 默认使用本地 LLM；Gemini 仅在配置时启用。
-- Gemini 推荐模式：Host Proxy（宿主机 Gemini CLI 认证与调用，容器仅发起 HTTP 请求）。
-- 支持 `enable_compare` 双模型对比（UI 已暴露入口，生成 gemini/local + 输入卡片）。
-- `/api/statistics` 返回完整趋势/配额/错误统计，用于大盘展示。
-- 可观测性 metadata 统一提供 `promptParsed` / `rawOutput` / `outputStructured`，保证 INTEL 页面可切换 RAW/STRUCT。
+- 本地 LLM 主链路稳定，few-shot 轮次实验与可视化链路已打通
+- Gemini proxy `model` 透传已完成代码实现与 mock 验证
+- `/api/experiments/:id` + 导出脚本可直接产出报告级数据（CSV/JSON/SVG）
+- 21 样本实验验证：few-shot 质量提升明确，但 Token 成本上升明显，需持续优化示例长度与预算比
 
 ---
 
 **维护者**: Three LANS Team
-**最后更新**: 2026-02-05

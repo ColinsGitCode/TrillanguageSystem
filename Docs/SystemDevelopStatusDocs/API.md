@@ -1,590 +1,262 @@
-# 📡 API 接口文档
+# API 接口文档
 
-**项目**: Trilingual Records
-**API 版本**: v1
-**更新日期**: 2026-02-05
+**项目**: Trilingual Records  
+**API 版本**: v1  
+**更新日期**: 2026-02-06
 
----
+## 1. API 总览
 
-## 📋 目录
+- Base URL: `http://localhost:3010/api`
+- 协议: HTTP/JSON
+- 认证: 本地部署默认无鉴权
 
-1. [API 总览](#api-总览)
-2. [通用规范](#通用规范)
-3. [生成接口](#生成接口)
-4. [查询接口](#查询接口)
-5. [删除接口](#删除接口)
-6. [文件系统接口](#文件系统接口)
-7. [健康检查接口](#健康检查接口)
-8. [Gemini CLI 认证接口](#gemini-cli-认证接口)
-9. [错误码](#错误码)
+### 1.1 端点列表
 
----
+| 类别 | 方法 | 路径 | 说明 |
+|---|---|---|---|
+| 生成 | POST | `/generate` | 生成学习卡片（单模型或对比） |
+| OCR | POST | `/ocr` | 图片识别为文本 |
+| 历史 | GET | `/history` | 分页历史记录 |
+| 历史 | GET | `/history/:id` | 单条记录详情 |
+| 统计 | GET | `/statistics` | Mission Control 数据 |
+| 搜索 | GET | `/search` | FTS 全文搜索 |
+| 最近 | GET | `/recent` | 最近记录 |
+| 文件 | GET | `/folders` | 日期目录列表 |
+| 文件 | GET | `/folders/:folder/files` | 目录下文件列表 |
+| 文件 | GET | `/folders/:folder/files/:file` | 文件内容或音频 |
+| 文件定位 | GET | `/records/by-file` | 按 folder/base 查询记录 |
+| 删除 | DELETE | `/records/:id` | 按记录 ID 删除 |
+| 删除 | DELETE | `/records/by-file` | 按 folder/base 删除 |
+| 实验 | GET | `/experiments/:id` | few-shot 实验导出 |
+| 健康 | GET | `/health` | 服务健康检查 |
+| Gemini CLI auth | GET/POST | `/gemini/auth/*` | 仅 `GEMINI_MODE=cli` 使用 |
 
-## API 总览
+## 2. 生成接口
 
-### 基础信息
+### 2.1 `POST /api/generate`
 
-- **Base URL**: `http://localhost:3010/api`
-- **协议**: HTTP/1.1
-- **Content-Type**: `application/json`
-- **认证**: 无需认证（本地部署）
-
-### 端点列表
-
-| 类别 | 方法 | 端点 | 功能 |
-|------|------|------|------|
-| **生成** | POST | `/generate` | 生成三语学习卡片 |
-| **OCR** | POST | `/ocr` | 图像文字识别 |
-| **查询** | GET | `/history` | 历史记录列表（分页） |
-| | GET | `/history/:id` | 单条记录详情 |
-| | GET | `/statistics` | 统计分析 |
-| | GET | `/search` | 全文搜索 |
-| | GET | `/recent` | 最近记录 |
-| | GET | `/experiments/:id` | Few-shot 实验数据导出 |
-| **删除** | DELETE | `/records/:id` | 按 ID 删除记录 |
-| | DELETE | `/records/by-file` | 按文件删除记录 |
-| **文件** | GET | `/folders` | 文件夹列表 |
-| | GET | `/folders/:folder/files` | 文件夹内文件列表 |
-| | GET | `/folders/:folder/files/:file` | 获取文件内容 |
-| | GET | `/records/by-file` | 根据文件定位记录 |
-| **健康** | GET | `/health` | 系统健康检查 |
-| **Gemini** | GET | `/gemini/auth/status` | Gemini CLI 认证状态 |
-| | POST | `/gemini/auth/start` | 启动 Gemini CLI 认证 |
-| | POST | `/gemini/auth/submit` | 提交授权码 |
-| | POST | `/gemini/auth/cancel` | 取消认证会话 |
-
----
-
-## 通用规范
-
-### 请求头
-
-```http
-Content-Type: application/json
-```
-
-### 响应格式
-
-- 生成与查询类接口通常返回 `{ success: true, ... }`
-- OCR / 文件列表等轻量接口可能直接返回数据对象
-
----
-
-## 生成接口
-
-### 1. 生成三语学习卡片（单模型）
-
-**请求**
-
-```http
-POST /api/generate
-Content-Type: application/json
-```
-
-**请求体**
+#### 请求体（常用字段）
 
 ```json
 {
-  "phrase": "hello world",
+  "phrase": "提示词工程",
   "llm_provider": "local",
   "enable_compare": false,
-  "experiment_id": "exp_1700000000_abcd12",
-  "variant": "baseline"
+  "llm_model": "qwen2_5_vl",
+  "experiment_id": "exp_round_xxx",
+  "experiment_round": 1,
+  "round_name": "fewshot_r1",
+  "variant": "fewshot_r1",
+  "is_teacher_reference": false,
+  "fewshot_options": {
+    "enabled": true,
+    "strategy": "HIGH_QUALITY_GEMINI",
+    "count": 3,
+    "minScore": 85,
+    "contextWindow": 4096,
+    "tokenBudgetRatio": 0.25,
+    "exampleMaxChars": 900,
+    "teacherFirst": true
+  }
 }
 ```
 
-**响应 (200 OK)**
+#### 字段说明
+
+- `phrase`: 必填，输入短语
+- `llm_provider`: `local` 或 `gemini`，默认 `local`
+- `enable_compare`: `true` 时触发双模型对比
+- `llm_model`: 模型覆盖字段
+  - local 路径用于覆盖本地模型名
+  - gemini host-proxy 路径会透传到 proxy 侧 `model`
+- `experiment_* / variant / is_teacher_reference / fewshot_options`:
+  用于实验追踪与 few-shot 配置
+
+#### 单模型响应（成功）
 
 ```json
 {
   "success": true,
+  "experiment_id": "exp_round_xxx",
+  "experiment_round": 1,
   "generationId": 123,
   "result": {
-    "folder": "20260205",
-    "baseName": "hello_world",
-    "targetDir": "/data/trilingual_records/20260205",
-    "files": ["hello_world.md", "hello_world.html"],
-    "absPaths": {
-      "md": "/data/trilingual_records/20260205/hello_world.md",
-      "html": "/data/trilingual_records/20260205/hello_world.html",
-      "meta": "/data/trilingual_records/20260205/hello_world.meta.json"
-    }
+    "folder": "20260206",
+    "baseName": "提示词工程",
+    "targetDir": "/data/trilingual_records/20260206"
   },
-  "audio": {
-    "results": [
-      {
-        "index": 0,
-        "filename": "hello_world_en_1.wav",
-        "filePath": "/data/trilingual_records/20260205/hello_world_en_1.wav",
-        "contentType": "audio/wav"
-      }
-    ],
-    "errors": []
-  },
+  "audio": { "results": [], "errors": [] },
   "prompt": "...",
   "llm_output": {
-    "markdown_content": "# Phrase\n...",
-    "html_content": "<!doctype html>...",
+    "markdown_content": "...",
+    "html_content": "...",
     "audio_tasks": []
   },
   "observability": {
-    "tokens": { "input": 1234, "output": 567, "total": 1801 },
-    "cost": { "input": 0, "output": 0, "total": 0 },
-    "quality": { "score": 88, "dimensions": { "completeness": 36 } },
-    "performance": { "totalTime": 2350, "phases": { "llmCall": 1850 } },
-    "prompt": { "full": "...", "sections": { "ROLE": "..." } },
+    "tokens": { "input": 0, "output": 0, "total": 0 },
+    "cost": { "total": 0 },
+    "quality": { "score": 0, "dimensions": {} },
+    "performance": { "totalTime": 0, "phases": {} },
     "metadata": {
       "provider": "local",
-      "model": "qwen2.5-coder:latest",
+      "model": "qwen2_5_vl",
       "promptText": "...",
-      "promptParsed": { "full": "...", "sections": { "ROLE": "..." } },
+      "promptParsed": {},
       "outputMode": "json",
-      "rawOutput": "{...}",
-      "outputStructured": "{...}"
+      "rawOutput": "...",
+      "outputStructured": "...",
+      "fewShot": {
+        "enabled": true,
+        "countRequested": 3,
+        "countUsed": 2,
+        "fallbackReason": "budget_reduction"
+      }
     }
   }
 }
 ```
 
-### 2. 生成三语学习卡片（双模型对比）
-
-**请求**
-
-```http
-POST /api/generate
-Content-Type: application/json
-```
-
-**请求体**
+#### 对比模式响应（`enable_compare=true`）
 
 ```json
 {
-  "phrase": "对比模式输入测试_20260205_03",
-  "llm_provider": "local",
-  "enable_compare": true
-}
-```
-
-**响应 (200 OK)**
-
-```json
-{
-  "phrase": "对比模式输入测试_20260205_03",
-  "gemini": {
-    "success": true,
-    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_gemini" },
-    "output": { "markdown_content": "...", "html_content": "...", "audio_tasks": [] },
-    "observability": { "tokens": {}, "cost": {}, "quality": {}, "performance": {}, "metadata": {} },
-    "audio": { "results": [], "errors": [] }
-  },
-  "local": {
-    "success": true,
-    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_local" },
-    "output": { "markdown_content": "...", "html_content": "...", "audio_tasks": [] },
-    "observability": { "tokens": {}, "cost": {}, "quality": {}, "performance": {}, "metadata": {} },
-    "audio": { "results": [], "errors": [] }
-  },
-  "input": {
-    "success": true,
-    "result": { "folder": "20260205", "baseName": "对比模式输入测试_20260205_03_input" }
-  },
+  "phrase": "提示词工程",
+  "gemini": { "success": true, "result": {}, "output": {}, "observability": {}, "audio": {} },
+  "local": { "success": true, "result": {}, "output": {}, "observability": {}, "audio": {} },
+  "input": { "success": true, "result": {} },
   "comparison": {
-    "metrics": { "speed": {}, "quality": {}, "tokens": {}, "cost": {} },
+    "metrics": {
+      "speed": { "gemini": 1000, "local": 1200 },
+      "quality": { "gemini": 90, "local": 82 },
+      "tokens": { "gemini": 1300, "local": 900 },
+      "cost": { "gemini": 0, "local": 0 }
+    },
     "winner": "gemini",
     "recommendation": "Gemini wins on speed/quality balance.",
-    "promptComparison": { "similarity": "identical", "geminiLength": 1200, "localLength": 1180 }
-  }
-}
-```
-
-**说明**
-- 对比模式会生成三份文件记录：`gemini`、`local`、`input`（输入卡片）。
-- 输入卡片用于保留原始输入，标题显示为 `【输入】{phrase}`。
-
----
-
-### 3. OCR 图像识别
-
-**请求**
-
-```http
-POST /api/ocr
-Content-Type: application/json
-```
-
----
-
-## 实验数据导出
-
-### GET /api/experiments/:id
-
-**说明**：导出 few-shot 实验数据（runs + examples）用于图表分析。
-
-**响应**
-```json
-{
-  "experimentId": "exp_1700000000_abcd12",
-  "runs": [
-    {
-      "id": 1,
-      "generation_id": 123,
-      "variant": "baseline",
-      "fewshot_enabled": 0,
-      "quality_score": 72,
-      "total_prompt_tokens_est": 1200
-    }
-  ],
-  "examples": [
-    {
-      "run_id": 2,
-      "example_generation_id": 88,
-      "example_quality_score": 93
-    }
-  ]
-}
-```
-
-**请求体**
-
-```json
-{
-  "image": "data:image/png;base64,iVBORw0KGgoAAAANS..."
-}
-```
-
-**响应 (200 OK)**
-
-```json
-{ "text": "识别出的文字内容" }
-```
-
----
-
-## 查询接口
-
-### 1. 历史记录列表（分页）
-
-**请求**
-
-```http
-GET /api/history?page=1&limit=20&search=hello&provider=local
-```
-
-**响应 (200 OK)**
-
-```json
-{
-  "success": true,
-  "records": [
-    {
-      "id": 123,
-      "phrase": "hello world",
-      "llm_provider": "local",
-      "llm_model": "qwen2.5",
-      "folder_name": "20260205",
-      "base_filename": "hello_world",
-      "created_at": "2026-02-05T10:30:00.000Z",
-      "quality_score": 88,
-      "tokens_total": 1801,
-      "cost_total": 0,
-      "performance_total_ms": 2350,
-      "audio_count": 2
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 342,
-    "totalPages": 18,
-    "hasNext": true,
-    "hasPrev": false
-  }
-}
-```
-
-### 2. 单条记录详情
-
-**请求**
-
-```http
-GET /api/history/:id
-```
-
-**响应 (200 OK)**
-
-```json
-{
-  "success": true,
-  "record": {
-    "id": 123,
-    "phrase": "hello world",
-    "llm_provider": "local",
-    "llm_model": "qwen2.5",
-    "folder_name": "20260205",
-    "base_filename": "hello_world",
-    "md_file_path": "/data/trilingual_records/20260205/hello_world.md",
-    "html_file_path": "/data/trilingual_records/20260205/hello_world.html",
-    "markdown_content": "# Phrase\n...",
-    "audioFiles": [
-      {
-        "language": "en",
-        "file_path": "/data/trilingual_records/20260205/hello_world_en_1.wav",
-        "status": "generated"
-      }
-    ],
-    "observability": {
-      "tokens_total": 1801,
-      "cost_total": 0,
-      "performance_total_ms": 2350,
-      "quality_score": 88,
-      "quality_dimensions": { "completeness": 36 }
+    "promptComparison": {
+      "similarity": "identical",
+      "geminiLength": 1234,
+      "localLength": 1210
     }
   }
 }
 ```
 
-### 3. 统计分析
+## 3. OCR 接口
 
-**请求**
+### 3.1 `POST /api/ocr`
 
-```http
-GET /api/statistics?dateFrom=2026-02-01&dateTo=2026-02-05
-```
-
-**响应 (200 OK)**
+请求：
 
 ```json
-{
-  "success": true,
-  "statistics": {
-    "totalCount": 342,
-    "avgQualityScore": 85.3,
-    "avgTokensTotal": 1850,
-    "avgLatencyMs": 2100,
-    "avgCost": 0,
-    "totalCost": 0,
-    "totalTokens": 632700,
-    "providerDistribution": {
-      "local": 320,
-      "gemini": 22
-    },
-    "qualityTrend": {
-      "7d": [ { "date": "2026-02-05", "avgScore": 88, "count": 15 } ]
-    },
-    "tokenTrend": {
-      "7d": [ { "date": "2026-02-05", "avgTokens": 1820, "count": 15 } ]
-    },
-    "latencyTrend": {
-      "7d": [ { "date": "2026-02-05", "avgMs": 2050, "count": 15 } ]
-    },
-    "errors": {
-      "total": 2,
-      "rate": 0.005,
-      "byType": { "ValidationError": 2 },
-      "recent": []
-    },
-    "quota": {
-      "used": 12000,
-      "limit": 1000000,
-      "percentage": 1.2,
-      "resetDate": "2026-03-01",
-      "estimatedDaysRemaining": 26
-    }
-  },
-  "period": { "dateFrom": "2026-02-01", "dateTo": "2026-02-05" }
-}
+{ "image": "data:image/png;base64,..." }
 ```
 
----
-
-## 删除接口
-
-### 1. 按 ID 删除记录
-
-```http
-DELETE /api/records/:id
-```
-
-**响应 (200 OK)**
+响应：
 
 ```json
-{ "success": true, "message": "Record deleted successfully", "deletedFiles": 7 }
+{ "text": "识别结果" }
 ```
 
-### 2. 按文件名删除记录
+## 4. 查询与统计接口
 
-```http
-DELETE /api/records/by-file?folder=20260205&base=hello_world
-```
+### 4.1 `GET /api/history`
 
-**响应 (200 OK)**
+- 参数：`page`、`limit`、`search`、`provider`、`dateFrom`、`dateTo`
+- 返回：`records + pagination`
 
-```json
-{ "success": true, "deletedFiles": 7, "recordDeleted": true }
-```
+### 4.2 `GET /api/history/:id`
 
----
+- 返回单条完整记录（含 `observability` 和 `audioFiles`）
 
-## 文件系统接口
+### 4.3 `GET /api/statistics`
 
-### 1. 文件夹列表
+- 参数：`provider`、`dateFrom`、`dateTo`
+- 返回：趋势、分布、成本、质量、性能等统计数据
 
-```http
-GET /api/folders
-```
+### 4.4 `GET /api/search`
 
-**响应**
+- 参数：`q`（必填）、`limit`
+- 基于 SQLite FTS5 检索
 
-```json
-{ "folders": ["20260205", "20260204"] }
-```
+### 4.5 `GET /api/recent`
 
-### 2. 文件夹内文件列表
+- 参数：`limit`
+- 返回最近记录列表
 
-```http
-GET /api/folders/:folder/files
-```
+## 5. 文件系统接口
 
-**响应**
+### 5.1 `GET /api/folders`
 
-```json
-{
-  "files": [
-    { "file": "hello_world.html", "title": "hello world" }
-  ]
-}
-```
+- 返回有 html 卡片的日期目录
 
-### 3. 获取文件内容
+### 5.2 `GET /api/folders/:folder/files`
 
-```http
-GET /api/folders/:folder/files/:file
-```
+- 返回该目录下卡片文件列表（含显示标题）
 
-**响应**: `text/html` / `text/markdown` / `audio/wav` / `audio/mpeg`
+### 5.3 `GET /api/folders/:folder/files/:file`
 
-### 4. 根据文件定位记录
+- 返回文件内容；音频文件会返回对应 content-type
 
-```http
-GET /api/records/by-file?folder=20260205&base=hello_world
-```
+### 5.4 `GET /api/records/by-file`
 
-**响应**
+- 参数：`folder`、`base`
+- 返回该文件对应数据库记录（若存在）
 
-```json
-{ "record": { "id": 123, "folder_name": "20260205", "base_filename": "hello_world" } }
-```
+## 6. 删除接口
 
----
+### 6.1 `DELETE /api/records/:id`
 
-## 健康检查接口
+- 删除指定记录及其 `md/html/meta/audio` 文件
 
-### 系统健康检查
+### 6.2 `DELETE /api/records/by-file`
 
-```http
-GET /api/health
-```
+- 参数：`folder`、`base`
+- 先尝试按 DB 记录删除，再做文件系统兜底清理
 
-**响应 (200 OK)**
+## 7. 实验数据接口
 
-```json
-{
-  "services": [
-    { "name": "Local LLM", "type": "llm", "status": "online", "latency": 120, "details": { "endpoint": "...", "model": "..." } },
-    { "name": "TTS English", "type": "tts", "status": "online", "latency": 80 },
-    { "name": "TTS Japanese", "type": "tts", "status": "online", "latency": 60 },
-    { "name": "Storage", "type": "storage", "status": "online", "details": { "used": 123456, "total": 6442450944, "percentage": 1.9, "recordsCount": 342 } }
-  ],
-  "system": { "uptime": 86400, "version": "1.0.0", "lastRestart": 1738730000000 }
-}
-```
+### 7.1 `GET /api/experiments/:id`
 
----
+返回结构：
 
-## Gemini CLI 认证接口
+- `runs`: few-shot run 记录
+- `examples`: few-shot 示例映射
+- `rounds`: round 聚合（质量、token、延迟、teacherGap）
+- `samples`: 样本明细
+- `teacherRefs`: teacher 输出快照
+- `deltas`: 相对 baseline 的增量指标
+- `trend`: 汇总信息（roundCount/sampleCount/hasTeacher）
 
-> 说明：仅在 `GEMINI_MODE=cli` 时启用，用于容器内 Gemini CLI 认证初始化；当使用 **host-proxy** 模式时可忽略。
+该接口直接服务于：
 
-### 1. 获取认证状态
+- `scripts/export_round_trend_dataset.js`
+- `d3/render_round_trend_charts.mjs`
+- `scripts/generate_round_kpi_report.js`
 
-```http
-GET /api/gemini/auth/status
-```
+## 8. 健康与 Gemini 认证接口
 
-**响应**
+### 8.1 `GET /api/health`
 
-```json
-{
-  "enabled": true,
-  "authenticated": false,
-  "pending": true,
-  "url": "https://accounts.google.com/o/oauth2/...",
-  "message": "waiting_for_code"
-}
-```
+- 返回服务可用性与依赖状态
 
-### 2. 启动认证
+### 8.2 `/api/gemini/auth/*`
 
-```http
-POST /api/gemini/auth/start
-```
+- `GET /status`
+- `POST /start`
+- `POST /submit`
+- `POST /cancel`
 
-**响应**
+仅在 `GEMINI_MODE=cli` 有意义。`host-proxy` 模式下通常不走这组接口。
 
-```json
-{
-  "enabled": true,
-  "authenticated": false,
-  "pending": true,
-  "url": "https://accounts.google.com/o/oauth2/..."
-}
-```
+## 9. 错误语义
 
-### 3. 提交授权码
-
-```http
-POST /api/gemini/auth/submit
-Content-Type: application/json
-```
-
-**请求体**
-
-```json
-{ "code": "4/0ASc..." }
-```
-
-**响应**
-
-```json
-{ "status": "success" }
-```
-
-### 4. 取消认证
-
-```http
-POST /api/gemini/auth/cancel
-```
-
-**响应**
-
-```json
-{ "cancelled": true }
-```
-
----
-
-## 错误码
-
-| 状态码 | 说明 | 场景 |
-|------|------|------|
-| 200 | OK | 请求成功 |
-| 400 | Bad Request | 缺少必填参数 |
-| 404 | Not Found | 资源不存在 |
-| 422 | Unprocessable Entity | 验证失败 |
-| 429 | Too Many Requests | 速率限制 |
-| 500 | Internal Server Error | 服务器错误 |
+- `400`: 参数缺失/非法
+- `404`: 资源不存在
+- `422`: 生成内容校验失败
+- `429`: 生成频率限流
+- `500`: 服务内部错误（同时写入 `generation_errors`）
 
 ---
 
 **维护者**: Three LANS Team
-**最后更新**: 2026-02-05

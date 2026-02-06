@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "gemini-proxy": "node scripts/gemini-host-proxy.js"
+    "gemini-proxy": "node scripts/gemini-host-proxy.js",
+    "fewshot:rounds": "node scripts/run_fewshot_rounds.js",
+    "fewshot:export-round": "node scripts/export_round_trend_dataset.js",
+    "fewshot:render-round-charts": "node d3/render_round_trend_charts.mjs",
+    "fewshot:report-round": "node scripts/generate_round_kpi_report.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

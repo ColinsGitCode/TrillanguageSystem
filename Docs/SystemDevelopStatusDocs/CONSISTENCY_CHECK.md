@@ -1,31 +1,23 @@
-# 📋 Repo 文档与代码一致性检查报告
+# Repo 文档与代码一致性检查
 
-**检查日期**: 2026-02-05
-**检查范围**: `Docs/SystemDevelopStatusDocs/*` vs 实际代码实现
+**检查日期**: 2026-02-06  
+**检查范围**: `Docs/SystemDevelopStatusDocs/*` 对照当前代码
 
----
+## 已对齐内容
 
-## ✅ 已对齐内容
+- `server.js` 路由与 `API.md` 端点说明一致
+- `/api/generate` 的实验参数（`experiment_*`、`fewshot_options`、`llm_model`）已在文档中完整体现
+- few-shot 追踪链路与数据库表（`few_shot_runs/experiment_rounds/experiment_samples/teacher_references`）已对齐
+- Gemini host-proxy 的 `model` 透传机制已在后端文档与 API 文档标注
+- 实验导出脚本与图表脚本（round trend/KPI）已进入状态文档
 
-- API 端点与响应结构 (包含按文件查询记录接口)
-- LLM 默认策略（Local LLM 为主，Gemini 可选）
-- Gemini Host Proxy 模式与宿主机代理脚本
-- Mission Control 作为统计大盘的定位与模块
-- 主界面布局与弹窗 Tab（卡片内容 / MISSION 指标）
-- **交互规范**：全量指标说明已从 Tooltip 切换为 `info-modal.js` 驱动的弹窗模式
-- **删除入口**：卡片详情弹窗左上角已集成同步删除功能
-- **对比模式 UI**：主界面已暴露双模型对比入口，生成 gemini/local + 输入卡片
-- **对比删除**：对比弹窗双列均提供独立删除按钮
+## 保留差异（可接受）
 
----
+1. `FEATURE_UPDATE_v2.1.md` 为历史发布说明，不代表当前全量状态
+2. `public/js/dashboard.js` 仍作为旧版兼容文件保留
+3. `geminiService.js`（Gemini API）仍存在但当前主线不依赖
 
-## ⚠️ 仍保留的轻微差异
+## 结论
 
-1. **virtual-list.js**：模块仍保留，但当前未启用（文件列表改为网格直渲染）。
-2. **public/js/dashboard.js**：旧版脚本保留但未使用。
-
-以上为可接受的“历史/保留项”，不影响主流程。
-
----
-
-**结论**：文档与代码保持高度一致，交互逻辑已按最新需求完成重构。
+- 当前系统状态文档已与代码主链路保持一致
+- few-shot 主线、proxy 透传、实验追踪与测试报告索引均已可追溯

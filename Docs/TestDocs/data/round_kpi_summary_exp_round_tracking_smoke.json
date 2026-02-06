@@ -1,0 +1,23 @@
+{
+  "totalRounds": 2,
+  "improvedRoundCount": 1,
+  "improvementRatioPct": 50,
+  "bestQualityRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "avgQualityScore": 77.5
+  },
+  "bestGainRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "deltaQuality": 17.5
+  },
+  "bestEfficiencyRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "gainPer1kExtraTokens": 92.10526315789474
+  },
+  "avgTeacherAlignmentPct": 76.76342072409489,
+  "avgStabilityCvPct": 2.634408602150538,
+  "fewshotEffectVisible": true
+}

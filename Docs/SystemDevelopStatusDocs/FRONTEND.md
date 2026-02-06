@@ -1,8 +1,8 @@
-# 📱 前端架构文档
+# 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 2.4
-**更新日期**: 2026-02-05
+**版本**: 2.8
+**更新日期**: 2026-02-06
 
 ---
 
@@ -56,15 +56,17 @@ public/
 - **Phrase List**：多列网格卡片视图（对比模式额外生成 `【输入】{phrase}`）
 - **弹窗交互**：
   - **Tab1：卡片内容**
-  - **Tab2：MISSION 指标** (HUD 仪表盘风格，Prompt/Output 支持 RAW/STRUCT 切换与一键复制)
+  - **Tab2：MISSION 指标**（HUD 仪表盘风格）
+  - Prompt / LLM Output：支持 RAW/结构化切换与复制
   - **指标详情**：卡片弹窗中使用 `?` 按钮查看指标说明
   - **记录删除**：左上角红色 `🗑️` 按钮，支持物理文件与数据库同步删除
   - **对比弹窗**：双列并排显示 GEMINI / LOCAL，列头集成独立删除按钮
-- **初始化设置**：当 `GEMINI_MODE=cli` 时出现登录引导覆盖层；host-proxy 模式不显示
+- **列表刷新机制**：生成成功后自动刷新当前日期目录的 Phrase List
+- **初始化设置**：`GEMINI_MODE=cli` 时出现登录引导；`host-proxy` 模式不显示该引导
 
 ---
 
-## 🎯 Mission Control（dashboard.html）
+## Mission Control（dashboard.html）
 
 **定位**：整体统计大盘（非单卡调试）
 
@@ -76,7 +78,7 @@ public/
 
 ---
 
-## 🎨 视觉风格
+## 视觉风格
 
 - 主页面：浅色、清爽、卡片式布局
 - Mission Control：暗色玻璃质感，数据仪表盘风格
@@ -84,5 +86,12 @@ public/
 
 ---
 
+## 与实验主线的关系
+
+- Mission Control 展示系统级统计
+- 单卡实验细节（Prompt/Output/round 指标）在卡片弹窗 `INTEL` 展示
+- few-shot 轮次图表由 `Docs/TestDocs/charts/*.svg` 离线生成，不直接嵌入前端运行时
+
+---
+
 **维护者**: Three LANS Team
-**最后更新**: 2026-02-05

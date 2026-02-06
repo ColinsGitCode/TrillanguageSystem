@@ -1,0 +1,68 @@
+{
+  "rounds": [
+    {
+      "roundNumber": 0,
+      "roundName": "baseline",
+      "variant": "baseline",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": { "enabled": false }
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "teacher_seed_r1",
+      "variant": "teacher_seed_r1",
+      "provider": "gemini",
+      "isTeacherReference": true,
+      "fewshotOptions": { "enabled": false }
+    },
+    {
+      "roundNumber": 1,
+      "roundName": "fewshot_r1",
+      "variant": "fewshot_r1",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 1,
+        "minScore": 70,
+        "tokenBudgetRatio": 0.15,
+        "exampleMaxChars": 420,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      }
+    },
+    {
+      "roundNumber": 2,
+      "roundName": "fewshot_r2",
+      "variant": "fewshot_r2",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 2,
+        "minScore": 75,
+        "tokenBudgetRatio": 0.18,
+        "exampleMaxChars": 460,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      }
+    },
+    {
+      "roundNumber": 3,
+      "roundName": "fewshot_r3",
+      "variant": "fewshot_r3",
+      "provider": "local",
+      "isTeacherReference": false,
+      "fewshotOptions": {
+        "enabled": true,
+        "count": 3,
+        "minScore": 75,
+        "tokenBudgetRatio": 0.2,
+        "exampleMaxChars": 500,
+        "teacherFirst": true,
+        "contextWindow": 2048
+      }
+    }
+  ]
+}
