@@ -14,6 +14,9 @@ const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
 const geminiAuthService = require('./services/geminiAuthService');
+const goldenExamplesService = require('./services/goldenExamplesService');
+const fewShotMetricsService = require('./services/fewShotMetricsService');
+const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
 const { HealthCheckService } = require('./services/healthCheckService');
@@ -42,6 +45,10 @@ function canGenerate(req) {
     }
     generationThrottle.set(key, now);
     return true;
+}
+
+function createExperimentId() {
+    return `exp_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
 function normalizeAudioTasks(tasks, baseName) {
@@ -96,9 +103,93 @@ async function generateWithProvider(phrase, provider, perf) {
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
-  const prompt = useMarkdownOutput
+  let prompt = useMarkdownOutput
       ? buildMarkdownPrompt({ phrase, filenameBase: baseName })
       : buildPrompt({ phrase, filenameBase: baseName });
+
+  const fewShotConfig = {
+      enabled: provider === 'local' && String(process.env.ENABLE_GOLDEN_EXAMPLES || '').toLowerCase() === 'true',
+      strategy: process.env.GOLDEN_EXAMPLES_STRATEGY || 'HIGH_QUALITY_GEMINI',
+      count: Number(process.env.GOLDEN_EXAMPLES_COUNT || 3),
+      minScore: Number(process.env.GOLDEN_EXAMPLES_MIN_SCORE || 85),
+      contextWindow: Number(process.env.LLM_CONTEXT_WINDOW || 4096),
+      tokenBudgetRatio: Number(process.env.FEWSHOT_TOKEN_BUDGET_RATIO || 0.25)
+  };
+
+  let fewShotMeta = {
+      enabled: false,
+      strategy: fewShotConfig.strategy,
+      countRequested: fewShotConfig.count,
+      countUsed: 0,
+      minScore: fewShotConfig.minScore,
+      contextWindow: fewShotConfig.contextWindow,
+      tokenBudgetRatio: fewShotConfig.tokenBudgetRatio,
+      basePromptTokens: 0,
+      fewshotPromptTokens: 0,
+      totalPromptTokensEst: 0,
+      fallbackReason: null,
+      exampleIds: [],
+      examples: []
+  };
+
+  if (fewShotConfig.enabled) {
+      perf.mark('fewshotSelect');
+      const outputMode = useMarkdownOutput ? 'markdown' : 'json';
+      const basePromptTokens = TokenCounter.estimate(prompt);
+      let examples = await goldenExamplesService.getRelevantExamples(phrase, fewShotConfig.count, {
+          outputMode,
+          minQualityScore: fewShotConfig.minScore
+      });
+      let enhancedPrompt = prompt;
+      let fallbackReason = null;
+
+      if (!examples.length) {
+          fallbackReason = 'no_examples';
+      } else {
+          enhancedPrompt = goldenExamplesService.buildEnhancedPrompt(prompt, examples);
+          let totalTokens = TokenCounter.estimate(enhancedPrompt);
+          let fewshotTokens = Math.max(0, totalTokens - basePromptTokens);
+          const budget = Math.floor(fewShotConfig.contextWindow * fewShotConfig.tokenBudgetRatio);
+
+          while (fewshotTokens > budget && examples.length > 0) {
+              examples = examples.slice(0, -1);
+              if (!examples.length) break;
+              enhancedPrompt = goldenExamplesService.buildEnhancedPrompt(prompt, examples);
+              totalTokens = TokenCounter.estimate(enhancedPrompt);
+              fewshotTokens = Math.max(0, totalTokens - basePromptTokens);
+              fallbackReason = 'budget_reduction';
+          }
+
+          if (examples.length === 0 && fewshotTokens > budget) {
+              enhancedPrompt = prompt;
+              fewshotTokens = 0;
+              totalTokens = basePromptTokens;
+              fallbackReason = 'budget_exceeded_disable';
+          }
+
+          prompt = enhancedPrompt;
+          fewShotMeta = {
+              ...fewShotMeta,
+              enabled: examples.length > 0,
+              countUsed: examples.length,
+              basePromptTokens,
+              fewshotPromptTokens: fewshotTokens,
+              totalPromptTokensEst: totalTokens,
+              fallbackReason,
+              exampleIds: examples.map(ex => ex.metadata?.generationId).filter(Boolean),
+              examples: examples.map(ex => ({
+                  exampleGenerationId: ex.metadata?.generationId,
+                  exampleQualityScore: ex.qualityScore,
+                  examplePromptHash: null,
+                  similarityScore: null
+              }))
+          };
+      }
+
+      if (!fewShotMeta.enabled && !fewShotMeta.fallbackReason) {
+          fewShotMeta.fallbackReason = fallbackReason || 'disabled';
+      }
+  }
 
   perf.mark('llmCall');
   let response;
@@ -147,6 +238,7 @@ async function generateWithProvider(phrase, provider, perf) {
   return {
     output: content,
     prompt,
+    fewShot: fewShotMeta,
     baseName, targetDir, folderName, // Pass file info for saving
     observability: {
       tokens: usage,
@@ -167,13 +259,27 @@ async function generateWithProvider(phrase, provider, perf) {
         rawOutput: useMarkdownOutput
           ? (response.rawOutput || content?.markdown_content || '')
           : JSON.stringify(content, null, 2),
-        outputStructured: JSON.stringify(content, null, 2)
+        outputStructured: JSON.stringify(content, null, 2),
+        fewShot: {
+          enabled: fewShotMeta.enabled,
+          strategy: fewShotMeta.strategy,
+          countRequested: fewShotMeta.countRequested,
+          countUsed: fewShotMeta.countUsed,
+          minScore: fewShotMeta.minScore,
+          contextWindow: fewShotMeta.contextWindow,
+          tokenBudgetRatio: fewShotMeta.tokenBudgetRatio,
+          basePromptTokens: fewShotMeta.basePromptTokens,
+          fewshotPromptTokens: fewShotMeta.fewshotPromptTokens,
+          totalPromptTokensEst: fewShotMeta.totalPromptTokensEst,
+          fallbackReason: fewShotMeta.fallbackReason,
+          exampleIds: fewShotMeta.exampleIds
+        }
       }
     }
   };
 }
 
-async function handleComparisonMode(phrase) {
+async function handleComparisonMode(phrase, options = {}) {
   console.log('[Comparison] Starting parallel generation...');
 
   const results = {
@@ -272,7 +378,41 @@ async function handleComparisonMode(phrase) {
           prompt,
           audioTasks: content.audio_tasks
         });
-        dbService.insertGeneration(dbData);
+        const generationId = dbService.insertGeneration(dbData);
+        if (generationId) {
+          try {
+            const fewShot = genValue.fewShot || {};
+            const experimentId = options.experimentId || createExperimentId();
+            const variant = `${options.variantBase || 'compare'}_${label}`;
+            const runId = fewShotMetricsService.insertFewShotRun({
+              generationId,
+              experimentId,
+              variant,
+              fewshotEnabled: fewShot.enabled || false,
+              strategy: fewShot.strategy,
+              exampleCount: fewShot.countUsed || 0,
+              minScore: fewShot.minScore,
+              contextWindow: fewShot.contextWindow,
+              tokenBudgetRatio: fewShot.tokenBudgetRatio,
+              basePromptTokens: fewShot.basePromptTokens,
+              fewshotPromptTokens: fewShot.fewshotPromptTokens,
+              totalPromptTokensEst: fewShot.totalPromptTokensEst,
+              outputTokens: observability?.tokens?.output || 0,
+              outputChars: content?.markdown_content?.length || 0,
+              qualityScore: observability?.quality?.score || 0,
+              qualityDimensions: observability?.quality?.dimensions || {},
+              latencyTotalMs: observability?.performance?.totalTime || 0,
+              success: true,
+              fallbackReason: fewShot.fallbackReason,
+              promptText: prompt
+            });
+            if (runId && Array.isArray(fewShot.examples) && fewShot.examples.length) {
+              fewShotMetricsService.insertFewShotExamples(runId, fewShot.examples);
+            }
+          } catch (fsErr) {
+            console.warn('[FewShot] Compare run record failed:', fsErr.message);
+          }
+        }
       } catch (dbErr) {
         console.error('[Database] Compare insert failed:', dbErr.message);
       }
@@ -366,12 +506,13 @@ app.post('/api/generate', async (req, res) => {
     if (!canGenerate(req)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
     // 默认使用本地LLM（Gemini已封存）
-    const { phrase, llm_provider = 'local', enable_compare = false } = req.body;
+    const { phrase, llm_provider = 'local', enable_compare = false, experiment_id, variant } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
 
     // Mode: Comparison
     if (enable_compare) {
-        const result = await handleComparisonMode(phrase);
+        const expId = experiment_id || createExperimentId();
+        const result = await handleComparisonMode(phrase, { experimentId: expId, variantBase: variant || 'compare' });
         return res.json(result);
     }
 
@@ -437,6 +578,42 @@ app.post('/api/generate', async (req, res) => {
     } catch (dbError) {
       console.error('[Database] Insert failed:', dbError.message);
       // 数据库插入失败不影响主流程
+    }
+
+    // Few-shot run record (baseline/fewshot)
+    if (generationId) {
+      try {
+        const expId = experiment_id || createExperimentId();
+        const runVariant = variant || (genResult.fewShot?.enabled ? 'fewshot' : 'baseline');
+        const fewShot = genResult.fewShot || {};
+        const runId = fewShotMetricsService.insertFewShotRun({
+          generationId,
+          experimentId: expId,
+          variant: runVariant,
+          fewshotEnabled: fewShot.enabled || false,
+          strategy: fewShot.strategy,
+          exampleCount: fewShot.countUsed || 0,
+          minScore: fewShot.minScore,
+          contextWindow: fewShot.contextWindow,
+          tokenBudgetRatio: fewShot.tokenBudgetRatio,
+          basePromptTokens: fewShot.basePromptTokens,
+          fewshotPromptTokens: fewShot.fewshotPromptTokens,
+          totalPromptTokensEst: fewShot.totalPromptTokensEst,
+          outputTokens: observability?.tokens?.output || 0,
+          outputChars: content?.markdown_content?.length || 0,
+          qualityScore: observability?.quality?.score || 0,
+          qualityDimensions: observability?.quality?.dimensions || {},
+          latencyTotalMs: observability?.performance?.totalTime || 0,
+          success: true,
+          fallbackReason: fewShot.fallbackReason,
+          promptText: genResult.prompt
+        });
+        if (runId && Array.isArray(fewShot.examples) && fewShot.examples.length) {
+          fewShotMetricsService.insertFewShotExamples(runId, fewShot.examples);
+        }
+      } catch (fsErr) {
+        console.warn('[FewShot] Run record failed:', fsErr.message);
+      }
     }
 
     res.json({
@@ -768,6 +945,21 @@ app.delete('/api/records/by-file', (req, res) => {
         });
     } catch (err) {
         console.error('[API /records/by-file DELETE] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Few-shot experiment data export
+app.get('/api/experiments/:id', (req, res) => {
+    try {
+        const experimentId = String(req.params.id || '').trim();
+        if (!experimentId) {
+            return res.status(400).json({ error: 'experiment id required' });
+        }
+        const runs = dbService.getFewShotRuns(experimentId);
+        const examples = dbService.getFewShotExamples(runs.map(r => r.id));
+        res.json({ experimentId, runs, examples });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

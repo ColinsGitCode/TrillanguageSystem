@@ -5,7 +5,7 @@
  * 用于提升本地 LLM 的生成质量
  */
 
-const db = require('./databaseService');
+const dbService = require('./databaseService');
 
 /**
  * 提取 Golden Examples 的策略
@@ -47,6 +47,11 @@ async function extractGoldenExamples(strategy = 'HIGH_QUALITY_GEMINI', options =
   }
 
   try {
+    const provider = options.provider || config.provider;
+    const minScore = Number(options.minQualityScore || config.minQualityScore || 0);
+    const limit = Number(options.limit || config.limit || 5);
+    const outputMode = (options.outputMode || 'json').toLowerCase();
+
     let query = `
       SELECT
         g.id,
@@ -56,8 +61,10 @@ async function extractGoldenExamples(strategy = 'HIGH_QUALITY_GEMINI', options =
         g.created_at,
         om.quality_score,
         om.tokens_total,
-        om.prompt_text,
-        om.output_raw
+        om.prompt_full,
+        om.prompt_parsed,
+        om.llm_output,
+        om.metadata
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.llm_provider = ?
@@ -67,26 +74,59 @@ async function extractGoldenExamples(strategy = 'HIGH_QUALITY_GEMINI', options =
       LIMIT ?
     `;
 
-    const examples = db.prepare(query).all(
-      config.provider,
-      config.minQualityScore,
-      config.limit
+    const examples = dbService.db.prepare(query).all(
+      provider,
+      minScore,
+      limit
     );
 
-    return examples.map(ex => formatExample(ex));
+    return examples.map(ex => formatExample(ex, { outputMode }));
   } catch (error) {
     console.error('[GoldenExamples] Error extracting examples:', error);
     return [];
   }
 }
 
+function safeJsonParse(text) {
+  if (!text || typeof text !== 'string') return null;
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return null;
+  }
+}
+
+function normalizeExampleOutput(record, outputMode) {
+  if (outputMode === 'markdown') {
+    const markdown = record.markdown_content || '';
+    return { outputText: markdown, outputObject: null };
+  }
+
+  const parsed = safeJsonParse(record.llm_output);
+  if (parsed && typeof parsed === 'object') {
+    const minimal = {
+      markdown_content: parsed.markdown_content || record.markdown_content || '',
+      audio_tasks: Array.isArray(parsed.audio_tasks) ? parsed.audio_tasks : []
+    };
+    return { outputText: JSON.stringify(minimal, null, 2), outputObject: minimal };
+  }
+
+  const fallback = {
+    markdown_content: record.markdown_content || '',
+    audio_tasks: []
+  };
+  return { outputText: JSON.stringify(fallback, null, 2), outputObject: fallback };
+}
+
 /**
  * 格式化为 Few-shot 示例格式
  */
-function formatExample(record) {
+function formatExample(record, options = {}) {
+  const outputMode = (options.outputMode || 'json').toLowerCase();
+  const { outputText } = normalizeExampleOutput(record, outputMode);
   return {
     input: record.phrase,
-    output: record.markdown_content,
+    output: outputText,
     qualityScore: record.quality_score,
     metadata: {
       generationId: record.id,
@@ -103,33 +143,35 @@ function formatExample(record) {
  * @param {number} count - 需要的示例数量
  * @returns {Promise<Array>} 相关示例
  */
-async function getRelevantExamples(currentPhrase, count = 3) {
+async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
   try {
     // 策略：优先选择与当前短语相似的高质量示例
     // 可以基于：1) 短语长度 2) 语言类型 3) 复杂度
 
     const phraseLength = currentPhrase.length;
     const isEnglish = /^[a-zA-Z\s]+$/.test(currentPhrase);
-    const isChinese = /[\u4e00-\u9fa5]/.test(currentPhrase);
+    const outputMode = (options.outputMode || 'json').toLowerCase();
+    const minScore = Number(options.minQualityScore || 85);
+    const provider = options.provider || 'gemini';
 
     let query = `
       SELECT
+        g.id,
         g.phrase,
         g.markdown_content,
         om.quality_score,
+        om.llm_output,
         LENGTH(g.phrase) as phrase_length
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
-      WHERE g.llm_provider = 'gemini'
-        AND om.quality_score >= 85
+      WHERE g.llm_provider = ?
+        AND om.quality_score >= ?
         AND g.markdown_content IS NOT NULL
     `;
 
     // 根据输入语言类型过滤
     if (isEnglish) {
       query += ` AND g.phrase GLOB '[a-zA-Z]*'`;
-    } else if (isChinese) {
-      query += ` AND g.phrase LIKE '%' || char(0x4e00, 0x9fa5) || '%'`;
     }
 
     query += `
@@ -139,8 +181,8 @@ async function getRelevantExamples(currentPhrase, count = 3) {
       LIMIT ?
     `;
 
-    const examples = db.prepare(query).all(phraseLength, count);
-    return examples.map(ex => formatExample(ex));
+    const examples = dbService.db.prepare(query).all(provider, minScore, phraseLength, count);
+    return examples.map(ex => formatExample(ex, { outputMode }));
   } catch (error) {
     console.error('[GoldenExamples] Error getting relevant examples:', error);
     return [];
@@ -165,7 +207,7 @@ async function analyzeGoldenPatterns() {
         AND om.quality_score >= 85
     `;
 
-    const stats = db.prepare(query).get();
+    const stats = dbService.db.prepare(query).get();
 
     return {
       goldenStandards: {
@@ -215,7 +257,7 @@ ${examples.map((ex, idx) => `
 **输入**: ${ex.input}
 
 **输出**:
-${ex.output.substring(0, 500)}...
+${ex.output}
 `).join('\n')}
 
 ---

@@ -271,6 +271,31 @@ class DatabaseService {
   }
 
   /**
+   * Few-shot runs by experiment id
+   */
+  getFewShotRuns(experimentId) {
+    if (!experimentId) return [];
+    return this.db.prepare(`
+      SELECT * FROM few_shot_runs
+      WHERE experiment_id = ?
+      ORDER BY created_at ASC
+    `).all(experimentId);
+  }
+
+  /**
+   * Few-shot examples by run ids
+   */
+  getFewShotExamples(runIds = []) {
+    if (!runIds.length) return [];
+    const placeholders = runIds.map(() => '?').join(', ');
+    return this.db.prepare(`
+      SELECT * FROM few_shot_examples
+      WHERE run_id IN (${placeholders})
+      ORDER BY id ASC
+    `).all(...runIds);
+  }
+
+  /**
    * 统计分析（增强版）
    */
   getStatistics({ provider, dateFrom, dateTo }) {

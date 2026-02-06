@@ -295,5 +295,58 @@ CREATE TABLE IF NOT EXISTS system_health (
 CREATE INDEX IF NOT EXISTS idx_health_checked ON system_health(checked_at DESC);
 
 -- ========================================
+-- 表 7: few_shot_runs（Few-shot 运行记录）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS few_shot_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL,
+  experiment_id TEXT NOT NULL,
+  variant TEXT NOT NULL,              -- baseline | fewshot
+  fewshot_enabled INTEGER NOT NULL,   -- 0/1
+  strategy TEXT,
+  example_count INTEGER,
+  min_score INTEGER,
+  context_window INTEGER,
+  token_budget_ratio REAL,
+  base_prompt_tokens INTEGER,
+  fewshot_prompt_tokens INTEGER,
+  total_prompt_tokens_est INTEGER,
+  output_tokens INTEGER,
+  output_chars INTEGER,
+  quality_score REAL,
+  quality_dimensions TEXT,            -- JSON
+  latency_total_ms INTEGER,
+  success INTEGER,                    -- 0/1
+  fallback_reason TEXT,
+  prompt_hash TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_fsr_experiment ON few_shot_runs(experiment_id);
+CREATE INDEX IF NOT EXISTS idx_fsr_variant ON few_shot_runs(variant);
+CREATE INDEX IF NOT EXISTS idx_fsr_created_at ON few_shot_runs(created_at);
+
+-- ========================================
+-- 表 8: few_shot_examples（Few-shot 示例映射）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS few_shot_examples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL,
+  example_generation_id INTEGER NOT NULL,
+  example_quality_score REAL,
+  example_prompt_hash TEXT,
+  similarity_score REAL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (run_id) REFERENCES few_shot_runs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_fse_run_id ON few_shot_examples(run_id);
+
+-- ========================================
 -- 完成初始化
 -- ========================================
