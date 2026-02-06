@@ -51,6 +51,33 @@ function createExperimentId() {
     return `exp_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
+function truncateExamplesForBudget(examples, outputMode, maxChars) {
+    if (!Array.isArray(examples)) return [];
+    return examples.map((ex) => {
+        const outputText = String(ex.output || '');
+        if (outputMode === 'markdown') {
+            if (outputText.length <= maxChars) return ex;
+            return { ...ex, output: `${outputText.slice(0, maxChars)}...` };
+        }
+
+        try {
+            const parsed = JSON.parse(outputText);
+            if (parsed && typeof parsed === 'object') {
+                const markdown = String(parsed.markdown_content || '');
+                if (markdown.length > maxChars) {
+                    parsed.markdown_content = `${markdown.slice(0, maxChars)}...`;
+                }
+                return { ...ex, output: JSON.stringify(parsed, null, 2) };
+            }
+        } catch (err) {
+            // fall through to raw truncation
+        }
+
+        if (outputText.length <= maxChars) return ex;
+        return { ...ex, output: `${outputText.slice(0, maxChars)}...` };
+    });
+}
+
 function normalizeAudioTasks(tasks, baseName) {
   if (!Array.isArray(tasks)) return [];
   return tasks.map((task, index) => {
@@ -116,6 +143,7 @@ async function generateWithProvider(phrase, provider, perf) {
       tokenBudgetRatio: Number(process.env.FEWSHOT_TOKEN_BUDGET_RATIO || 0.25)
   };
 
+  const basePromptTokens = TokenCounter.estimate(prompt);
   let fewShotMeta = {
       enabled: false,
       strategy: fewShotConfig.strategy,
@@ -124,9 +152,9 @@ async function generateWithProvider(phrase, provider, perf) {
       minScore: fewShotConfig.minScore,
       contextWindow: fewShotConfig.contextWindow,
       tokenBudgetRatio: fewShotConfig.tokenBudgetRatio,
-      basePromptTokens: 0,
+      basePromptTokens,
       fewshotPromptTokens: 0,
-      totalPromptTokensEst: 0,
+      totalPromptTokensEst: basePromptTokens,
       fallbackReason: null,
       exampleIds: [],
       examples: []
@@ -135,7 +163,6 @@ async function generateWithProvider(phrase, provider, perf) {
   if (fewShotConfig.enabled) {
       perf.mark('fewshotSelect');
       const outputMode = useMarkdownOutput ? 'markdown' : 'json';
-      const basePromptTokens = TokenCounter.estimate(prompt);
       let examples = await goldenExamplesService.getRelevantExamples(phrase, fewShotConfig.count, {
           outputMode,
           minQualityScore: fewShotConfig.minScore
@@ -160,11 +187,22 @@ async function generateWithProvider(phrase, provider, perf) {
               fallbackReason = 'budget_reduction';
           }
 
-          if (examples.length === 0 && fewshotTokens > budget) {
+          if (examples.length > 0 && fewshotTokens > budget) {
+              const perExampleBudget = Math.max(120, Math.floor(budget / examples.length));
+              const maxChars = perExampleBudget * 4;
+              examples = truncateExamplesForBudget(examples, outputMode, maxChars);
+              enhancedPrompt = goldenExamplesService.buildEnhancedPrompt(prompt, examples);
+              totalTokens = TokenCounter.estimate(enhancedPrompt);
+              fewshotTokens = Math.max(0, totalTokens - basePromptTokens);
+              fallbackReason = 'budget_truncate';
+          }
+
+          if (fewshotTokens > budget) {
               enhancedPrompt = prompt;
               fewshotTokens = 0;
               totalTokens = basePromptTokens;
               fallbackReason = 'budget_exceeded_disable';
+              examples = [];
           }
 
           prompt = enhancedPrompt;

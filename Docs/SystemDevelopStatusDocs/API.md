@@ -40,6 +40,7 @@
 | | GET | `/statistics` | 统计分析 |
 | | GET | `/search` | 全文搜索 |
 | | GET | `/recent` | 最近记录 |
+| | GET | `/experiments/:id` | Few-shot 实验数据导出 |
 | **删除** | DELETE | `/records/:id` | 按 ID 删除记录 |
 | | DELETE | `/records/by-file` | 按文件删除记录 |
 | **文件** | GET | `/folders` | 文件夹列表 |
@@ -86,7 +87,9 @@ Content-Type: application/json
 {
   "phrase": "hello world",
   "llm_provider": "local",
-  "enable_compare": false
+  "enable_compare": false,
+  "experiment_id": "exp_1700000000_abcd12",
+  "variant": "baseline"
 }
 ```
 
@@ -207,6 +210,38 @@ Content-Type: application/json
 ```http
 POST /api/ocr
 Content-Type: application/json
+```
+
+---
+
+## 实验数据导出
+
+### GET /api/experiments/:id
+
+**说明**：导出 few-shot 实验数据（runs + examples）用于图表分析。
+
+**响应**
+```json
+{
+  "experimentId": "exp_1700000000_abcd12",
+  "runs": [
+    {
+      "id": 1,
+      "generation_id": 123,
+      "variant": "baseline",
+      "fewshot_enabled": 0,
+      "quality_score": 72,
+      "total_prompt_tokens_est": 1200
+    }
+  ],
+  "examples": [
+    {
+      "run_id": 2,
+      "example_generation_id": 88,
+      "example_quality_score": 93
+    }
+  ]
+}
 ```
 
 **请求体**

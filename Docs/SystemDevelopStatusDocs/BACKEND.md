@@ -26,6 +26,7 @@
 │   ├── observabilityService.js       # 可观测性指标
 │   ├── databaseService.js            # SQLite 访问
 │   ├── databaseHelpers.js            # 数据库辅助
+│   ├── fewShotMetricsService.js      # Few-shot 实验记录写入
 │   └── healthCheckService.js         # 健康检查
 ├── database/
 │   └── schema.sql                     # SQLite Schema
@@ -118,6 +119,8 @@
 - `generations`: 生成主记录
 - `audio_files`: 音频任务与文件
 - `observability_metrics`: 指标数据
+- `few_shot_runs`: Few-shot 实验运行记录
+- `few_shot_examples`: Few-shot 示例映射
 - `generation_errors`: 错误记录
 - `generations_fts`: FTS5 搜索
 
