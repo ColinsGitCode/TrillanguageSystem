@@ -315,9 +315,9 @@ winner = abs(scoreA - scoreB) > 5 ? higherScore : 'tie'
 ## 📞 技术支持
 
 如有问题，请参考：
-- [完整功能文档](./MODEL_COMPARISON_FEATURE.md)
-- [快速上手指南](./QUICK_START_COMPARISON.md)
-- [后端架构文档](../Docs/SystemDevelopStatusDocs/BACKEND.md)
+- [完整功能文档](../DesignDocs/CodeAsPrompt/MODEL_COMPARISON_FEATURE.md)
+- [快速上手指南](../DesignDocs/CodeAsPrompt/QUICK_START_COMPARISON.md)
+- [后端架构文档](BACKEND.md)
 
 ---
 

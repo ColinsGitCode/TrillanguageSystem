@@ -171,35 +171,35 @@ artificial intelligence
 创建分析脚本 `scripts/analyze-quality-patterns.js`：
 
 ```javascript
-const goldenExamplesService = require('../services/goldenExamplesService');
+const goldenExamplesService = require('./goldenExamplesService');
 
 async function analyzeQuality() {
-  console.log('📊 分析高质量案例特征...\n');
+	console.log('📊 分析高质量案例特征...\n');
 
-  // 获取统计数据
-  const analysis = await goldenExamplesService.analyzeGoldenPatterns();
+	// 获取统计数据
+	const analysis = await goldenExamplesService.analyzeGoldenPatterns();
 
-  console.log('=== Golden Standards ===');
-  console.log(`平均质量评分: ${analysis.goldenStandards.avgQualityScore.toFixed(2)}`);
-  console.log(`平均 Token 数: ${analysis.goldenStandards.avgTokens.toFixed(0)}`);
-  console.log(`平均内容长度: ${analysis.goldenStandards.avgContentLength.toFixed(0)} 字符`);
-  console.log(`样本数量: ${analysis.goldenStandards.sampleSize}`);
+	console.log('=== Golden Standards ===');
+	console.log(`平均质量评分: ${analysis.goldenStandards.avgQualityScore.toFixed(2)}`);
+	console.log(`平均 Token 数: ${analysis.goldenStandards.avgTokens.toFixed(0)}`);
+	console.log(`平均内容长度: ${analysis.goldenStandards.avgContentLength.toFixed(0)} 字符`);
+	console.log(`样本数量: ${analysis.goldenStandards.sampleSize}`);
 
-  console.log('\n=== 优化建议 ===');
-  analysis.recommendations.forEach((rec, idx) => {
-    console.log(`${idx + 1}. ${rec}`);
-  });
+	console.log('\n=== 优化建议 ===');
+	analysis.recommendations.forEach((rec, idx) => {
+		console.log(`${idx + 1}. ${rec}`);
+	});
 
-  // 提取具体示例
-  console.log('\n=== 高质量示例 ===');
-  const examples = await goldenExamplesService.extractGoldenExamples('HIGH_QUALITY_GEMINI');
+	// 提取具体示例
+	console.log('\n=== 高质量示例 ===');
+	const examples = await goldenExamplesService.extractGoldenExamples('HIGH_QUALITY_GEMINI');
 
-  examples.slice(0, 3).forEach((ex, idx) => {
-    console.log(`\n示例 ${idx + 1}:`);
-    console.log(`  输入: ${ex.input}`);
-    console.log(`  质量: ${ex.qualityScore}`);
-    console.log(`  长度: ${ex.output.length} 字符`);
-  });
+	examples.slice(0, 3).forEach((ex, idx) => {
+		console.log(`\n示例 ${idx + 1}:`);
+		console.log(`  输入: ${ex.input}`);
+		console.log(`  质量: ${ex.qualityScore}`);
+		console.log(`  长度: ${ex.output.length} 字符`);
+	});
 }
 
 analyzeQuality().catch(console.error);

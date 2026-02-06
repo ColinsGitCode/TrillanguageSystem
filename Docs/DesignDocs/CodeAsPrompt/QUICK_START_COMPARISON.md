@@ -265,8 +265,8 @@ totalTime ≈ max(geminiTime, localTime) + 网络延迟
 
 ## 🎓 学习资源
 
-- **完整文档:** [MODEL_COMPARISON_FEATURE.md](./MODEL_COMPARISON_FEATURE.md)
-- **更新日志:** [FEATURE_UPDATE_v2.1.md](./FEATURE_UPDATE_v2.1.md)
+- **完整文档:** [MODEL_COMPARISON_FEATURE.md](MODEL_COMPARISON_FEATURE.md)
+- **更新日志:** [FEATURE_UPDATE_v2.1.md](../../SystemDevelopStatusDocs/FEATURE_UPDATE_v2.1.md)
 - **代码示例:** `public/js/modules/app.js`
 
 ## 🚀 下一步

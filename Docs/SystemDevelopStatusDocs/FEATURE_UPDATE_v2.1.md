@@ -194,8 +194,8 @@ curl -X POST http://localhost:3010/api/generate \
 ## 🎓 学习资源
 
 ### 文档
-- [完整功能文档](./MODEL_COMPARISON_FEATURE.md)
-- [API 参考](../CLAUDE.md)
+- [完整功能文档](../DesignDocs/CodeAsPrompt/MODEL_COMPARISON_FEATURE.md)
+- [API 参考](../../CLAUDE.md)
 
 ### 代码示例
 - 前端实现: `public/js/modules/app.js` (handleCompareResult)
