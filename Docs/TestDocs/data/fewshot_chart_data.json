@@ -1,0 +1,98 @@
+{
+  "summary": {
+    "baseline": {
+      "count": 8,
+      "avgQuality": 28.625,
+      "avgTokens": 389,
+      "avgLatency": 17955.375,
+      "avgOutputChars": 437.875
+    },
+    "fewshot": {
+      "count": 8,
+      "avgQuality": 78.25,
+      "avgTokens": 1070.375,
+      "avgLatency": 49427.625,
+      "avgOutputChars": 1495.875
+    }
+  },
+  "paired": [
+    {
+      "phrase": "hello world",
+      "baseline": {
+        "phrase": "hello world",
+        "variant": "baseline",
+        "quality": 73,
+        "tokens": 947,
+        "latency": 40226,
+        "outputChars": 975
+      },
+      "fewshot": {
+        "phrase": "hello world (2)",
+        "variant": "fewshot",
+        "quality": 68,
+        "tokens": 936,
+        "latency": 35692,
+        "outputChars": 940
+      }
+    },
+    {
+      "phrase": "machine learning",
+      "baseline": {
+        "phrase": "machine learning",
+        "variant": "baseline",
+        "quality": 84,
+        "tokens": 1048,
+        "latency": 47591,
+        "outputChars": 1266
+      },
+      "fewshot": {
+        "phrase": "machine learning (2)",
+        "variant": "fewshot",
+        "quality": 84,
+        "tokens": 1054,
+        "latency": 47599,
+        "outputChars": 1286
+      }
+    },
+    {
+      "phrase": "API Gateway",
+      "baseline": {
+        "phrase": "API Gateway",
+        "variant": "baseline",
+        "quality": 72,
+        "tokens": 1117,
+        "latency": 55826,
+        "outputChars": 1262
+      },
+      "fewshot": {
+        "phrase": "API Gateway (2)",
+        "variant": "fewshot",
+        "quality": 78,
+        "tokens": 1096,
+        "latency": 54479,
+        "outputChars": 1217
+      }
+    }
+  ],
+  "deltas": [
+    {
+      "phrase": "hello world",
+      "deltaQuality": -5,
+      "deltaTokens": -11,
+      "deltaLatency": -4534
+    },
+    {
+      "phrase": "machine learning",
+      "deltaQuality": 0,
+      "deltaTokens": 6,
+      "deltaLatency": 8
+    },
+    {
+      "phrase": "API Gateway",
+      "deltaQuality": 6,
+      "deltaTokens": -21,
+      "deltaLatency": -1347
+    }
+  ],
+  "generatedAt": "2026-02-06T03:44:09.297Z"
+}

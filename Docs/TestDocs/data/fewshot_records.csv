@@ -1,0 +1,17 @@
+phrase,variant,quality,tokens,latency,outputChars
+"hello world","baseline",73,947,40226,975
+"machine learning","baseline",84,1048,47591,1266
+"unknown","baseline",0,0,0,0
+"unknown","baseline",0,0,0,0
+"unknown","baseline",0,0,0,0
+"unknown","baseline",0,0,0,0
+"API Gateway","baseline",72,1117,55826,1262
+"unknown","baseline",0,0,0,0
+"hello world (2)","fewshot",68,936,35692,940
+"machine learning (2)","fewshot",84,1054,47599,1286
+"量子纠缠","fewshot",78,1202,61152,2160
+"供应链","fewshot",84,1037,47384,1431
+"提示词工程","fewshot",81,1096,51478,1663
+"OCR 识别","fewshot",78,1054,46868,1475
+"API Gateway (2)","fewshot",78,1096,54479,1217
+"多模型对比","fewshot",75,1088,50769,1795

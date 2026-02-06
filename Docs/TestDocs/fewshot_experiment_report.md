@@ -60,31 +60,27 @@ API Gateway
 
 ---
 
-## 5. 图表建议（用于汇报）
+## 5. 可视化结果（D3 产出）
 
-### 5.1 平均质量分提升（柱状图）
-- **X 轴**：Baseline / Few-shot
-- **Y 轴**：平均质量分
-- **结论**：质量提升显著（+49.6）
+> 生成脚本：`node d3/render_fewshot_charts.mjs`  
+> 图表输出：`Docs/TestDocs/charts/`
 
-### 5.2 Token 成本变化（柱状图）
-- **X 轴**：Baseline / Few-shot
-- **Y 轴**：平均 tokens
-- **结论**：token 消耗约 +175%
+### 5.1 平均质量分（柱状图）
+![](charts/fewshot_quality_bar.svg)
 
-### 5.3 延迟对比（柱状图）
-- **X 轴**：Baseline / Few-shot
-- **Y 轴**：平均延迟 (秒)
-- **结论**：延迟增加约 +31s（需在业务侧权衡）
+### 5.2 平均 Tokens（柱状图）
+![](charts/fewshot_tokens_bar.svg)
 
-### 5.4 质量提升分布（箱线图 / 条形图）
-- **数据**：每条短语的质量分提升
-- **结论**：few-shot 对几乎所有样本均有提升
+### 5.3 平均延迟（柱状图）
+![](charts/fewshot_latency_bar.svg)
 
-### 5.5 质量 vs Token 散点图
-- **X 轴**：tokens
-- **Y 轴**：quality score
-- **结论**：质量提升与 token 成本呈正相关
+### 5.4 质量提升分布（可配对短语）
+> 说明：该图仅统计可配对短语（同名或 `(2)` 归一化）计算的 delta。
+
+![](charts/fewshot_quality_delta.svg)
+
+### 5.5 质量 vs Tokens（散点图）
+![](charts/fewshot_quality_tokens_scatter.svg)
 
 ---
 
@@ -120,4 +116,5 @@ API Gateway
 - Baseline 原始数据：`/tmp/baseline.jsonl`
 - Few-shot 原始数据：`/tmp/enhanced.jsonl`
 - 实验导出接口：`GET /api/experiments/exp_1770347956_fs`
-
+- 可视化数据集：`Docs/TestDocs/data/fewshot_chart_data.json`
+- 图表文件：`Docs/TestDocs/charts/*.svg`

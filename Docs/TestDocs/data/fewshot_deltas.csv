@@ -1,0 +1,13 @@
+phrase,deltaQuality,deltaTokens,deltaLatency
+"hello world",-73,-947,-40226
+"machine learning",-84,-1048,-47591
+"unknown",0,0,0
+"API Gateway",-72,-1117,-55826
+"hello world (2)",68,936,35692
+"machine learning (2)",84,1054,47599
+"量子纠缠",78,1202,61152
+"供应链",84,1037,47384
+"提示词工程",81,1096,51478
+"OCR 识别",78,1054,46868
+"API Gateway (2)",78,1096,54479
+"多模型对比",75,1088,50769

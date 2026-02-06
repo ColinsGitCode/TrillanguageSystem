@@ -14,6 +14,12 @@ data/
 *.db-shm
 *.db-wal
 
+# Allow tracked test datasets & charts
+!Docs/TestDocs/data/
+!Docs/TestDocs/data/**
+!Docs/TestDocs/charts/
+!Docs/TestDocs/charts/**
+
 # Temporary documentation files
 Docs/**/*.bak
 Docs/**/*_backup.md

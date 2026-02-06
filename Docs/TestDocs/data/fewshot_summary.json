@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "count": 8,
+    "avgQuality": 28.625,
+    "avgTokens": 389,
+    "avgLatency": 17955.375,
+    "avgOutputChars": 437.875
+  },
+  "fewshot": {
+    "count": 8,
+    "avgQuality": 78.25,
+    "avgTokens": 1070.375,
+    "avgLatency": 49427.625,
+    "avgOutputChars": 1495.875
+  }
+}

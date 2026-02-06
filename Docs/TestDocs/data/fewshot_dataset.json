@@ -1,0 +1,222 @@
+{
+  "summary": {
+    "baseline": {
+      "count": 8,
+      "avgQuality": 28.625,
+      "avgTokens": 389,
+      "avgLatency": 17955.375,
+      "avgOutputChars": 437.875
+    },
+    "fewshot": {
+      "count": 8,
+      "avgQuality": 78.25,
+      "avgTokens": 1070.375,
+      "avgLatency": 49427.625,
+      "avgOutputChars": 1495.875
+    }
+  },
+  "records": [
+    {
+      "phrase": "hello world",
+      "variant": "baseline",
+      "quality": 73,
+      "tokens": 947,
+      "latency": 40226,
+      "outputChars": 975
+    },
+    {
+      "phrase": "machine learning",
+      "variant": "baseline",
+      "quality": 84,
+      "tokens": 1048,
+      "latency": 47591,
+      "outputChars": 1266
+    },
+    {
+      "phrase": "unknown",
+      "variant": "baseline",
+      "quality": 0,
+      "tokens": 0,
+      "latency": 0,
+      "outputChars": 0
+    },
+    {
+      "phrase": "unknown",
+      "variant": "baseline",
+      "quality": 0,
+      "tokens": 0,
+      "latency": 0,
+      "outputChars": 0
+    },
+    {
+      "phrase": "unknown",
+      "variant": "baseline",
+      "quality": 0,
+      "tokens": 0,
+      "latency": 0,
+      "outputChars": 0
+    },
+    {
+      "phrase": "unknown",
+      "variant": "baseline",
+      "quality": 0,
+      "tokens": 0,
+      "latency": 0,
+      "outputChars": 0
+    },
+    {
+      "phrase": "API Gateway",
+      "variant": "baseline",
+      "quality": 72,
+      "tokens": 1117,
+      "latency": 55826,
+      "outputChars": 1262
+    },
+    {
+      "phrase": "unknown",
+      "variant": "baseline",
+      "quality": 0,
+      "tokens": 0,
+      "latency": 0,
+      "outputChars": 0
+    },
+    {
+      "phrase": "hello world (2)",
+      "variant": "fewshot",
+      "quality": 68,
+      "tokens": 936,
+      "latency": 35692,
+      "outputChars": 940
+    },
+    {
+      "phrase": "machine learning (2)",
+      "variant": "fewshot",
+      "quality": 84,
+      "tokens": 1054,
+      "latency": 47599,
+      "outputChars": 1286
+    },
+    {
+      "phrase": "量子纠缠",
+      "variant": "fewshot",
+      "quality": 78,
+      "tokens": 1202,
+      "latency": 61152,
+      "outputChars": 2160
+    },
+    {
+      "phrase": "供应链",
+      "variant": "fewshot",
+      "quality": 84,
+      "tokens": 1037,
+      "latency": 47384,
+      "outputChars": 1431
+    },
+    {
+      "phrase": "提示词工程",
+      "variant": "fewshot",
+      "quality": 81,
+      "tokens": 1096,
+      "latency": 51478,
+      "outputChars": 1663
+    },
+    {
+      "phrase": "OCR 识别",
+      "variant": "fewshot",
+      "quality": 78,
+      "tokens": 1054,
+      "latency": 46868,
+      "outputChars": 1475
+    },
+    {
+      "phrase": "API Gateway (2)",
+      "variant": "fewshot",
+      "quality": 78,
+      "tokens": 1096,
+      "latency": 54479,
+      "outputChars": 1217
+    },
+    {
+      "phrase": "多模型对比",
+      "variant": "fewshot",
+      "quality": 75,
+      "tokens": 1088,
+      "latency": 50769,
+      "outputChars": 1795
+    }
+  ],
+  "deltas": [
+    {
+      "phrase": "hello world",
+      "deltaQuality": -73,
+      "deltaTokens": -947,
+      "deltaLatency": -40226
+    },
+    {
+      "phrase": "machine learning",
+      "deltaQuality": -84,
+      "deltaTokens": -1048,
+      "deltaLatency": -47591
+    },
+    {
+      "phrase": "unknown",
+      "deltaQuality": 0,
+      "deltaTokens": 0,
+      "deltaLatency": 0
+    },
+    {
+      "phrase": "API Gateway",
+      "deltaQuality": -72,
+      "deltaTokens": -1117,
+      "deltaLatency": -55826
+    },
+    {
+      "phrase": "hello world (2)",
+      "deltaQuality": 68,
+      "deltaTokens": 936,
+      "deltaLatency": 35692
+    },
+    {
+      "phrase": "machine learning (2)",
+      "deltaQuality": 84,
+      "deltaTokens": 1054,
+      "deltaLatency": 47599
+    },
+    {
+      "phrase": "量子纠缠",
+      "deltaQuality": 78,
+      "deltaTokens": 1202,
+      "deltaLatency": 61152
+    },
+    {
+      "phrase": "供应链",
+      "deltaQuality": 84,
+      "deltaTokens": 1037,
+      "deltaLatency": 47384
+    },
+    {
+      "phrase": "提示词工程",
+      "deltaQuality": 81,
+      "deltaTokens": 1096,
+      "deltaLatency": 51478
+    },
+    {
+      "phrase": "OCR 识别",
+      "deltaQuality": 78,
+      "deltaTokens": 1054,
+      "deltaLatency": 46868
+    },
+    {
+      "phrase": "API Gateway (2)",
+      "deltaQuality": 78,
+      "deltaTokens": 1096,
+      "deltaLatency": 54479
+    },
+    {
+      "phrase": "多模型对比",
+      "deltaQuality": 75,
+      "deltaTokens": 1088,
+      "deltaLatency": 50769
+    }
+  ]
+}
