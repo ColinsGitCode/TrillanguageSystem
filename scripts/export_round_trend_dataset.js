@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const dbService = require('../services/databaseService');
+const { runPairedTests } = require('../services/statisticsService');
 
 function writeCsv(filePath, rows, columns) {
   const header = columns.join(',');
@@ -70,6 +71,18 @@ function computeRoundMetrics(rounds, samples) {
   const baselineTokens = toNumber(baseline.avgTokensTotal);
   const baselineLatency = toNumber(baseline.avgLatencyMs);
 
+  // 获取 baseline 配对分数（按短语排序，用于统计检验）
+  const baselineRoundNum = Number(baseline.roundNumber || 0);
+  const baselineSamples = (sampleMap.get(baselineRoundNum) || [])
+    .filter((s) => Number(s.isTeacher) !== 1)
+    .sort((a, b) => String(a.phrase || '').localeCompare(String(b.phrase || '')));
+  const baselinePhraseScores = new Map();
+  for (const s of baselineSamples) {
+    if (Number(s.success) === 1) {
+      baselinePhraseScores.set(String(s.phrase || ''), toNumber(s.qualityScore));
+    }
+  }
+
   let teacherGapReference = null;
   for (const row of rounds) {
     const gap = toNullableNumber(row.teacherGap);
@@ -112,6 +125,26 @@ function computeRoundMetrics(rounds, samples) {
       ? safeDivide(teacherGapReference - teacherGap, Math.abs(teacherGapReference)) * 100
       : null;
 
+    // 统计检验：配对 t-test / Wilcoxon / CI / Cohen's d
+    let statisticalTests = null;
+    if (roundNumber !== baselineRoundNum && baselinePhraseScores.size > 0) {
+      const currentSamples = localSamples
+        .filter((s) => Number(s.success) === 1)
+        .sort((a, b) => String(a.phrase || '').localeCompare(String(b.phrase || '')));
+      const pairedBaseline = [];
+      const pairedCurrent = [];
+      for (const s of currentSamples) {
+        const phrase = String(s.phrase || '');
+        if (baselinePhraseScores.has(phrase)) {
+          pairedBaseline.push(baselinePhraseScores.get(phrase));
+          pairedCurrent.push(toNumber(s.qualityScore));
+        }
+      }
+      if (pairedBaseline.length >= 5) {
+        statisticalTests = runPairedTests(pairedBaseline, pairedCurrent);
+      }
+    }
+
     return {
       roundNumber,
       roundName: row.roundName,
@@ -135,7 +168,8 @@ function computeRoundMetrics(rounds, samples) {
       qualityStdDev: qualitySd,
       qualityCvPct: (qualitySd !== null && avgQuality > 0) ? (qualitySd / avgQuality) * 100 : null,
       fewshotEnabled: Number(row.fewshotEnabled) === 1,
-      isImprovedVsBaseline: deltaQuality >= 1.5
+      isImprovedVsBaseline: deltaQuality >= 1.5,
+      statisticalTests
     };
   });
 }
@@ -158,6 +192,10 @@ function computeKpiSummary(roundMetrics = []) {
     .map((r) => r.qualityCvPct)
     .filter((v) => Number.isFinite(v)));
 
+  // 从最佳增益轮次提取统计检验结果
+  const bestStatRound = bestGain && bestGain.statisticalTests ? bestGain : null;
+  const statsResult = bestStatRound?.statisticalTests || null;
+
   return {
     totalRounds: localRounds.length,
     improvedRoundCount: improvedRounds.length,
@@ -177,7 +215,16 @@ function computeKpiSummary(roundMetrics = []) {
       : null,
     avgTeacherAlignmentPct: avgTeacherAlignment,
     avgStabilityCvPct: avgStabilityCv,
-    fewshotEffectVisible: improvedRounds.length > 0
+    fewshotEffectVisible: improvedRounds.length > 0,
+    statisticalSignificance: statsResult ? {
+      pairedSampleSize: statsResult.sampleSize,
+      pValue: statsResult.pairedTTest?.pValue ?? null,
+      confidenceInterval95: statsResult.confidenceInterval95 || null,
+      cohensD: statsResult.cohensD || null,
+      wilcoxonPValue: statsResult.wilcoxon?.pValue ?? null,
+      significant: statsResult.significant || false,
+      summary: statsResult.summary || ''
+    } : null
   };
 }
 

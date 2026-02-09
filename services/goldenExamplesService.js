@@ -36,6 +36,25 @@ const EXTRACTION_STRATEGIES = {
 
 const DEFAULT_MAX_OUTPUT_CHARS = Number(process.env.GOLDEN_EXAMPLE_MAX_CHARS || 900);
 
+/**
+ * 计算两个字符串之间的 bigram 相似度 (Dice coefficient)
+ * 适用于中英日混合文本，无需分词依赖
+ */
+function bigramSimilarity(a, b) {
+  const strA = String(a || '').toLowerCase().trim();
+  const strB = String(b || '').toLowerCase().trim();
+  if (!strA || !strB) return 0;
+  if (strA === strB) return 1;
+  const bigramsA = new Set();
+  const bigramsB = new Set();
+  for (let i = 0; i < strA.length - 1; i++) bigramsA.add(strA.slice(i, i + 2));
+  for (let i = 0; i < strB.length - 1; i++) bigramsB.add(strB.slice(i, i + 2));
+  if (!bigramsA.size || !bigramsB.size) return 0;
+  let overlap = 0;
+  for (const bg of bigramsA) { if (bigramsB.has(bg)) overlap++; }
+  return (2 * overlap) / (bigramsA.size + bigramsB.size);
+}
+
 function clipText(raw, maxChars = DEFAULT_MAX_OUTPUT_CHARS) {
   const text = String(raw || '').trim();
   if (!text) return '';
@@ -208,6 +227,8 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
       }
     }
 
+    // 查询候选集（扩大范围取 count*5，后续在 JS 层按相似度重排）
+    const candidateLimit = Math.max(count * 5, 15);
     let query = `
       SELECT
         g.id,
@@ -217,8 +238,7 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
         g.created_at,
         om.quality_score,
         om.llm_output,
-        om.tokens_total,
-        LENGTH(g.phrase) as phrase_length
+        om.tokens_total
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.llm_provider = ?
@@ -232,13 +252,25 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
     }
 
     query += `
-      ORDER BY
-        ABS(LENGTH(g.phrase) - ?) ASC,
-        om.quality_score DESC
+      ORDER BY om.quality_score DESC
       LIMIT ?
     `;
 
-    const examples = dbService.db.prepare(query).all(provider, minScore, phraseLength, count);
+    const candidates = dbService.db.prepare(query).all(provider, minScore, candidateLimit);
+
+    // 按 bigram 关键词相似度重排，取 top-N
+    const scored = candidates.map((ex) => ({
+      ...ex,
+      _similarity: bigramSimilarity(currentPhrase, ex.phrase)
+    }));
+    scored.sort((a, b) => {
+      // 优先相似度，相似度相同时按 quality 排序
+      const simDiff = b._similarity - a._similarity;
+      if (Math.abs(simDiff) > 0.01) return simDiff;
+      return (b.quality_score || 0) - (a.quality_score || 0);
+    });
+
+    const examples = scored.slice(0, count);
     return examples.map((ex) => formatExample(ex, {
       outputMode,
       maxOutputChars

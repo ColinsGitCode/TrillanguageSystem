@@ -1,0 +1,3 @@
+roundNumber,roundName,sampleCount,successCount,successRate,avgQualityScore,avgTokensTotal,avgLatencyMs,deltaQuality,deltaTokens,deltaLatency,qualityPer1kTokens,gainPer1kExtraTokens,tokenIncreasePct,latencyIncreasePct,teacherAvgQuality,teacherGap,teacherAlignmentPct,teacherGapClosurePct,qualityStdDev,qualityCvPct,fewshotEnabled,isImprovedVsBaseline
+0,"baseline",50,49,98,75,1028.78,46680.82,0,0,0,72.901883784677,"",0,0,0,0,"",0,3.9180484564115403,5.22406460854872,false,false
+1,"fewshot_r1",50,49,98,76.88,1413.72,49562.78,1.8799999999999955,384.94000000000005,2881.959999999999,54.38134849899555,4.883878006962111,37.417134858764754,6.173756159381946,0,0,"",0,3.2011555597863173,4.163833974748072,false,true

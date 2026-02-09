@@ -1,0 +1,39 @@
+{
+  "totalRounds": 2,
+  "improvedRoundCount": 1,
+  "improvementRatioPct": 50,
+  "bestQualityRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "avgQualityScore": 76.88
+  },
+  "bestGainRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "deltaQuality": 1.8799999999999955
+  },
+  "bestEfficiencyRound": {
+    "roundNumber": 1,
+    "roundName": "fewshot_r1",
+    "gainPer1kExtraTokens": 4.883878006962111
+  },
+  "avgTeacherAlignmentPct": null,
+  "avgStabilityCvPct": 4.693949291648396,
+  "fewshotEffectVisible": true,
+  "statisticalSignificance": {
+    "pairedSampleSize": 48,
+    "pValue": 0.0005348840516851288,
+    "confidenceInterval95": {
+      "lower": 0.84,
+      "upper": 2.83,
+      "mean": 1.83
+    },
+    "cohensD": {
+      "d": 0.537,
+      "interpretation": "medium"
+    },
+    "wilcoxonPValue": 0.001,
+    "significant": true,
+    "summary": "Mean diff: +1.83; 95% CI: [0.84, 2.83]; t-test p=0.0005; Wilcoxon p=0.0010; Cohen's d=0.537 (medium)"
+  }
+}

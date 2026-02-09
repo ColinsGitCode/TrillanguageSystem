@@ -1,0 +1,3 @@
+roundNumber,roundName,sampleCount,successCount,avgQualityScore,avgTokensTotal,avgLatencyMs,teacherAvgQuality,teacherGap
+0,"baseline",50,49,75,1028.78,46680.82,"",""
+1,"fewshot_r1",50,49,76.88,1413.72,49562.78,"",""

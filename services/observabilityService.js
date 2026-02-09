@@ -185,7 +185,8 @@ class QualityChecker {
       completeness: this.calculateCompletenessScore(checks, content),     // 完整性 (40分)
       accuracy: this.calculateAccuracyScore(content, expectedPhrase),     // 准确性 (30分)
       exampleQuality: this.calculateExampleScore(content, parsed),          // 例句质量 (20分)
-      formatting: this.calculateFormattingScore(content, parsed, templateCompliance) // 格式规范 (10分)
+      formatting: this.calculateFormattingScore(content, parsed, templateCompliance), // 格式规范 (10分)
+      contentLength: (content.markdown_content || '').length              // 独立指标：内容长度（不计入总分，用于分析"长度 vs 质量"关系）
     };
 
     // 计算综合得分
@@ -277,6 +278,7 @@ class QualityChecker {
   /**
    * 计算完整性得分 (40分)
    * 检查结构完整性和必需字段
+   * 注意：不再以内容长度作为加分项，避免 few-shot 输出变长时自动加分
    */
   static calculateCompletenessScore(checks, content) {
     let score = 0;
@@ -290,9 +292,16 @@ class QualityChecker {
     // 音频任务存在 (10分)
     if (checks.audioTasksGenerated) score += 10;
 
-    // 内容长度合理 (5分)
-    const markdown = content.markdown_content || '';
-    if (markdown.length > 500) score += 5;
+    // 三语 section 结构完整性 (5分) — 替代原 "内容长度>500字" 加分
+    const parsed = parseTrilingualMarkdown(content?.markdown_content || '');
+    const en = parsed?.sections?.en || {};
+    const ja = parsed?.sections?.ja || {};
+    const zh = parsed?.sections?.zh || {};
+    const sectionComplete =
+      !!(en.translation && en.explanation && en.examples?.length >= 2) &&
+      !!(ja.translation && ja.explanation && ja.examples?.length >= 2) &&
+      !!(zh.translation && zh.explanation);
+    if (sectionComplete) score += 5;
 
     return score;
   }
@@ -427,7 +436,7 @@ class QualityChecker {
    * 计算综合得分 (总分100)
    */
   static calculateOverallScore(dimensions) {
-    // 直接求和，因为各维度已经按满分设计
+    // 直接求和（仅计分维度），contentLength 为独立分析指标不计入
     const score = dimensions.completeness +
                   dimensions.accuracy +
                   dimensions.exampleQuality +
