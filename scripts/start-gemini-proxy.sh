@@ -13,7 +13,7 @@ LOG_FILE="/tmp/gemini-proxy.log"
 export GEMINI_PROXY_PORT=3210
 export GEMINI_PROXY_BIN="gemini"
 export GEMINI_PROXY_TIMEOUT_MS=90000
-export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-pro}"
+export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-pro-preview}"
 # export GEMINI_PROXY_OUTPUT_DIR="/tmp/gemini-outputs"  # 可选：保存输出
 
 case "$1" in

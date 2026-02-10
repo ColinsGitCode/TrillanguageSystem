@@ -3,13 +3,21 @@ services:
   viewer:
     build: .
     container_name: trilingual-viewer
+    depends_on:
+      - ocr
+      - tts-en
+      - tts-ja
     environment:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
       - DB_PATH=/data/trilingual_records/trilingual_records.db
+      - OCR_PROVIDER=tesseract
+      - OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr
+      - OCR_LANGS=eng+jpn+chi_sim
+      - OCR_TIMEOUT_MS=20000
       - GEMINI_MODE=host-proxy
       - GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
-      - GEMINI_PROXY_MODEL=gemini-cli
+      - GEMINI_PROXY_MODEL=${GEMINI_PROXY_MODEL:-gemini-3-pro-preview}
       - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
       - TTS_EN_TYPE=kokoro
       - TTS_EN_SPEED=1.0
@@ -20,7 +28,7 @@ services:
       - TTS_JA_TYPE=voicevox
       - VOICEVOX_SPEAKER=2
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-pro-preview}
       - ENABLE_GOLDEN_EXAMPLES=${ENABLE_GOLDEN_EXAMPLES:-false}
       - GOLDEN_EXAMPLES_STRATEGY=${GOLDEN_EXAMPLES_STRATEGY:-HIGH_QUALITY_GEMINI}
       - GOLDEN_EXAMPLES_COUNT=${GOLDEN_EXAMPLES_COUNT:-3}
@@ -36,6 +44,17 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  ocr:
+    build:
+      context: ./ocr_service
+    container_name: trilingual-ocr
+    environment:
+      - OCR_LANGS=eng+jpn+chi_sim
+      - OCR_TIMEOUT_SEC=20
+      - OCR_PSM=6
+      - OCR_OEM=1
+    restart: unless-stopped
 
   tts-en:
     image: dlaszlo/speech-service:cpu-latest

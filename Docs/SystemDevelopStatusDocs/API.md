@@ -2,7 +2,7 @@
 
 **项目**: Trilingual Records  
 **API 版本**: v1  
-**更新日期**: 2026-02-06
+**更新日期**: 2026-02-10
 
 ## 1. API 总览
 
@@ -65,6 +65,7 @@
 
 - `phrase`: 必填，输入短语
 - `llm_provider`: `local` 或 `gemini`，默认 `local`
+  - 当 `llm_provider=gemini` 且未传 `llm_model` 时，默认使用 `gemini-3-pro-preview`
 - `enable_compare`: `true` 时触发双模型对比
 - `llm_model`: 模型覆盖字段
   - local 路径用于覆盖本地模型名
@@ -79,6 +80,9 @@
   "success": true,
   "experiment_id": "exp_round_xxx",
   "experiment_round": 1,
+  "provider_requested": "gemini",
+  "provider_used": "gemini",
+  "fallback": null,
   "generationId": 123,
   "result": {
     "folder": "20260206",
@@ -115,6 +119,11 @@
   }
 }
 ```
+
+说明：
+- `provider_requested`: 前端请求的 provider
+- `provider_used`: 实际执行 provider（Gemini 异常时可能自动回退到 `local`）
+- `fallback`: 回退信息；无回退时为 `null`
 
 #### 对比模式响应（`enable_compare=true`）
 
@@ -255,6 +264,7 @@
 - `404`: 资源不存在
 - `422`: 生成内容校验失败
 - `429`: 生成频率限流
+  - 响应包含 `retry_after_ms` 与 `hint`
 - `500`: 服务内部错误（同时写入 `generation_errors`）
 
 ---

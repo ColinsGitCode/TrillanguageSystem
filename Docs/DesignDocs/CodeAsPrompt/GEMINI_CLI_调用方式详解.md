@@ -90,7 +90,7 @@
 {
   "phrase": "提示词工程",
   "llm_provider": "gemini",
-  "llm_model": "gemini-2.5-flash",
+  "llm_model": "gemini-3-pro-preview",
   "enable_tts": true,
   "target_folder": "20260129"
 }
@@ -140,21 +140,33 @@ curl -s http://localhost:3210/health
 ```bash
 curl -s -X POST http://localhost:3210/api/gemini \
   -H 'Content-Type: application/json' \
-  -d '{"prompt":"请只回复 ok","baseName":"probe","model":"gemini-2.5-flash"}'
+  -d '{"prompt":"请只回复 ok","baseName":"probe","model":"gemini-3-pro-preview"}'
 ```
 
 ---
 
-## 8. 当前模型可用性结论（本机实测）
+## 8. 当前模型可用性结论（本机实测，2026-02-10）
 
 最近实测结论：
-- 可用：`gemini-2.5-flash`、`gemini-2.5-pro`、`gemini-2.0-flash`
-- 不可用（当前账号/环境）：`gemini-3-pro`（`ModelNotFoundError 404`）
+- 可用：
+  - `gemini-3-pro-preview`（当前默认）
+  - `gemini-3-flash-preview`
+  - `gemini-2.5-pro`
+  - `gemini-2.5-flash`
+  - `gemini-2.5-flash-lite`
+- 不可用（当前账号/环境，返回 `ModelNotFoundError 404`）：
+  - `gemini-3-pro`
+  - `gemini-3-flash`
+  - `gemini-3-pro-latest`
+  - `gemini-2.5-pro-latest`
+  - `gemini-pro-latest`
+  - `gemini-flash-latest`
 - 不应作为模型名：`gemini-cli`（不是有效模型 ID）
 
 实践建议：
-- 默认模型优先设置为 `gemini-2.5-flash`
-- `gemini-3-pro` 仅在账号明确开通后再启用
+- 默认模型优先设置为 `gemini-3-pro-preview`
+- teacher 池建议优先 `gemini-3-pro-preview`
+- 若要降成本/提速，可切换 `gemini-3-flash-preview` 或 `gemini-2.5-flash`
 
 ---
 
@@ -174,7 +186,7 @@ curl -s -X POST http://localhost:3210/api/gemini \
 原因：`--model` 指定了当前账号不可用模型。
 
 处理：
-- 改为 `gemini-2.5-flash` 或可用模型。
+- 改为当前可用模型（优先 `gemini-3-pro-preview`，次选 `gemini-2.5-pro`）。
 
 ### 9.3 `Rate limit exceeded`（429）
 
@@ -200,12 +212,12 @@ curl -s -X POST http://localhost:3210/api/gemini \
 # viewer
 GEMINI_MODE=host-proxy
 GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
-GEMINI_PROXY_MODEL=gemini-2.5-flash
+GEMINI_PROXY_MODEL=gemini-3-pro-preview
 
 # host proxy
 GEMINI_PROXY_PORT=3210
 GEMINI_PROXY_BIN=gemini
-GEMINI_PROXY_MODEL=gemini-2.5-flash
+GEMINI_PROXY_MODEL=gemini-3-pro-preview
 GEMINI_PROXY_TIMEOUT_MS=90000
 ```
 

@@ -9,6 +9,7 @@ const geminiService = require('./services/geminiService');
 const { runGeminiCli } = require('./services/geminiCliService');
 const { runGeminiProxy } = require('./services/geminiProxyService');
 const localLlmService = require('./services/localLlmService');
+const tesseractOcrService = require('./services/tesseractOcrService');
 const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
@@ -37,15 +38,19 @@ app.use(express.json({ limit: '10mb' }));
 // ... (Keep existing throttle logic and helper functions)
 const GENERATE_MIN_INTERVAL_MS = 4000;
 const generationThrottle = new Map();
-function canGenerate(req) {
+function checkGenerateThrottle(req) {
     const key = req.ip || 'unknown';
     const now = Date.now();
     const last = generationThrottle.get(key) || 0;
-    if (now - last < GENERATE_MIN_INTERVAL_MS) {
-        return false;
+    const elapsed = now - last;
+    if (elapsed < GENERATE_MIN_INTERVAL_MS) {
+        return {
+            allowed: false,
+            retryAfterMs: GENERATE_MIN_INTERVAL_MS - elapsed
+        };
     }
     generationThrottle.set(key, now);
-    return true;
+    return { allowed: true, retryAfterMs: 0 };
 }
 
 function createExperimentId() {
@@ -117,6 +122,69 @@ function validateGeneratedContent(content, options = {}) {
     return errors;
 }
 
+function sanitizeGeminiModelName(modelName) {
+    const model = String(modelName || '').trim();
+    if (!model) return '';
+    const lowered = model.toLowerCase();
+    // These aliases are internal labels, not real Gemini model ids.
+    if (lowered === 'gemini-cli' || lowered === 'cli' || lowered === 'default') return '';
+    return model;
+}
+
+function resolveGeminiModel(mode, modelOverride) {
+    const candidates = mode === 'host-proxy'
+        ? [modelOverride, process.env.GEMINI_PROXY_MODEL, process.env.GEMINI_CLI_MODEL, process.env.GEMINI_MODEL]
+        : [modelOverride, process.env.GEMINI_CLI_MODEL, process.env.GEMINI_MODEL];
+
+    for (const candidate of candidates) {
+        const sanitized = sanitizeGeminiModelName(candidate);
+        if (sanitized) return sanitized;
+    }
+    return '';
+}
+
+function isGeminiUnavailableError(error) {
+    const message = String(error?.message || '');
+    return /ModelNotFoundError|Requested entity was not found|Gemini proxy error|Error when talking to Gemini API|API key|quota|permission|429|403|404/i.test(message);
+}
+
+async function generateWithAutoFallback(phrase, provider, perf, options = {}) {
+    try {
+        return await generateWithProvider(phrase, provider, perf, options);
+    } catch (error) {
+        const fallbackEnabled = typeof options.allowGeminiFallback === 'boolean'
+            ? options.allowGeminiFallback
+            : String(process.env.GEMINI_FALLBACK_TO_LOCAL || 'true').toLowerCase() !== 'false';
+
+        if (provider !== 'gemini' || !fallbackEnabled || !isGeminiUnavailableError(error)) {
+            throw error;
+        }
+
+        console.warn('[Generate] Gemini unavailable, fallback to local:', error.message);
+        const fallbackPerf = new PerformanceMonitor().start();
+        const fallbackResult = await generateWithProvider(phrase, 'local', fallbackPerf, {
+            ...options,
+            modelOverride: null,
+            allowGeminiFallback: false
+        });
+
+        fallbackResult.fallback = {
+            from: 'gemini',
+            to: 'local',
+            reason: 'gemini_unavailable',
+            error: error.message
+        };
+        fallbackResult.observability.metadata = {
+            ...(fallbackResult.observability.metadata || {}),
+            requestedProvider: 'gemini',
+            fallbackFrom: 'gemini',
+            fallbackReason: 'gemini_unavailable',
+            fallbackError: error.message
+        };
+        return fallbackResult;
+    }
+}
+
 // ========== Core Logic ==========
 
 async function generateWithProvider(phrase, provider, perf, options = {}) {
@@ -136,7 +204,7 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
-  const resolvedGeminiCliModel = options.modelOverride || process.env.GEMINI_CLI_MODEL || '';
+  const resolvedGeminiCliModel = resolveGeminiModel(geminiMode, options.modelOverride);
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   let prompt = useMarkdownOutput
@@ -589,7 +657,14 @@ async function handleComparisonMode(phrase, options = {}) {
 app.post('/api/generate', async (req, res) => {
   const perf = new PerformanceMonitor().start();
   try {
-    if (!canGenerate(req)) return res.status(429).json({ error: 'Rate limit exceeded' });
+    const throttle = checkGenerateThrottle(req);
+    if (!throttle.allowed) {
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        retry_after_ms: throttle.retryAfterMs,
+        hint: 'Please wait a few seconds before generating again.'
+      });
+    }
 
     // 默认使用本地LLM（Gemini已封存）
     const {
@@ -627,7 +702,7 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // Mode: Single
-    const genResult = await generateWithProvider(phrase, llm_provider, perf, {
+    const genResult = await generateWithAutoFallback(phrase, llm_provider, perf, {
       fewshotOptions: fewshot_options,
       experimentId: experiment_id || '',
       experimentRound: roundNumber,
@@ -635,6 +710,7 @@ app.post('/api/generate', async (req, res) => {
       targetFolder: target_folder || ''
     });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
+    const providerUsed = observability?.metadata?.provider || llm_provider;
 
     postProcessGeneratedContent(content);
 
@@ -674,8 +750,8 @@ app.post('/api/generate', async (req, res) => {
     try {
       const dbData = prepareInsertData({
         phrase,
-        provider: llm_provider,
-        model: observability.metadata?.model || llm_provider,
+        provider: providerUsed,
+        model: observability.metadata?.model || providerUsed,
         folderName,
         baseName: result.baseName,
         filePaths: {
@@ -731,7 +807,7 @@ app.post('/api/generate', async (req, res) => {
         experimentTrackingService.recordExperimentSample({
           generationId,
           phrase,
-          provider: llm_provider,
+          provider: providerUsed,
           experimentId: expId,
           roundNumber,
           roundName: round_name || null,
@@ -751,6 +827,9 @@ app.post('/api/generate', async (req, res) => {
         success: true,
         experiment_id: expId,
         experiment_round: roundNumber,
+        provider_requested: llm_provider,
+        provider_used: providerUsed,
+        fallback: genResult.fallback || null,
         generationId, // 返回数据库ID
         result,
         audio,
@@ -823,10 +902,31 @@ app.post('/api/generate', async (req, res) => {
 // Reuse existing endpoints
 app.post('/api/ocr', async (req, res) => {
     try {
-        const { image } = req.body;
+        const { image, provider, langs } = req.body || {};
         if (!image) return res.status(400).json({ error: 'No image' });
-        const text = await localLlmService.recognizeImage(image);
-        res.json({ text: text || 'No text found' });
+
+        const selectedProvider = String(provider || process.env.OCR_PROVIDER || 'tesseract').toLowerCase();
+        let text = '';
+        let actualProvider = selectedProvider;
+
+        if (selectedProvider === 'tesseract') {
+          text = await tesseractOcrService.recognizeImage(image, { langs });
+        } else if (selectedProvider === 'local') {
+          text = await localLlmService.recognizeImage(image);
+        } else if (selectedProvider === 'auto') {
+          try {
+            text = await tesseractOcrService.recognizeImage(image, { langs });
+            actualProvider = 'tesseract';
+          } catch (ocrErr) {
+            console.warn('[OCR] Tesseract failed in auto mode, fallback to local OCR:', ocrErr.message);
+            text = await localLlmService.recognizeImage(image);
+            actualProvider = 'local';
+          }
+        } else {
+          return res.status(400).json({ error: `Unsupported OCR provider: ${selectedProvider}` });
+        }
+
+        res.json({ text: text || 'No text found', provider: actualProvider });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

@@ -1,7 +1,7 @@
 # Repo 架构与功能设计（最新）
 
-**最后更新**: 2026-02-06  
-**版本**: 2.8
+**最后更新**: 2026-02-10  
+**版本**: 2.9
 
 ## 项目概览
 
@@ -9,6 +9,7 @@
 - 目标：输入文本或 OCR 图片，生成三语学习卡片（Markdown/HTML/音频）并沉淀可观测数据
 - 当前主线：`local LLM + few-shot 轮次优化 + Gemini teacher 对照`
 - Gemini 集成策略：默认使用宿主机 `gemini-host-proxy`（容器内不再依赖 Gemini CLI 可执行文件）
+- Gemini 默认模型：`gemini-3-pro-preview`（支持 `llm_model` 按请求覆盖）
 
 ## 架构总览
 
@@ -18,7 +19,7 @@
 - 存储层：
   - 文件系统：按日期目录 `YYYYMMDD` 存储 `md/html/meta/audio`
   - SQLite：`generations`、`observability_metrics`、`few_shot_runs`、`experiment_rounds`、`experiment_samples`、`teacher_references`
-- 部署：Docker Compose（viewer + tts-en + tts-ja）+ 宿主机 Gemini Proxy
+- 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Proxy
 
 ## 当前能力清单
 

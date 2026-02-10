@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 2.8  
-**更新日期**: 2026-02-06
+**版本**: 2.9  
+**更新日期**: 2026-02-10
 
 ## 后端目录（核心）
 
@@ -85,6 +85,8 @@ scripts/
 - `scripts/gemini-host-proxy.js` 支持 `model` 透传为 CLI 参数（默认 `--model`）
 - `server.js` 透传请求 `llm_model` 到 proxy 调用路径
 - 说明：容器当前不要求安装 Gemini CLI，执行可在宿主机完成
+- 默认模型：`gemini-3-pro-preview`（可被请求 `llm_model` 覆盖）
+- 实测可用模型（2026-02-10）：`gemini-3-pro-preview`、`gemini-3-flash-preview`、`gemini-2.5-pro`、`gemini-2.5-flash`
 
 ## 数据模型（重点）
 
@@ -117,9 +119,9 @@ LLM_TEMPERATURE=0.2
 # Gemini (推荐 host-proxy)
 # GEMINI_MODE=host-proxy
 # GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
-# GEMINI_PROXY_MODEL=gemini-3-pro
-# GEMINI_CLI_MODEL=gemini-3-pro
-# GEMINI_TEACHER_MODEL=gemini-3-pro
+# GEMINI_PROXY_MODEL=gemini-3-pro-preview
+# GEMINI_CLI_MODEL=gemini-3-pro-preview
+# GEMINI_TEACHER_MODEL=gemini-3-pro-preview
 
 # Few-shot
 # ENABLE_GOLDEN_EXAMPLES=true
@@ -138,7 +140,7 @@ TTS_JA_ENDPOINT=http://tts-ja:50021
 ## 当前状态结论
 
 - 本地 LLM 主链路稳定，few-shot 轮次实验与可视化链路已打通
-- Gemini proxy `model` 透传已完成代码实现与 mock 验证
+- Gemini proxy `model` 透传已完成代码实现与实机验证，默认模型已切换为 `gemini-3-pro-preview`
 - `/api/experiments/:id` + 导出脚本可直接产出报告级数据（CSV/JSON/SVG）
 - 21 样本实验验证：few-shot 质量提升明确，但 Token 成本上升明显，需持续优化示例长度与预算比
 

@@ -40,7 +40,13 @@ class HealthCheckService {
       checks.push(this.checkTTSJapanese());
     }
 
-    // 4. Storage
+    // 4. OCR Service
+    const ocrProvider = (process.env.OCR_PROVIDER || '').toLowerCase();
+    if (ocrProvider === 'tesseract' || process.env.OCR_TESSERACT_ENDPOINT) {
+      checks.push(this.checkTesseractOCR());
+    }
+
+    // 5. Storage
     checks.push(this.checkStorage());
 
     // 等待所有检查完成
@@ -268,6 +274,55 @@ class HealthCheckService {
         const version = await response.text().catch(() => null);
         if (version) {
           service.details.version = version;
+        }
+      } else {
+        service.status = 'degraded';
+        service.message = `连接异常: ${response.status}`;
+      }
+    } catch (error) {
+      service.status = 'offline';
+      service.message = error.name === 'AbortError' ? '请求超时' : error.message;
+    }
+
+    return service;
+  }
+
+  /**
+   * 检查 Tesseract OCR 服务
+   */
+  static async checkTesseractOCR() {
+    const endpoint = process.env.OCR_TESSERACT_ENDPOINT || 'http://ocr:8080/ocr';
+    const baseUrl = endpoint.replace(/\/ocr\/?$/, '');
+    const service = {
+      name: 'OCR (Tesseract)',
+      type: 'ocr',
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        endpoint,
+        langs: process.env.OCR_LANGS || 'eng+jpn+chi_sim'
+      }
+    };
+
+    try {
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${baseUrl}/health`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      service.latency = Date.now() - startTime;
+
+      if (response.ok) {
+        service.status = service.latency > 2000 ? 'degraded' : 'online';
+        service.message = service.latency > 2000 ? '响应缓慢' : '服务正常';
+        const data = await response.json().catch(() => ({}));
+        if (data.engine) {
+          service.details.engine = data.engine;
         }
       } else {
         service.status = 'degraded';

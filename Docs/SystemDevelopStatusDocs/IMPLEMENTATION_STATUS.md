@@ -1,7 +1,7 @@
 # 实现状态报告（few-shot 主线）
 
-**日期**: 2026-02-06  
-**版本**: v2.8  
+**日期**: 2026-02-10  
+**版本**: v2.9  
 **状态**: 进行中（核心链路可用，持续优化）
 
 ## 1. 当前阶段结论
@@ -11,6 +11,16 @@
 - 本轮已验证 few-shot 真正注入并产生显著提质
 
 ## 2. 已完成能力
+
+### 2.0 Gemini 模型路由与默认值（更新）
+
+- 默认 Gemini 模型已统一为：`gemini-3-pro-preview`
+- 生效链路：
+  - `docker-compose.yml` 默认 `GEMINI_PROXY_MODEL/GEMINI_MODEL`
+  - `scripts/start-gemini-proxy.sh` 默认 `GEMINI_PROXY_MODEL`
+  - `.env.example` 示例值同步为 `gemini-3-pro-preview`
+- `/api/generate` 支持 `llm_model` 覆盖；未传时走默认模型
+- Gemini 不可用时自动回退本地模型（`provider_requested=gemini`，`provider_used=local`）
 
 ### 2.1 生成与观测
 
