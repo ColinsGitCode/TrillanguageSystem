@@ -9,7 +9,7 @@ const geminiService = require('./services/geminiService');
 const { runGeminiCli } = require('./services/geminiCliService');
 const { runGeminiProxy } = require('./services/geminiProxyService');
 const localLlmService = require('./services/localLlmService');
-const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory } = require('./services/fileManager');
+const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
@@ -128,7 +128,9 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   }
 
   perf.mark('promptBuild');
-  const { targetDir, folderName } = ensureTodayDirectory();
+  const { targetDir, folderName } = options.targetFolder
+    ? ensureFolderDirectory(options.targetFolder)
+    : ensureTodayDirectory();
   const baseName = buildBaseName(phrase, targetDir);
   const geminiMode = (process.env.GEMINI_MODE || 'cli').toLowerCase();
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
@@ -354,13 +356,15 @@ async function handleComparisonMode(phrase, options = {}) {
     generateWithProvider(phrase, 'gemini', perfGemini, {
       ...(options.geminiOptions || {}),
       experimentId: options.experimentId,
-      experimentRound: options.experimentRound
+      experimentRound: options.experimentRound,
+      targetFolder: options.targetFolder || ''
     }),
     generateWithProvider(phrase, 'local', perfLocal, {
       ...(options.localOptions || {}),
       fewshotOptions: options.fewshotOptions || {},
       experimentId: options.experimentId,
-      experimentRound: options.experimentRound
+      experimentRound: options.experimentRound,
+      targetFolder: options.targetFolder || ''
     })
   ]);
 
@@ -592,6 +596,7 @@ app.post('/api/generate', async (req, res) => {
       phrase,
       llm_provider = 'local',
       enable_compare = false,
+      target_folder = '',
       experiment_id,
       variant,
       experiment_round = 0,
@@ -615,7 +620,8 @@ app.post('/api/generate', async (req, res) => {
           roundName: round_name || null,
           isTeacherReference: Boolean(is_teacher_reference),
           variantBase: variant || 'compare',
-          fewshotOptions: fewshot_options
+          fewshotOptions: fewshot_options,
+          targetFolder: target_folder || ''
         });
         return res.json(result);
     }
@@ -625,7 +631,8 @@ app.post('/api/generate', async (req, res) => {
       fewshotOptions: fewshot_options,
       experimentId: experiment_id || '',
       experimentRound: roundNumber,
-      modelOverride: llm_model || null
+      modelOverride: llm_model || null,
+      targetFolder: target_folder || ''
     });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
 

@@ -169,6 +169,36 @@ function ensureTodayDirectory() {
 }
 
 /**
+ * Ensures a specific folder exists under records path.
+ * @param {string} folderName - Target folder name (for example: YYYYMMDD).
+ * @returns {{targetDir: string, folderName: string}} Ensured folder info.
+ */
+function ensureFolderDirectory(folderName) {
+    const safeName = String(folderName || '').trim();
+    if (!safeName) {
+        return ensureTodayDirectory();
+    }
+
+    if (!/^[\w.-]+$/.test(safeName)) {
+        throw new Error('Invalid folder name');
+    }
+
+    const targetDir = path.resolve(path.join(baseDir, safeName));
+    if (!targetDir.startsWith(baseDir)) {
+        throw new Error('Invalid folder path');
+    }
+
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+    if (!fs.statSync(targetDir).isDirectory()) {
+        throw new Error('Target path is not a directory');
+    }
+
+    return { targetDir, folderName: safeName };
+}
+
+/**
  * Builds a safe base filename for generated assets.
  * @param {string} phrase - The input phrase.
  * @param {string} targetDir - Folder used to check for duplicates.
@@ -257,6 +287,7 @@ module.exports = {
     saveGeneratedFiles,
     buildBaseName,
     ensureTodayDirectory,
+    ensureFolderDirectory,
     listFoldersWithHtml,
     listHtmlFilesInFolder,
     readFileInFolder,
