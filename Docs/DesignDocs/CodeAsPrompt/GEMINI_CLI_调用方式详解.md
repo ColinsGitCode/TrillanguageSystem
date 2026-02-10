@@ -68,6 +68,14 @@
   - 默认推荐：`http://host.docker.internal:3210/api/gemini`
 - `GEMINI_PROXY_MODEL`
   - 代理默认模型（如果请求未显式透传 `llm_model`）
+- `GEMINI_PROXY_REQUEST_TIMEOUT_MS`
+  - viewer 调用 proxy 的请求超时（默认 `120000`）
+- `GEMINI_PROXY_RETRIES`
+  - 超时/5xx 的自动重试次数（默认 `1`，即最多 2 次尝试）
+- `GEMINI_PROXY_AUTO_RESET`
+  - 超时时自动调用 proxy reset（默认 `true`）
+- `GEMINI_PROXY_RETRY_DELAY_MS`
+  - 重试退避基线毫秒（默认 `1200`）
 - `GEMINI_CLI_MODEL`
   - CLI 模式默认模型（`GEMINI_MODE=cli` 时使用）
 
@@ -75,7 +83,7 @@
 
 - `GEMINI_PROXY_PORT`：默认 `3210`
 - `GEMINI_PROXY_BIN`：默认 `gemini`
-- `GEMINI_PROXY_TIMEOUT_MS`：默认 `90000`
+- `GEMINI_PROXY_TIMEOUT_MS`：Gemini CLI 子进程超时（代码默认 `90000`，启动脚本默认导出 `150000`）
 - `GEMINI_PROXY_MODEL`：代理默认模型
 - `GEMINI_PROXY_MODEL_ARG`：默认 `--model`
 - `GEMINI_PROXY_PROMPT_ARG`：默认 `-p`
@@ -126,6 +134,7 @@
 ```bash
 bash scripts/start-gemini-proxy.sh start
 bash scripts/start-gemini-proxy.sh status
+bash scripts/start-gemini-proxy.sh reset
 bash scripts/start-gemini-proxy.sh stop
 ```
 
@@ -201,8 +210,13 @@ curl -s -X POST http://localhost:3210/api/gemini \
 原因：CLI 执行超时。
 
 处理：
-- 调大 `GEMINI_PROXY_TIMEOUT_MS` / `GEMINI_CLI_TIMEOUT_MS`
-- 缩短 prompt 或拆分批任务
+- 当前已内置：
+  - proxy 请求自动重试（`GEMINI_PROXY_RETRIES`）
+  - 超时时自动调用 `/admin/reset`（`GEMINI_PROXY_AUTO_RESET=true`）
+- 可继续优化：
+  - 调大 `GEMINI_PROXY_TIMEOUT_MS` / `GEMINI_PROXY_REQUEST_TIMEOUT_MS`
+  - 缩短 prompt 或拆分批任务
+  - 在批量脚本里分组请求并限制并发
 
 ---
 
@@ -218,7 +232,7 @@ GEMINI_PROXY_MODEL=gemini-3-pro-preview
 GEMINI_PROXY_PORT=3210
 GEMINI_PROXY_BIN=gemini
 GEMINI_PROXY_MODEL=gemini-3-pro-preview
-GEMINI_PROXY_TIMEOUT_MS=90000
+GEMINI_PROXY_TIMEOUT_MS=150000
 ```
 
 ---

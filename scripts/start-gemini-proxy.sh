@@ -12,7 +12,7 @@ LOG_FILE="/tmp/gemini-proxy.log"
 # 配置
 export GEMINI_PROXY_PORT=3210
 export GEMINI_PROXY_BIN="gemini"
-export GEMINI_PROXY_TIMEOUT_MS=90000
+export GEMINI_PROXY_TIMEOUT_MS=150000
 export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-pro-preview}"
 # export GEMINI_PROXY_OUTPUT_DIR="/tmp/gemini-outputs"  # 可选：保存输出
 
@@ -103,10 +103,15 @@ case "$1" in
       -d "{\"prompt\":\"$2\",\"baseName\":\"test\"}" | jq .
     ;;
 
+  reset)
+    echo "♻️  请求 Gemini Proxy 执行 reset..."
+    curl -s -X POST http://localhost:$GEMINI_PROXY_PORT/admin/reset | jq .
+    ;;
+
   *)
     echo "Gemini Host Proxy 管理脚本"
     echo ""
-    echo "用法: $0 {start|stop|restart|status|logs|test}"
+    echo "用法: $0 {start|stop|restart|status|logs|test|reset}"
     echo ""
     echo "命令："
     echo "  start    - 后台启动代理"
@@ -115,6 +120,7 @@ case "$1" in
     echo "  status   - 查看状态"
     echo "  logs     - 查看实时日志"
     echo "  test     - 测试调用 (例: $0 test \"hello world\")"
+    echo "  reset    - 重置并清理正在执行的 Gemini CLI 子进程"
     exit 1
     ;;
 esac

@@ -84,6 +84,9 @@ scripts/
 - `services/geminiProxyService.js` 请求体包含：`prompt/baseName/model`
 - `scripts/gemini-host-proxy.js` 支持 `model` 透传为 CLI 参数（默认 `--model`）
 - `server.js` 透传请求 `llm_model` 到 proxy 调用路径
+- 超时鲁棒性：
+  - `geminiProxyService` 对 timeout/5xx 自动重试
+  - timeout 时自动调用 proxy `/admin/reset` 清理挂起子进程
 - 说明：容器当前不要求安装 Gemini CLI，执行可在宿主机完成
 - 默认模型：`gemini-3-pro-preview`（可被请求 `llm_model` 覆盖）
 - 实测可用模型（2026-02-10）：`gemini-3-pro-preview`、`gemini-3-flash-preview`、`gemini-2.5-pro`、`gemini-2.5-flash`
@@ -120,6 +123,10 @@ LLM_TEMPERATURE=0.2
 # GEMINI_MODE=host-proxy
 # GEMINI_PROXY_URL=http://host.docker.internal:3210/api/gemini
 # GEMINI_PROXY_MODEL=gemini-3-pro-preview
+# GEMINI_PROXY_REQUEST_TIMEOUT_MS=120000
+# GEMINI_PROXY_RETRIES=1
+# GEMINI_PROXY_AUTO_RESET=true
+# GEMINI_PROXY_RETRY_DELAY_MS=1200
 # GEMINI_CLI_MODEL=gemini-3-pro-preview
 # GEMINI_TEACHER_MODEL=gemini-3-pro-preview
 
