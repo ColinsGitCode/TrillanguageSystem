@@ -169,15 +169,15 @@ function renderSlide03SystemObservability() {
     { name: '实验数据维度', value: 6, max: 6, color: '#9333ea' }
   ];
 
-  const x0 = 180;
+  const x0 = 260;
   const y0 = 170;
-  const barW = 840;
+  const barW = 760;
   const barH = 56;
   const gap = 90;
 
   blocks.forEach((b, i) => {
     const y = y0 + i * gap;
-    svg.append('text').attr('x', 40).attr('y', y + 38).attr('font-size', 24).attr('fill', '#0f172a').text(b.name);
+    svg.append('text').attr('x', 32).attr('y', y + 38).attr('font-size', 23).attr('fill', '#0f172a').text(b.name);
     svg.append('rect').attr('x', x0).attr('y', y).attr('width', barW).attr('height', barH).attr('rx', 12).attr('fill', '#e2e8f0');
     svg
       .append('rect')
@@ -270,12 +270,12 @@ function renderSlide04aObservabilityDataModel() {
 
   const facts = [
     '核心持久化表: 11',
-    '实验追踪主表: runs / rounds / samples / teacher',
-    'INTEL 数据: prompt/rawOutput/quality/tokens/performance 全链路可回放'
+    '实验追踪: 轮次/样本/教师参照',
+    '生成输入输出与质量成本可回放'
   ];
-  svg.append('rect').attr('x', 910).attr('y', 180).attr('width', 330).attr('height', 360).attr('rx', 14).attr('fill', '#f8fafc').attr('stroke', '#cbd5e1');
+  svg.append('rect').attr('x', 880).attr('y', 180).attr('width', 360).attr('height', 360).attr('rx', 14).attr('fill', '#f8fafc').attr('stroke', '#cbd5e1');
   facts.forEach((f, i) => {
-    svg.append('text').attr('x', 934).attr('y', 244 + i * 88).attr('font-size', 20).attr('fill', '#334155').text(`- ${f}`);
+    svg.append('text').attr('x', 904).attr('y', 244 + i * 88).attr('font-size', 18).attr('fill', '#334155').text(`- ${f}`);
   });
 
   addFooter(svg, 'Source: Docs/SystemDevelopStatusDocs/BACKEND.md + API.md');
@@ -331,9 +331,9 @@ function renderSlide04bObservabilityTimeline() {
     svg.append('text').attr('x', barX + barW + 18).attr('y', yy + 26).attr('font-size', 18).attr('font-weight', 700).attr('fill', '#1f2937').text(`${m.value}/${m.max}`);
   });
 
-  svg.append('rect').attr('x', 940).attr('y', 378).attr('width', 300).attr('height', 240).attr('rx', 12).attr('fill', '#f8fafc').attr('stroke', '#cbd5e1');
-  ['Mission Control 实时统计', 'History INTEL 卡片回放', '实验导出脚本可复现'].forEach((line, idx) => {
-    svg.append('text').attr('x', 964).attr('y', 438 + idx * 62).attr('font-size', 19).attr('fill', '#334155').text(`- ${line}`);
+  svg.append('rect').attr('x', 934).attr('y', 378).attr('width', 306).attr('height', 240).attr('rx', 12).attr('fill', '#f8fafc').attr('stroke', '#cbd5e1');
+  ['实时监控', '历史回放', '结果可复现'].forEach((line, idx) => {
+    svg.append('text').attr('x', 948).attr('y', 436 + idx * 62).attr('font-size', 17).attr('fill', '#334155').text(`- ${line}`);
   });
 
   addFooter(svg, 'Source: generation pipeline + /api/history/:id payload');
@@ -690,9 +690,9 @@ function renderSlide13DecisionMatrix() {
     svg.append('text').attr('x', x(s.cost) + r(s.risk) + 8).attr('y', y(s.gain) + 4).attr('font-size', 14).attr('fill', '#0f172a').text(s.name);
   });
 
-  svg.append('rect').attr('x', 820).attr('y', 120).attr('width', 360).attr('height', 120).attr('rx', 10).attr('fill', '#f0fdf4').attr('stroke', '#22c55e');
-  svg.append('text').attr('x', 840).attr('y', 162).attr('font-size', 20).attr('font-weight', 700).attr('fill', '#166534').text('建议优先级: 预算调优 + Teacher池扩容');
-  svg.append('text').attr('x', 840).attr('y', 194).attr('font-size', 16).attr('fill', '#166534').text('目标：保持显著性，降低 token 成本');
+  svg.append('rect').attr('x', 700).attr('y', 70).attr('width', 500).attr('height', 112).attr('rx', 10).attr('fill', '#f0fdf4').attr('stroke', '#22c55e');
+  svg.append('text').attr('x', 724).attr('y', 112).attr('font-size', 19).attr('font-weight', 700).attr('fill', '#166534').text('建议优先级: 预算调优 + Teacher池扩容');
+  svg.append('text').attr('x', 724).attr('y', 142).attr('font-size', 15).attr('fill', '#166534').text('目标：保持显著性，降低 token 成本');
   addFooter(svg, 'Data: benchmark summary + roadmap assumptions');
   saveSvg(dom, 'slide_13_decision_matrix.svg');
 }
