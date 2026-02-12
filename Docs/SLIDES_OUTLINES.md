@@ -57,86 +57,127 @@
 
 ## Slide 4 Code as Prompt — 代码即提示词
 
-- 目标一句话：展示 Prompt 不是一段静态文本，而是随代码演进的工程产物。
-- 核心内容：
-  - **Prompt 演进三代**：
-    1. V1 静态模板 (`codex_prompt/phrase_3LANS_markdown.md`) — 硬编码指令
-    2. V2 程序化生成 (`services/promptEngine.js`) — CoT 5 步推理 + 质量标准
-    3. V3 动态注入 (`services/goldenExamplesService.js`) — 运行时 Few-shot + Bigram 相似度选取
-  - **关键代码变更**：
-    - `promptEngine.js:buildPrompt()` -> 5 维质量标准嵌入 prompt
-    - `goldenExamplesService.js:getRelevantExamples()` -> 从 LENGTH() 近邻到 bigram 相似度
-    - `observabilityService.js:calculateCompletenessScore()` -> 从长度加分到结构检查
-  - **启示**：提示词的优化本质上是代码重构，需要版本控制、可测试、可回滚
+- 目标一句话：Prompt 是“可迭代代码系统”，不是“一次性文本”。
+- 演进主线：V1 静态模板 -> V2 程序化组装 -> V3 运行时 few-shot 注入。
+- 单案例指标（打招呼）：Quality `64 -> 73`（`+14.1%`），Tokens `870 -> 1291`（`+48.4%`），Latency `27.6s -> 34.4s`（`+24.8%`）。
+- 汇报重点：每次 Prompt 变更都可观测、可回放、可门禁。
 
 ![Slide 4 Chart](TestDocs/charts/slide_04_code_as_prompt_timeline.svg)
 
-**讲者备注**：这是演讲的核心差异化观点：展示 prompt 如何像代码一样演进、测试、迭代。  
-**Data Source**: `services/promptEngine.js`, `services/goldenExamplesService.js`, `services/observabilityService.js`
+**讲者备注**：先立住“工程化 Prompt”主论点，再进入数据与机制分解。  
+**Data Source**: `services/promptEngine.js`, `services/goldenExamplesService.js`, `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/*.jsonl`
 
 ---
 
 ## Slide 4.1 系统观测性子页 A：数据模型与追溯关系
 
-- 目标一句话：把“可观测”从口号落到可查询的数据关系图。
-- 核心内容：
-  - 业务表：`generations / observability_metrics / audio_files`
-  - 实验表：`few_shot_runs / few_shot_examples / experiment_rounds / experiment_samples / teacher_references`
-  - 追溯路径：`generation` -> `observability` -> `sample` -> `teacher_ref`
-  - 产物回放：`promptFull / promptParsed / rawOutput / outputStructured`
+- 目标一句话：质量问题可以定位到“样本-提示词-输出-指标”全链路。
+- 数据域：业务生成表 + few-shot 实验表 + teacher 引用表。
+- 回放字段：`promptFull`、`rawOutput`、`metadata.fewShot`、`quality/tokens/latency`。
+- 汇报口径：异常样本可 1 条 SQL 追溯来源与影响范围。
 
 ![Slide 4.1 Chart](TestDocs/charts/slide_04a_observability_data_model.svg)
 
-**讲者备注**：强调“任意一条质量异常都能追溯到具体 prompt、样本和 teacher 来源”。  
+**讲者备注**：突出“可追溯”是实验可信的前提。  
 **Data Source**: `Docs/SystemDevelopStatusDocs/BACKEND.md`, `Docs/SystemDevelopStatusDocs/API.md`
 
 ---
 
 ## Slide 4.2 系统观测性子页 B：采集时序与指标落点
 
-- 目标一句话：明确每个阶段采集什么指标，避免“只看最终分数”。
-- 核心内容：
-  - 9 步时序：request -> promptBuild -> llmCall -> parse -> postProcess -> render -> saveFiles -> tts -> dbPersist
-  - 指标维度：tokens / quality / performance / prompt-output / few-shot metadata
-  - 产品落点：Mission Control 实时统计 + History INTEL 回放 + 实验导出
-  - 验证标准：同一请求可在 API 返回、DB、报告三处交叉验证
+- 目标一句话：指标必须在正确阶段采集，否则无法解释质量变化原因。
+- 时序节点：`request -> promptBuild -> llmCall -> parse -> save -> persist`。
+- 指标分组：质量、Token、延迟、few-shot 注入元数据。
+- 数据一致性：API 返回值、DB、实验报告三点校验。
 
 ![Slide 4.2 Chart](TestDocs/charts/slide_04b_observability_timeline.svg)
 
-**讲者备注**：讲清“采集时机正确”比“采集字段多”更关键。  
+**讲者备注**：这页只讲“何时采集什么”，不展开算法细节。  
 **Data Source**: `server.js`, `Docs/SystemDevelopStatusDocs/API.md`, `Docs/SystemDevelopStatusDocs/BACKEND.md`
 
 ---
 
 ## Slide 4.3 Code as Prompt 子页 A：运行时组装架构
 
-- 目标一句话：把 Prompt 机制拆解为可替换、可测试的四层。
-- 核心内容：
-  - L1 模板层：`codex_prompt/*.md`
-  - L2 组装层：`promptEngine.buildPrompt/buildMarkdownPrompt`
-  - L3 注入层：`goldenExamplesService`（示例检索 + 预算控制 + 回退）
-  - L4 校验层：`PromptParser + observabilityService + postProcessor`
+- 目标一句话：把 Prompt 工程拆成可替换组件，避免“全量重写”。
+- 四层结构：模板层 / 组装层 / 注入层 / 校验层。
+- 关键接口：`buildPrompt()`、`getRelevantExamples()`、`buildEnhancedPrompt()`。
+- 工程收益：局部调参可独立回归、可灰度发布。
 
 ![Slide 4.3 Chart](TestDocs/charts/slide_04c_code_as_prompt_architecture.svg)
 
-**讲者备注**：这页强调“Prompt 工程是可维护的软件架构，不是单次手写文本”。  
+**讲者备注**：强调“可维护架构”而不是“提示词技巧”。  
 **Data Source**: `services/promptEngine.js`, `services/goldenExamplesService.js`, `services/observabilityService.js`
 
 ---
 
 ## Slide 4.4 Code as Prompt 子页 B：实验门禁与发布判定
 
-- 目标一句话：建立 Prompt 变更的工程门禁，避免主观判断上线。
-- 核心内容：
-  - 门禁指标：`successRate`、`deltaQuality`、`pValue`、`Cohen's d`、`gainPer1kTokens`、`tokenIncreasePct`
-  - 判定规则：统计显著 + 质量增益 + 成本约束三者同时满足
-  - 当前结果：大部分门禁通过，但 token 增幅仍是主约束项
-  - 发布策略：`PASS` 自动进入下一轮；`FAIL` 回到示例长度与预算参数调优
+- 目标一句话：Prompt 发布走“指标门禁”，不走“主观好坏”。
+- 门禁维度：`deltaQuality`、`pValue`、`tokenIncreasePct`、`gainPer1kTokens`。
+- 判定规则：质量提升 + 显著性 + 成本约束同时满足。
+- 结论口径：质量增益成立，但 token 膨胀仍是主瓶颈。
 
 ![Slide 4.4 Chart](TestDocs/charts/slide_04d_code_as_prompt_gates.svg)
 
-**讲者备注**：强调“以门禁驱动 prompt 迭代”，而非“以感觉驱动 prompt 迭代”。  
+**讲者备注**：把“实验结论”转成可执行发布策略。  
 **Data Source**: `Docs/TestDocs/data/round_metrics_exp_benchmark_50_20260209_140431.csv`, `Docs/TestDocs/data/round_kpi_summary_exp_benchmark_50_20260209_140431.json`
+
+---
+
+## Slide 4.5 Code as Prompt 子页 C：单案例 KPI 对照（数据感主图）
+
+- 目标一句话：用 1 个真实样例快速展示“收益与代价”。
+- 质量：`64 -> 73`（`+9`，`+14.1%`）。
+- 成本：Tokens `+421`（`+48.4%`），Latency `+6835ms`（`+24.8%`）。
+- 管理动作：保留 few-shot，但继续压缩注入长度与预算比例。
+
+![Slide 4.5 Chart](TestDocs/charts/slide_04e_code_as_prompt_case_kpi.svg)
+
+**讲者备注**：这是面向业务方最直观的一页。  
+**Data Source**: `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/baseline.jsonl`, `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/fewshot_r1.jsonl`
+
+---
+
+## Slide 4.6 Code as Prompt 子页 D：Prompt Token 构成（预算视角）
+
+- 目标一句话：解释“为什么 token 会涨”。
+- 基础 Prompt：`274`（两轮不变）。
+- 注入 Token：`0 -> 258`；总 Prompt：`274 -> 532`。
+- 注入效率：本例 `countRequested=2`、`countUsed=1`、注入占比 `48.5%`。
+
+![Slide 4.6 Chart](TestDocs/charts/slide_04f_code_as_prompt_composition.svg)
+
+**讲者备注**：直连预算调参（`tokenBudgetRatio` / 示例长度裁剪）。  
+**Data Source**: `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/fewshot_r1.jsonl`
+
+---
+
+## Slide 4.7 Code as Prompt 子页 E：阶段贡献拆分（V1/V2/V3）
+
+- 目标一句话：明确质量提升主要来自哪个阶段。
+- V1：结构稳定，无新增增益信号。
+- V2：参数微调，小幅影响。
+- V3：few-shot 注入后与质量提升同步出现（`64 -> 73`）。
+
+![Slide 4.7 Chart](TestDocs/charts/slide_04g_code_as_prompt_stage_impact.svg)
+
+**讲者备注**：用于回答“本轮优化到底改进在哪里”。  
+**Data Source**: `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/*.jsonl`
+
+---
+
+## Slide 4.8 Code as Prompt 子页 F：Prompt 差异门禁（上线前检查）
+
+- 目标一句话：给 Prompt 变更增加轻量门禁，避免成本失控。
+- 差异指标：Chars `+94.0%`、Lines `+83.7%`、Prompt Tokens `+94.2%`。
+- 质量联动：当 Prompt Tokens 增幅 > `80%`，要求质量增幅 >= `+3`。
+- 本例状态：质量 `+9`，满足联动门禁，但仍需继续降本。
+
+![Slide 4.8 Chart](TestDocs/charts/slide_04h_code_as_prompt_prompt_diff_metrics.svg)
+
+**讲者备注**：这页给出“可执行门禁阈值”，便于团队统一评审标准。  
+**Data Source**: `Docs/TestDocs/data/rounds/exp_benchmark_50_20260209_140431/*.jsonl`
 
 ---
 
