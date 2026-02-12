@@ -162,6 +162,8 @@ async function renderHtmlFromMarkdown(markdown, options = {}) {
 
   marked.setOptions({ mangle: false, headerIds: false });
   const contentHtml = marked.parse(markdownWithAudio);
+  const faviconDataUri =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='12' fill='%231f3b8f'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-family='Arial,Helvetica,sans-serif' font-size='24' font-weight='700' fill='white'%3ELAN%3C/text%3E%3C/svg%3E";
 
   const styles = `
     :root { --accent: #c48a3b; --ink: #1d1c1a; --paper: #ffffff; }
@@ -219,6 +221,8 @@ async function renderHtmlFromMarkdown(markdown, options = {}) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${baseName}</title>
+    <link rel="icon" type="image/svg+xml" href="${faviconDataUri}">
+    <link rel="shortcut icon" href="${faviconDataUri}">
     <style>${styles}</style>
   </head>
   <body>
