@@ -35,6 +35,35 @@ function isRetriableError(message) {
   return isTimeoutLikeError(text) || /Gemini proxy error \(5\d\d\)/.test(text);
 }
 
+function maybeTrim(value) {
+  const text = String(value ?? '').trim();
+  return text || '';
+}
+
+function looksLikeGateway18888(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.port === '18888';
+  } catch (err) {
+    return false;
+  }
+}
+
+function buildAuthHeaders(options = {}) {
+  const authMode = maybeTrim(options.authMode || process.env.GEMINI_PROXY_AUTH_MODE || 'apikey').toLowerCase();
+  const apiKey = maybeTrim(options.apiKey || process.env.GEMINI_PROXY_API_KEY || process.env.GATEWAY_API_KEY);
+  const token = maybeTrim(options.bearerToken || process.env.GEMINI_PROXY_BEARER_TOKEN || apiKey);
+  const headers = { 'Content-Type': 'application/json' };
+
+  if (authMode === 'bearer') {
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
+
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  return headers;
+}
+
 async function triggerReset(resetUrl) {
   if (!resetUrl) return null;
   const controller = new AbortController();
@@ -53,13 +82,13 @@ async function triggerReset(resetUrl) {
   }
 }
 
-async function runOnce(url, payload, timeoutMs) {
+async function runOnce(url, payload, timeoutMs, headers) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -81,7 +110,7 @@ async function runOnce(url, payload, timeoutMs) {
 }
 
 async function runGeminiProxy(prompt, options = {}) {
-  const url = options.url || process.env.GEMINI_PROXY_URL || 'http://host.docker.internal:3210/api/gemini';
+  const url = options.url || process.env.GEMINI_PROXY_URL || 'http://host.docker.internal:18888/api/gemini';
   const payload = { prompt, baseName: options.baseName || 'suggestion' };
   const model = options.model || '';
   if (String(model || '').trim()) {
@@ -93,12 +122,17 @@ async function runGeminiProxy(prompt, options = {}) {
   const retryDelayMs = toNumberOr(process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
   const resetOnTimeout = parseBoolean(options.resetOnTimeout ?? process.env.GEMINI_PROXY_AUTO_RESET, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);
+  const headers = buildAuthHeaders(options);
+
+  if (looksLikeGateway18888(url) && !headers['X-API-Key'] && !headers.Authorization) {
+    throw new Error('Gemini gateway on :18888 requires auth. Set GEMINI_PROXY_API_KEY or GEMINI_PROXY_BEARER_TOKEN');
+  }
 
   let lastError = null;
   const attempts = Math.max(1, retries + 1);
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await runOnce(url, payload, timeoutMs);
+      return await runOnce(url, payload, timeoutMs, headers);
     } catch (error) {
       lastError = error;
       const retriable = isRetriableError(error.message);

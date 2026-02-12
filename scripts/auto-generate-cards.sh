@@ -5,6 +5,8 @@
 
 PHRASE="$1"
 API_URL="http://localhost:3010/api/generate"
+GEMINI_GATEWAY_URL="${GEMINI_GATEWAY_URL:-http://localhost:18888/api/gemini}"
+GEMINI_API_KEY="${GEMINI_API_KEY:-${GEMINI_PROXY_API_KEY:-}}"
 
 if [ -z "$PHRASE" ]; then
   echo "用法: $0 <phrase>"
@@ -12,11 +14,17 @@ if [ -z "$PHRASE" ]; then
   exit 1
 fi
 
+if [ -z "$GEMINI_API_KEY" ]; then
+  echo "缺少 GEMINI API Key：请设置 GEMINI_API_KEY 或 GEMINI_PROXY_API_KEY"
+  exit 1
+fi
+
 echo "🔍 步骤1：使用 Gemini 搜索最新定义..."
 
-# 通过 Host Proxy 调用 Gemini 搜索
-GEMINI_RESULT=$(curl -s -X POST http://localhost:3210/api/gemini \
+# 通过 Gateway(18888) 调用 Gemini 搜索
+GEMINI_RESULT=$(curl -s -X POST "$GEMINI_GATEWAY_URL" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $GEMINI_API_KEY" \
   -d "{\"prompt\":\"搜索并总结【$PHRASE】的最新定义和用法（2026年），用中文回答\",\"baseName\":\"search\"}")
 
 DEFINITION=$(echo "$GEMINI_RESULT" | jq -r '.markdown')
