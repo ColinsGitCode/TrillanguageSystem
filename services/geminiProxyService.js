@@ -17,6 +17,10 @@ function sleep(ms) {
 
 function buildResetUrl(apiUrl) {
   try {
+    if (looksLikeGateway18888(apiUrl)) {
+      // Gateway may not expose /admin/reset; only call executor reset explicitly.
+      return '';
+    }
     const parsed = new URL(apiUrl);
     parsed.pathname = '/admin/reset';
     parsed.search = '';
@@ -53,14 +57,18 @@ function buildAuthHeaders(options = {}) {
   const authMode = maybeTrim(options.authMode || process.env.GEMINI_PROXY_AUTH_MODE || 'apikey').toLowerCase();
   const apiKey = maybeTrim(options.apiKey || process.env.GEMINI_PROXY_API_KEY || process.env.GATEWAY_API_KEY);
   const token = maybeTrim(options.bearerToken || process.env.GEMINI_PROXY_BEARER_TOKEN || apiKey);
+  const sourceApp = maybeTrim(options.sourceApp || process.env.GEMINI_PROXY_SOURCE_APP);
+  const sourceEnv = maybeTrim(options.sourceEnv || process.env.GEMINI_PROXY_SOURCE_ENV);
   const headers = { 'Content-Type': 'application/json' };
 
   if (authMode === 'bearer') {
     if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
+  } else if (apiKey) {
+    headers['X-API-Key'] = apiKey;
   }
 
-  if (apiKey) headers['X-API-Key'] = apiKey;
+  if (sourceApp) headers['X-Source-App'] = sourceApp;
+  if (sourceEnv) headers['X-Source-Env'] = sourceEnv;
   return headers;
 }
 
@@ -116,9 +124,21 @@ async function runGeminiProxy(prompt, options = {}) {
   if (String(model || '').trim()) {
     payload.model = String(model).trim();
   }
+  const project = maybeTrim(options.project || process.env.GEMINI_PROXY_PROJECT || process.env.GEMINI_PROXY_SOURCE_APP);
+  if (project) {
+    payload.project = project;
+  }
+  const timeoutMs = toNumberOr(options.timeoutMs ?? process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS, 120000);
+  payload.timeoutMs = timeoutMs;
+  const executionTimeoutMs = toNumberOr(options.executionTimeoutMs ?? process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS, 0);
+  const paramPolicy = maybeTrim(options.paramPolicy || process.env.GEMINI_PROXY_PARAM_POLICY || 'strict').toLowerCase();
+  if (executionTimeoutMs > 0 || (paramPolicy && paramPolicy !== 'strict')) {
+    payload.paramPolicy = paramPolicy || 'strict';
+    payload.params = {};
+    if (executionTimeoutMs > 0) payload.params.executionTimeoutMs = executionTimeoutMs;
+  }
 
   const retries = toNumberOr(options.retries ?? process.env.GEMINI_PROXY_RETRIES, 1);
-  const timeoutMs = toNumberOr(options.timeoutMs ?? process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS, 120000);
   const retryDelayMs = toNumberOr(process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
   const resetOnTimeout = parseBoolean(options.resetOnTimeout ?? process.env.GEMINI_PROXY_AUTO_RESET, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);

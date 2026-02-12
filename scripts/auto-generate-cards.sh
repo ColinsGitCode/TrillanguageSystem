@@ -7,6 +7,10 @@ PHRASE="$1"
 API_URL="http://localhost:3010/api/generate"
 GEMINI_GATEWAY_URL="${GEMINI_GATEWAY_URL:-http://localhost:18888/api/gemini}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-${GEMINI_PROXY_API_KEY:-}}"
+GEMINI_SOURCE_APP="${GEMINI_SOURCE_APP:-tri-lang-learning-system}"
+GEMINI_SOURCE_ENV="${GEMINI_SOURCE_ENV:-prod}"
+GEMINI_PROJECT="${GEMINI_PROJECT:-tri-lang-learning-system}"
+GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
 
 if [ -z "$PHRASE" ]; then
   echo "用法: $0 <phrase>"
@@ -25,7 +29,9 @@ echo "🔍 步骤1：使用 Gemini 搜索最新定义..."
 GEMINI_RESULT=$(curl -s -X POST "$GEMINI_GATEWAY_URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $GEMINI_API_KEY" \
-  -d "{\"prompt\":\"搜索并总结【$PHRASE】的最新定义和用法（2026年），用中文回答\",\"baseName\":\"search\"}")
+  -H "X-Source-App: $GEMINI_SOURCE_APP" \
+  -H "X-Source-Env: $GEMINI_SOURCE_ENV" \
+  -d "{\"prompt\":\"搜索并总结【$PHRASE】的最新定义和用法（2026年），用中文回答\",\"baseName\":\"search\",\"model\":\"$GEMINI_MODEL\",\"project\":\"$GEMINI_PROJECT\"}")
 
 DEFINITION=$(echo "$GEMINI_RESULT" | jq -r '.markdown')
 

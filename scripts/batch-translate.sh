@@ -6,6 +6,10 @@
 INPUT_FILE="$1"
 GEMINI_GATEWAY_URL="${GEMINI_GATEWAY_URL:-http://localhost:18888/api/gemini}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-${GEMINI_PROXY_API_KEY:-}}"
+GEMINI_SOURCE_APP="${GEMINI_SOURCE_APP:-tri-lang-learning-system}"
+GEMINI_SOURCE_ENV="${GEMINI_SOURCE_ENV:-prod}"
+GEMINI_PROJECT="${GEMINI_PROJECT:-tri-lang-learning-system}"
+GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
 
 if [ -z "$INPUT_FILE" ] || [ ! -f "$INPUT_FILE" ]; then
   echo "用法: $0 <input_file>"
@@ -30,7 +34,9 @@ while IFS= read -r phrase; do
   result=$(curl -s -X POST "$GEMINI_GATEWAY_URL" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: $GEMINI_API_KEY" \
-    -d "{\"prompt\":\"翻译成中日英三语：$phrase\",\"baseName\":\"$phrase\"}")
+    -H "X-Source-App: $GEMINI_SOURCE_APP" \
+    -H "X-Source-Env: $GEMINI_SOURCE_ENV" \
+    -d "{\"prompt\":\"翻译成中日英三语：$phrase\",\"baseName\":\"$phrase\",\"model\":\"$GEMINI_MODEL\",\"project\":\"$GEMINI_PROJECT\"}")
 
   echo "$result" | jq -r '.markdown'
   echo "---"

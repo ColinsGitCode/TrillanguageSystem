@@ -200,7 +200,7 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
     ? ensureFolderDirectory(options.targetFolder)
     : ensureTodayDirectory();
   const baseName = buildBaseName(phrase, targetDir);
-  const geminiMode = (process.env.GEMINI_MODE || 'cli').toLowerCase();
+  const geminiMode = (process.env.GEMINI_MODE || 'host-proxy').toLowerCase();
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
@@ -943,13 +943,13 @@ app.get('/api/health', async (req, res) => {
 
 // ========== Gemini CLI Auth ==========
 app.get('/api/gemini/auth/status', (req, res) => {
-  const enabled = (process.env.GEMINI_MODE || 'cli').toLowerCase() === 'cli';
+  const enabled = (process.env.GEMINI_MODE || 'host-proxy').toLowerCase() === 'cli';
   const status = geminiAuthService.getStatus();
   res.json({ enabled, ...status });
 });
 
 app.post('/api/gemini/auth/start', async (req, res) => {
-  const enabled = (process.env.GEMINI_MODE || 'cli').toLowerCase() === 'cli';
+  const enabled = (process.env.GEMINI_MODE || 'host-proxy').toLowerCase() === 'cli';
   if (!enabled) return res.status(400).json({ error: 'Gemini CLI not enabled' });
   try {
     const status = await geminiAuthService.startAuth();
