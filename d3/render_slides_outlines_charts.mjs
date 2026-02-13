@@ -86,6 +86,122 @@ const categoryData = [
   { category: '歧义复杂', baseline: 77.8, fewshot: 79.21, delta: 1.41, roi: 3.75 }
 ];
 
+function renderSlide00PromptHierarchy() {
+  const { dom, svg } = createSvg();
+  addTitle(svg, '概念界定：Prompt Engineering / Code as Prompt / Few-shot', '层级关系：方法论 -> 工程范式 -> 运行时策略');
+
+  const layers = [
+    {
+      x: 120,
+      y: 130,
+      w: 1040,
+      h: 138,
+      title: 'Prompt Engineering（提示词工程）',
+      desc: '定义任务目标、约束与评测口径，形成可迭代优化闭环',
+      color: '#e0f2fe',
+      stroke: '#0284c7'
+    },
+    {
+      x: 220,
+      y: 315,
+      w: 840,
+      h: 138,
+      title: 'Code as Prompt（代码即提示词）',
+      desc: '将提示词模块化、版本化、可观测化，并接入实验门禁',
+      color: '#ede9fe',
+      stroke: '#7c3aed'
+    },
+    {
+      x: 320,
+      y: 500,
+      w: 640,
+      h: 114,
+      title: 'Few-shot（少样本机制）',
+      desc: '运行时按预算注入高质量样例，提升输出一致性与准确性',
+      color: '#dcfce7',
+      stroke: '#16a34a'
+    }
+  ];
+
+  layers.forEach((layer) => {
+    svg
+      .append('rect')
+      .attr('x', layer.x)
+      .attr('y', layer.y)
+      .attr('width', layer.w)
+      .attr('height', layer.h)
+      .attr('rx', 18)
+      .attr('fill', layer.color)
+      .attr('stroke', layer.stroke)
+      .attr('stroke-width', 2.2);
+    svg
+      .append('text')
+      .attr('x', layer.x + 24)
+      .attr('y', layer.y + 48)
+      .attr('font-size', 30)
+      .attr('font-weight', 700)
+      .attr('fill', '#0f172a')
+      .text(layer.title);
+    svg
+      .append('text')
+      .attr('x', layer.x + 24)
+      .attr('y', layer.y + 88)
+      .attr('font-size', 22)
+      .attr('fill', '#334155')
+      .text(layer.desc);
+  });
+
+  const arrow = (x1, y1, x2, y2) => {
+    svg
+      .append('line')
+      .attr('x1', x1)
+      .attr('y1', y1)
+      .attr('x2', x2)
+      .attr('y2', y2)
+      .attr('stroke', '#64748b')
+      .attr('stroke-width', 2.5)
+      .attr('marker-end', 'url(#arrowhead)');
+  };
+
+  const defs = svg.append('defs');
+  defs
+    .append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 8)
+    .attr('refY', 5)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto-start-reverse')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+    .attr('fill', '#64748b');
+
+  arrow(640, 270, 640, 305);
+  arrow(640, 455, 640, 490);
+
+  svg
+    .append('rect')
+    .attr('x', 120)
+    .attr('y', 638)
+    .attr('width', 1040)
+    .attr('height', 52)
+    .attr('rx', 12)
+    .attr('fill', '#f8fafc')
+    .attr('stroke', '#cbd5e1');
+  svg
+    .append('text')
+    .attr('x', 140)
+    .attr('y', 672)
+    .attr('font-size', 22)
+    .attr('font-weight', 600)
+    .attr('fill', '#1e3a8a')
+    .text('项目映射：V1 静态模板（基础） -> V2 程序化组装（工程化） -> V3 few-shot 动态注入（策略化）');
+
+  addFooter(svg, 'Source: promptEngine.js + goldenExamplesService.js + observability design');
+  saveSvg(dom, 'slide_00_prompt_hierarchy.svg');
+}
+
 function renderSlide01GoalTriangle() {
   const { dom, svg } = createSvg();
   addTitle(svg, '质量-成本-稳定性目标三角', 'exp_benchmark_50_20260209_140431');
@@ -789,6 +905,7 @@ function renderSlide16ArtifactCoverage() {
 }
 
 function main() {
+  renderSlide00PromptHierarchy();
   renderSlide01GoalTriangle();
   renderSlide02KpiFramework();
   renderSlide03SystemObservability();

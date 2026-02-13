@@ -7,6 +7,22 @@
 
 ---
 
+## Slide 0 概念界定：Prompt Engineering / Code as Prompt / Few-shot
+
+- 目标一句话：先统一三者边界，避免后续把“方法”“工程实现”“策略机制”混为一谈。
+- 核心内容：
+  - `Prompt Engineering`：总方法论，定义任务目标、约束、评测与迭代闭环。
+  - `Code as Prompt`：工程范式，把 Prompt 变成可编排、可版本化、可回归的代码系统。
+  - `Few-shot`：运行时策略，在上下文预算内注入高质量示例来提升稳定性与精度。
+  - 层级关系：**方法论（PE） -> 工程承载（Code as Prompt） -> 策略插件（Few-shot）**。
+
+![Slide 0 Chart](TestDocs/charts/slide_00_prompt_hierarchy.svg)
+
+**讲者备注**：这页只做“术语定标”，后续所有实验结果都回到这三个层级解释。  
+**Data Source**: `services/promptEngine.js`, `services/goldenExamplesService.js`, `Docs/TestDocs/fewshot_experiment_report.md`
+
+---
+
 ## Slide 1 封面：问题与目标
 
 - 目标一句话：在不依赖云端推理主链路的前提下，让本地 LLM 输出质量可测量地提升。

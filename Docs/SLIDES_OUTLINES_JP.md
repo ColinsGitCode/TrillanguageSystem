@@ -7,6 +7,93 @@
 
 ---
 
+## Slide 0A 概念階層（導入）
+
+- **目的**: 3つの概念（Prompt Engineering / Code as Prompt / few-shot）の上下関係を最初に固定する。
+- **要点（短く）**:
+  - Prompt Engineering: 最上位の設計方法論
+  - Code as Prompt: Promptを実装可能な構造にする工学方式
+  - few-shot: 実行時に品質を押し上げる戦術
+  - 関係: **方法論 -> 実装方式 -> 実行戦術**
+
+![Slide 0A Chart](assets/slides_charts/ja/slide_00a_concept_hierarchy_ja.svg)
+
+**話すポイント**:
+- 以降の実験結果は、どの層の改善かを明示して解釈する。
+
+**出典**: Prompt実装構成と実験運用設計
+
+---
+
+## Slide 0B 概念解説① Prompt Engineering
+
+- **目的**: 「何を最適化するか」を定義する設計層を説明する。
+- **要点（短く）**:
+  - タスク定義・出力制約・品質基準を先に固定
+  - 評価観点（品質/コスト/安定性/統計）を合意
+  - 後続実装の判定ルールをここで確定
+
+![Slide 0B Chart](assets/slides_charts/ja/slide_00b_prompt_engineering_intro_ja.svg)
+
+**話すポイント**:
+- Promptを書く前に「評価可能な定義」を作るのが本質。
+
+**出典**: 品質評価設計 + 生成仕様ルール
+
+---
+
+## Slide 0C 概念解説② Code as Prompt
+
+- **目的**: Promptを「文章」から「運用可能なコード資産」に変える意義を示す。
+- **要点（短く）**:
+  - テンプレ・組立・注入・検証を部品化
+  - 差分管理・再現実験・リリースゲートを実装
+  - 改善を主観ではなくメトリクスで判定
+
+![Slide 0C Chart](assets/slides_charts/ja/slide_00c_code_as_prompt_intro_ja.svg)
+
+**話すポイント**:
+- 品質改善は「プロンプト技巧」ではなく「実装と検証の継続運用」。
+
+**出典**: promptEngine / observability / release gate設計
+
+---
+
+## Slide 0D 概念解説③ few-shot
+
+- **目的**: few-shotを単純ON/OFF機能ではなく、制御付き戦術として説明する。
+- **要点（短く）**:
+  - Teacher候補の検索と品質選別
+  - context budget内での注入制御
+  - 超過時の縮退（削減・短縮・無効化）
+
+![Slide 0D Chart](assets/slides_charts/ja/slide_00d_fewshot_intro_ja.svg)
+
+**話すポイント**:
+- few-shotの評価は、品質向上とtoken増の両方を同時に見る。
+
+**出典**: golden examples 選別ロジック + token予算制御
+
+---
+
+## Slide 0 アプリ概要（導入）
+
+- **目的**: 聴衆に「このAPPが何を解くか」を30秒で共有する。
+- **要点（短く）**:
+  - 入力: テキスト / OCR
+  - 生成: 三言語カード + 例句TTS
+  - 管理: 日付フォルダ / 履歴
+  - 分析: INTEL / 統計ダッシュボード
+
+![Slide 0 Chart](assets/slides_charts/ja/slide_00_app_overview_ja.svg)
+
+**話すポイント**:
+- この後のスライドは「品質改善」の話だが、土台はこの業務フロー。
+
+**出典**: APP機能設計と現行実装
+
+---
+
 ## Slide 1 表紙：課題と到達目標
 
 - **目的**: クラウド依存を抑えつつ、ローカルLLMの品質改善を定量管理する。

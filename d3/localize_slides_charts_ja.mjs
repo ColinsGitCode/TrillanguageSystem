@@ -187,7 +187,339 @@ function footer(svg, text) {
     .attr('font-family', FONT.family)
     .attr('font-size', 12)
     .attr('fill', '#64748B')
-    .text(`出典: ${String(text || '').replace(/^Source:\\s*/i, '')}`);
+    .text(`出典: ${String(text || '').replace(/^Source:\s*/i, '')}`);
+}
+
+function renderSlide00() {
+  const { svg, body } = createCanvas('アプリ機能サマリー', '生成・学習・観測を1画面で運用');
+
+  card(svg, {
+    x: 70,
+    y: 180,
+    w: 260,
+    h: 150,
+    theme: 'blue',
+    title: '入力',
+    lines: ['テキスト', '画像OCR']
+  });
+
+  card(svg, {
+    x: 390,
+    y: 180,
+    w: 260,
+    h: 150,
+    theme: 'green',
+    title: '生成',
+    lines: ['日英中カード', '例句TTS']
+  });
+
+  card(svg, {
+    x: 710,
+    y: 180,
+    w: 260,
+    h: 150,
+    theme: 'purple',
+    title: '管理',
+    lines: ['日付フォルダ', '履歴/削除']
+  });
+
+  card(svg, {
+    x: 1030,
+    y: 180,
+    w: 180,
+    h: 150,
+    theme: 'orange',
+    title: '分析',
+    lines: ['INTEL', '統計ダッシュボード']
+  });
+
+  arrow(svg, 330, 255, 390, 255);
+  arrow(svg, 650, 255, 710, 255);
+  arrow(svg, 970, 255, 1030, 255);
+
+  card(svg, {
+    x: 180,
+    y: 400,
+    w: 930,
+    h: 170,
+    theme: 'gray',
+    title: '実運用の価値',
+    lines: ['生成 -> 学習 -> 追跡を同じ導線で完結', 'few-shot実験の記録と再現をそのまま報告へ接続']
+  });
+
+  footer(svg, 'app workflow overview');
+  saveSvg(body, 'slide_00_app_overview_ja.svg');
+}
+
+function renderSlide00aConceptHierarchy() {
+  const { svg, body } = createCanvas('概念関係：Prompt Engineering / Code as Prompt / few-shot', '順序ではなく「集合の所属関係」で整理');
+
+  // Scheme B: strict subset (nested sets).
+  svg
+    .append('rect')
+    .attr('x', 70)
+    .attr('y', 130)
+    .attr('width', 1140)
+    .attr('height', 520)
+    .attr('rx', 22)
+    .attr('fill', '#EFF6FF')
+    .attr('stroke', '#2563EB')
+    .attr('stroke-width', 2.5);
+
+  svg
+    .append('text')
+    .attr('x', 102)
+    .attr('y', 176)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 28)
+    .attr('font-weight', 800)
+    .attr('fill', '#1D4ED8')
+    .text('Prompt Engineering（方法論の集合）');
+
+  svg
+    .append('text')
+    .attr('x', 102)
+    .attr('y', 206)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 16)
+    .attr('fill', '#334155')
+    .text('目的定義 / 制約設計 / 評価指標 / 反復改善を含む全体領域');
+
+  svg
+    .append('rect')
+    .attr('x', 180)
+    .attr('y', 250)
+    .attr('width', 920)
+    .attr('height', 330)
+    .attr('rx', 20)
+    .attr('fill', '#F3E8FF')
+    .attr('stroke', '#7C3AED')
+    .attr('stroke-width', 2.5)
+    .attr('opacity', 0.92);
+
+  svg
+    .append('text')
+    .attr('x', 215)
+    .attr('y', 292)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 24)
+    .attr('font-weight', 800)
+    .attr('fill', '#6D28D9')
+    .text('Code as Prompt（Prompt Engineering の部分集合）');
+  svg
+    .append('text')
+    .attr('x', 215)
+    .attr('y', 320)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 15)
+    .attr('fill', '#334155')
+    .text('Promptを部品化・実装化・計測可能にする運用集合');
+
+  svg
+    .append('rect')
+    .attr('x', 330)
+    .attr('y', 365)
+    .attr('width', 620)
+    .attr('height', 170)
+    .attr('rx', 18)
+    .attr('fill', '#DCFCE7')
+    .attr('stroke', '#16A34A')
+    .attr('stroke-width', 2.5)
+    .attr('opacity', 0.92);
+
+  svg
+    .append('text')
+    .attr('x', 360)
+    .attr('y', 406)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 24)
+    .attr('font-weight', 800)
+    .attr('fill', '#15803D')
+    .text('few-shot（Code as Prompt の部分集合）');
+  svg
+    .append('text')
+    .attr('x', 360)
+    .attr('y', 434)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 15)
+    .attr('fill', '#334155')
+    .text('高品質例示を使う品質向上戦術の集合');
+
+  svg
+    .append('rect')
+    .attr('x', 520)
+    .attr('y', 468)
+    .attr('width', 240)
+    .attr('height', 52)
+    .attr('rx', 10)
+    .attr('fill', '#FEF9C3')
+    .attr('stroke', '#CA8A04')
+    .attr('stroke-width', 2.2);
+
+  svg
+    .append('text')
+    .attr('x', 640)
+    .attr('y', 500)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', FONT.family)
+    .attr('font-size', 16)
+    .attr('font-weight', 800)
+    .attr('fill', '#A16207')
+    .text('本デモで適用したメカニズム');
+
+  footer(svg, 'set-based relationship among three prompt concepts');
+  saveSvg(body, 'slide_00a_concept_hierarchy_ja.svg');
+}
+
+function renderSlide00bPromptEngineeringIntro() {
+  const { svg, body } = createCanvas('概念解説① Prompt Engineering', '何を最適化するかを定義する設計層');
+
+  card(svg, {
+    x: 80,
+    y: 150,
+    w: 340,
+    h: 190,
+    theme: 'blue',
+    title: '役割',
+    lines: ['・目的と評価軸を定義', '・出力フォーマットを規定', '・失敗パターンを制約化']
+  });
+
+  card(svg, {
+    x: 470,
+    y: 150,
+    w: 340,
+    h: 190,
+    theme: 'green',
+    title: '主要成果物',
+    lines: ['・system指示', '・品質ルーブリック', '・評価手順 / 判定条件']
+  });
+
+  card(svg, {
+    x: 860,
+    y: 150,
+    w: 340,
+    h: 190,
+    theme: 'orange',
+    title: '本プロジェクト適用',
+    lines: ['・三言語カード仕様', '・日本語ふりがな規則', '・INTEL指標定義']
+  });
+
+  card(svg, {
+    x: 130,
+    y: 410,
+    w: 1020,
+    h: 220,
+    theme: 'gray',
+    title: '判断基準（この層で確定）',
+    lines: ['品質のみでは採用しない：品質 + コスト + 安定性 + 統計有意性を同時評価', '→ 以降の Code as Prompt / few-shot はこの基準を満たすための実装手段']
+  });
+
+  arrow(svg, 420, 245, 470, 245);
+  arrow(svg, 810, 245, 860, 245);
+  arrow(svg, 640, 342, 640, 410);
+
+  footer(svg, 'prompt engineering role in evaluation and constraints');
+  saveSvg(body, 'slide_00b_prompt_engineering_intro_ja.svg');
+}
+
+function renderSlide00cCodeAsPromptIntro() {
+  const { svg, body } = createCanvas('概念解説② Code as Prompt', 'Promptを「編集可能な資産」に変える実装層');
+
+  card(svg, {
+    x: 70,
+    y: 170,
+    w: 250,
+    h: 160,
+    theme: 'gray',
+    title: '入力',
+    lines: ['フレーズ', '言語条件', 'モデル設定']
+  });
+
+  card(svg, {
+    x: 370,
+    y: 170,
+    w: 250,
+    h: 160,
+    theme: 'blue',
+    title: 'テンプレ層',
+    lines: ['共通規約', '出力制約', '表記ルール']
+  });
+
+  card(svg, {
+    x: 670,
+    y: 170,
+    w: 250,
+    h: 160,
+    theme: 'purple',
+    title: '組立/注入層',
+    lines: ['条件分岐', 'few-shot注入', '予算制御']
+  });
+
+  card(svg, {
+    x: 970,
+    y: 170,
+    w: 250,
+    h: 160,
+    theme: 'green',
+    title: '出力',
+    lines: ['Markdownカード', '音声タスク', '観測メトリクス']
+  });
+
+  arrow(svg, 320, 250, 370, 250);
+  arrow(svg, 620, 250, 670, 250);
+  arrow(svg, 920, 250, 970, 250);
+
+  card(svg, {
+    x: 90,
+    y: 390,
+    w: 1100,
+    h: 240,
+    theme: 'orange',
+    title: 'Code as Promptの価値',
+    lines: ['・変更をコード差分で管理できる（再現性）', '・ラウンド比較で改善を定量評価できる（検証性）', '・ゲート条件で安全に本番反映できる（運用性）']
+  });
+
+  footer(svg, 'code-as-prompt engineering properties');
+  saveSvg(body, 'slide_00c_code_as_prompt_intro_ja.svg');
+}
+
+function renderSlide00dFewShotIntro() {
+  const { svg, body } = createCanvas('概念解説③ few-shot', '高品質例示を予算内で注入する実行戦術');
+
+  const stages = [
+    { x: 70, t: '候補取得', d: ['Teacherサンプル検索'], c: 'blue' },
+    { x: 340, t: '品質選別', d: ['スコア下限 / 類似度'], c: 'green' },
+    { x: 610, t: '予算判定', d: ['context比率 18-25%'], c: 'purple' },
+    { x: 880, t: '注入/縮退', d: ['注入 or 短縮 or 無効化'], c: 'orange' }
+  ];
+
+  stages.forEach((s, i) => {
+    card(svg, { x: s.x, y: 190, w: 230, h: 140, theme: s.c, title: s.t, lines: s.d });
+    if (i < stages.length - 1) arrow(svg, s.x + 230, 260, stages[i + 1].x, 260);
+  });
+
+  card(svg, {
+    x: 90,
+    y: 390,
+    w: 510,
+    h: 220,
+    theme: 'gray',
+    title: '期待効果',
+    lines: ['・翻訳の自然さ向上', '・例句品質の一貫性向上', '・ローカルLLMの弱点補完']
+  });
+
+  card(svg, {
+    x: 680,
+    y: 390,
+    w: 510,
+    h: 220,
+    theme: 'red',
+    title: '運用リスクと制御',
+    lines: ['・token増加 → 予算制御/ゲートで抑制', '・過適合 → Teacher多様性と定期更新', '・効果減衰 → ラウンド評価で再調整']
+  });
+
+  footer(svg, 'few-shot runtime strategy and controls');
+  saveSvg(body, 'slide_00d_fewshot_intro_ja.svg');
 }
 
 function renderSlide01() {
@@ -390,21 +722,49 @@ function renderSlide04b() {
     { label: '品質', covered: '5/5', ratio: 1.0, c: '#16A34A' },
     { label: '性能', covered: '6/6', ratio: 1.0, c: '#7C3AED' },
     { label: '指示/出力', covered: '4/4', ratio: 1.0, c: '#EA580C' },
-    { label: 'few-shotメタ', covered: '6/6', ratio: 1.0, c: '#DC2626' }
+    { label: 'few-shot', covered: '6/6', ratio: 1.0, c: '#DC2626' }
   ];
+
+  // Dedicated columns to avoid overlap when scaled in PPT.
+  const labelColRight = 180;
+  const barX = 210;
+  const barWidth = 560;
+  const valueColX = 790;
+  const valueColW = 90;
+  const valueX = valueColX + valueColW - 14;
+
+  svg.append('rect').attr('x', 36).attr('y', 352).attr('width', 150).attr('height', 280).attr('rx', 10).attr('fill', '#F8FAFC').attr('stroke', '#CBD5E1');
+  svg.append('rect').attr('x', valueColX).attr('y', 352).attr('width', valueColW).attr('height', 280).attr('rx', 10).attr('fill', '#F8FAFC').attr('stroke', '#CBD5E1');
 
   bars.forEach((b, idx) => {
     const y = 360 + idx * 56;
-    svg.append('text').attr('x', 46).attr('y', y + 24).attr('font-family', FONT.mono).attr('font-size', 22).attr('fill', '#334155').text(b.label);
-    svg.append('rect').attr('x', 140).attr('y', y).attr('width', 740).attr('height', 36).attr('rx', 8).attr('fill', '#E2E8F0');
-    svg.append('rect').attr('x', 140).attr('y', y).attr('width', 740 * b.ratio).attr('height', 36).attr('rx', 8).attr('fill', b.c);
-    svg.append('text').attr('x', 900).attr('y', y + 24).attr('font-family', FONT.mono).attr('font-size', 20).attr('font-weight', 700).attr('fill', '#0F172A').text(b.covered);
+    svg
+      .append('text')
+      .attr('x', labelColRight)
+      .attr('y', y + 24)
+      .attr('text-anchor', 'end')
+      .attr('font-family', FONT.family)
+      .attr('font-size', 22)
+      .attr('fill', '#334155')
+      .text(b.label);
+    svg.append('rect').attr('x', barX).attr('y', y).attr('width', barWidth).attr('height', 36).attr('rx', 8).attr('fill', '#E2E8F0');
+    svg.append('rect').attr('x', barX).attr('y', y).attr('width', barWidth * b.ratio).attr('height', 36).attr('rx', 8).attr('fill', b.c);
+    svg
+      .append('text')
+      .attr('x', valueX)
+      .attr('y', y + 24)
+      .attr('text-anchor', 'end')
+      .attr('font-family', FONT.mono)
+      .attr('font-size', 20)
+      .attr('font-weight', 700)
+      .attr('fill', '#0F172A')
+      .text(b.covered);
   });
 
   card(svg, {
-    x: 930,
+    x: 940,
     y: 356,
-    w: 290,
+    w: 280,
     h: 280,
     theme: 'gray',
     title: '運用価値',
@@ -869,6 +1229,11 @@ function renderSlide13() {
 
 function main() {
   console.log('Generating localized JP slide charts...');
+  renderSlide00aConceptHierarchy();
+  renderSlide00bPromptEngineeringIntro();
+  renderSlide00cCodeAsPromptIntro();
+  renderSlide00dFewShotIntro();
+  renderSlide00();
   renderSlide01();
   renderSlide02();
   renderSlide03();
