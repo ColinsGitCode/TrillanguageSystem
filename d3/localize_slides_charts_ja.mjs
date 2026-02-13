@@ -3,7 +3,6 @@ import path from 'path';
 import { JSDOM } from 'jsdom';
 import * as d3 from 'd3';
 
-// --- Configuration ---
 const OUTPUT_DIR = 'Docs/assets/slides_charts/ja';
 const DATA_DIR = 'Docs/TestDocs/data';
 const BENCHMARK_ID = 'exp_benchmark_50_20260209_140431';
@@ -13,147 +12,881 @@ const trendPath = path.join(DATA_DIR, `round_trend_${BENCHMARK_ID}.json`);
 const summaryData = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
 const trendData = JSON.parse(fs.readFileSync(trendPath, 'utf8'));
 
-const COLORS = {
-  blue: '#E3F2FD', blueBorder: '#1565C0',
-  green: '#E8F5E9', greenBorder: '#2E7D32',
-  orange: '#FFF3E0', orangeBorder: '#EF6C00',
-  purple: '#F3E5F5', purpleBorder: '#7B1FA2',
-  red: '#FFEBEE', redBorder: '#C62828',
-  gray: '#F5F5F5', grayBorder: '#424242',
-  text: '#212121'
+const baselineRound = (trendData.roundMetrics || []).find((r) => r.roundNumber === 0) || {};
+const fewshotRound = (trendData.roundMetrics || []).find((r) => r.roundNumber !== 0 && r.fewshotEnabled) || (trendData.roundMetrics || [])[1] || {};
+const statSig = summaryData.statisticalSignificance || {};
+
+const CANVAS = { width: 1280, height: 720 };
+const FONT = {
+  family: "'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif",
+  mono: "'JetBrains Mono','SFMono-Regular',monospace"
 };
 
-function createSVG(width, height) {
-  const dom = new JSDOM(`<!DOCTYPE html><body></body>`);
-  const body = dom.window.document.body;
-  const svg = d3.select(body).append('svg')
-    .attr('width', width).attr('height', height)
-    .attr('xmlns', 'http://www.w3.org/2000/svg')
-    .style('background', '#ffffff');
-  return { svg, body };
+const PALETTE = {
+  bg: '#F7F9FC',
+  text: '#1F2937',
+  muted: '#5B6475',
+  line: '#CBD5E1',
+  blue: { fill: '#E7F0FF', stroke: '#2563EB', title: '#1D4ED8' },
+  green: { fill: '#E9F8EF', stroke: '#16A34A', title: '#15803D' },
+  orange: { fill: '#FFF4E8', stroke: '#EA580C', title: '#C2410C' },
+  purple: { fill: '#F3E8FF', stroke: '#9333EA', title: '#7E22CE' },
+  red: { fill: '#FEECEC', stroke: '#DC2626', title: '#B91C1C' },
+  gray: { fill: '#EEF2F7', stroke: '#64748B', title: '#475569' }
+};
+
+function num(v, digits = 2) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '-';
+  return n.toFixed(digits);
 }
 
-function saveSVG(body, filename) {
+function pct(v, digits = 1) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '-';
+  return `${n.toFixed(digits)}%`;
+}
+
+function createCanvas(title, subtitle = '') {
+  const dom = new JSDOM('<!doctype html><body></body>');
+  const body = dom.window.document.body;
+  const svg = d3
+    .select(body)
+    .append('svg')
+    .attr('xmlns', 'http://www.w3.org/2000/svg')
+    .attr('width', CANVAS.width)
+    .attr('height', CANVAS.height)
+    .style('background', PALETTE.bg);
+
+  svg
+    .append('rect')
+    .attr('x', 16)
+    .attr('y', 16)
+    .attr('width', CANVAS.width - 32)
+    .attr('height', CANVAS.height - 32)
+    .attr('rx', 18)
+    .attr('fill', '#FFFFFF')
+    .attr('stroke', '#E2E8F0');
+
+  svg
+    .append('text')
+    .attr('x', 44)
+    .attr('y', 62)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 40)
+    .attr('font-weight', 800)
+    .attr('fill', PALETTE.text)
+    .text(title);
+
+  if (subtitle) {
+    svg
+      .append('text')
+      .attr('x', 44)
+      .attr('y', 92)
+      .attr('font-family', FONT.family)
+      .attr('font-size', 18)
+      .attr('fill', PALETTE.muted)
+      .text(subtitle);
+  }
+
+  return { body, svg };
+}
+
+function saveSvg(body, filename) {
   if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUTPUT_DIR, filename), body.innerHTML);
+  fs.writeFileSync(path.join(OUTPUT_DIR, filename), body.innerHTML, 'utf8');
   console.log(`Saved: ${filename}`);
 }
 
-function drawBox(g, x, y, w, h, text, colorKey, title = '', fontSize = 14) {
-  const bg = COLORS[colorKey] || '#f0f0f0';
-  const border = COLORS[colorKey + 'Border'] || '#ccc';
-  g.append('rect').attr('x', x).attr('y', y).attr('width', w).attr('height', h).attr('rx', 8).attr('ry', 8).attr('fill', bg).attr('stroke', border).attr('stroke-width', 2);
-  let textY = y + (title ? 50 : h / 2 + 5);
-  if (title) {
-    g.append('text').attr('x', x + w / 2).attr('y', y + 25).attr('text-anchor', 'middle').attr('font-family', 'sans-serif').attr('font-size', '16px').attr('font-weight', 'bold').attr('fill', border).text(title);
+function ensureArrow(svg, id = 'arrow') {
+  let defs = svg.select('defs');
+  if (defs.empty()) defs = svg.append('defs');
+  if (defs.select(`#${id}`).empty()) {
+    defs
+      .append('marker')
+      .attr('id', id)
+      .attr('viewBox', '0 0 10 10')
+      .attr('refX', 9)
+      .attr('refY', 5)
+      .attr('markerWidth', 7)
+      .attr('markerHeight', 7)
+      .attr('orient', 'auto-start-reverse')
+      .append('path')
+      .attr('d', 'M0,0 L10,5 L0,10 z')
+      .attr('fill', '#64748B');
   }
-  const lines = Array.isArray(text) ? text : [text];
-  const offset = title ? 20 : (lines.length > 1 ? -((lines.length - 1) * 10) : 0);
-  lines.forEach((line, i) => {
-    g.append('text').attr('x', x + w / 2).attr('y', textY + offset + i * 22).attr('text-anchor', 'middle').attr('font-family', 'sans-serif').attr('font-size', `${fontSize}px`).attr('fill', COLORS.text).text(line);
+}
+
+function arrow(svg, x1, y1, x2, y2, label = '') {
+  ensureArrow(svg);
+  svg
+    .append('line')
+    .attr('x1', x1)
+    .attr('y1', y1)
+    .attr('x2', x2)
+    .attr('y2', y2)
+    .attr('stroke', '#64748B')
+    .attr('stroke-width', 2)
+    .attr('marker-end', 'url(#arrow)');
+
+  if (label) {
+    svg
+      .append('text')
+      .attr('x', (x1 + x2) / 2)
+      .attr('y', (y1 + y2) / 2 - 8)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', FONT.family)
+      .attr('font-size', 14)
+      .attr('fill', '#475569')
+      .text(label);
+  }
+}
+
+function card(svg, { x, y, w, h, theme = 'gray', title = '', lines = [] }) {
+  const c = PALETTE[theme] || PALETTE.gray;
+  svg
+    .append('rect')
+    .attr('x', x)
+    .attr('y', y)
+    .attr('width', w)
+    .attr('height', h)
+    .attr('rx', 14)
+    .attr('fill', c.fill)
+    .attr('stroke', c.stroke)
+    .attr('stroke-width', 2);
+
+  if (title) {
+    svg
+      .append('text')
+      .attr('x', x + 18)
+      .attr('y', y + 32)
+      .attr('font-family', FONT.family)
+      .attr('font-size', 20)
+      .attr('font-weight', 800)
+      .attr('fill', c.title)
+      .text(title);
+  }
+
+  lines.forEach((line, idx) => {
+    svg
+      .append('text')
+      .attr('x', x + 18)
+      .attr('y', y + 60 + idx * 24)
+      .attr('font-family', FONT.family)
+      .attr('font-size', 16)
+      .attr('fill', PALETTE.text)
+      .text(line);
   });
 }
 
-function drawArrow(svg, x1, y1, x2, y2, color = '#999') {
-  const markerId = 'arrowhead';
-  if (svg.select(`#${markerId}`).empty()) {
-    svg.append('defs').append('marker').attr('id', markerId).attr('viewBox', '0 0 10 10').attr('refX', 10).attr('refY', 5).attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto').append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', color);
-  }
-  svg.append('line').attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2).attr('stroke', color).attr('stroke-width', 2).attr('marker-end', `url(#${markerId})`);
+function footer(svg, text) {
+  svg
+    .append('text')
+    .attr('x', 44)
+    .attr('y', CANVAS.height - 30)
+    .attr('font-family', FONT.family)
+    .attr('font-size', 12)
+    .attr('fill', '#64748B')
+    .text(`出典: ${String(text || '').replace(/^Source:\\s*/i, '')}`);
 }
 
-// --- Specific Sub-Page Renderers ---
+function renderSlide01() {
+  const { svg, body } = createCanvas('課題三角形：品質・コスト・安定性', 'Few-shot導入の評価軸');
+
+  const pA = [640, 190];
+  const pB = [300, 560];
+  const pC = [980, 560];
+
+  svg
+    .append('path')
+    .attr('d', `M${pA[0]},${pA[1]} L${pB[0]},${pB[1]} L${pC[0]},${pC[1]} Z`)
+    .attr('fill', '#F8FAFC')
+    .attr('stroke', '#94A3B8')
+    .attr('stroke-width', 2)
+    .attr('stroke-dasharray', '8,6');
+
+  card(svg, { x: 560, y: 138, w: 160, h: 94, theme: 'blue', title: '品質', lines: ['Quality Score'] });
+  card(svg, { x: 218, y: 510, w: 170, h: 94, theme: 'orange', title: 'コスト', lines: ['Avg Tokens'] });
+  card(svg, { x: 892, y: 510, w: 180, h: 94, theme: 'green', title: '安定性', lines: ['CV / Success Rate'] });
+  card(svg, {
+    x: 500,
+    y: 360,
+    w: 280,
+    h: 120,
+    theme: 'purple',
+    title: '最適化目標',
+    lines: ['ローカルLLM品質を改善しつつ', 'token増加を管理可能範囲に維持']
+  });
+
+  footer(svg, 'Source: Benchmark方針と評価設計');
+  saveSvg(body, 'slide_01_goal_triangle_ja.svg');
+}
+
+function renderSlide02() {
+  const { svg, body } = createCanvas('評価フレーム：成功基準の定義', '品質だけでなく効率・統計で判定');
+
+  const cols = [
+    {
+      theme: 'blue',
+      title: '主要指標',
+      lines: ['・平均品質スコア', '・成功率', '・改善ラウンド比率']
+    },
+    {
+      theme: 'orange',
+      title: '制約指標',
+      lines: ['・平均トークン数', '・平均遅延', '・トークン増加率']
+    },
+    {
+      theme: 'green',
+      title: '効率指標',
+      lines: ['・Gain / 1k tokens', '・しきい値 > 5.0', `・実測: ${num(summaryData.bestEfficiencyRound?.gainPer1kExtraTokens, 2)}`]
+    },
+    {
+      theme: 'purple',
+      title: '統計指標',
+      lines: [`・p値: ${num(statSig.pValue, 4)}`, `・95% CI: [${num(statSig.confidenceInterval95?.lower, 2)}, ${num(statSig.confidenceInterval95?.upper, 2)}]`, `・Cohen's d: ${num(statSig.cohensD?.d, 3)}`]
+    }
+  ];
+
+  cols.forEach((col, idx) => {
+    card(svg, { x: 46 + idx * 302, y: 150, w: 286, h: 220, theme: col.theme, title: col.title, lines: col.lines });
+  });
+
+  card(svg, {
+    x: 46,
+    y: 420,
+    w: 1188,
+    h: 150,
+    theme: statSig.significant ? 'green' : 'red',
+    title: statSig.significant ? '判定: 統計的に有意' : '判定: 有意差なし',
+    lines: [statSig.summary || '統計サマリーなし']
+  });
+
+  footer(svg, 'Source: round_kpi_summary_exp_benchmark_50_20260209_140431.json');
+  saveSvg(body, 'slide_02_kpi_framework_ja.svg');
+}
+
+function renderSlide03() {
+  const { svg, body } = createCanvas('システム構成：生成から可観測まで', '実験再現を支える記録導線');
+
+  card(svg, { x: 70, y: 180, w: 250, h: 120, theme: 'blue', title: 'フロントエンド', lines: ['カード生成UI', '比較ビュー / 履歴'] });
+  card(svg, { x: 370, y: 180, w: 250, h: 120, theme: 'green', title: 'バックエンド', lines: ['生成オーケストレーション', 'モデル切替・比較実行'] });
+  card(svg, { x: 670, y: 180, w: 250, h: 120, theme: 'purple', title: 'Promptエンジン', lines: ['テンプレート組立', 'few-shot注入'] });
+  card(svg, { x: 970, y: 180, w: 240, h: 120, theme: 'orange', title: 'モデル層', lines: ['Gemini Teacher', 'Local Student'] });
+
+  card(svg, { x: 240, y: 390, w: 360, h: 170, theme: 'gray', title: '保存レイヤー', lines: ['ファイル: md/html/audio', 'DB: runs / samples / metrics'] });
+  card(svg, { x: 660, y: 390, w: 420, h: 170, theme: 'blue', title: '可観測レイヤー', lines: ['tokens / latency / quality', 'prompt・output・差分を追跡'] });
+
+  arrow(svg, 320, 240, 370, 240);
+  arrow(svg, 620, 240, 670, 240);
+  arrow(svg, 920, 240, 970, 240);
+  arrow(svg, 560, 300, 420, 390, '保存');
+  arrow(svg, 800, 300, 870, 390, '指標化');
+
+  footer(svg, 'Source: backend/frontend 実装 + observability schema');
+  saveSvg(body, 'slide_03_system_observability_ja.svg');
+}
+
+function renderSlide04() {
+  const { svg, body } = createCanvas('Code as Prompt：V1→V2→V3', '静的文面から実行時注入へ');
+
+  svg
+    .append('line')
+    .attr('x1', 110)
+    .attr('y1', 360)
+    .attr('x2', 1160)
+    .attr('y2', 360)
+    .attr('stroke', '#94A3B8')
+    .attr('stroke-width', 8)
+    .attr('stroke-linecap', 'round');
+
+  const nodes = [
+    { x: 220, theme: 'gray', title: 'V1 静的テンプレート', lines: ['固定指示のみ', '再利用は容易 / 精度限界'] },
+    { x: 640, theme: 'blue', title: 'V2 プログラム組立', lines: ['条件分岐・部品化', '出力構造の安定化'] },
+    { x: 1060, theme: 'green', title: 'V3 実行時few-shot', lines: ['類似例を動的注入', '品質改善と予算制御'] }
+  ];
+
+  nodes.forEach((n, idx) => {
+    svg
+      .append('circle')
+      .attr('cx', n.x)
+      .attr('cy', 360)
+      .attr('r', 18)
+      .attr('fill', PALETTE[n.theme].stroke);
+    card(svg, { x: n.x - 165, y: 420, w: 330, h: 145, theme: n.theme, title: n.title, lines: n.lines });
+    if (idx < nodes.length - 1) {
+      arrow(svg, n.x + 18, 360, nodes[idx + 1].x - 18, 360);
+    }
+  });
+
+  card(svg, {
+    x: 440,
+    y: 170,
+    w: 400,
+    h: 120,
+    theme: 'purple',
+    title: '単一ケース例（挨拶）',
+    lines: ['品質: 64 → 73 (+14.1%)', 'Tokens: 870 → 1291 (+48.4%)', 'Latency: 27.6s → 34.4s (+24.8%)']
+  });
+
+  footer(svg, 'Source: prompt evolution + case sample');
+  saveSvg(body, 'slide_04_code_as_prompt_timeline_ja.svg');
+}
 
 function renderSlide04a() {
-  const { svg, body } = createSVG(800, 400);
-  drawBox(svg, 50, 50, 200, 100, ["Generation Logs", "(Requests/Outputs)"], "blue", "Product Domain");
-  drawBox(svg, 300, 50, 200, 100, ["Experiment Runs", "(Rounds/Samples)"], "green", "Research Domain");
-  drawBox(svg, 550, 50, 200, 100, ["Teacher Refs", "(Golden Examples)"], "purple", "Knowledge Domain");
-  
-  // Connectors
-  drawArrow(svg, 250, 100, 300, 100);
-  drawArrow(svg, 550, 100, 500, 100);
-  
-  svg.append('rect').attr('x', 250).attr('y', 220).attr('width', 300).attr('height', 80).attr('fill', '#f5f5f5').attr('stroke', '#666').attr('rx', 5);
-  svg.append('text').attr('x', 400).attr('y', 255).attr('text-anchor', 'middle').attr('font-weight', 'bold').text("Unified Trace ID");
-  svg.append('text').attr('x', 400).attr('y', 280).attr('text-anchor', 'middle').attr('font-size', '12px').text("Links quality metrics to prompt versions");
-  
-  drawArrow(svg, 150, 150, 250, 220);
-  drawArrow(svg, 400, 150, 400, 220);
-  drawArrow(svg, 650, 150, 550, 220);
-  saveSVG(body, 'slide_04a_observability_data_model_ja.svg');
+  const { svg, body } = createCanvas('観測サブページA：データモデルと追跡関係', '生成記録からfew-shot参照まで単一路で追跡');
+
+  const nodes = [
+    { x: 80, y: 160, t: '生成記録', l: ['phrases / files'], c: 'blue' },
+    { x: 360, y: 160, t: '指標記録', l: ['tokens / quality'], c: 'purple' },
+    { x: 640, y: 160, t: '音声記録', l: ['audio tasks'], c: 'green' },
+    { x: 80, y: 340, t: 'few-shot実験', l: ['runs / rounds'], c: 'orange' },
+    { x: 360, y: 340, t: 'Teacher参照', l: ['examples'], c: 'gray' },
+    { x: 640, y: 340, t: 'サンプル明細', l: ['samples'], c: 'blue' }
+  ];
+
+  nodes.forEach((n) => card(svg, { x: n.x, y: n.y, w: 220, h: 120, theme: n.c, title: n.t, lines: n.l }));
+
+  arrow(svg, 300, 220, 360, 220);
+  arrow(svg, 580, 220, 640, 220);
+  arrow(svg, 190, 280, 190, 340);
+  arrow(svg, 470, 280, 470, 340);
+  arrow(svg, 300, 400, 360, 400);
+  arrow(svg, 580, 400, 640, 400);
+
+  card(svg, {
+    x: 910,
+    y: 160,
+    w: 320,
+    h: 300,
+    theme: 'green',
+    title: '追跡ポイント',
+    lines: ['・request_id / generation_id で結線', '・PromptとOutputを同時保存', '・品質差分をラウンド比較可能', '・Teacher参照の効果を再集計可能']
+  });
+
+  footer(svg, 'Source: DB schema + experiment tracking flow');
+  saveSvg(body, 'slide_04a_observability_data_model_ja.svg');
 }
 
 function renderSlide04b() {
-  const { svg, body } = createSVG(850, 200);
-  const steps = ["入力", "指示生成", "LLM推論", "構造化", "指標計算", "永続化"];
-  const stepWidth = 110;
-  steps.forEach((s, i) => {
-    const x = 50 + i * (stepWidth + 20);
-    drawBox(svg, x, 50, stepWidth, 80, [s], i % 2 === 0 ? "blue" : "green");
-    if (i < steps.length - 1) drawArrow(svg, x + stepWidth, 90, x + stepWidth + 20, 90);
+  const { svg, body } = createCanvas('観測サブページB：収集タイムラインと指標配置', '9工程ごとの計測位置を固定化');
+
+  const steps = ['受信', 'Prompt構築', 'LLM呼出', '解析', '後処理', '描画', '保存', '音声生成', 'DB記録'];
+  const startX = 60;
+  const gap = 128;
+
+  steps.forEach((s, idx) => {
+    const x = startX + idx * gap;
+    svg.append('circle').attr('cx', x).attr('cy', 220).attr('r', 27).attr('fill', '#DBEAFE').attr('stroke', '#2563EB').attr('stroke-width', 2);
+    svg.append('text').attr('x', x).attr('y', 226).attr('text-anchor', 'middle').attr('font-family', FONT.mono).attr('font-size', 14).attr('fill', '#1E3A8A').text(idx + 1);
+    svg.append('text').attr('x', x).attr('y', 272).attr('text-anchor', 'middle').attr('font-family', FONT.family).attr('font-size', 14).attr('fill', PALETTE.text).text(s);
+    if (idx < steps.length - 1) {
+      arrow(svg, x + 28, 220, x + gap - 28, 220);
+    }
   });
-  saveSVG(body, 'slide_04b_observability_timeline_ja.svg');
+
+  const bars = [
+    { label: 'トークン', covered: '3/3', ratio: 1.0, c: '#2563EB' },
+    { label: '品質', covered: '5/5', ratio: 1.0, c: '#16A34A' },
+    { label: '性能', covered: '6/6', ratio: 1.0, c: '#7C3AED' },
+    { label: '指示/出力', covered: '4/4', ratio: 1.0, c: '#EA580C' },
+    { label: 'few-shotメタ', covered: '6/6', ratio: 1.0, c: '#DC2626' }
+  ];
+
+  bars.forEach((b, idx) => {
+    const y = 360 + idx * 56;
+    svg.append('text').attr('x', 46).attr('y', y + 24).attr('font-family', FONT.mono).attr('font-size', 22).attr('fill', '#334155').text(b.label);
+    svg.append('rect').attr('x', 140).attr('y', y).attr('width', 740).attr('height', 36).attr('rx', 8).attr('fill', '#E2E8F0');
+    svg.append('rect').attr('x', 140).attr('y', y).attr('width', 740 * b.ratio).attr('height', 36).attr('rx', 8).attr('fill', b.c);
+    svg.append('text').attr('x', 900).attr('y', y + 24).attr('font-family', FONT.mono).attr('font-size', 20).attr('font-weight', 700).attr('fill', '#0F172A').text(b.covered);
+  });
+
+  card(svg, {
+    x: 930,
+    y: 356,
+    w: 290,
+    h: 280,
+    theme: 'gray',
+    title: '運用価値',
+    lines: ['・リアルタイムの品質監視', '・履歴カードで再生確認', '・実験レポートで再現検証']
+  });
+
+  footer(svg, 'Source: observability instrumentation map');
+  saveSvg(body, 'slide_04b_observability_timeline_ja.svg');
 }
 
 function renderSlide04c() {
-  const { svg, body } = createSVG(800, 450);
+  const { svg, body } = createCanvas('観測サブページC：Code as Promptの4層構造', '差し替え可能なPromptエンジン設計');
+
   const layers = [
-    { n: "Verification Layer", d: "Schema & Logic Check", c: "red" },
-    { n: "Injection Layer", d: "Few-shot Runtime Inject", c: "purple" },
-    { n: "Assemble Layer", d: "Dynamic Component Stitching", c: "blue" },
-    { n: "Template Layer", d: "Base Markdown Structure", c: "gray" }
+    { t: '検証層', l: ['schemaチェック', '安全フィルタ'], c: 'red', y: 150 },
+    { t: '注入層', l: ['few-shot候補選定', '予算内注入'], c: 'purple', y: 250 },
+    { t: '組立層', l: ['テンプレ部品合成', '条件分岐'], c: 'blue', y: 350 },
+    { t: 'テンプレ層', l: ['言語別ひな型', '出力制約'], c: 'gray', y: 450 }
   ];
-  layers.forEach((l, i) => {
-    drawBox(svg, 200, 50 + i * 90, 400, 70, [l.n, l.d], l.c);
+
+  layers.forEach((layer, idx) => {
+    card(svg, { x: 270, y: layer.y, w: 740, h: 90, theme: layer.c, title: layer.t, lines: layer.l });
+    if (idx < layers.length - 1) arrow(svg, 640, layer.y + 90, 640, layers[idx + 1].y);
   });
-  saveSVG(body, 'slide_04c_code_as_prompt_architecture_ja.svg');
+
+  card(svg, {
+    x: 70,
+    y: 220,
+    w: 170,
+    h: 230,
+    theme: 'green',
+    title: '入力',
+    lines: ['phrase', '言語条件', 'モデル設定']
+  });
+  arrow(svg, 240, 335, 270, 335);
+
+  card(svg, {
+    x: 1040,
+    y: 220,
+    w: 170,
+    h: 230,
+    theme: 'orange',
+    title: '出力',
+    lines: ['markdown', 'audio tasks', 'observability']
+  });
+  arrow(svg, 1010, 335, 1040, 335);
+
+  footer(svg, 'Source: promptEngine + validation flow');
+  saveSvg(body, 'slide_04c_code_as_prompt_architecture_ja.svg');
 }
 
 function renderSlide04d() {
-  const { svg, body } = createSVG(800, 400);
-  drawBox(svg, 300, 50, 200, 80, ["Prompt Candidate"], "gray");
-  drawArrow(svg, 400, 130, 400, 180);
-  
-  svg.append('text').attr('x', 400).attr('y', 170).attr('text-anchor', 'middle').attr('font-weight', 'bold').text("Gate Check");
-  
-  const conditions = [
-    { t: "deltaQuality > 0", c: "blue", x: 100 },
-    { t: "pValue < 0.05", c: "green", x: 325 },
-    { t: "Gain > 5.0", c: "orange", x: 550 }
-  ];
-  conditions.forEach(d => {
-    drawBox(svg, d.x, 200, 150, 80, [d.t], d.c);
-    drawArrow(svg, 400, 180, d.x + 75, 200);
+  const { svg, body } = createCanvas('観測サブページD：リリースゲート判定', '主観ではなく指標でPromptを出荷');
+
+  card(svg, {
+    x: 440,
+    y: 150,
+    w: 400,
+    h: 110,
+    theme: 'gray',
+    title: '候補Prompt',
+    lines: ['実験ラウンド結果を入力']
   });
-  
-  drawBox(svg, 250, 320, 300, 50, ["RELEASE PERMITTED"], "green");
-  drawArrow(svg, 400, 280, 400, 320);
-  saveSVG(body, 'slide_04d_code_as_prompt_gates_ja.svg');
+
+  card(svg, {
+    x: 390,
+    y: 310,
+    w: 500,
+    h: 160,
+    theme: 'blue',
+    title: 'ゲート条件',
+    lines: ['① deltaQuality > 0', '② p-value < 0.05', '③ Gain > 5.0  (例外: 高コスト時は +3品質を要求)']
+  });
+
+  card(svg, {
+    x: 180,
+    y: 540,
+    w: 380,
+    h: 110,
+    theme: 'green',
+    title: 'PASS',
+    lines: ['本番候補として採用', '次ラウンドで継続監視']
+  });
+  card(svg, {
+    x: 720,
+    y: 540,
+    w: 380,
+    h: 110,
+    theme: 'red',
+    title: 'FAIL',
+    lines: ['差分分析へ戻す', '候補例や予算設定を再調整']
+  });
+
+  arrow(svg, 640, 260, 640, 310);
+  arrow(svg, 560, 470, 370, 540, '条件を満たす');
+  arrow(svg, 720, 470, 910, 540, '条件未達');
+
+  footer(svg, 'Source: release policy / experiment gate criteria');
+  saveSvg(body, 'slide_04d_code_as_prompt_gates_ja.svg');
 }
 
-// --- Re-use existing renderers ---
-function renderSlide01() { const { svg, body } = createSVG(800, 400); const p1 = [400, 50]; const p2 = [200, 350]; const p3 = [600, 350]; svg.append('path').attr('d', `M${p1[0]},${p1[1]} L${p2[0]},${p2[1]} L${p3[0]},${p3[1]} Z`).attr('fill', '#fdfdfd').attr('stroke', '#ddd').attr('stroke-width', 2).attr('stroke-dasharray', '5,5'); drawBox(svg, p1[0]-75, p1[1]-25, 150, 50, ["Quality (品質)"], 'blue'); drawBox(svg, p2[0]-75, p2[1]-25, 150, 50, ["Cost (コスト)"], 'orange'); drawBox(svg, p3[0]-75, p3[1]-25, 150, 50, ["Stability (安定性)"], 'green'); svg.append('text').attr('x', 400).attr('y', 230).attr('text-anchor', 'middle').attr('font-family', 'sans-serif').attr('font-size', '20px').attr('font-weight', 'bold').text("Few-shot Trade-off"); saveSVG(body, 'slide_01_goal_triangle_ja.svg'); }
-function renderSlide02() { const { svg, body } = createSVG(800, 450); const kpis = [{ title: "主要指標", items: ["Quality Score (品質)", "Success Rate (成功率)"], color: "blue", x: 50 }, { title: "制約指標", items: ["Avg Tokens (コスト)", "Avg Latency (遅延)"], color: "orange", x: 300 }, { title: "效率指標", items: ["Gain / 1k Tokens", "Threshold > 5.0"], color: "green", x: 550 }]; kpis.forEach(kpi => drawBox(svg, kpi.x, 100, 200, 150, kpi.items, kpi.color, kpi.title)); drawBox(svg, 50, 320, 700, 60, ["統計的有意性: p-value < 0.05 / 95% 信頼区間 / Cohen's d"], "purple"); saveSVG(body, 'slide_02_kpi_framework_ja.svg'); }
-function renderSlide03() { const { svg, body } = createSVG(800, 500); drawBox(svg, 300, 30, 200, 60, ["Frontend UI", "Dashboard"], "blue"); svg.append('rect').attr('x', 100).attr('y', 130).attr('width', 600).attr('height', 240).attr('fill', '#f8f9fa').attr('stroke', '#dee2e6').attr('rx', 10); drawBox(svg, 150, 180, 180, 60, ["LLM Service", "(Provider Switch)"], "gray"); drawBox(svg, 470, 180, 180, 60, ["Few-shot Engine", "(Dynamic Inject)"], "green"); drawBox(svg, 310, 280, 180, 60, ["Observability Trace"], "purple"); drawBox(svg, 250, 410, 300, 60, ["SQLite Storage", "(Metrics & Samples)"], "orange"); drawArrow(svg, 400, 90, 400, 130); drawArrow(svg, 400, 370, 400, 410); saveSVG(body, 'slide_03_system_observability_ja.svg'); }
-function renderSlide04() { const { svg, body } = createSVG(800, 300); const versions = [{ v: "V1", desc: "Static Template", x: 100, color: "gray" }, { v: "V2", desc: "Programmatic", x: 400, color: "blue" }, { v: "V3", desc: "Runtime Few-shot", x: 700, color: "green" }]; svg.append('line').attr('x1', 50).attr('y1', 150).attr('x2', 750).attr('y2', 150).attr('stroke', '#ccc').attr('stroke-width', 4); versions.forEach(d => { svg.append('circle').attr('cx', d.x).attr('cy', 150).attr('r', 12).attr('fill', COLORS[d.color + 'Border']); drawBox(svg, d.x - 75, 180, 150, 70, [d.v, d.desc], d.color); }); saveSVG(body, 'slide_04_code_as_prompt_timeline_ja.svg'); }
-function renderSlide05() { const { svg, body } = createSVG(800, 400); drawBox(svg, 50, 50, 200, 100, ["Input Phrase", "(e.g. rollout)"], "gray"); drawBox(svg, 300, 50, 200, 100, ["Similarity Search", "(Teacher Pool)"], "blue"); drawBox(svg, 550, 50, 200, 100, ["Rank & Select", "(Quality > 85)"], "green"); svg.append('rect').attr('x', 200).attr('y', 200).attr('width', 400).attr('height', 150).attr('fill', COLORS.purple).attr('stroke', COLORS.purpleBorder).attr('rx', 8); svg.append('text').attr('x', 400).attr('y', 235).attr('text-anchor', 'middle').attr('font-weight', 'bold').text("Token Budget Control (25%)"); drawArrow(svg, 250, 100, 300, 100); drawArrow(svg, 500, 100, 550, 100); drawArrow(svg, 400, 150, 400, 200); saveSVG(body, 'slide_05_injection_mechanism_ja.svg'); }
-function renderSlide06() { const { svg, body } = createSVG(800, 250); const steps = [{ n: "1. Run", c: "gray", x: 50 }, { n: "2. Agg", c: "blue", x: 235 }, { n: "3. Viz", c: "green", x: 420 }, { n: "4. Report", c: "purple", x: 605 }]; steps.forEach((s, i) => { drawBox(svg, s.x, 80, 145, 80, [s.n], s.c); if (i < 3) drawArrow(svg, s.x + 145, 120, s.x + 185, 120); }); saveSVG(body, 'slide_06_repro_pipeline_ja.svg'); }
-function renderSlide07() { const { svg, body } = createSVG(800, 350); const categories = [{ name: "日常語彙 (Daily)", count: 15, color: "blue", x: 100 }, { name: "技術用語 (Tech)", count: 20, color: "green", x: 350 }, { name: "曖昧/複雑 (Complex)", count: 15, color: "purple", x: 600 }]; categories.forEach(d => { svg.append('circle').attr('cx', d.x + 50).attr('cy', 150).attr('r', d.count * 3).attr('fill', COLORS[d.color]).attr('stroke', COLORS[d.color + 'Border']).attr('stroke-width', 2); drawBox(svg, d.x - 25, 230, 150, 60, [d.name], d.color); }); saveSVG(body, 'slide_07_benchmark_design_ja.svg'); }
-function renderSlide08() { const { svg, body } = createSVG(900, 500); const stats = [{ label: "Quality", val: "+1.88", sub: "p=0.0005", color: "blue" }, { label: "Cost", val: "+37%", sub: "Tokens", color: "orange" }, { label: "Efficiency", val: "4.88", sub: "pts/1k tok", color: "green" }]; stats.forEach((s, i) => drawBox(svg, 50 + i * 280, 50, 240, 100, [s.val, s.sub], s.color, s.label)); const caseY = 200; svg.append('rect').attr('x', 50).attr('y', caseY).attr('width', 800).attr('height', 250).attr('fill', '#fff').attr('stroke', '#333').attr('rx', 5); svg.append('text').attr('x', 70).attr('y', caseY + 30).attr('font-weight', 'bold').attr('font-size', '18px').text("Case Study: 'rollout'"); const caseText = ["Before (Baseline):", "  解説: 公開すること。 (Simple, dictionary-like)", "  After (Few-shot):", "  解説: DevOpsにおける段階的リリース... (Context-aware)"]; caseText.forEach((line, i) => { svg.append('text').attr('x', 70).attr('y', caseY + 60 + i * 25).attr('font-family', 'monospace').attr('font-size', '14px').attr('fill', line.includes("After") ? '#2E7D32' : (line.includes("Before") ? '#C62828' : '#333')).text(line); }); saveSVG(body, 'slide_08_core_results_with_case_ja.svg'); }
-function renderSlide09() { const { svg, body } = createSVG(800, 400); const data = [{ cat: "日常語彙 (Daily)", gain: 9.06, color: "blue" }, { cat: "曖昧/複雑 (Complex)", gain: 3.75, color: "green" }, { cat: "技術用語 (Tech)", gain: 2.33, color: "gray" }]; const xScale = d3.scaleBand().domain(data.map(d => d.cat)).range([100, 700]).padding(0.4); const yScale = d3.scaleLinear().domain([0, 10]).range([350, 50]); svg.append('line').attr('x1', 100).attr('y1', 350).attr('x2', 700).attr('y2', 350).attr('stroke', '#333'); svg.append('line').attr('x1', 100).attr('y1', yScale(5)).attr('x2', 700).attr('y2', yScale(5)).attr('stroke', 'red').attr('stroke-dasharray', '4,4').attr('stroke-width', 2); data.forEach(d => { svg.append('rect').attr('x', xScale(d.cat)).attr('y', yScale(d.gain)).attr('width', xScale.bandwidth()).attr('height', 350 - yScale(d.gain)).attr('fill', COLORS[d.color]); svg.append('text').attr('x', xScale(d.cat) + xScale.bandwidth()/2).attr('y', yScale(d.gain) - 10).attr('text-anchor', 'middle').attr('font-weight', 'bold').text(d.gain); svg.append('text').attr('x', xScale(d.cat) + xScale.bandwidth()/2).attr('y', 370).attr('text-anchor', 'middle').attr('font-size', '12px').text(d.cat); }); saveSVG(body, 'slide_09_category_insights_ja.svg'); }
-function renderSlide10() { const { svg, body } = createSVG(800, 400); const steps = [{ label: "Raw Delta", val: 7.33, y: 50, color: "gray" }, { label: "Length Bias", val: -5.45, y: 150, color: "red" }, { label: "True Quality", val: 1.88, y: 250, color: "green" }]; steps.forEach((step, i) => { drawBox(svg, 300, step.y, 200, 60, [`${step.val > 0 ? '+' : ''}${step.val}`], step.color, step.label); if (i < steps.length - 1) svg.append('line').attr('x1', 400).attr('y1', step.y + 60).attr('x2', 400).attr('y2', step.y + 100).attr('stroke', '#ccc').attr('stroke-width', 2).attr('stroke-dasharray', '4,4'); }); saveSVG(body, 'slide_10_limitations_onion_ja.svg'); }
-function renderSlide11() { const { svg, body } = createSVG(800, 450); const rows = [{ time: "30 Days", item: "Teacher Pool Expansion", risk: "Latency +200ms", color: "blue" }, { time: "60 Days", item: "Budget Relax (0.25)", risk: "Cost +15%", color: "green" }, { time: "90 Days", item: "LLM Evaluator", risk: "Eval Time x2", color: "purple" }]; rows.forEach((row, i) => { const y = 50 + i * 130; drawBox(svg, 50, y, 120, 100, [row.time], "gray"); drawBox(svg, 220, y, 300, 100, [row.item], row.color, "Initiative"); drawBox(svg, 570, y, 180, 100, [row.risk], "red", "Risk"); drawArrow(svg, 170, y+50, 220, y+50); drawArrow(svg, 520, y+50, 570, y+50); }); saveSVG(body, 'slide_11_roadmap_risk_ja.svg'); }
-function renderSlide12() { const { svg, body } = createSVG(800, 400); const pillars = [{ n: "Observability", d: "全生成の構造化記録", c: "blue", x: 50 }, { n: "Traceability", d: "実験IDによる完全追跡", c: "green", x: 300 }, { n: "Reproducibility", d: "ワンクリック再現", c: "purple", x: 550 }]; pillars.forEach(d => drawBox(svg, d.x, 100, 200, 200, [d.n, "", d.d], d.c)); saveSVG(body, 'slide_12_engineering_value_ja.svg'); }
-function renderSlide13() { const { svg, body } = createSVG(600, 600); svg.append('line').attr('x1', 50).attr('y1', 550).attr('x2', 550).attr('y2', 550).attr('stroke', '#333').attr('stroke-width', 2); svg.append('line').attr('x1', 50).attr('y1', 550).attr('x2', 50).attr('y2', 50).attr('stroke', '#333').attr('stroke-width', 2); svg.append('line').attr('x1', 300).attr('y1', 50).attr('x2', 300).attr('y2', 550).attr('stroke', '#ddd').attr('stroke-dasharray', '4,4'); svg.append('line').attr('x1', 50).attr('y1', 300).attr('x2', 550).attr('y2', 300).attr('stroke', '#ddd').attr('stroke-dasharray', '4,4'); const items = [{ name: "Budget Relax", x: 150, y: 150, color: "green" }, { name: "Teacher Pool", x: 450, y: 100, color: "blue" }, { name: "LLM Eval", x: 450, y: 200, color: "blue" }, { name: "Rule Fixes", x: 150, y: 450, color: "gray" }, { name: "Blind Fewshot", x: 450, y: 450, color: "red" }]; items.forEach(d => { svg.append('circle').attr('cx', d.x).attr('cy', d.y).attr('r', 10).attr('fill', COLORS[d.color]); svg.append('text').attr('x', d.x).attr('y', d.y - 15).attr('text-anchor', 'middle').attr('font-size', '12px').text(d.name); }); saveSVG(body, 'slide_13_investment_matrix_ja.svg'); }
+function renderSlide05() {
+  const { svg, body } = createCanvas('few-shot注入メカニズム', '検索・選別・予算制御・フォールバック');
+
+  const stages = [
+    { x: 60, title: '入力フレーズ', lines: ['例: rollout'], theme: 'gray' },
+    { x: 330, title: '類似検索', lines: ['Teacher候補を取得'], theme: 'blue' },
+    { x: 600, title: '品質選別', lines: ['下限スコア / 類似度'], theme: 'green' },
+    { x: 870, title: '予算判定', lines: ['token比率 0.18-0.25'], theme: 'purple' }
+  ];
+  stages.forEach((s, idx) => {
+    card(svg, { x: s.x, y: 190, w: 220, h: 130, theme: s.theme, title: s.title, lines: s.lines });
+    if (idx < stages.length - 1) arrow(svg, s.x + 220, 255, stages[idx + 1].x, 255);
+  });
+
+  card(svg, {
+    x: 180,
+    y: 400,
+    w: 920,
+    h: 210,
+    theme: 'orange',
+    title: 'フォールバック経路',
+    lines: ['1) 例示数を削減  →  2) 例示本文を短縮  →  3) 注入停止してbaselineへ回帰', 'budget_exceeded_disable を観測指標として保存']
+  });
+  arrow(svg, 980, 320, 640, 400, '超過時');
+
+  footer(svg, 'Source: goldenExamplesService + token budget logic');
+  saveSvg(body, 'slide_05_injection_mechanism_ja.svg');
+}
+
+function renderSlide06() {
+  const { svg, body } = createCanvas('ワンクリック再現パイプライン', 'Run -> Aggregate -> Visualize -> Report');
+
+  const steps = [
+    { t: '実験実行', d: 'ラウンド生成', c: 'gray' },
+    { t: '集計', d: 'KPI抽出', c: 'blue' },
+    { t: '可視化', d: 'SVG生成', c: 'green' },
+    { t: '報告', d: 'レポート出力', c: 'purple' }
+  ];
+
+  steps.forEach((s, idx) => {
+    const x = 80 + idx * 300;
+    card(svg, { x, y: 260, w: 230, h: 170, theme: s.c, title: `Step ${idx + 1}: ${s.t}`, lines: [s.d] });
+    if (idx < steps.length - 1) arrow(svg, x + 230, 345, x + 300, 345);
+  });
+
+  card(svg, {
+    x: 160,
+    y: 500,
+    w: 960,
+    h: 120,
+    theme: 'orange',
+    title: '再現性の定義',
+    lines: ['同じ入力セット・同じ設定で、同じ統計サマリーと同じ結論が再取得できること']
+  });
+
+  footer(svg, 'Source: experiment scripts + reporting pipeline');
+  saveSvg(body, 'slide_06_repro_pipeline_ja.svg');
+}
+
+function renderSlide07() {
+  const { svg, body } = createCanvas('50サンプルベンチマーク設計', `実験ID: ${BENCHMARK_ID}`);
+
+  const data = [
+    { name: '日常語彙', count: 15, color: 'blue' },
+    { name: '技術用語', count: 20, color: 'green' },
+    { name: '曖昧/複雑', count: 15, color: 'purple' }
+  ];
+
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  let start = -Math.PI / 2;
+  const cx = 380;
+  const cy = 370;
+  const r = 180;
+
+  data.forEach((d) => {
+    const angle = (d.count / total) * Math.PI * 2;
+    const arc = d3.arc().innerRadius(70).outerRadius(r).startAngle(start).endAngle(start + angle);
+    svg
+      .append('path')
+      .attr('d', arc())
+      .attr('transform', `translate(${cx},${cy})`)
+      .attr('fill', PALETTE[d.color].fill)
+      .attr('stroke', PALETTE[d.color].stroke)
+      .attr('stroke-width', 2);
+
+    const mid = start + angle / 2;
+    const tx = cx + Math.cos(mid) * 225;
+    const ty = cy + Math.sin(mid) * 225;
+    svg
+      .append('text')
+      .attr('x', tx)
+      .attr('y', ty)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', FONT.family)
+      .attr('font-size', 18)
+      .attr('font-weight', 700)
+      .attr('fill', PALETTE[d.color].title)
+      .text(`${d.name} ${d.count}件`);
+
+    start += angle;
+  });
+
+  svg
+    .append('text')
+    .attr('x', cx)
+    .attr('y', cy - 8)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', FONT.mono)
+    .attr('font-size', 34)
+    .attr('font-weight', 800)
+    .attr('fill', '#0F172A')
+    .text('50');
+  svg
+    .append('text')
+    .attr('x', cx)
+    .attr('y', cy + 26)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', FONT.family)
+    .attr('font-size', 16)
+    .attr('fill', PALETTE.muted)
+    .text('総サンプル数');
+
+  card(svg, {
+    x: 760,
+    y: 220,
+    w: 430,
+    h: 240,
+    theme: 'gray',
+    title: '設計ポイント',
+    lines: ['・カテゴリ偏りを抑えた配分', '・口語/技術/複雑表現を網羅', '・few-shot効果の偏りを検証可能']
+  });
+
+  footer(svg, 'Source: benchmark_phrases_50.txt');
+  saveSvg(body, 'slide_07_benchmark_design_ja.svg');
+}
+
+function renderSlide08() {
+  const { svg, body } = createCanvas('コア結果：50サンプル比較', 'few-shotの改善量とコスト増を同時提示');
+
+  const qualityBefore = Number(baselineRound.avgQualityScore || 0);
+  const qualityAfter = Number(fewshotRound.avgQualityScore || 0);
+  const tokensBefore = Number(baselineRound.avgTokensTotal || 0);
+  const tokensAfter = Number(fewshotRound.avgTokensTotal || 0);
+
+  const qScale = d3.scaleLinear().domain([0, 90]).range([0, 260]);
+  const tScale = d3.scaleLinear().domain([0, Math.max(tokensAfter, tokensBefore, 1500)]).range([0, 260]);
+
+  card(svg, { x: 60, y: 150, w: 560, h: 230, theme: 'blue', title: '品質スコア', lines: [`Baseline: ${num(qualityBefore, 2)}`, `Few-shot: ${num(qualityAfter, 2)}`, `差分: +${num(qualityAfter - qualityBefore, 2)}`] });
+  svg.append('rect').attr('x', 300).attr('y', 230).attr('width', qScale(qualityBefore)).attr('height', 24).attr('fill', '#93C5FD');
+  svg.append('rect').attr('x', 300).attr('y', 270).attr('width', qScale(qualityAfter)).attr('height', 24).attr('fill', '#2563EB');
+
+  card(svg, { x: 660, y: 150, w: 560, h: 230, theme: 'orange', title: 'トークン量', lines: [`Baseline: ${num(tokensBefore, 0)}`, `Few-shot: ${num(tokensAfter, 0)}`, `増加率: ${pct(((tokensAfter - tokensBefore) / tokensBefore) * 100, 1)}`] });
+  svg.append('rect').attr('x', 900).attr('y', 230).attr('width', tScale(tokensBefore)).attr('height', 24).attr('fill', '#FDBA74');
+  svg.append('rect').attr('x', 900).attr('y', 270).attr('width', tScale(tokensAfter)).attr('height', 24).attr('fill', '#EA580C');
+
+  card(svg, {
+    x: 60,
+    y: 430,
+    w: 1160,
+    h: 210,
+    theme: 'green',
+    title: 'ケース例: rollout',
+    lines: ['Before: 辞書的で硬い説明、文脈が薄い', 'After: DevOps文脈を含む口語的な説明へ改善', '体感価値: 「辞書」→「文脈理解アシスタント」']
+  });
+
+  footer(svg, `Source: round metrics + p-value ${num(statSig.pValue, 4)}`);
+  saveSvg(body, 'slide_08_core_results_with_case_ja.svg');
+}
+
+function renderSlide09() {
+  const { svg, body } = createCanvas('カテゴリ洞察：効果の偏り', 'Gain per 1k tokens のカテゴリ差');
+
+  const data = [
+    { cat: '日常語彙', gain: 9.06, theme: 'blue' },
+    { cat: '曖昧/複雑', gain: 3.75, theme: 'green' },
+    { cat: '技術用語', gain: 2.33, theme: 'gray' }
+  ];
+
+  const x = d3.scaleBand().domain(data.map((d) => d.cat)).range([120, 840]).padding(0.35);
+  const y = d3.scaleLinear().domain([0, 10]).range([560, 180]);
+
+  svg.append('line').attr('x1', 120).attr('y1', 560).attr('x2', 860).attr('y2', 560).attr('stroke', '#334155').attr('stroke-width', 2);
+  svg.append('line').attr('x1', 120).attr('y1', y(5)).attr('x2', 860).attr('y2', y(5)).attr('stroke', '#DC2626').attr('stroke-width', 2).attr('stroke-dasharray', '6,6');
+  svg.append('text').attr('x', 870).attr('y', y(5) + 5).attr('font-family', FONT.mono).attr('font-size', 14).attr('fill', '#DC2626').text('しきい値 5.0');
+
+  data.forEach((d) => {
+    const bw = x.bandwidth();
+    svg
+      .append('rect')
+      .attr('x', x(d.cat))
+      .attr('y', y(d.gain))
+      .attr('width', bw)
+      .attr('height', 560 - y(d.gain))
+      .attr('rx', 8)
+      .attr('fill', PALETTE[d.theme].stroke);
+    svg
+      .append('text')
+      .attr('x', x(d.cat) + bw / 2)
+      .attr('y', y(d.gain) - 10)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', FONT.mono)
+      .attr('font-size', 20)
+      .attr('font-weight', 700)
+      .attr('fill', '#0F172A')
+      .text(num(d.gain, 2));
+    svg
+      .append('text')
+      .attr('x', x(d.cat) + bw / 2)
+      .attr('y', 590)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', FONT.family)
+      .attr('font-size', 18)
+      .attr('fill', '#334155')
+      .text(d.cat);
+  });
+
+  card(svg, {
+    x: 910,
+    y: 220,
+    w: 300,
+    h: 300,
+    theme: 'orange',
+    title: '解釈',
+    lines: ['・日常語彙は高効率', '・技術用語は効果限定', '・適用対象の選別が必要']
+  });
+
+  footer(svg, 'Source: benchmark report category summary');
+  saveSvg(body, 'slide_09_category_insights_ja.svg');
+}
+
+function renderSlide10() {
+  const { svg, body } = createCanvas('自己批判：品質増分の分解', '見かけの差分と実質改善を分離');
+
+  const rows = [
+    { label: 'Raw Delta', value: 7.33, theme: 'gray' },
+    { label: 'Length Bias', value: -5.45, theme: 'red' },
+    { label: 'True Quality', value: 1.88, theme: 'green' }
+  ];
+
+  rows.forEach((row, idx) => {
+    card(svg, {
+      x: 280,
+      y: 170 + idx * 170,
+      w: 720,
+      h: 120,
+      theme: row.theme,
+      title: `${idx + 1}. ${row.label}`,
+      lines: [`寄与値: ${row.value > 0 ? '+' : ''}${num(row.value, 2)}`]
+    });
+    if (idx < rows.length - 1) {
+      arrow(svg, 640, 290 + idx * 170, 640, 340 + idx * 170);
+    }
+  });
+
+  card(svg, {
+    x: 60,
+    y: 240,
+    w: 180,
+    h: 210,
+    theme: 'blue',
+    title: '結論',
+    lines: ['見かけ値ではなく', '補正後の値を', '主要判断に使う']
+  });
+
+  footer(svg, 'Source: benchmark bias analysis');
+  saveSvg(body, 'slide_10_limitations_onion_ja.svg');
+}
+
+function renderSlide11() {
+  const { svg, body } = createCanvas('最適化ロードマップ：効果とリスク', '30/60/90日で段階導入');
+
+  const items = [
+    { term: '30日', plan: 'Teacherプール拡張', effect: '品質 +2〜3', risk: '類似検索 +200ms', c: 'blue', y: 170 },
+    { term: '60日', plan: '予算配分緩和', effect: 'fallback減少', risk: '月間コスト +15%', c: 'green', y: 320 },
+    { term: '90日', plan: 'LLM評価導入', effect: '評価精度向上', risk: '評価時間 x2', c: 'purple', y: 470 }
+  ];
+
+  items.forEach((item) => {
+    card(svg, { x: 60, y: item.y, w: 130, h: 100, theme: 'gray', title: item.term, lines: [] });
+    card(svg, { x: 230, y: item.y, w: 340, h: 100, theme: item.c, title: '方針', lines: [item.plan] });
+    card(svg, { x: 610, y: item.y, w: 250, h: 100, theme: 'green', title: '期待効果', lines: [item.effect] });
+    card(svg, { x: 900, y: item.y, w: 320, h: 100, theme: 'red', title: '潜在リスク', lines: [item.risk] });
+    arrow(svg, 190, item.y + 50, 230, item.y + 50);
+    arrow(svg, 570, item.y + 50, 610, item.y + 50);
+    arrow(svg, 860, item.y + 50, 900, item.y + 50);
+  });
+
+  footer(svg, 'Source: optimization roadmap design');
+  saveSvg(body, 'slide_11_roadmap_risk_ja.svg');
+}
+
+function renderSlide12() {
+  const { svg, body } = createCanvas('エンジニアリング価値', 'Observability + Traceability + Reproducibility');
+
+  const pillars = [
+    { t: 'Observability', d: '全生成の構造化記録', c: 'blue', x: 90 },
+    { t: 'Traceability', d: '実験IDで完全追跡', c: 'green', x: 450 },
+    { t: 'Reproducibility', d: '自動実行で再現', c: 'purple', x: 810 }
+  ];
+
+  pillars.forEach((p, idx) => {
+    card(svg, { x: p.x, y: 210, w: 300, h: 230, theme: p.c, title: p.t, lines: [p.d] });
+    if (idx < pillars.length - 1) arrow(svg, p.x + 300, 325, pillars[idx + 1].x, 325);
+  });
+
+  card(svg, {
+    x: 150,
+    y: 500,
+    w: 980,
+    h: 130,
+    theme: 'orange',
+    title: '開発効果',
+    lines: ['品質改善施策を、計測可能・比較可能・再実行可能な単位で運用できる']
+  });
+
+  footer(svg, 'Source: production observability implementation');
+  saveSvg(body, 'slide_12_engineering_value_ja.svg');
+}
+
+function renderSlide13() {
+  const { svg, body } = createCanvas('投資優先マトリクス', '縦軸: 品質効果 / 横軸: 実装難易度');
+
+  const left = 130;
+  const top = 150;
+  const width = 850;
+  const height = 470;
+
+  svg.append('rect').attr('x', left).attr('y', top).attr('width', width).attr('height', height).attr('fill', '#FFFFFF').attr('stroke', '#CBD5E1');
+  svg.append('line').attr('x1', left + width / 2).attr('y1', top).attr('x2', left + width / 2).attr('y2', top + height).attr('stroke', '#CBD5E1').attr('stroke-dasharray', '7,6');
+  svg.append('line').attr('x1', left).attr('y1', top + height / 2).attr('x2', left + width).attr('y2', top + height / 2).attr('stroke', '#CBD5E1').attr('stroke-dasharray', '7,6');
+
+  svg.append('text').attr('x', left + width / 2).attr('y', top + height + 48).attr('text-anchor', 'middle').attr('font-family', FONT.family).attr('font-size', 20).attr('fill', '#334155').text('実装難易度 →');
+  svg.append('text').attr('transform', `translate(${left - 74}, ${top + height / 2}) rotate(-90)`).attr('text-anchor', 'middle').attr('font-family', FONT.family).attr('font-size', 20).attr('fill', '#334155').text('品質効果 →');
+
+  const points = [
+    { x: 280, y: 270, label: '予算配分緩和', c: 'green' },
+    { x: 650, y: 230, label: 'Teacherプール拡張', c: 'blue' },
+    { x: 760, y: 330, label: 'LLM評価導入', c: 'purple' },
+    { x: 260, y: 510, label: 'ルール微修正', c: 'gray' },
+    { x: 760, y: 520, label: '無差別few-shot', c: 'red' }
+  ];
+
+  points.forEach((p) => {
+    svg.append('circle').attr('cx', p.x).attr('cy', p.y).attr('r', 16).attr('fill', PALETTE[p.c].fill).attr('stroke', PALETTE[p.c].stroke).attr('stroke-width', 2);
+    svg.append('text').attr('x', p.x + 24).attr('y', p.y + 5).attr('font-family', FONT.family).attr('font-size', 16).attr('fill', '#0F172A').text(p.label);
+  });
+
+  card(svg, {
+    x: 1010,
+    y: 210,
+    w: 220,
+    h: 260,
+    theme: 'green',
+    title: '推奨順位',
+    lines: ['1) 予算配分緩和', '2) Teacherプール拡張', '3) LLM評価導入']
+  });
+
+  footer(svg, 'Source: roadmap assumptions + benchmark outcomes');
+  saveSvg(body, 'slide_13_investment_matrix_ja.svg');
+}
 
 function main() {
-  console.log("Generating Japanese Slides Charts (TRUE FULL VERSION)...");
-  renderSlide01(); renderSlide02(); renderSlide03(); renderSlide04();
-  renderSlide04a(); renderSlide04b(); renderSlide04c(); renderSlide04d();
-  renderSlide05(); renderSlide06(); renderSlide07(); renderSlide08();
-  renderSlide09(); renderSlide10(); renderSlide11(); renderSlide12();
+  console.log('Generating localized JP slide charts...');
+  renderSlide01();
+  renderSlide02();
+  renderSlide03();
+  renderSlide04();
+  renderSlide04a();
+  renderSlide04b();
+  renderSlide04c();
+  renderSlide04d();
+  renderSlide05();
+  renderSlide06();
+  renderSlide07();
+  renderSlide08();
+  renderSlide09();
+  renderSlide10();
+  renderSlide11();
+  renderSlide12();
   renderSlide13();
-  console.log("Mission accomplished. All placeholders replaced with real visualizations.");
+  console.log('Done.');
 }
+
 main();
