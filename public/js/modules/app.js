@@ -254,6 +254,45 @@ function finishSetup() {
 // 文件夹与文件浏览
 // ==========================================
 
+function parseDateFolderKey(name) {
+    const match = name.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+
+    if (
+        Number.isNaN(date.getTime()) ||
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+    ) {
+        return null;
+    }
+
+    return year * 10000 + month * 100 + day;
+}
+
+function pickDefaultFolder(folders) {
+    if (!Array.isArray(folders) || !folders.length) return null;
+
+    let latestDateFolder = null;
+    let latestDateKey = -1;
+
+    folders.forEach(name => {
+        const key = parseDateFolderKey(name);
+        if (key !== null && key > latestDateKey) {
+            latestDateKey = key;
+            latestDateFolder = name;
+        }
+    });
+
+    if (latestDateFolder) return latestDateFolder;
+    return [...folders].sort((a, b) => b.localeCompare(a))[0];
+}
+
 async function loadFolders(options = {}) {
     const { keepSelection = false, refreshFiles = false, targetSelect = null, noCache = false } = options;
     const state = store.get();
@@ -261,22 +300,24 @@ async function loadFolders(options = {}) {
     try {
         const data = await api.getFolders(noCache);
         const folders = data.folders || [];
+        const hasValidSelected = Boolean(state.selectedFolder && folders.includes(state.selectedFolder));
         
         store.setState({ folders });
         els.folderCount.textContent = folders.length;
         
         renderFolders();
 
-        let folderToSelect = folders[0];
+        let folderToSelect = pickDefaultFolder(folders);
         if (targetSelect && folders.includes(targetSelect)) {
             folderToSelect = targetSelect;
-        } else if (keepSelection && state.selectedFolder && folders.includes(state.selectedFolder)) {
+        } else if (keepSelection && hasValidSelected) {
             folderToSelect = state.selectedFolder;
         }
 
-        if ((targetSelect || !keepSelection || (keepSelection && !state.selectedFolder)) && folderToSelect) {
+        const shouldSelectFolder = Boolean(folderToSelect) && (targetSelect || !keepSelection || !hasValidSelected);
+        if (shouldSelectFolder) {
             await selectFolder(folderToSelect, { noCache });
-        } else if (refreshFiles && state.selectedFolder) {
+        } else if (refreshFiles && hasValidSelected) {
             await loadFiles(state.selectedFolder, { noCache });
         }
     } catch (err) {
@@ -1373,7 +1414,7 @@ function renderCardModal(markdown, title, options = {}) {
                         throw new Error('Cannot identify record to delete');
                     }
                     closeModal();
-                    loadFolders({ refreshFiles: true, noCache: true });
+                    loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
                 } catch (e) {
                     alert('Delete failed: ' + e.message);
                 }
@@ -1797,8 +1838,6 @@ function renderHistory(records) {
                 const res = await api.getHistoryDetail(id);
                 const record = res.record;
                 const mdContent = await api.getFileContent(record.folder_name, record.base_filename + '.md');
-                // 模拟选中文件夹以支持音频播放
-                store.setState({ selectedFolder: record.folder_name });
                 renderCardModal(mdContent, record.phrase, {
                     folder: record.folder_name,
                     baseName: record.base_filename,
@@ -1845,7 +1884,7 @@ async function deleteHistoryRecord(id) {
         await api.deleteRecord(id);
         // 刷新列表
         loadHistory({ noCache: true });
-        loadFolders({ refreshFiles: true, noCache: true });
+        loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
         els.contextMenu.classList.add('hidden');
     } catch (err) {
         alert('删除失败: ' + err.message);

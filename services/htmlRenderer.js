@@ -71,6 +71,13 @@ async function normalizeJapaneseRuby(markdown) {
       continue;
     }
 
+    // Do not mutate existing HTML fragments (e.g. audio tags), otherwise
+    // filenames/attributes can be corrupted by ruby conversion.
+    if (/<[^>]+>/.test(line)) {
+      output.push(line);
+      continue;
+    }
+
     const hasKanji = /[\u3400-\u9FFF々〆ヵヶ]/.test(line);
     if (!hasKanji) {
       output.push(line);
