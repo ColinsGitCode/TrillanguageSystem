@@ -16,7 +16,7 @@ services:
       - OCR_LANGS=eng+jpn+chi_sim
       - OCR_TIMEOUT_MS=20000
       - GEMINI_MODE=host-proxy
-      - GEMINI_PROXY_URL=${GEMINI_PROXY_URL:-http://host.docker.internal:18888/api/gemini}
+      - GEMINI_PROXY_URL=http://host.docker.internal:18888/api/gemini
       - GEMINI_PROXY_AUTH_MODE=${GEMINI_PROXY_AUTH_MODE:-apikey}
       - GEMINI_PROXY_API_KEY=${GEMINI_PROXY_API_KEY:-}
       - GEMINI_PROXY_SOURCE_APP=${GEMINI_PROXY_SOURCE_APP:-tri-lang-learning-system}
@@ -26,6 +26,7 @@ services:
       - GEMINI_PROXY_REQUEST_TIMEOUT_MS=${GEMINI_PROXY_REQUEST_TIMEOUT_MS:-120000}
       - GEMINI_PROXY_EXECUTION_TIMEOUT_MS=${GEMINI_PROXY_EXECUTION_TIMEOUT_MS:-100000}
       - GEMINI_PROXY_PARAM_POLICY=${GEMINI_PROXY_PARAM_POLICY:-strict}
+      - GEMINI_PROXY_ENFORCE_GATEWAY=${GEMINI_PROXY_ENFORCE_GATEWAY:-true}
       - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
       - TTS_EN_TYPE=kokoro
       - TTS_EN_SPEED=1.0

@@ -18,6 +18,7 @@ const geminiAuthService = require('./services/geminiAuthService');
 const goldenExamplesService = require('./services/goldenExamplesService');
 const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
+const exampleReviewService = require('./services/exampleReviewService');
 const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -213,16 +214,43 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
 
   const reqFewShot = options.fewshotOptions || {};
   const envFewshotEnabled = String(process.env.ENABLE_GOLDEN_EXAMPLES || '').toLowerCase() === 'true';
+  const envGeminiFewshotEnabled = String(process.env.ENABLE_GEMINI_FEWSHOT || '').toLowerCase() === 'true';
   const enabledOverride = typeof reqFewShot.enabled === 'boolean' ? reqFewShot.enabled : null;
+  const providerFewshotEnabled = provider === 'local'
+    ? envFewshotEnabled
+    : provider === 'gemini'
+      ? envGeminiFewshotEnabled
+      : false;
+  const providerDefaultCount = provider === 'gemini'
+    ? (reqFewShot.count ?? process.env.GEMINI_FEWSHOT_COUNT ?? process.env.GOLDEN_EXAMPLES_COUNT ?? 2)
+    : (reqFewShot.count ?? process.env.GOLDEN_EXAMPLES_COUNT ?? 3);
+  const providerDefaultMinScore = provider === 'gemini'
+    ? (reqFewShot.minScore ?? process.env.GEMINI_FEWSHOT_MIN_SCORE ?? process.env.GOLDEN_EXAMPLES_MIN_SCORE ?? 85)
+    : (reqFewShot.minScore ?? process.env.GOLDEN_EXAMPLES_MIN_SCORE ?? 85);
+  const providerTokenBudgetRatio = provider === 'gemini'
+    ? (reqFewShot.tokenBudgetRatio ?? process.env.GEMINI_FEWSHOT_TOKEN_BUDGET_RATIO ?? process.env.FEWSHOT_TOKEN_BUDGET_RATIO ?? 0.15)
+    : (reqFewShot.tokenBudgetRatio ?? process.env.FEWSHOT_TOKEN_BUDGET_RATIO ?? 0.25);
+  const providerExampleMaxChars = provider === 'gemini'
+    ? (reqFewShot.exampleMaxChars ?? process.env.GEMINI_FEWSHOT_EXAMPLE_MAX_CHARS ?? process.env.GOLDEN_EXAMPLE_MAX_CHARS ?? 700)
+    : (reqFewShot.exampleMaxChars ?? process.env.GOLDEN_EXAMPLE_MAX_CHARS ?? 900);
+  const reviewGatedDefault = String(process.env.ENABLE_REVIEW_GATED_FEWSHOT || '').toLowerCase() === 'true';
   const fewShotConfig = {
-      enabled: provider === 'local' && (enabledOverride !== null ? enabledOverride : envFewshotEnabled),
+      enabled: (provider === 'local' || provider === 'gemini') && (enabledOverride !== null ? enabledOverride : providerFewshotEnabled),
       strategy: reqFewShot.strategy || process.env.GOLDEN_EXAMPLES_STRATEGY || 'HIGH_QUALITY_GEMINI',
-      count: toNumberOr(reqFewShot.count ?? process.env.GOLDEN_EXAMPLES_COUNT ?? 3, 3),
-      minScore: toNumberOr(reqFewShot.minScore ?? process.env.GOLDEN_EXAMPLES_MIN_SCORE ?? 85, 85),
+      count: toNumberOr(providerDefaultCount, provider === 'gemini' ? 2 : 3),
+      minScore: toNumberOr(providerDefaultMinScore, 85),
       contextWindow: toNumberOr(reqFewShot.contextWindow ?? process.env.LLM_CONTEXT_WINDOW ?? 4096, 4096),
-      tokenBudgetRatio: toNumberOr(reqFewShot.tokenBudgetRatio ?? process.env.FEWSHOT_TOKEN_BUDGET_RATIO ?? 0.25, 0.25),
-      exampleMaxChars: toNumberOr(reqFewShot.exampleMaxChars ?? process.env.GOLDEN_EXAMPLE_MAX_CHARS ?? 900, 900),
-      teacherFirst: reqFewShot.teacherFirst !== false
+      tokenBudgetRatio: toNumberOr(providerTokenBudgetRatio, provider === 'gemini' ? 0.15 : 0.25),
+      exampleMaxChars: toNumberOr(providerExampleMaxChars, provider === 'gemini' ? 700 : 900),
+      teacherFirst: reqFewShot.teacherFirst !== false,
+      provider: String(reqFewShot.provider || (provider === 'gemini'
+        ? process.env.GEMINI_FEWSHOT_PROVIDER || 'gemini'
+        : process.env.GOLDEN_EXAMPLES_PROVIDER || 'gemini')).trim().toLowerCase(),
+      reviewGated: typeof reqFewShot.reviewGated === 'boolean' ? reqFewShot.reviewGated : reviewGatedDefault,
+      reviewOnly: typeof reqFewShot.reviewOnly === 'boolean'
+        ? reqFewShot.reviewOnly
+        : String(process.env.REVIEW_GATED_FEWSHOT_ONLY || '').toLowerCase() === 'true',
+      reviewMinOverall: toNumberOr(reqFewShot.reviewMinOverall ?? process.env.REVIEW_GATE_MIN_OVERALL ?? 4.2, 4.2)
   };
 
   const basePromptTokens = TokenCounter.estimate(prompt);
@@ -235,6 +263,10 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
       contextWindow: fewShotConfig.contextWindow,
       tokenBudgetRatio: fewShotConfig.tokenBudgetRatio,
       exampleMaxChars: fewShotConfig.exampleMaxChars,
+      provider: fewShotConfig.provider,
+      reviewGated: fewShotConfig.reviewGated,
+      reviewOnly: fewShotConfig.reviewOnly,
+      reviewMinOverall: fewShotConfig.reviewMinOverall,
       basePromptTokens,
       fewshotPromptTokens: 0,
       totalPromptTokensEst: basePromptTokens,
@@ -248,11 +280,15 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
       const outputMode = useMarkdownOutput ? 'markdown' : 'json';
       let examples = await goldenExamplesService.getRelevantExamples(phrase, fewShotConfig.count, {
           outputMode,
+          provider: fewShotConfig.provider,
           minQualityScore: fewShotConfig.minScore,
           experimentId: options.experimentId || '',
           roundNumber: options.experimentRound || 0,
           maxOutputChars: fewShotConfig.exampleMaxChars,
-          teacherFirst: fewShotConfig.teacherFirst
+          teacherFirst: fewShotConfig.teacherFirst,
+          reviewGated: fewShotConfig.reviewGated,
+          reviewOnly: fewShotConfig.reviewOnly,
+          reviewMinOverall: fewShotConfig.reviewMinOverall
       });
       let enhancedPrompt = prompt;
       let fallbackReason = null;
@@ -396,6 +432,10 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
           contextWindow: fewShotMeta.contextWindow,
           tokenBudgetRatio: fewShotMeta.tokenBudgetRatio,
           exampleMaxChars: fewShotMeta.exampleMaxChars,
+          provider: fewShotMeta.provider,
+          reviewGated: fewShotMeta.reviewGated,
+          reviewOnly: fewShotMeta.reviewOnly,
+          reviewMinOverall: fewShotMeta.reviewMinOverall,
           basePromptTokens: fewShotMeta.basePromptTokens,
           fewshotPromptTokens: fewShotMeta.fewshotPromptTokens,
           totalPromptTokensEst: fewShotMeta.totalPromptTokensEst,
@@ -518,6 +558,17 @@ async function handleComparisonMode(phrase, options = {}) {
           audioTasks: content.audio_tasks
         });
         const generationId = dbService.insertGeneration(dbData);
+        try {
+          exampleReviewService.ingestGeneration({
+            generationId,
+            phrase,
+            markdownContent: content.markdown_content,
+            folderName,
+            baseFilename: fileResult.baseName
+          });
+        } catch (reviewErr) {
+          console.warn('[Review] ingest generation failed:', reviewErr.message);
+        }
         if (generationId) {
           try {
             const fewShot = genValue.fewShot || {};
@@ -766,6 +817,17 @@ app.post('/api/generate', async (req, res) => {
       });
 
       generationId = dbService.insertGeneration(dbData);
+      try {
+        exampleReviewService.ingestGeneration({
+          generationId,
+          phrase,
+          markdownContent: content.markdown_content,
+          folderName,
+          baseFilename: result.baseName
+        });
+      } catch (reviewErr) {
+        console.warn('[Review] ingest generation failed:', reviewErr.message);
+      }
       console.log('[Database] Inserted generation:', generationId);
     } catch (dbError) {
       console.error('[Database] Insert failed:', dbError.message);
@@ -1105,6 +1167,111 @@ app.get('/api/recent', (req, res) => {
         console.error('[API /recent] Error:', e);
         res.status(500).json({ error: e.message });
     }
+});
+
+// ========== 例句评审与注入门控 API ==========
+
+app.get('/api/review/campaigns', (req, res) => {
+  try {
+    const campaigns = exampleReviewService.getCampaigns();
+    res.json({ success: true, campaigns });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/review/campaigns/active', (req, res) => {
+  try {
+    const campaign = exampleReviewService.getActiveCampaign();
+    if (!campaign) return res.json({ success: true, campaign: null });
+    const progress = exampleReviewService.getCampaignProgress(campaign.id);
+    res.json({ success: true, campaign: progress || campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/campaigns', (req, res) => {
+  try {
+    const { name, createdBy, notes } = req.body || {};
+    const campaign = exampleReviewService.createCampaign({ name, createdBy, notes });
+    res.json({ success: true, campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/review/campaigns/:id/progress', (req, res) => {
+  try {
+    const progress = exampleReviewService.getCampaignProgress(Number(req.params.id));
+    if (!progress) return res.status(404).json({ error: 'Campaign not found' });
+    res.json({ success: true, progress });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/campaigns/:id/finalize', (req, res) => {
+  try {
+    const campaignId = Number(req.params.id);
+    const progress = exampleReviewService.finalizeCampaign(campaignId, req.body || {});
+    res.json({ success: true, progress });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/backfill', (req, res) => {
+  try {
+    const { limit = 0 } = req.body || {};
+    const result = exampleReviewService.backfillMissingGenerations(Number(limit || 0));
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/review/generations/:id/examples', (req, res) => {
+  try {
+    const generationId = Number(req.params.id);
+    if (!generationId) return res.status(400).json({ error: 'Invalid generation id' });
+    const campaignId = req.query.campaignId ? Number(req.query.campaignId) : null;
+    const reviewer = String(req.query.reviewer || process.env.REVIEW_DEFAULT_REVIEWER || 'owner');
+    const examples = exampleReviewService.getGenerationExamples(generationId, { campaignId, reviewer });
+    res.json({ success: true, examples });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/examples/:id/reviews', (req, res) => {
+  try {
+    const exampleId = Number(req.params.id);
+    const {
+      campaignId = null,
+      reviewer = process.env.REVIEW_DEFAULT_REVIEWER || 'owner',
+      scoreSentence,
+      scoreTranslation,
+      scoreTts,
+      decision = 'neutral',
+      comment = ''
+    } = req.body || {};
+
+    const result = exampleReviewService.upsertReview({
+      exampleId,
+      campaignId,
+      reviewer,
+      scoreSentence,
+      scoreTranslation,
+      scoreTts,
+      decision,
+      comment
+    });
+
+    res.json({ success: true, review: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.get('/api/folders', (req, res) => {

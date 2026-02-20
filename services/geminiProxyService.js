@@ -36,7 +36,7 @@ function isTimeoutLikeError(message) {
 
 function isRetriableError(message) {
   const text = String(message || '');
-  return isTimeoutLikeError(text) || /Gemini proxy error \(5\d\d\)/.test(text);
+  return isTimeoutLikeError(text) || /Gemini proxy error \(5\d\d\)|fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(text);
 }
 
 function maybeTrim(value) {
@@ -51,6 +51,40 @@ function looksLikeGateway18888(url) {
   } catch (err) {
     return false;
   }
+}
+
+function rewriteHost(url, newHost) {
+  try {
+    const parsed = new URL(url);
+    parsed.hostname = newHost;
+    return parsed.toString();
+  } catch (err) {
+    return url;
+  }
+}
+
+function buildUrlCandidates(url, options = {}) {
+  const candidates = [url];
+  const preferIpv4 = parseBoolean(options.preferIpv4 ?? process.env.GEMINI_PROXY_PREFER_IPV4, true);
+  if (!preferIpv4) return candidates;
+
+  try {
+    const parsed = new URL(url);
+    const host = (parsed.hostname || '').trim().toLowerCase();
+    if (!['host.docker.internal', 'docker-host-gateway'].includes(host)) {
+      return candidates;
+    }
+    const fallbackHost = maybeTrim(options.ipv4FallbackHost || process.env.GEMINI_PROXY_IPV4_FALLBACK || '192.168.65.254');
+    if (!fallbackHost) return candidates;
+    const fallbackUrl = rewriteHost(url, fallbackHost);
+    if (fallbackUrl && fallbackUrl !== url) {
+      candidates.push(fallbackUrl);
+    }
+  } catch (err) {
+    return candidates;
+  }
+
+  return candidates;
 }
 
 function buildAuthHeaders(options = {}) {
@@ -119,6 +153,7 @@ async function runOnce(url, payload, timeoutMs, headers) {
 
 async function runGeminiProxy(prompt, options = {}) {
   const url = options.url || process.env.GEMINI_PROXY_URL || 'http://host.docker.internal:18888/api/gemini';
+  const urlCandidates = buildUrlCandidates(url, options);
   const payload = { prompt, baseName: options.baseName || 'suggestion' };
   const model = options.model || '';
   if (String(model || '').trim()) {
@@ -141,8 +176,13 @@ async function runGeminiProxy(prompt, options = {}) {
   const retries = toNumberOr(options.retries ?? process.env.GEMINI_PROXY_RETRIES, 1);
   const retryDelayMs = toNumberOr(process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
   const resetOnTimeout = parseBoolean(options.resetOnTimeout ?? process.env.GEMINI_PROXY_AUTO_RESET, true);
+  const enforceGateway = parseBoolean(options.enforceGateway ?? process.env.GEMINI_PROXY_ENFORCE_GATEWAY, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);
   const headers = buildAuthHeaders(options);
+
+  if (enforceGateway && !looksLikeGateway18888(url)) {
+    throw new Error(`Invalid GEMINI_PROXY_URL for unified mode: ${url}. Expected Gateway endpoint on :18888.`);
+  }
 
   if (looksLikeGateway18888(url) && !headers['X-API-Key'] && !headers.Authorization) {
     throw new Error('Gemini gateway on :18888 requires auth. Set GEMINI_PROXY_API_KEY or GEMINI_PROXY_BEARER_TOKEN');
@@ -151,19 +191,33 @@ async function runGeminiProxy(prompt, options = {}) {
   let lastError = null;
   const attempts = Math.max(1, retries + 1);
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await runOnce(url, payload, timeoutMs, headers);
-    } catch (error) {
-      lastError = error;
-      const retriable = isRetriableError(error.message);
-      if (!retriable || attempt >= attempts) break;
+    for (let i = 0; i < urlCandidates.length; i += 1) {
+      const candidateUrl = urlCandidates[i];
+      const hasFallback = i < urlCandidates.length - 1;
+      try {
+        return await runOnce(candidateUrl, payload, timeoutMs, headers);
+      } catch (error) {
+        lastError = error;
+        const isNetworkError = /fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(String(error?.message || ''));
+        if (hasFallback && isNetworkError) {
+          console.warn('[GeminiProxy] primary url failed, trying fallback:', { primary: candidateUrl, fallback: urlCandidates[i + 1], error: error.message });
+          continue;
+        }
 
-      if (isTimeoutLikeError(error.message) && resetOnTimeout) {
-        const resetResult = await triggerReset(resetUrl);
-        console.warn('[GeminiProxy] timeout detected, reset requested:', resetResult);
+        const retriable = isRetriableError(error.message);
+        if (!retriable || attempt >= attempts) {
+          i = urlCandidates.length; // break candidate loop
+          break;
+        }
+
+        if (isTimeoutLikeError(error.message) && resetOnTimeout) {
+          const resetResult = await triggerReset(resetUrl);
+          console.warn('[GeminiProxy] timeout detected, reset requested:', resetResult);
+        }
+
+        await sleep(retryDelayMs * attempt);
+        i = urlCandidates.length; // go next attempt
       }
-
-      await sleep(retryDelayMs * attempt);
     }
   }
 

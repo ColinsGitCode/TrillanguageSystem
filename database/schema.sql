@@ -436,5 +436,152 @@ CREATE INDEX IF NOT EXISTS idx_es_provider ON experiment_samples(provider);
 CREATE INDEX IF NOT EXISTS idx_es_created_at ON experiment_samples(created_at);
 
 -- ========================================
+-- 表 12: example_units（例句级审核样本池）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS example_units (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_hash TEXT NOT NULL UNIQUE,
+  lang TEXT NOT NULL,                          -- en | ja
+  sentence_text TEXT NOT NULL,
+  translation_text TEXT NOT NULL,
+  source_phrase TEXT,
+  first_generation_id INTEGER,
+  last_generation_id INTEGER,
+  source_count INTEGER DEFAULT 0,
+  review_score_sentence REAL,
+  review_score_translation REAL,
+  review_score_tts REAL,
+  review_score_overall REAL,
+  review_votes INTEGER DEFAULT 0,
+  review_comment_latest TEXT,
+  eligibility TEXT DEFAULT 'pending',          -- pending | approved | rejected
+  last_reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (first_generation_id) REFERENCES generations(id) ON DELETE SET NULL,
+  FOREIGN KEY (last_generation_id) REFERENCES generations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eu_lang ON example_units(lang);
+CREATE INDEX IF NOT EXISTS idx_eu_eligibility ON example_units(eligibility);
+CREATE INDEX IF NOT EXISTS idx_eu_score ON example_units(review_score_overall DESC);
+CREATE INDEX IF NOT EXISTS idx_eu_updated ON example_units(updated_at DESC);
+
+-- ========================================
+-- 表 13: example_unit_sources（例句来源映射）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS example_unit_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  example_id INTEGER NOT NULL,
+  generation_id INTEGER NOT NULL,
+  phrase TEXT,
+  folder_name TEXT,
+  base_filename TEXT,
+  source_slot TEXT,                            -- en_1 / en_2 / ja_1 / ja_2 ...
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(example_id, generation_id, source_slot),
+  FOREIGN KEY (example_id) REFERENCES example_units(id) ON DELETE CASCADE,
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_eus_generation ON example_unit_sources(generation_id);
+CREATE INDEX IF NOT EXISTS idx_eus_example ON example_unit_sources(example_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_eus_after_insert
+AFTER INSERT ON example_unit_sources
+BEGIN
+  UPDATE example_units
+  SET
+    source_count = (
+      SELECT COUNT(*) FROM example_unit_sources eus WHERE eus.example_id = NEW.example_id
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.example_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_eus_after_delete
+AFTER DELETE ON example_unit_sources
+BEGIN
+  UPDATE example_units
+  SET
+    source_count = (
+      SELECT COUNT(*) FROM example_unit_sources eus WHERE eus.example_id = OLD.example_id
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.example_id;
+END;
+
+-- ========================================
+-- 表 14: review_campaigns（人工评审批次）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS review_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  status TEXT DEFAULT 'active',                -- active | finalized | canceled
+  scope TEXT DEFAULT 'existing_snapshot',
+  snapshot_at DATETIME,
+  created_by TEXT DEFAULT 'owner',
+  notes TEXT,
+  total_examples INTEGER DEFAULT 0,
+  reviewed_examples INTEGER DEFAULT 0,
+  approved_examples INTEGER DEFAULT 0,
+  rejected_examples INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  finalized_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_rc_status ON review_campaigns(status, created_at DESC);
+
+-- ========================================
+-- 表 15: review_campaign_items（批次样本映射）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS review_campaign_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL,
+  example_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending',               -- pending | reviewed
+  reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(campaign_id, example_id),
+  FOREIGN KEY (campaign_id) REFERENCES review_campaigns(id) ON DELETE CASCADE,
+  FOREIGN KEY (example_id) REFERENCES example_units(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rci_campaign ON review_campaign_items(campaign_id, status);
+
+-- ========================================
+-- 表 16: example_reviews（例句评分/评论）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS example_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  example_id INTEGER NOT NULL,
+  campaign_id INTEGER,
+  reviewer TEXT DEFAULT 'owner',
+  score_sentence INTEGER CHECK(score_sentence BETWEEN 1 AND 5),
+  score_translation INTEGER CHECK(score_translation BETWEEN 1 AND 5),
+  score_tts INTEGER CHECK(score_tts BETWEEN 1 AND 5),
+  decision TEXT DEFAULT 'neutral',             -- approve | reject | neutral
+  comment TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(example_id, campaign_id, reviewer),
+  FOREIGN KEY (example_id) REFERENCES example_units(id) ON DELETE CASCADE,
+  FOREIGN KEY (campaign_id) REFERENCES review_campaigns(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_er_example ON example_reviews(example_id, campaign_id);
+CREATE INDEX IF NOT EXISTS idx_er_campaign ON example_reviews(campaign_id, updated_at DESC);
+
+-- ========================================
 -- 完成初始化
 -- ========================================

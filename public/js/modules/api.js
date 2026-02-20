@@ -108,6 +108,52 @@ class ApiService {
     async cancelGeminiAuth() {
         return this.fetchJson('/api/gemini/auth/cancel', { method: 'POST' });
     }
+
+    async getActiveReviewCampaign() {
+        return this.fetchJson('/api/review/campaigns/active');
+    }
+
+    async createReviewCampaign(payload = {}) {
+        return this.fetchJson('/api/review/campaigns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getReviewCampaignProgress(campaignId) {
+        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/progress`);
+    }
+
+    async finalizeReviewCampaign(campaignId, payload = {}) {
+        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/finalize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getGenerationReviewExamples(generationId, params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const suffix = query ? `?${query}` : '';
+        return this.fetchJson(`/api/review/generations/${encodeURIComponent(generationId)}/examples${suffix}`);
+    }
+
+    async submitExampleReview(exampleId, payload = {}) {
+        return this.fetchJson(`/api/review/examples/${encodeURIComponent(exampleId)}/reviews`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async backfillReviewExamples(limit = 0) {
+        return this.fetchJson('/api/review/backfill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit })
+        });
+    }
 }
 
 export const api = new ApiService();

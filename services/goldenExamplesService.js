@@ -6,6 +6,7 @@
  */
 
 const dbService = require('./databaseService');
+const exampleReviewService = require('./exampleReviewService');
 
 /**
  * 提取 Golden Examples 的策略
@@ -187,6 +188,24 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
     const roundNumber = Number(options.roundNumber || 0);
     const maxOutputChars = Number(options.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS);
     const teacherFirst = options.teacherFirst !== false;
+    const reviewGated = typeof options.reviewGated === 'boolean'
+      ? options.reviewGated
+      : String(process.env.ENABLE_REVIEW_GATED_FEWSHOT || '').toLowerCase() === 'true';
+    const reviewOnly = options.reviewOnly === true;
+
+    if (reviewGated) {
+      const reviewedExamples = exampleReviewService.getApprovedExamplesForFewShot(currentPhrase, count, {
+        outputMode,
+        minOverall: options.reviewMinOverall,
+        excludePhrase: currentPhrase
+      });
+      if (reviewedExamples.length) {
+        return reviewedExamples;
+      }
+      if (reviewOnly) {
+        return [];
+      }
+    }
 
     // 优先复用同实验的 teacher 样本
     if (teacherFirst && experimentId) {

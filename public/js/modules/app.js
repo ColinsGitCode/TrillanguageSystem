@@ -52,6 +52,10 @@ const els = {
 };
 
 let fileListState = null;
+const reviewState = {
+    activeCampaign: null,
+    reviewer: localStorage.getItem('review_reviewer') || 'owner'
+};
 
 // Timer State
 let timerInterval = null;
@@ -995,6 +999,218 @@ function bindAudioButtons(container, defaultFolder = null) {
     });
 }
 
+async function ensureActiveReviewCampaign(force = false) {
+    if (!force && reviewState.activeCampaign) return reviewState.activeCampaign;
+    try {
+        const res = await api.getActiveReviewCampaign();
+        reviewState.activeCampaign = res.campaign || null;
+        return reviewState.activeCampaign;
+    } catch (err) {
+        console.warn('Load active review campaign failed:', err.message);
+        return null;
+    }
+}
+
+async function loadReviewPanel(options = {}) {
+    const generationId = Number(options.generationId || 0);
+    const container = document.getElementById('cardReview');
+    if (!container) return;
+    if (!generationId) {
+        container.innerHTML = '<div class="review-empty">当前记录缺少 generationId，无法评审。</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="review-empty">加载评审数据中...</div>';
+    const campaign = await ensureActiveReviewCampaign();
+    let campaignId = campaign?.id || null;
+    let progress = null;
+    if (campaignId) {
+        try {
+            const progressRes = await api.getReviewCampaignProgress(campaignId);
+            progress = progressRes.progress || null;
+            if (progress) reviewState.activeCampaign = progress;
+        } catch (err) {
+            console.warn('Load review progress failed:', err.message);
+        }
+    }
+
+    let examples = [];
+    try {
+        const data = await api.getGenerationReviewExamples(generationId, {
+            campaignId: campaignId || '',
+            reviewer: reviewState.reviewer
+        });
+        examples = data.examples || [];
+    } catch (err) {
+        container.innerHTML = `<div class="review-empty">加载例句失败: ${escapeHtml(err.message)}</div>`;
+        return;
+    }
+
+    const progressText = progress
+        ? `${progress.reviewed_examples || 0}/${progress.total_examples || 0} (${progress.completion_rate || 0}%)`
+        : '未创建评审批次';
+    const hasPending = Number(progress?.pending_examples || 0) > 0;
+
+    container.innerHTML = `
+      <div class="review-toolbar">
+        <div class="review-meta">
+          <div class="review-campaign-name">批次: ${escapeHtml(campaign?.name || '未创建')}</div>
+          <div class="review-campaign-progress">进度: ${escapeHtml(progressText)}</div>
+        </div>
+        <div class="review-actions">
+          ${campaignId
+            ? `<button class="btn-secondary" id="reviewFinalizeBtn" ${hasPending ? 'disabled title="请先完成全部评分后再统一处理"' : ''}>统一处理并入池</button>`
+            : `<button class="btn-secondary" id="reviewCreateBtn">创建评审批次</button>`}
+          <button class="btn-text" id="reviewRefreshBtn">刷新</button>
+        </div>
+      </div>
+      ${campaignId && hasPending ? `<div class="review-hint">请先完成全部评分后再执行统一处理（剩余 ${progress.pending_examples} 条）。</div>` : ''}
+      <div class="review-list" id="reviewExampleList">
+        ${examples.length ? examples.map((ex) => renderReviewExampleCard(ex, campaignId)).join('') : '<div class="review-empty">当前卡片没有可评审例句。</div>'}
+      </div>
+    `;
+
+    const createBtn = document.getElementById('reviewCreateBtn');
+    if (createBtn) {
+        createBtn.onclick = async () => {
+            createBtn.disabled = true;
+            try {
+                await api.createReviewCampaign({
+                    name: `campaign_${new Date().toISOString().slice(0, 10)}`,
+                    createdBy: reviewState.reviewer
+                });
+                reviewState.activeCampaign = null;
+                await loadReviewPanel({ generationId });
+            } catch (err) {
+                alert(`创建批次失败: ${err.message}`);
+                createBtn.disabled = false;
+            }
+        };
+    }
+
+    const finalizeBtn = document.getElementById('reviewFinalizeBtn');
+    if (finalizeBtn && campaignId) {
+        finalizeBtn.onclick = async () => {
+            if (hasPending) {
+                alert(`当前批次仍有 ${progress.pending_examples} 条未评审，请先完成全部评分。`);
+                return;
+            }
+            if (!confirm('确认对当前批次执行统一处理并更新注入资格？')) return;
+            finalizeBtn.disabled = true;
+            try {
+                await api.finalizeReviewCampaign(campaignId);
+                reviewState.activeCampaign = null;
+                await loadReviewPanel({ generationId });
+            } catch (err) {
+                alert(`统一处理失败: ${err.message}`);
+                finalizeBtn.disabled = false;
+            }
+        };
+    }
+
+    const refreshBtn = document.getElementById('reviewRefreshBtn');
+    if (refreshBtn) {
+        refreshBtn.onclick = () => loadReviewPanel({ generationId });
+    }
+
+    container.querySelectorAll('.review-save-btn').forEach((btn) => {
+        btn.onclick = async () => {
+            const exampleId = Number(btn.dataset.exampleId || 0);
+            if (!exampleId) return;
+
+            const sentenceInput = container.querySelector(`input[name="sentence-${exampleId}"]:checked`);
+            const translationInput = container.querySelector(`input[name="translation-${exampleId}"]:checked`);
+            const ttsInput = container.querySelector(`input[name="tts-${exampleId}"]:checked`);
+            const decisionSelect = container.querySelector(`select[name="decision-${exampleId}"]`);
+            const commentInput = container.querySelector(`textarea[name="comment-${exampleId}"]`);
+
+            if (!sentenceInput || !translationInput || !ttsInput) {
+                alert('请先完成三项评分');
+                return;
+            }
+
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = '保存中...';
+
+            try {
+                await api.submitExampleReview(exampleId, {
+                    campaignId: campaignId || null,
+                    reviewer: reviewState.reviewer,
+                    scoreSentence: Number(sentenceInput.value),
+                    scoreTranslation: Number(translationInput.value),
+                    scoreTts: Number(ttsInput.value),
+                    decision: decisionSelect?.value || 'neutral',
+                    comment: commentInput?.value || ''
+                });
+                btn.textContent = '已保存';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 900);
+            } catch (err) {
+                alert(`保存失败: ${err.message}`);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        };
+    });
+}
+
+function renderScoreChoices(name, selectedValue = '') {
+    const selected = String(selectedValue || '');
+    return [1, 2, 3, 4, 5].map((score) => `
+      <label class="review-score-item">
+        <input type="radio" name="${name}" value="${score}" ${selected === String(score) ? 'checked' : ''} />
+        <span>${score}</span>
+      </label>
+    `).join('');
+}
+
+function renderReviewExampleCard(example, campaignId) {
+    const eligibility = example.eligibility || 'pending';
+    const badgeClass = eligibility === 'approved'
+        ? 'review-badge approved'
+        : eligibility === 'rejected'
+            ? 'review-badge rejected'
+            : 'review-badge pending';
+    return `
+      <div class="review-item" data-example-id="${example.id}">
+        <div class="review-item-head">
+          <div>
+            <div class="review-slot">${escapeHtml(example.sourceSlot || '')} · ${escapeHtml((example.lang || '').toUpperCase())}</div>
+            <div class="review-text">${escapeHtml(example.sentenceText || '')}</div>
+            <div class="review-translation">${escapeHtml(example.translationText || '')}</div>
+          </div>
+          <div class="${badgeClass}">${escapeHtml(eligibility)}</div>
+        </div>
+        <div class="review-score-grid">
+          <div class="review-score-row">
+            <span>原句</span>
+            <div class="review-score-choices">${renderScoreChoices(`sentence-${example.id}`, example.scoreSentence)}</div>
+          </div>
+          <div class="review-score-row">
+            <span>翻译</span>
+            <div class="review-score-choices">${renderScoreChoices(`translation-${example.id}`, example.scoreTranslation)}</div>
+          </div>
+          <div class="review-score-row">
+            <span>TTS</span>
+            <div class="review-score-choices">${renderScoreChoices(`tts-${example.id}`, example.scoreTts)}</div>
+          </div>
+        </div>
+        <div class="review-footer">
+          <select name="decision-${example.id}" class="review-decision">
+            <option value="neutral" ${example.decision === 'neutral' ? 'selected' : ''}>中立</option>
+            <option value="approve" ${example.decision === 'approve' ? 'selected' : ''}>推荐注入</option>
+            <option value="reject" ${example.decision === 'reject' ? 'selected' : ''}>不推荐注入</option>
+          </select>
+          <textarea name="comment-${example.id}" class="review-comment" placeholder="评论（可选）">${escapeHtml(example.comment || '')}</textarea>
+          <button class="btn-secondary review-save-btn" data-example-id="${example.id}" ${campaignId ? '' : 'disabled'}>保存评分</button>
+        </div>
+      </div>
+    `;
+}
+
 function buildIntelHud(metrics, options = {}) {
     const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
     const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'LOCAL').toUpperCase();
@@ -1154,6 +1370,7 @@ function renderCardModal(markdown, title, options = {}) {
     let displayTitle = title;
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
+    const generationId = Number(options.metrics?.id || options.generationId || 0);
 
     const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder: options.folder || store.get('selectedFolder') });
 
@@ -1251,6 +1468,7 @@ function renderCardModal(markdown, title, options = {}) {
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
                     <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
+                    ${generationId ? '<button class="tab-btn" data-target="cardReview" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
                 </div>
             </div>
 
@@ -1397,6 +1615,8 @@ function renderCardModal(markdown, title, options = {}) {
                 </div>
 
             </div>
+
+            ${generationId ? '<div id="cardReview" class="mc-body" style="display:none;"></div>' : ''}
         </div>
     `;
 
@@ -1435,12 +1655,22 @@ function renderCardModal(markdown, title, options = {}) {
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
             const intelTab = els.modalContainer.querySelector('#cardIntel');
+            const reviewTab = els.modalContainer.querySelector('#cardReview');
             
             if (targetId === 'cardIntel') {
                 intelTab.style.display = 'grid';
                 requestAnimationFrame(() => renderIntelCharts(metrics));
             } else {
                 intelTab.style.display = 'none';
+            }
+
+            if (reviewTab) {
+                if (targetId === 'cardReview') {
+                    reviewTab.style.display = 'block';
+                    loadReviewPanel({ generationId });
+                } else {
+                    reviewTab.style.display = 'none';
+                }
             }
         };
     });
@@ -1454,6 +1684,10 @@ function renderCardModal(markdown, title, options = {}) {
         bindInfoButtons(els.modalContainer);
         bindIntelViewers(els.modalContainer);
     }, 10);
+
+    if (generationId) {
+        loadReviewPanel({ generationId });
+    }
 }
 
 function bindIntelViewers(container) {
