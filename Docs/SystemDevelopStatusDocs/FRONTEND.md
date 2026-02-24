@@ -1,96 +1,111 @@
 # 前端架构文档
 
-**项目**: Trilingual Records
-**版本**: 2.8
-**更新日期**: 2026-02-06
+**项目**: Trilingual Records  
+**版本**: 3.2  
+**更新日期**: 2026-02-24
 
----
+## 1. 前端目录
 
-## 📂 文件结构
-
-```
+```text
 public/
-├── index.html                    # 主应用页面
-├── dashboard.html                # Mission Control 仪表盘（统计大盘）
-├── styles.css                    # 主样式
-├── modern-card.css               # 学习卡片弹窗与指标样式
-├── observability.css             # 历史样式文件（保留未启用）
+├── index.html
+├── dashboard.html
+├── styles.css
+├── modern-card.css
+├── observability.css
+├── favicon-lan.svg
 ├── css/
-│   └── dashboard.css             # 仪表盘样式
+│   └── dashboard.css
 └── js/
-    ├── dashboard.js              # 旧版脚本（保留但未使用）
     └── modules/
-        ├── app.js                # 主应用入口
-        ├── dashboard.js          # Mission Control 逻辑
-        ├── api.js                # API 封装
-        ├── info-modal.js         # 指标说明弹窗模块 (NEW)
-        ├── store.js              # 状态管理
-        ├── utils.js              # 工具函数
-        ├── audio-player.js       # 音频播放器
-        └── virtual-list.js       # 虚拟列表（当前未启用）
+        ├── app.js
+        ├── dashboard.js
+        ├── api.js
+        ├── store.js
+        ├── utils.js
+        ├── audio-player.js
+        ├── info-modal.js
+        └── virtual-list.js
 ```
 
----
+## 2. 主界面布局（index）
 
-## 🧭 主界面布局（index.html）
-
-```
-┌─────────────────────────────────────────────────┐
-│ Header: TRILINGUAL RECORDS + Mission Control   │
-├────────────────┬────────────────────────────────┤
-│  生成面板       │  Phrase List（多列卡片）       │
-│  - 文本输入     │                                │
-│  - 图片识别     │                                │
-│  - 进度条       │                                │
-├────────────────┴────────────────────────────────┤
-│  资源区 Tabs：文件夹 / 历史记录                 │
-└─────────────────────────────────────────────────┘
+```text
+Header (TRILINGUAL RECORDS + Mission Control)
+├─ 左侧：生成面板（文本输入 / OCR / 进度）
+├─ 右侧：Phrase List（学习卡片列表）
+└─ 下方：资源区 Tabs（文件夹 / 历史记录）
 ```
 
-### 关键组件
+### 2.1 关键交互
 
-- **生成面板**：文本输入 + OCR + 9 阶段进度
-- **资源区 Tabs**：
-  - 文件夹：按日期分组
-  - 历史记录：搜索/过滤/分页
-- **Phrase List**：多列网格卡片视图（对比模式额外生成 `【输入】{phrase}`）
-- **弹窗交互**：
-  - **Tab1：卡片内容**
-  - **Tab2：MISSION 指标**（HUD 仪表盘风格）
-  - Prompt / LLM Output：支持 RAW/结构化切换与复制
-  - **指标详情**：卡片弹窗中使用 `?` 按钮查看指标说明
-  - **记录删除**：左上角红色 `🗑️` 按钮，支持物理文件与数据库同步删除
-  - **对比弹窗**：双列并排显示 GEMINI / LOCAL，列头集成独立删除按钮
-- **列表刷新机制**：生成成功后自动刷新当前日期目录的 Phrase List
-- **初始化设置**：`GEMINI_MODE=cli` 时出现登录引导；`host-proxy` 模式不显示该引导
+- 生成成功后自动刷新列表并定位到目标日期目录
+- 页面常驻操作时保持当前选中目录
+- 页面刷新时默认显示最近日期目录
+- 卡片列表支持多列自适应显示
 
----
+## 3. 卡片弹窗（Viewer Modal）
 
-## Mission Control（dashboard.html）
+### 3.1 单卡弹窗 Tabs
 
-**定位**：整体统计大盘（非单卡调试）
+- `CONTENT`：卡片正文 + 例句音频
+- `INTEL`：质量/Token/性能/Prompt/LLM Output
+- `REVIEW`（有 generationId 时显示）：例句人工评分与评论
 
-**模块**：
-- Overview / Cost Summary
-- Quality / Token / Latency 趋势
-- Provider 分布 (D3.js 饼图)
-- Infrastructure (服务健康检查)
+### 3.2 INTEL 页能力
 
----
+- Prompt / LLM Output 支持 `RAW` / `STRUCT` 切换
+- 支持一键复制
+- 指标说明 `?` 按钮弹窗（info-modal）
 
-## 视觉风格
+### 3.3 REVIEW 页能力
 
-- 主页面：浅色、清爽、卡片式布局
-- Mission Control：暗色玻璃质感，数据仪表盘风格
-- 对比弹窗：宽屏并排布局，字体缩小、内容密度提升，便于对照阅读
+- 每条例句评分：`原句 / 翻译 / TTS`（1~5）
+- 决策：`推荐注入 / 不推荐注入 / 中立`
+- 评论：文本备注
+- 批次动作：创建批次、查看进度、统一处理并入池、刷新
 
----
+## 4. 对比模式弹窗
 
-## 与实验主线的关系
+- 左右双列并排显示 Gemini / Local 内容
+- 同时支持 CONTENT 与 INTEL 对照
+- 结果区含 winner 与 metrics 对比
+- 支持按模型侧删除对应生成记录
 
-- Mission Control 展示系统级统计
-- 单卡实验细节（Prompt/Output/round 指标）在卡片弹窗 `INTEL` 展示
-- few-shot 轮次图表由 `Docs/TestDocs/charts/*.svg` 离线生成，不直接嵌入前端运行时
+## 5. Mission Control（dashboard）
+
+定位：系统级统计大盘（不是单卡调试页）
+
+主要模块：
+
+- 质量趋势
+- Token 趋势
+- 延迟趋势
+- provider 分布
+- 近期记录与基础健康信息
+
+## 6. 状态管理与 API 封装
+
+- 状态：`store.js`
+  - `selectedFolder`、`selectedFile`
+  - `llmProvider`、`modelMode`、`compareMode`
+- API：`api.js`
+  - 生成/OCR/历史/统计
+  - 评审 campaign 与评分提交
+  - 删除与文件读取
+
+## 7. 视觉与可用性
+
+- 主页面：浅色、内容密度高、卡片化
+- 对比弹窗：宽视图对照优先
+- Mission Control：仪表盘风格
+- 浏览器标签页图标：`favicon-lan.svg`（LAN）
+
+## 8. 与后端主线关系
+
+- 前端不直接执行 few-shot 逻辑，只透传配置
+- 单卡详细实验字段由 `observability.metadata` 驱动
+- review-gated 流程通过评审 API 触发，最终由后端 finalize 后生效
 
 ---
 

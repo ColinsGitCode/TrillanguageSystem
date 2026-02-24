@@ -1,78 +1,73 @@
-# Repo 架构与功能设计（最新）
+# Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-02-10  
-**版本**: 2.9
+**最后更新**: 2026-02-24  
+**版本**: 3.2
 
-## 项目概览
+## 1. 项目定位
 
-- 项目名称：Trilingual Records（三语学习卡片系统）
-- 目标：输入文本或 OCR 图片，生成三语学习卡片（Markdown/HTML/音频）并沉淀可观测数据
-- 当前主线：`local LLM + few-shot 轮次优化 + Gemini teacher 对照`
-- Gemini 集成策略：默认使用宿主机 `gemini-host-proxy`（容器内不再依赖 Gemini CLI 可执行文件）
-- Gemini 默认模型：`gemini-3-pro-preview`（支持 `llm_model` 按请求覆盖）
+- 项目：Trilingual Records（三语学习卡片系统）
+- 输入：文本 / OCR 图片
+- 输出：三语学习卡片（Markdown + HTML）+ 例句语音
+- 目标：在可观测和可评审前提下，持续提升生成质量
 
-## 架构总览
+## 2. 当前架构
 
-- 前端：`public/`（主页面 `index.html` + 统计大盘 `dashboard.html`）
-- 后端：`server.js`（Express API + 生成编排 + 对比模式 + 实验追踪）
-- 服务层：`services/`（LLM、Prompt、后处理、渲染、TTS、DB、few-shot/experiment）
+- 前端：`public/index.html`（生成、列表、弹窗） + `public/dashboard.html`（Mission Control）
+- 后端：`server.js`（生成编排、对比、评审、实验导出）
+- 服务层：`services/*`（LLM、OCR、TTS、few-shot、评审、观测、DB）
 - 存储层：
-  - 文件系统：按日期目录 `YYYYMMDD` 存储 `md/html/meta/audio`
-  - SQLite：`generations`、`observability_metrics`、`few_shot_runs`、`experiment_rounds`、`experiment_samples`、`teacher_references`
-- 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Proxy
+  - 文件：按日期目录 `YYYYMMDD`
+  - SQLite：16 张表（业务 + 观测 + 实验 + 评审）
+- 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Gateway/Executor
 
-## 当前能力清单
+## 3. 当前功能清单
 
-- 单模型生成：`local`（默认）/ `gemini`（通过 CLI 或 host-proxy）
-- 双模型对比：`enable_compare=true`，同时生成 `gemini/local` 以及 `input` 输入卡片
-- 详情弹窗双 Tab：
-  - `CONTENT`：学习卡片内容与例句音频
-  - `INTEL`：质量/Token/性能/Prompt/LLM Output（支持 RAW/结构化切换与复制）
-- 删除能力：
-  - 按记录 ID 删除：`DELETE /api/records/:id`
-  - 按文件删除：`DELETE /api/records/by-file`
-  - 均会清理数据库记录与关联音频文件
-- 文件浏览：
-  - 日期目录列表：`GET /api/folders`
-  - 目录内卡片：`GET /api/folders/:folder/files`
-  - 文件内容读取：`GET /api/folders/:folder/files/:file`
+### 3.1 生成与对比
 
-## Few-shot 与实验机制（主线）
+- 单模型生成（local/gemini）
+- 对比模式：同时产出 Gemini 与 Local 结果并给出对比指标
+- 删除：支持按 `id` 或按 `folder/base` 删除并清理关联文件
 
-- Prompt 注入流程（local provider）：
-  1. baseline prompt 构建
-  2. 读取 teacher 或历史高质量样本（`goldenExamplesService`）
-  3. 预算控制：`contextWindow * tokenBudgetRatio`
-  4. 超预算降级：`budget_reduction -> budget_truncate -> budget_exceeded_disable`
-- 轮次追踪：
-  - 样本记录：`experiment_samples`
-  - 轮次聚合：`experiment_rounds`
-  - teacher 快照：`teacher_references`
-  - run 明细：`few_shot_runs` + `few_shot_examples`
-- 导出与报告脚本：
-  - `scripts/run_fewshot_rounds.js`
-  - `scripts/export_round_trend_dataset.js`
-  - `d3/render_round_trend_charts.mjs`
-  - `scripts/generate_round_kpi_report.js`
+### 3.2 评审与注入
 
-## 最新验证状态（2026-02-06）
+- 卡片弹窗新增 `REVIEW` 页
+- 例句级评分：原句/翻译/TTS（1~5）
+- 支持决策与评论（推荐注入/不推荐注入/中立）
+- 批次统一 finalize 后更新注入资格
+- few-shot 可开启 review-gated，优先使用 approved 样本
 
-- 实验：`exp_round_local20plus_20260206_073637`（21 条样本）
-- 核心结果（local baseline vs local fewshot_r1）：
-  - 成功率：`90.48% -> 100.00%`
-  - 平均质量：`72.00 -> 79.33`（+7.33）
-  - 平均 Tokens：`979.76 -> 1498.48`（+52.94%）
-  - 平均延迟：`57.59s -> 59.16s`（+2.73%）
-  - 增益效率：`14.14 分 / 1k 额外 token`
-- Proxy 透传：`model` 字段已完成代码与 mock 链路验证
+### 3.3 可观测与实验
 
-## 关键文档入口
+- 单次生成记录：prompt/rawOutput/outputStructured/tokens/quality/latency
+- 实验追踪：`few_shot_runs`、`experiment_rounds`、`experiment_samples`、`teacher_references`
+- 导出链路：脚本生成 CSV/JSON/SVG/Markdown 报告
 
-- 后端状态：`Docs/SystemDevelopStatusDocs/BACKEND.md`
-- API 状态：`Docs/SystemDevelopStatusDocs/API.md`
-- 实现状态：`Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
-- 本轮完整测试报告：`Docs/TestDocs/完整测试报告_local20plus_20260206_073637.md`
-- 本轮对照报告：`Docs/TestDocs/对照报告_local20plus_vs_gemini3pro_prev.md`
+### 3.4 OCR/TTS
+
+- OCR 默认 tesseract（支持 local/auto）
+- EN/JA 语音生成并归档到对应卡片目录
+
+## 4. 主线技术策略
+
+- 默认主链路：本地 LLM
+- Gemini 作为 teacher / 对照 /补充通道（host-proxy）
+- 质量优化主手段：few-shot + 人工评审门控 + 可观测闭环
+
+## 5. 现阶段重点关注
+
+1. 扩大高质量样本池（teacher + approved）
+2. 控制 token 膨胀，提升 gain per 1k token
+3. 把观测指标升级为 SLO/门禁策略
+4. 增强网关异常场景下的自恢复与告警
+
+## 6. 关键文档入口
+
+- `Docs/SystemDevelopStatusDocs/API.md`
+- `Docs/SystemDevelopStatusDocs/BACKEND.md`
+- `Docs/SystemDevelopStatusDocs/FRONTEND.md`
+- `Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
+- `Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
+- `Docs/SLIDES_OUTLINES.md`
 
 ---
 

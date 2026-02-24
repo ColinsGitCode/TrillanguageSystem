@@ -1,23 +1,28 @@
 # Repo 文档与代码一致性检查
 
-**检查日期**: 2026-02-06  
-**检查范围**: `Docs/SystemDevelopStatusDocs/*` 对照当前代码
+**检查日期**: 2026-02-24  
+**检查范围**: `Docs/SystemDevelopStatusDocs/*` 对照当前代码主链路
 
-## 已对齐内容
+## 1. 已对齐项
 
-- `server.js` 路由与 `API.md` 端点说明一致
-- `/api/generate` 的实验参数（`experiment_*`、`fewshot_options`、`llm_model`）已在文档中完整体现
-- few-shot 追踪链路与数据库表（`few_shot_runs/experiment_rounds/experiment_samples/teacher_references`）已对齐
-- Gemini host-proxy 的 `model` 透传机制已在后端文档与 API 文档标注
-- 实验导出脚本与图表脚本（round trend/KPI）已进入状态文档
+- 路由对齐：`server.js` 中 27 个 API 端点已在 `API.md` 覆盖
+- 生成接口对齐：`/api/generate` 的 `target_folder/llm_model/fewshot_options` 已更新文档
+- OCR 对齐：`tesseract/local/auto` 三模式和返回 `provider` 已更新文档
+- 评审链路对齐：`/api/review/*` 端点、批次 finalize、评分字段已更新文档
+- few-shot 对齐：review-gated / reviewOnly / reviewMinOverall 已更新文档
+- 数据模型对齐：16 张表（含 review 相关 5 张）已在后端文档体现
+- 前端对齐：弹窗 `CONTENT/INTEL/REVIEW`、Prompt/Output RAW/STRUCT 已记录
 
-## 保留差异（可接受）
+## 2. 历史文档说明
 
-1. `FEATURE_UPDATE_v2.1.md` 为历史发布说明，不代表当前全量状态
-2. `public/js/dashboard.js` 仍作为旧版兼容文件保留
-3. `geminiService.js`（Gemini API）仍存在但当前主线不依赖
+- `FEATURE_UPDATE_v2.1.md` 属于历史发布归档，不作为当前实现基线
+- 历史说明保留用于回溯，不影响当前状态判断
 
-## 结论
+## 3. 结论
 
-- 当前系统状态文档已与代码主链路保持一致
-- few-shot 主线、proxy 透传、实验追踪与测试报告索引均已可追溯
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路基本一致
+- 当前文档可直接支撑：
+  1. 接口联调
+  2. 评分与注入机制解释
+  3. 可观测与实验链路说明
+
