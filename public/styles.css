@@ -499,6 +499,54 @@ h1 {
   border-color: #fca5a5;
 }
 
+.review-badge.finalized {
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.btn-sampling {
+  padding: 0.45rem 0.9rem;
+  background: #059669;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-sampling:hover:not(:disabled) {
+  background: #047857;
+}
+
+.btn-sampling:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-rollback {
+  padding: 0.45rem 0.9rem;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-rollback:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-rollback:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .setup-overlay {
   position: fixed;
   inset: 0;

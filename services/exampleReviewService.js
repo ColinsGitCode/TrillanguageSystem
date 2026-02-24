@@ -80,6 +80,7 @@ function computeEligibility(agg, policy = {}) {
   const minSentence = Number(policy.minSentence || 4.0);
   const minTranslation = Number(policy.minTranslation || 4.0);
   const maxRejectRate = Number(policy.maxRejectRate || 0.3);
+  const minTts = Number(policy.minTts || 3.0);
 
   const votes = Number(agg.votes || 0);
   if (votes < minVotes) return 'pending';
@@ -91,6 +92,7 @@ function computeEligibility(agg, policy = {}) {
   const rejectRate = votes > 0 ? Number(agg.rejectVotes || 0) / votes : 0;
 
   if (rejectRate >= maxRejectRate) return 'rejected';
+  if (tts < minTts) return 'rejected';
   if (overall >= minOverall && sentence >= minSentence && translation >= minTranslation) return 'approved';
   return 'rejected';
 }
@@ -474,6 +476,15 @@ class ExampleReviewService {
       throw new Error('campaign has pending examples, please finish reviews before finalize');
     }
 
+    if (allowPartial && policy.minReviewRate > 0) {
+      const total = Number(progress.total_examples || 0);
+      const reviewed = Number(progress.reviewed_examples || 0);
+      const actualRate = total > 0 ? reviewed / total : 0;
+      if (actualRate < Number(policy.minReviewRate)) {
+        throw new Error(`review rate ${(actualRate * 100).toFixed(1)}% is below minimum ${(Number(policy.minReviewRate) * 100).toFixed(1)}%`);
+      }
+    }
+
     const rows = this.db.prepare(`
       SELECT
         rci.example_id AS exampleId,
@@ -555,8 +566,47 @@ class ExampleReviewService {
     return this.getCampaignProgress(campaignId);
   }
 
+  rollbackCampaign(campaignId) {
+    const progress = this.getCampaignProgress(campaignId);
+    if (!progress) throw new Error('campaign not found');
+    if (progress.status !== 'finalized') throw new Error('only finalized campaigns can be rolled back');
+
+    const resetUnits = this.db.prepare(`
+      UPDATE example_units SET
+        eligibility = 'pending',
+        review_score_overall = NULL,
+        review_score_sentence = NULL,
+        review_score_translation = NULL,
+        review_score_tts = NULL,
+        review_votes = 0,
+        review_comment_latest = NULL
+      WHERE id IN (
+        SELECT example_id FROM review_campaign_items WHERE campaign_id = ?
+      )
+    `);
+
+    const resetItems = this.db.prepare(`
+      UPDATE review_campaign_items SET status = 'pending', reviewed_at = NULL
+      WHERE campaign_id = ?
+    `);
+
+    const reactivateCampaign = this.db.prepare(`
+      UPDATE review_campaigns SET status = 'active' WHERE id = ?
+    `);
+
+    const tx = this.db.transaction(() => {
+      resetUnits.run(Number(campaignId));
+      resetItems.run(Number(campaignId));
+      reactivateCampaign.run(Number(campaignId));
+    });
+
+    tx();
+    return this.getCampaignProgress(campaignId);
+  }
+
   getApprovedExamplesForFewShot(currentPhrase, count = 3, options = {}) {
     const minOverall = Number(options.minOverall || process.env.REVIEW_GATE_MIN_OVERALL || 4.2);
+    const minTts = Number(options.minTts || process.env.REVIEW_GATE_MIN_TTS || 3.0);
     const candidateLimit = Math.max(count * 8, 24);
     const outputMode = (options.outputMode || 'markdown').toLowerCase();
     const excludePhrase = normalizeText(options.excludePhrase || '');
@@ -573,20 +623,21 @@ class ExampleReviewService {
       FROM example_units eu
       WHERE eu.eligibility = 'approved'
         AND eu.review_score_overall >= @minOverall
+        AND (eu.review_score_tts IS NULL OR eu.review_score_tts >= @minTts)
       ORDER BY eu.review_score_overall DESC, eu.review_votes DESC, eu.updated_at DESC
       LIMIT @candidateLimit
     `).all({
       minOverall,
+      minTts,
       candidateLimit
     });
 
     const scored = rows
       .filter((row) => !excludePhrase || normalizeForHash(row.sourcePhrase) !== normalizeForHash(excludePhrase))
       .map((row) => {
-        const similarity = Math.max(
-          bigramSimilarity(currentPhrase, row.sourcePhrase),
-          bigramSimilarity(currentPhrase, row.sentenceText)
-        );
+        const phraseSim = bigramSimilarity(currentPhrase, row.sourcePhrase);
+        const sentenceSim = bigramSimilarity(currentPhrase, row.sentenceText);
+        const similarity = phraseSim * 0.8 + sentenceSim * 0.2;
         return { ...row, _similarity: similarity };
       });
 

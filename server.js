@@ -1221,6 +1221,16 @@ app.post('/api/review/campaigns/:id/finalize', (req, res) => {
   }
 });
 
+app.post('/api/review/campaigns/:id/rollback', (req, res) => {
+  try {
+    const campaignId = Number(req.params.id);
+    const progress = exampleReviewService.rollbackCampaign(campaignId);
+    res.json({ success: true, progress });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/review/backfill', (req, res) => {
   try {
     const { limit = 0 } = req.body || {};

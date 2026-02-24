@@ -133,6 +133,12 @@ class ApiService {
         });
     }
 
+    async rollbackReviewCampaign(campaignId) {
+        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/rollback`, {
+            method: 'POST'
+        });
+    }
+
     async getGenerationReviewExamples(generationId, params = {}) {
         const query = new URLSearchParams(params).toString();
         const suffix = query ? `?${query}` : '';

@@ -1050,21 +1050,29 @@ async function loadReviewPanel(options = {}) {
         ? `${progress.reviewed_examples || 0}/${progress.total_examples || 0} (${progress.completion_rate || 0}%)`
         : '未创建评审批次';
     const hasPending = Number(progress?.pending_examples || 0) > 0;
+    const isFinalized = progress?.status === 'finalized';
 
     container.innerHTML = `
       <div class="review-toolbar">
         <div class="review-meta">
-          <div class="review-campaign-name">批次: ${escapeHtml(campaign?.name || '未创建')}</div>
+          <div class="review-campaign-name">批次: ${escapeHtml(campaign?.name || '未创建')}${isFinalized ? ' <span class="review-badge finalized">已完成</span>' : ''}</div>
           <div class="review-campaign-progress">进度: ${escapeHtml(progressText)}</div>
         </div>
         <div class="review-actions">
-          ${campaignId
-            ? `<button class="btn-secondary" id="reviewFinalizeBtn" ${hasPending ? 'disabled title="请先完成全部评分后再统一处理"' : ''}>统一处理并入池</button>`
-            : `<button class="btn-secondary" id="reviewCreateBtn">创建评审批次</button>`}
+          ${campaignId && !isFinalized
+            ? `<button class="btn-secondary" id="reviewFinalizeBtn" ${hasPending ? 'disabled title="请先完成全部评分后再统一处理"' : ''}>统一处理并入池</button>
+               <button class="btn-sampling" id="reviewSamplingBtn">采样处理</button>`
+            : ''}
+          ${campaignId && isFinalized
+            ? `<button class="btn-rollback" id="reviewRollbackBtn">回滚</button>`
+            : ''}
+          ${!campaignId
+            ? `<button class="btn-secondary" id="reviewCreateBtn">创建评审批次</button>`
+            : ''}
           <button class="btn-text" id="reviewRefreshBtn">刷新</button>
         </div>
       </div>
-      ${campaignId && hasPending ? `<div class="review-hint">请先完成全部评分后再执行统一处理（剩余 ${progress.pending_examples} 条）。</div>` : ''}
+      ${campaignId && hasPending && !isFinalized ? `<div class="review-hint">请先完成全部评分后再执行统一处理（剩余 ${progress.pending_examples} 条）。可使用"采样处理"跳过未评审样本。</div>` : ''}
       <div class="review-list" id="reviewExampleList">
         ${examples.length ? examples.map((ex) => renderReviewExampleCard(ex, campaignId)).join('') : '<div class="review-empty">当前卡片没有可评审例句。</div>'}
       </div>
@@ -1104,6 +1112,38 @@ async function loadReviewPanel(options = {}) {
             } catch (err) {
                 alert(`统一处理失败: ${err.message}`);
                 finalizeBtn.disabled = false;
+            }
+        };
+    }
+
+    const samplingBtn = document.getElementById('reviewSamplingBtn');
+    if (samplingBtn && campaignId) {
+        samplingBtn.onclick = async () => {
+            if (!confirm('采样处理将跳过未评审的样本，仅处理已评审部分。确认继续？')) return;
+            samplingBtn.disabled = true;
+            try {
+                await api.finalizeReviewCampaign(campaignId, { allowPartial: true, minReviewRate: 0.3 });
+                reviewState.activeCampaign = null;
+                await loadReviewPanel({ generationId });
+            } catch (err) {
+                alert(`采样处理失败: ${err.message}`);
+                samplingBtn.disabled = false;
+            }
+        };
+    }
+
+    const rollbackBtn = document.getElementById('reviewRollbackBtn');
+    if (rollbackBtn && campaignId) {
+        rollbackBtn.onclick = async () => {
+            if (!confirm('回滚将重置所有注入资格为 pending，但保留原始评分数据。确认回滚？')) return;
+            rollbackBtn.disabled = true;
+            try {
+                await api.rollbackReviewCampaign(campaignId);
+                reviewState.activeCampaign = null;
+                await loadReviewPanel({ generationId });
+            } catch (err) {
+                alert(`回滚失败: ${err.message}`);
+                rollbackBtn.disabled = false;
             }
         };
     }
