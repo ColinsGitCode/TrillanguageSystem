@@ -35,6 +35,7 @@
 | 评审 | POST | `/review/campaigns` | 创建评审批次（snapshot） |
 | 评审 | GET | `/review/campaigns/:id/progress` | 批次进度 |
 | 评审 | POST | `/review/campaigns/:id/finalize` | 统一处理并更新注入资格 |
+| 评审 | POST | `/review/campaigns/:id/rollback` | 回滚已完成批次（重置 eligibility，保留评分） |
 | 评审 | POST | `/review/backfill` | 回填历史记录到评审池 |
 | 评审 | GET | `/review/generations/:id/examples` | 获取该卡片例句样本 |
 | 评审 | POST | `/review/examples/:id/reviews` | 保存例句评分/评论 |
@@ -256,8 +257,27 @@
 - `POST /api/review/campaigns`
 - `GET /api/review/campaigns/:id/progress`
 - `POST /api/review/campaigns/:id/finalize`
+- `POST /api/review/campaigns/:id/rollback`
 
-`finalize` 默认要求批次无 pending 项（可在请求体中策略性放宽）。
+#### finalize 参数
+
+```json
+{
+  "allowPartial": true,
+  "minReviewRate": 0.3
+}
+```
+
+- 默认要求批次无 pending 项
+- `allowPartial=true`：启用采样模式，允许跳过未评审样本
+- `minReviewRate`：采样模式下的最低评审比例（0~1），低于此值拒绝 finalize
+- eligibility 判定新增 TTS 独立下限：`tts < 3.0` 直接 rejected
+
+#### rollback 说明
+
+- 仅对 `status=finalized` 的批次有效
+- 事务性重置：`example_units.eligibility` → pending，聚合分数清零，`campaign.status` → active
+- `example_reviews` 原始评分数据保留不删除，可重新 finalize
 
 ### 7.2 样本读取与评分
 

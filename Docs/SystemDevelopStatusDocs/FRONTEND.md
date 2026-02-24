@@ -1,7 +1,7 @@
 # 前端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.2  
+**版本**: 3.3
 **更新日期**: 2026-02-24
 
 ## 1. 前端目录
@@ -63,7 +63,12 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 每条例句评分：`原句 / 翻译 / TTS`（1~5）
 - 决策：`推荐注入 / 不推荐注入 / 中立`
 - 评论：文本备注
-- 批次动作：创建批次、查看进度、统一处理并入池、刷新
+- 批次动作：
+  - 创建批次、查看进度、刷新
+  - 统一处理并入池（要求全量评审完成）
+  - **采样处理**（绿色按钮）：跳过未评审样本，按 `minReviewRate=0.3` 门控（v3.3 新增）
+  - **回滚**（红色按钮，二次确认）：已完成批次重置为 active（v3.3 新增）
+  - **已完成** 标签（蓝色 badge）：finalized 批次状态标识（v3.3 新增）
 
 ## 4. 对比模式弹窗
 
@@ -91,7 +96,7 @@ Header (TRILINGUAL RECORDS + Mission Control)
   - `llmProvider`、`modelMode`、`compareMode`
 - API：`api.js`
   - 生成/OCR/历史/统计
-  - 评审 campaign 与评分提交
+  - 评审 campaign（创建/finalize/rollback）与评分提交
   - 删除与文件读取
 
 ## 7. 视觉与可用性

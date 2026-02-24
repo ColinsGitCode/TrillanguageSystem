@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-02-24  
-**版本**: 3.2
+**最后更新**: 2026-02-24
+**版本**: 3.3
 
 ## 1. 项目定位
 
@@ -33,8 +33,12 @@
 - 卡片弹窗新增 `REVIEW` 页
 - 例句级评分：原句/翻译/TTS（1~5）
 - 支持决策与评论（推荐注入/不推荐注入/中立）
+- TTS 独立下限：`tts < 3.0` 直接 rejected，防止低质量音频样本注入
 - 批次统一 finalize 后更新注入资格
+- 采样评审模式：支持 `allowPartial` + `minReviewRate`，大批次无需全量评审
+- Finalize 回滚：已完成批次可回滚为 active，重置 eligibility 但保留原始评分
 - few-shot 可开启 review-gated，优先使用 approved 样本
+- 相似度加权选例：`phraseSim*0.8 + sentenceSim*0.2`，优先匹配 source_phrase
 
 ### 3.3 可观测与实验
 

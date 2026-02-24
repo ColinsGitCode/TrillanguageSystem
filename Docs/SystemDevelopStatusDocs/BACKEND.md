@@ -1,7 +1,7 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.2  
+**版本**: 3.3
 **更新日期**: 2026-02-24
 
 ## 1. 核心目录
@@ -94,8 +94,20 @@ scripts/
 
 - `exampleReviewService` 维护样本评分与资格
 - 聚合分：`0.45*sentence + 0.45*translation + 0.1*tts`
-- 资格：`pending / approved / rejected`
+- 资格判定规则（`computeEligibility`）：
+  1. `votes < minVotes(1)` → pending
+  2. `rejectRate >= 0.3` → rejected
+  3. `tts < minTts(3.0)` → rejected（独立下限，v3.3 新增）
+  4. `overall >= 4.2 && sentence >= 4.0 && translation >= 4.0` → approved
+  5. 其他 → rejected
 - `reviewOnly=true` 且无 approved 样本时，直接不注入
+- 相似度选例：`phraseSim*0.8 + sentenceSim*0.2`（v3.3 改为加权，优先 source_phrase）
+
+### 5.4 评审批次生命周期
+
+- 创建 → active（可评审）
+- finalize → finalized（默认要求 100% 评审完成；`allowPartial=true` 启用采样模式）
+- rollback → active（重置 eligibility，保留 example_reviews 原始数据；v3.3 新增）
 
 ## 6. Gemini host-proxy 集成（当前默认）
 
@@ -157,6 +169,7 @@ FEWSHOT_TOKEN_BUDGET_RATIO=0.25
 ENABLE_REVIEW_GATED_FEWSHOT=false
 REVIEW_GATED_FEWSHOT_ONLY=false
 REVIEW_GATE_MIN_OVERALL=4.2
+REVIEW_GATE_MIN_TTS=3.0
 
 OCR_PROVIDER=tesseract
 OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr
