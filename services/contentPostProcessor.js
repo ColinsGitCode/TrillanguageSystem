@@ -73,9 +73,10 @@ function relocateLoanwordAnnotations(markdown) {
 
   function flushPending() {
     if (!pending || !pending.length) return;
-    pending.forEach((item) => {
-      output.push(`${pendingIndent}${LOANWORD_LABEL}: ${item.en} = ${item.ja}`);
-    });
+    const tags = pending
+      .map((item) => `<span class="loanword-tag">${item.en} → ${item.ja}</span>`)
+      .join(' ');
+    output.push(`${pendingIndent}<span class="loanword-line">${tags}</span>`);
     pending = null;
   }
 
@@ -183,12 +184,21 @@ function sanitizeAudioTasks(tasks = []) {
   });
 }
 
+function markExplanationLines(markdown) {
+  if (!markdown) return markdown;
+  return markdown.replace(
+    /^(\s*-\s*\*\*)(解释|解説)(\*\*:\s*)(.+)$/gm,
+    '$1$2$3<span class="explanation-text">$4</span>'
+  );
+}
+
 function postProcessGeneratedContent(content) {
   if (!content || typeof content !== 'object') return content;
   let markdown = content.markdown_content || '';
   markdown = relocateLoanwordAnnotations(markdown);
   markdown = cleanJapaneseTranslations(markdown);
   markdown = dedupeTechSection(markdown);
+  markdown = markExplanationLines(markdown);
   content.markdown_content = markdown;
   if (Array.isArray(content.audio_tasks)) {
     content.audio_tasks = sanitizeAudioTasks(content.audio_tasks);

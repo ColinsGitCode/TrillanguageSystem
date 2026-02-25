@@ -80,6 +80,7 @@
 - 最新仓库状态：`Docs/SystemDevelopStatusDocs/repo_status.md`
 - 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
+- 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`
 
 ---
 

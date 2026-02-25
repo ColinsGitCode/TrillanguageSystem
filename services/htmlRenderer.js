@@ -136,16 +136,14 @@ function injectAudioTags(markdown, baseName, audioTasks) {
       else currentLang = null;
     }
 
-    output.push(line);
-
     const exampleMatch = line.match(/^\s*-\s*\*\*例句(\d+)\*\*:/);
     if (exampleMatch && currentLang) {
       const index = exampleMatch[1];
       const suffixKey = `${currentLang}:${currentLang}_${index}`;
       const suffix = audioMap.get(suffixKey) || `_${currentLang}_${index}`;
-      output.push(
-        `  <div class="audio"><audio controls src="${baseName}${suffix}.wav"></audio></div>`
-      );
+      output.push(`${line} <audio src="${baseName}${suffix}.wav"></audio>`);
+    } else {
+      output.push(line);
     }
   });
 
@@ -213,8 +211,11 @@ async function renderHtmlFromMarkdown(markdown, options = {}) {
     li::before { content: '•'; color: var(--accent); display: inline-block; width: 1em; }
     rt { font-size: 0.65em; color: #666; font-family: 'Noto Sans JP', 'Hiragino Sans',
          'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans', sans-serif; }
+    .explanation-text { font-size: 0.9em; color: #888; }
+    .loanword-line { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+    .loanword-tag { display: inline-block; font-size: 0.75em; font-family: monospace; background: rgba(249,115,22,0.07); color: #c2410c; border: 1px solid rgba(249,115,22,0.2); border-radius: 4px; padding: 1px 8px; white-space: nowrap; }
     .audio { margin: 0.35em 0 0.75em 0; }
-    audio { width: 100%; max-width: 360px; }
+    audio { display: inline-block; width: auto; max-width: 200px; height: 28px; vertical-align: middle; margin-left: 0.3em; }
     @media (max-width: 720px) {
       .card { padding: 1.6rem 1.4rem; }
       h1 { font-size: 1.8rem; }

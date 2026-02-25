@@ -2,14 +2,30 @@ function initSection() {
   return {
     translation: '',
     explanation: '',
-    examples: []
+    examples: [],
+    register: '',
+    disambiguation: ''
   };
 }
 
 function parseLoanwordLine(text) {
+  // Legacy format: 外来语标注: English = カタカナ
   const match = text.match(/外来语标注:\s*([^=]+?)\s*=\s*(.+)$/);
-  if (!match) return null;
-  return { en: match[1].trim(), ja: match[2].trim() };
+  if (match) return { en: match[1].trim(), ja: match[2].trim() };
+  // New HTML span format: <span class="loanword-tag">English → カタカナ</span>
+  const tagMatch = text.match(/loanword-tag[^>]*>([^→<]+?)\s*→\s*([^<]+)</);
+  if (tagMatch) return { en: tagMatch[1].trim(), ja: tagMatch[2].trim() };
+  return null;
+}
+
+function parseLoanwordTags(text) {
+  const results = [];
+  const re = /loanword-tag[^>]*>([^→<]+?)\s*→\s*([^<]+)</g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    results.push({ en: m[1].trim(), ja: m[2].trim() });
+  }
+  return results;
 }
 
 function parseTrilingualMarkdown(markdown) {
@@ -71,6 +87,18 @@ function parseTrilingualMarkdown(markdown) {
         continue;
       }
 
+      if (/语域/.test(label)) {
+        result.sections[current].register = value;
+        lastExample = null;
+        continue;
+      }
+
+      if (/辨析/.test(label)) {
+        result.sections[current].disambiguation = value;
+        lastExample = null;
+        continue;
+      }
+
       if (/例句/.test(label)) {
         const example = { text: value, translation: '', loanwords: [] };
         result.sections[current].examples.push(example);
@@ -82,6 +110,13 @@ function parseTrilingualMarkdown(markdown) {
     const bulletMatch = line.match(/^\s*-\s+(.+)$/);
     if (bulletMatch && lastExample) {
       const text = bulletMatch[1].trim();
+      // Check for multiple loanword tags (new HTML span format)
+      const multiTags = parseLoanwordTags(text);
+      if (multiTags.length > 0) {
+        lastExample.loanwords.push(...multiTags);
+        continue;
+      }
+      // Check for single loanword (legacy format)
       const loanword = parseLoanwordLine(text);
       if (loanword) {
         lastExample.loanwords.push(loanword);

@@ -145,8 +145,59 @@
 }
 
 /* Definitions & Markdown Content */
-.mc-content h1, .mc-content h2 {
-  display: none; /* Hide original MD headers as we use custom header */
+.mc-content h1 {
+  display: none; /* Title shown in .mc-header */
+}
+
+/* Language Section Dividers */
+.mc-content h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82em;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.03em;
+  color: var(--text-slate);
+  margin: 1.8rem 0 1rem 0;
+  padding: 0;
+  border: none;
+}
+
+.mc-content h2:first-of-type {
+  margin-top: 0;
+}
+
+.mc-content h2::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 1.1em;
+  border-radius: 2px;
+  background: var(--accent-en);
+  flex-shrink: 0;
+}
+
+.mc-content h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* 2nd h2: Japanese → orange */
+.mc-content h2:nth-of-type(2)::before {
+  background: var(--accent-jp);
+}
+
+/* 3rd h2: Chinese → green */
+.mc-content h2:nth-of-type(3)::before {
+  background: var(--accent-cn);
+}
+
+/* 4th+ h2: Tech section → muted */
+.mc-content h2:nth-of-type(n+4)::before {
+  background: var(--text-muted);
 }
 
 .mc-content p {
@@ -296,21 +347,66 @@ rt {
   color: var(--text-muted);
 }
 
-/* Audio Button (Injected via JS) */
+/* Explanation text de-emphasis */
+.explanation-text {
+  font-size: 0.88em;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Loanword annotation tags */
+.loanword-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.loanword-tag {
+  display: inline-block;
+  font-size: 0.72em;
+  font-family: var(--font-mono);
+  background: rgba(249, 115, 22, 0.07);
+  color: #c2410c;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: 4px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* Chinese section summary card */
+.mc-content h2:nth-of-type(3) + ul {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.03) 0%, rgba(16, 185, 129, 0.06) 100%);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  border-left: 3px solid var(--accent-cn);
+}
+
+.mc-content h2:nth-of-type(3) + ul li {
+  border-left: none;
+}
+
+.mc-content h2:nth-of-type(3) + ul strong {
+  color: var(--accent-cn);
+}
+
+/* Audio Button (Inline after example sentences) */
 .audio-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #f3f4f6;
   color: var(--text-slate);
-  margin-left: 0.5rem;
+  margin-left: 0.4rem;
   cursor: pointer;
   border: 1px solid var(--border-subtle);
   transition: all 0.2s;
-  font-size: 18px;
+  font-size: 14px;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .audio-btn:hover {
@@ -326,9 +422,9 @@ rt {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(188, 71, 73, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(188, 71, 73, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(188, 71, 73, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
 }
 
 /* Close Button */
