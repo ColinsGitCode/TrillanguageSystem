@@ -978,9 +978,80 @@ function initModal() {
     });
 }
 
+function normalizeLoanwordAnnotations(markdown) {
+    if (!markdown || typeof markdown !== 'string') return markdown || '';
+    if (markdown.includes('loanword-block')) return markdown;
+
+    const looksKana = (s) => /[\u30A0-\u30FF]/.test(String(s || ''));
+    const looksLatin = (s) => /[A-Za-z]/.test(String(s || ''));
+    const parsePairs = (raw) => String(raw || '')
+        .split(/[，,、；;]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map((chunk) => {
+            const match = chunk.match(/^([^=]+?)\s*=\s*(.+)$/);
+            if (!match) return { en: chunk, ja: '' };
+            let left = match[1].trim();
+            let right = match[2].trim();
+            if (looksKana(left) && looksLatin(right)) {
+                const tmp = left;
+                left = right;
+                right = tmp;
+            }
+            return { en: left, ja: right };
+        });
+
+    const renderBlock = (items) => {
+        if (!items.length) return '';
+        const tags = items
+            .map(({ en, ja }) => {
+                const safeEn = escapeHtml(String(en || '').trim());
+                const safeJa = escapeHtml(String(ja || '').trim());
+                if (!safeEn && !safeJa) return '';
+                return safeJa
+                    ? `<span class="loanword-tag">${safeEn} → ${safeJa}</span>`
+                    : `<span class="loanword-tag">${safeEn}</span>`;
+            })
+            .filter(Boolean)
+            .join(' ');
+        if (!tags) return '';
+        return `<div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line">${tags}</span></div>`;
+    };
+
+    const lines = markdown.split(/\r?\n/);
+    const output = [];
+
+    lines.forEach((line) => {
+        const inlineMatch = line.match(/^(\s*-\s+)(.*?)\s+[-—–]\s*外来语标注[:：]\s*(.+)$/i);
+        if (inlineMatch) {
+            const prefix = inlineMatch[1];
+            const translated = inlineMatch[2].trim();
+            const pairs = parsePairs(inlineMatch[3]);
+            output.push(`${prefix}${translated}`);
+            const block = renderBlock(pairs);
+            if (block) output.push(block);
+            return;
+        }
+
+        const standaloneMatch = line.match(/^\s*-\s*外来语标注[:：]\s*(.*)$/i);
+        if (standaloneMatch) {
+            const raw = (standaloneMatch[1] || '').trim();
+            const pairs = parsePairs(raw || '无');
+            const block = renderBlock(pairs);
+            output.push(block || line);
+            return;
+        }
+
+        output.push(line);
+    });
+
+    return output.join('\n');
+}
+
 function renderMarkdownWithAudioButtons(markdown, options = {}) {
     const folder = options.folder || '';
-    const html = marked.parse(markdown || '');
+    const normalized = normalizeLoanwordAnnotations(markdown || '');
+    const html = marked.parse(normalized);
     const processedHtml = html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src) => {
         const folderAttr = folder ? ` data-folder="${folder}"` : '';
         return `<button class="audio-btn" data-src="${src}"${folderAttr}>▶</button>`;

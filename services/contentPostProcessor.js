@@ -2,6 +2,8 @@ const KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]/g;
 const KANA_PAREN_REGEX = /[（(][\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\u30FC\s]+[）)]/g;
 const LOANWORD_PAREN_REGEX = /([\u30A0-\u30FF\u30FC]+)\(([A-Za-z0-9][A-Za-z0-9\s._-]*)\)/g;
 const LOANWORD_LABEL = '外来语标注';
+const LEGACY_LOANWORD_LINE_REGEX = /^(\s*)-\s*外来语标注[:：]\s*(.*)$/i;
+const INLINE_LOANWORD_SPLIT_REGEX = /^(.*?)\s+[-—–]\s*外来语标注[:：]\s*(.+)$/i;
 
 function stripRuby(text) {
   if (!text) return '';
@@ -69,14 +71,50 @@ function relocateLoanwordAnnotations(markdown) {
   const output = [];
   let inJapanese = false;
   let pending = null;
-  let pendingIndent = '  - ';
+  let pendingIndent = '  ';
+
+  function renderLoanwordBlock(items = [], indent = '  ') {
+    if (!items.length) return null;
+    const tags = items
+      .map((item) => {
+        const en = String(item.en || '').trim();
+        const ja = String(item.ja || '').trim();
+        if (!en && !ja) return '';
+        if (!ja) return `<span class="loanword-tag">${en}</span>`;
+        return `<span class="loanword-tag">${en} → ${ja}</span>`;
+      })
+      .filter(Boolean)
+      .join(' ');
+    if (!tags) return null;
+    return `${indent}<div class="loanword-block"><span class="loanword-label">${LOANWORD_LABEL}</span><span class="loanword-line">${tags}</span></div>`;
+  }
+
+  function parseLegacyLoanwordPairs(text) {
+    const looksKana = (s) => /[\u30A0-\u30FF]/.test(String(s || ''));
+    const looksLatin = (s) => /[A-Za-z]/.test(String(s || ''));
+    return String(text || '')
+      .split(/[，,、；;]+/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const match = chunk.match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (!match) return { en: chunk, ja: '' };
+        let left = match[1].trim();
+        let right = match[2].trim();
+        if (looksKana(left) && looksLatin(right)) {
+          const tmp = left;
+          left = right;
+          right = tmp;
+        }
+        return { en: left, ja: right };
+      })
+      .filter(Boolean);
+  }
 
   function flushPending() {
     if (!pending || !pending.length) return;
-    const tags = pending
-      .map((item) => `<span class="loanword-tag">${item.en} → ${item.ja}</span>`)
-      .join(' ');
-    output.push(`${pendingIndent}<span class="loanword-line">${tags}</span>`);
+    const block = renderLoanwordBlock(pending, pendingIndent);
+    if (block) output.push(block);
     pending = null;
   }
 
@@ -87,6 +125,22 @@ function relocateLoanwordAnnotations(markdown) {
       const headerText = headerMatch[2];
       inJapanese = /日本語|日语/.test(headerText);
       output.push(line);
+      continue;
+    }
+
+    const legacyLoanwordMatch = line.match(LEGACY_LOANWORD_LINE_REGEX);
+    if (legacyLoanwordMatch) {
+      const indent = legacyLoanwordMatch[1] || '  ';
+      const pairs = parseLegacyLoanwordPairs(legacyLoanwordMatch[2]);
+      const block = renderLoanwordBlock(
+        pairs.length ? pairs : [{ en: legacyLoanwordMatch[2].trim() || '无', ja: '' }],
+        indent
+      );
+      if (block) {
+        output.push(block);
+      } else {
+        output.push(line);
+      }
       continue;
     }
 
@@ -106,7 +160,7 @@ function relocateLoanwordAnnotations(markdown) {
         return ja;
       });
       pending = extracted.length ? extracted : null;
-      pendingIndent = '  - ';
+      pendingIndent = '  ';
       output.push(`${prefix}${content}`);
       continue;
     }
@@ -114,10 +168,27 @@ function relocateLoanwordAnnotations(markdown) {
     const translationMatch = line.match(/^(\s*-\s+)(.*)$/);
     const isLabeled = /\*\*[^*]+?\*\*:\s*/.test(line);
     if (translationMatch && !isLabeled) {
-      output.push(line);
-      if (pending) {
-        pendingIndent = translationMatch[1];
-        flushPending();
+      const prefix = translationMatch[1];
+      const content = translationMatch[2];
+      const inlineLoanwordMatch = content.match(INLINE_LOANWORD_SPLIT_REGEX);
+
+      if (inlineLoanwordMatch) {
+        const translatedText = inlineLoanwordMatch[1].trim();
+        const rawPairs = inlineLoanwordMatch[2].trim();
+        const parsedPairs = parseLegacyLoanwordPairs(rawPairs);
+        const block = renderLoanwordBlock(
+          parsedPairs.length ? parsedPairs : [{ en: rawPairs, ja: '' }],
+          prefix.replace(/-\s*$/, '')
+        );
+        output.push(`${prefix}${translatedText}`);
+        if (block) output.push(block);
+        pending = null;
+      } else {
+        output.push(line);
+        if (pending) {
+          pendingIndent = prefix.replace(/-\s*$/, '');
+          flushPending();
+        }
       }
       continue;
     }
@@ -186,9 +257,26 @@ function sanitizeAudioTasks(tasks = []) {
 
 function markExplanationLines(markdown) {
   if (!markdown) return markdown;
-  return markdown.replace(
+  let normalized = String(markdown);
+
+  // Collapse duplicated wrappers produced by repeated migrations.
+  const nestedWrapper =
+    /<span\s+class=["']explanation-text["']>\s*<span\s+class=["']explanation-text["']>([\s\S]*?)<\/span>\s*<\/span>/gi;
+  let prev = '';
+  while (normalized !== prev) {
+    prev = normalized;
+    normalized = normalized.replace(nestedWrapper, '<span class="explanation-text">$1</span>');
+  }
+
+  return normalized.replace(
     /^(\s*-\s*\*\*)(解释|解説)(\*\*:\s*)(.+)$/gm,
-    '$1$2$3<span class="explanation-text">$4</span>'
+    (full, head, label, tail, content) => {
+      const text = String(content || '').trim();
+      if (/^<span\s+class=["']explanation-text["'][^>]*>[\s\S]*<\/span>$/i.test(text)) {
+        return `${head}${label}${tail}${text}`;
+      }
+      return `${head}${label}${tail}<span class="explanation-text">${text}</span>`;
+    }
   );
 }
 

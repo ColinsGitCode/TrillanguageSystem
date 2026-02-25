@@ -212,8 +212,10 @@ async function renderHtmlFromMarkdown(markdown, options = {}) {
     rt { font-size: 0.65em; color: #666; font-family: 'Noto Sans JP', 'Hiragino Sans',
          'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans', sans-serif; }
     .explanation-text { font-size: 0.9em; color: #888; }
-    .loanword-line { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
-    .loanword-tag { display: inline-block; font-size: 0.75em; font-family: monospace; background: rgba(249,115,22,0.07); color: #c2410c; border: 1px solid rgba(249,115,22,0.2); border-radius: 4px; padding: 1px 8px; white-space: nowrap; }
+    .loanword-block { display: block; margin-top: 0.5em; padding: 0.35em 0.55em 0.45em 0.6em; border-left: 3px solid rgba(249,115,22,0.9); background: linear-gradient(90deg, rgba(249,115,22,0.1), rgba(249,115,22,0.03)); border-radius: 8px; }
+    .loanword-label { display: block; font-size: 0.68em; font-weight: 700; color: #b45309; margin-bottom: 0.25em; letter-spacing: .02em; }
+    .loanword-line { display: flex; flex-wrap: wrap; gap: 6px; }
+    .loanword-tag { display: inline-block; font-size: 0.75em; font-family: monospace; font-weight: 700; background: rgba(251,146,60,0.16); color: #9a3412; border: 1px solid rgba(249,115,22,0.4); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
     .audio { margin: 0.35em 0 0.75em 0; }
     audio { display: inline-block; width: auto; max-width: 200px; height: 28px; vertical-align: middle; margin-left: 0.3em; }
     @media (max-width: 720px) {
