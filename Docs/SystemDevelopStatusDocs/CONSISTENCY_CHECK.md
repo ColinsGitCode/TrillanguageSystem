@@ -15,6 +15,7 @@
 - 卡片样式对齐：外来语标注独立高亮块（非同行显示）与历史卡片兼容转换已记录
 - 运维脚本对齐：`scripts/updateLegacyCardStyle.js` 与 `npm run cards:migrate-style` 已记录
 - v3.5 选区生成对齐：`✦ Generate Card` 已切换为静默任务队列（不跳转），并补充 Ruby-aware 选区提取策略
+- v3.5 主入口对齐：首页 `Generate` 入口已切换为静默任务队列（支持连续入队）
 
 ## 2. v3.3 评审改进对齐
 

@@ -39,7 +39,8 @@ Header (TRILINGUAL RECORDS + Mission Control)
 
 ### 2.1 关键交互
 
-- 生成成功后自动刷新列表并定位到目标日期目录
+- 点击主输入区 `Generate` 后任务入后台队列，可继续输入并连续点击生成
+- 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - 卡片列表支持多列自适应显示
@@ -118,6 +119,7 @@ Header (TRILINGUAL RECORDS + Mission Control)
   - `llmProvider`、`modelMode`、`compareMode`
 - API：`api.js`
   - 生成/OCR/历史/统计
+  - `generate()` 支持扩展参数透传（如 `target_folder`）以服务后台队列任务
   - 评审 campaign（创建/finalize/rollback）与评分提交
   - 删除与文件读取
 

@@ -1,4 +1,4 @@
-# 文本选取即时生成卡片（静默队列版）
+# 文本选取与主输入即时生成（静默队列版）
 
 **版本**: v3.5
 **日期**: 2026-02-26
@@ -6,7 +6,7 @@
 
 ## 1. 功能概述
 
-在学习卡片 CONTENT 区域保留选区浮动按钮（FAB）`✦ Generate Card`，但交互升级为**静默入队**：
+在学习卡片 CONTENT 区域保留选区浮动按钮（FAB）`✦ Generate Card`，并将首页主输入 `Generate` 入口一并升级为**静默入队**：
 
 - 点击后任务直接进入后台生成队列
 - 不关闭当前卡片弹窗
@@ -15,7 +15,7 @@
 ### 交互流程
 
 ```text
-用户在 #cardContent 中拖选文字
+路径 A：用户在 #cardContent 中拖选文字
         ↓
 浮动按钮出现在选区上方（✦ Generate Card）
         ↓
@@ -24,6 +24,10 @@
 Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
         ↓
 加入后台任务队列（queued）
+        ↓
+路径 B：首页主输入框点击 Generate
+        ↓
+输入文本直接加入同一后台任务队列（queued）
         ↓
 队列串行执行（running -> success/failed）
         ↓
@@ -41,7 +45,7 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
 | `buildSelectionCandidateFromContainer(container)` | `public/js/modules/app.js` | 从选区构建可入队文本（含 Ruby-aware 处理） |
 | `collectVisibleSelectionText(node, pieces)` | `public/js/modules/app.js` | 遍历 DOM 片段，过滤 UI 噪音节点与注音节点 |
 | `normalizeSelectionPhrase(text)` | `public/js/modules/app.js` | 归一化短语（空白/标点/前缀清洗） |
-| `enqueueBackgroundGenerationTask(...)` | `public/js/modules/app.js` | 入队（去重、队列上限） |
+| `enqueueBackgroundGenerationTask(...)` | `public/js/modules/app.js` | 入队（去重、队列上限；选区与主输入共用） |
 | `processGenerationQueue()` | `public/js/modules/app.js` | 串行调度执行器（并发=1） |
 | `runGenerationTaskFromQueue(task)` | `public/js/modules/app.js` | 调用 `api.generate()` 完成单任务生成 |
 
@@ -107,9 +111,10 @@ renderCardModal()
 ## 6. 验收要点
 
 1. 连续点击 `✦ Generate Card` 多次后，任务按顺序串行执行。
-2. 执行期间当前卡片不关闭、不跳转。
-3. 日语含注音选区生成任务短语不包含注音文本（`rt`）。
-4. 失败任务可重试，成功任务会出现在对应日期目录下。
+2. 首页主输入可连续输入并连续点击 `Generate`，任务按顺序执行。
+3. 执行期间当前卡片不关闭、不跳转。
+4. 日语含注音选区生成任务短语不包含注音文本（`rt`）。
+5. 失败任务可重试，成功任务会出现在对应日期目录下。
 
 ---
 

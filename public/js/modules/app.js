@@ -540,67 +540,24 @@ function initModelSelector() {
 function initGenerator() {
     els.genBtn.addEventListener('click', async () => {
         const phrase = els.phraseInput.value.trim();
-        if (!phrase) return;
-
-        const mode = store.get('modelMode');
-        const isCompare = mode === 'compare';
-
-        store.setState({ isGenerating: true });
-        updateGenUI(true);
-        startProgress(phrase);
-
-        try {
-            updateStep('init', '初始化...');
-            await new Promise(r => setTimeout(r, 100));
-
-            updateStep('prompt', '构建优化 Prompt...');
-            updateStep('llm', isCompare ? '双模型并行生成中...' : 'AI 思考中...');
-
-            const provider = mode === 'gemini' ? 'gemini' : 'local';
-            const data = await api.generate(phrase, provider, isCompare);
-
-            // 对比模式处理
-            if (isCompare) {
-                handleCompareResult(data);
-                updateStep('complete', '对比完成!', false);
-                setTimeout(hideProgress, 3000);
-                return;
-            }
-
-            // 单模式处理
-            updateStep('parse', '解析结果...');
-
-            // 保存可观测性数据
-            if (data.observability) {
-                localStorage.setItem('latest_observability', JSON.stringify(data.observability));
-            }
-
-            updateStep('render', '渲染 HTML...');
-            updateStep('save', '保存文件...');
-
-            if (data.audio?.results?.length) {
-                updateStep('audio', '生成 TTS 音频...');
-            }
-
-            updateStep('complete', '完成!', false);
-
-            els.phraseInput.value = '';
-            clearImage();
-
-            // 自动跳转到新结果并刷新
-            await loadFolders({ targetSelect: data.result.folder, noCache: true });
-
-            setTimeout(hideProgress, 3000);
-
-        } catch (err) {
-            els.progressStatus.textContent = `❌ ${err.message}`;
-            els.progressStatus.style.color = 'var(--color-error)';
-            setTimeout(hideProgress, 5000);
-        } finally {
-            store.setState({ isGenerating: false });
-            updateGenUI(false);
-            stopTimer();
+        if (!phrase) {
+            showGenerationQueueToast('请输入短语或句子');
+            return;
         }
+
+        const accepted = enqueueBackgroundGenerationTask(phrase, phrase, {
+            folder: store.get('selectedFolder') || '',
+            baseName: '',
+            generationId: null,
+            entry: 'main-input'
+        });
+        if (!accepted) return;
+
+        // 保持页面与卡片阅读上下文不变，仅清空输入以便继续排队。
+        els.phraseInput.value = '';
+        els.phraseInput.focus();
+        hideProgress();
+        stopTimer();
     });
 }
 
