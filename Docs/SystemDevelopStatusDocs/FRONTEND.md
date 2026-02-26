@@ -1,8 +1,8 @@
 # 前端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.3
-**更新日期**: 2026-02-24
+**版本**: 3.4
+**更新日期**: 2026-02-25
 
 ## 1. 前端目录
 
@@ -51,6 +51,16 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - `CONTENT`：卡片正文 + 例句音频
 - `INTEL`：质量/Token/性能/Prompt/LLM Output
 - `REVIEW`（有 generationId 时显示）：例句人工评分与评论
+
+### 3.1.1 外来语标注展示（v3.4 新增）
+
+- 统一展示为独立高亮块：`loanword-block`
+- 标签与内容分行：
+  - 第一行：`外来语标注`
+  - 第二行：`English → カタカナ` tag 列表
+- 兼容旧卡片：
+  - 弹窗渲染路径会在前端运行时规范化旧格式（`normalizeLoanwordAnnotations`）
+  - 历史文件可通过迁移脚本离线回填为新格式
 
 ### 3.2 INTEL 页能力
 
@@ -105,6 +115,7 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 对比弹窗：宽视图对照优先
 - Mission Control：仪表盘风格
 - 浏览器标签页图标：`favicon-lan.svg`（LAN）
+- 外来语标注：左侧强调线 + 橙色高亮背景 + 粗体胶囊 tag（强调可读性）
 
 ## 8. 与后端主线关系
 

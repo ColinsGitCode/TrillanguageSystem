@@ -781,6 +781,83 @@ class DatabaseService {
   }
 
   /**
+   * 评审管线统计（Dashboard 用）
+   */
+  getReviewStats() {
+    const eligibility = this.db.prepare(`
+      SELECT eligibility, COUNT(*) as count
+      FROM example_units
+      GROUP BY eligibility
+    `).all();
+
+    const byLang = this.db.prepare(`
+      SELECT lang, eligibility, COUNT(*) as count
+      FROM example_units
+      GROUP BY lang, eligibility
+    `).all();
+
+    const recentActivity = this.db.prepare(`
+      SELECT date(updated_at) as day, COUNT(*) as reviews
+      FROM example_reviews
+      WHERE updated_at >= date('now', '-30 days')
+      GROUP BY day
+      ORDER BY day
+    `).all();
+
+    const avgScores = this.db.prepare(`
+      SELECT
+        AVG(score_sentence) as avgSentence,
+        AVG(score_translation) as avgTranslation,
+        AVG(score_tts) as avgTts,
+        COUNT(*) as totalReviews
+      FROM example_reviews
+    `).get();
+
+    return { eligibility, byLang, recentActivity, avgScores };
+  }
+
+  /**
+   * Few-shot 效果统计（Dashboard 用）
+   */
+  getFewShotStats() {
+    const byVariant = this.db.prepare(`
+      SELECT
+        variant,
+        COUNT(*) as runs,
+        AVG(quality_score) as avgQuality,
+        AVG(total_prompt_tokens_est) as avgTokens,
+        AVG(latency_total_ms) as avgLatency
+      FROM few_shot_runs
+      GROUP BY variant
+    `).all();
+
+    const fallbackReasons = this.db.prepare(`
+      SELECT fallback_reason, COUNT(*) as count
+      FROM few_shot_runs
+      WHERE fallback_reason IS NOT NULL AND fallback_reason != ''
+      GROUP BY fallback_reason
+      ORDER BY count DESC
+    `).all();
+
+    const injectionRate = this.db.prepare(`
+      SELECT
+        SUM(fewshot_enabled) as enabled,
+        COUNT(*) as total
+      FROM few_shot_runs
+    `).get();
+
+    const qualityTrend = this.db.prepare(`
+      SELECT date(created_at) as day, variant, AVG(quality_score) as avgQuality
+      FROM few_shot_runs
+      WHERE created_at >= date('now', '-30 days')
+      GROUP BY day, variant
+      ORDER BY day
+    `).all();
+
+    return { byVariant, fallbackReasons, injectionRate, qualityTrend };
+  }
+
+  /**
    * 关闭数据库连接
    */
   close() {

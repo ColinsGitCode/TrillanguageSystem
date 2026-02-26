@@ -1,6 +1,6 @@
 # Repo 文档与代码一致性检查
 
-**检查日期**: 2026-02-24
+**检查日期**: 2026-02-25
 **检查范围**: `Docs/SystemDevelopStatusDocs/*` 对照当前代码主链路
 
 ## 1. 已对齐项
@@ -12,6 +12,8 @@
 - few-shot 对齐：review-gated / reviewOnly / reviewMinOverall / minTts / 加权相似度 已更新文档
 - 数据模型对齐：16 张表（含 review 相关 5 张）已在后端文档体现
 - 前端对齐：弹窗 `CONTENT/INTEL/REVIEW`、采样按钮/回滚按钮/已完成标签 已记录
+- 卡片样式对齐：外来语标注独立高亮块（非同行显示）与历史卡片兼容转换已记录
+- 运维脚本对齐：`scripts/updateLegacyCardStyle.js` 与 `npm run cards:migrate-style` 已记录
 
 ## 2. v3.3 评审改进对齐
 
@@ -28,9 +30,8 @@
 
 ## 4. 结论
 
-- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.3）
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.4）
 - 当前文档可直接支撑：
   1. 接口联调
   2. 评分与注入机制解释（含 TTS 门控、采样模式、回滚）
   3. 可观测与实验链路说明
-

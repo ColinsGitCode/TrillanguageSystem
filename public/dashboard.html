@@ -9,7 +9,7 @@
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <!-- Styles -->
-    <link rel="stylesheet" href="styles.css"> <!-- Reuse main styles for vars -->
+    <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="modern-card.css">
     <link rel="stylesheet" href="css/dashboard.css">
     <!-- Libraries -->
@@ -58,6 +58,11 @@
                 </h1>
             </div>
             <div style="display: flex; align-items: center; gap: 24px;">
+                <div class="time-range-selector">
+                    <button class="time-btn" data-days="7">7D</button>
+                    <button class="time-btn active" data-days="30">30D</button>
+                    <button class="time-btn" data-days="90">90D</button>
+                </div>
                 <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <div class="status-dot" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);"></div>
@@ -68,120 +73,20 @@
 
         <!-- 2. Main Grid -->
         <main class="dashboard-grid-v2">
-            
-            <!-- A. Status Matrix (Top Left) -->
+
+            <!-- Row 1: Infrastructure | Error Monitor | Data Core (span 2) -->
+
+            <!-- A. Infrastructure -->
             <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
                 <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 12px;">
                     <h3>Infrastructure <button class="info-btn" data-info-key="INFRASTRUCTURE">?</button></h3>
-                    <div style="width: 20px; height: 20px; border: 1px solid var(--neon-blue); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                        <div style="width: 6px; height: 6px; background: var(--neon-blue); border-radius: 50%;"></div>
+                    <div style="width: 20px; height: 20px; border: 1px solid var(--color-accent); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 6px; height: 6px; background: var(--color-accent); border-radius: 50%;"></div>
                     </div>
                 </div>
                 <div id="serviceMatrix" style="display: flex; flex-direction: column; gap: 8px;">
                     <!-- Injected -->
                 </div>
-            </div>
-
-            <!-- B. Quota Gauge (Top Mid) -->
-            <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div class="card-header" style="width: 100%; margin-bottom: 8px;">
-                    <h3>API Fuel <button class="info-btn" data-info-key="API_FUEL">?</button></h3>
-                </div>
-                <div style="position: relative; width: 120px; height: 80px;">
-                    <div id="quotaChart"></div>
-                    <div style="position: absolute; bottom: 0; width: 100%; text-align: center;">
-                        <span id="quotaPercent" style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; color: var(--sci-text-main);">0%</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- C. Storage (Top Right) -->
-            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-                    <h3>Data Core <button class="info-btn" data-info-key="DATA_CORE">?</button></h3>
-                    <span class="badge" id="storageMeta">0 files</span>
-                </div>
-                <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;">
-                    <span id="storageUsed" style="font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; color: var(--sci-text-main);">0.00</span>
-                    <span style="color: var(--sci-text-muted); font-size: 14px;">GB USED</span>
-                </div>
-                <div style="background: #e5e7eb; height: 4px; border-radius: 2px; overflow: hidden;">
-                    <div id="storageBar" style="background: var(--neon-purple); height: 100%; width: 0%; box-shadow: 0 0 10px var(--neon-purple);"></div>
-                </div>
-            </div>
-
-            <!-- D. Model Arena (The Core) -->
-            <div class="glass-panel" id="card-arena" style="grid-column: span 2; grid-row: span 2; padding: 24px; border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                <div class="card-header" style="margin-bottom: 24px;">
-                    <h3 style="color: var(--neon-blue);">⚔️ Model Arena <button class="info-btn" data-info-key="MODEL_ARENA">?</button></h3>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center;">
-                    <!-- Gemini -->
-                    <div style="text-align: right;">
-                        <div style="font-family: 'Space Grotesk'; font-size: 20px; font-weight: 700; color: var(--neon-blue); margin-bottom: 16px;">GEMINI API</div>
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <div>
-                                <span style="font-size: 12px; color: var(--sci-text-muted);">SPEED</span>
-                                <div style="font-family: 'JetBrains Mono'; font-size: 18px;" id="geminiSpeedVal">-</div>
-                            </div>
-                            <div>
-                                <span style="font-size: 12px; color: var(--sci-text-muted);">QUALITY</span>
-                                <div style="font-family: 'JetBrains Mono'; font-size: 18px; color: var(--neon-green);" id="geminiQualityVal">-</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- VS -->
-                    <div style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 800; color: rgba(255,255,255,0.2);">VS</div>
-                    
-                    <!-- Local -->
-                    <div style="text-align: left;">
-                        <div style="font-family: 'Space Grotesk'; font-size: 20px; font-weight: 700; color: var(--neon-purple); margin-bottom: 16px;">LOCAL LLM</div>
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <div>
-                                <span style="font-size: 12px; color: var(--sci-text-muted);">SPEED</span>
-                                <div style="font-family: 'JetBrains Mono'; font-size: 18px;" id="localSpeedVal">-</div>
-                            </div>
-                            <div>
-                                <span style="font-size: 12px; color: var(--sci-text-muted);">QUALITY</span>
-                                <div style="font-family: 'JetBrains Mono'; font-size: 18px; color: var(--neon-green);" id="localQualityVal">-</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-top: 32px; padding: 16px; background: rgba(0,0,0,0.3); border-radius: 8px; border-left: 4px solid var(--neon-amber);">
-                    <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--neon-amber);">RECOMMENDATION ENGINE</div>
-                    <div id="arenaRecommendation" style="margin-top: 4px; font-size: 14px;">Analyzing performance data...</div>
-                </div>
-            </div>
-
-            <!-- E. Quality Trend (Area Glow Chart) -->
-            <div class="glass-panel" style="grid-column: span 2; padding: 24px; border-radius: 16px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-                    <h3>Quality Signal <button class="info-btn" data-info-key="QUALITY_SIGNAL">?</button></h3>
-                    <div class="time-range-selector">
-                        <!-- Buttons managed by JS -->
-                    </div>
-                </div>
-                <div id="qualityTrendChart" style="width: 100%; height: 200px;"></div>
-            </div>
-
-            <!-- F. Live Feed (Enhanced) -->
-            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px; overflow: hidden;">
-                <div class="card-header" style="margin-bottom: 12px;">
-                    <h3>Live Feed <button class="info-btn" data-info-key="LIVE_FEED">?</button></h3>
-                </div>
-                <div id="liveFeed" style="font-family: 'JetBrains Mono'; font-size: 12px; display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto;">
-                    <div style="color: var(--sci-text-muted);">Waiting for stream...</div>
-                </div>
-            </div>
-
-            <!-- G. Provider Distribution -->
-            <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
-                <div class="card-header" style="margin-bottom: 12px;">
-                    <h3>Provider Split <button class="info-btn" data-info-key="PROVIDER_SPLIT">?</button></h3>
-                </div>
-                <div id="providerDistribution"></div>
             </div>
 
             <!-- H. Error Monitor -->
@@ -192,28 +97,89 @@
                 <div id="errorMonitor"></div>
             </div>
 
+            <!-- C. Data Core (span 2) -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <h3>Data Core <button class="info-btn" data-info-key="DATA_CORE">?</button></h3>
+                    <span class="badge" id="storageMeta">0 files</span>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;">
+                    <span id="storageUsed" style="font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; color: var(--text-primary);">0.00</span>
+                    <span style="color: var(--text-secondary); font-size: 14px;">GB USED</span>
+                </div>
+                <div style="background: #e5e7eb; height: 4px; border-radius: 2px; overflow: hidden;">
+                    <div id="storageBar" style="background: var(--color-purple); height: 100%; width: 0%; box-shadow: 0 0 10px var(--color-purple);"></div>
+                </div>
+            </div>
+
+            <!-- Row 2: Review Pipeline (span 2) | Few-shot Effectiveness (span 2) -->
+
+            <!-- Review Pipeline -->
+            <div class="glass-panel review-pipeline-panel" style="grid-column: span 2; padding: 20px; border-radius: 12px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <h3 style="color: var(--color-success);">Review Pipeline <button class="info-btn" data-info-key="REVIEW_PIPELINE">?</button></h3>
+                </div>
+                <div id="reviewPipeline">
+                    <div class="empty-hint">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Few-shot Effectiveness -->
+            <div class="glass-panel fewshot-panel" style="grid-column: span 2; padding: 20px; border-radius: 12px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <h3 style="color: var(--color-purple);">Few-shot Effectiveness <button class="info-btn" data-info-key="FEWSHOT_EFFECT">?</button></h3>
+                </div>
+                <div id="fewshotEffect">
+                    <div class="empty-hint">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Row 3: Token Trend (span 2) | Latency (span 1) | Quality mini (span 1) -->
+
             <!-- I. Token Trend -->
             <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px;">
                 <div class="card-header" style="margin-bottom: 12px;">
-                    <h3 style="color: var(--neon-purple);">Token Trend <button class="info-btn" data-info-key="TOKEN_TREND">?</button></h3>
+                    <h3 style="color: var(--color-purple);">Token Trend <button class="info-btn" data-info-key="TOKEN_TREND">?</button></h3>
                 </div>
                 <div id="tokenTrendChart" style="width: 100%; height: 150px;"></div>
-            </div>
-
-            <!-- J. Cost Trend -->
-            <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
-                <div class="card-header" style="margin-bottom: 12px;">
-                    <h3 style="color: var(--neon-amber);">Cost Trend <button class="info-btn" data-info-key="COST_TREND">?</button></h3>
-                </div>
-                <div id="costTrendChart" style="width: 100%; height: 120px;"></div>
             </div>
 
             <!-- K. Latency Trend -->
             <div class="glass-panel" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
                 <div class="card-header" style="margin-bottom: 12px;">
-                    <h3 style="color: var(--neon-blue);">Latency Trend <button class="info-btn" data-info-key="LATENCY_TREND">?</button></h3>
+                    <h3 style="color: var(--color-accent);">Latency Trend <button class="info-btn" data-info-key="LATENCY_TREND">?</button></h3>
                 </div>
                 <div id="latencyTrendChart" style="width: 100%; height: 120px;"></div>
+            </div>
+
+            <!-- E. Quality Signal (Mini) -->
+            <div class="glass-panel quality-mini" style="grid-column: span 1; padding: 16px; border-radius: 12px;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h3>Quality Signal <button class="info-btn" data-info-key="QUALITY_SIGNAL">?</button></h3>
+                </div>
+                <div id="qualityMini">
+                    <div class="empty-hint">-</div>
+                </div>
+            </div>
+
+            <!-- Row 4: Live Feed (span 2) | Provider (span 1) | placeholder -->
+
+            <!-- F. Live Feed -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px; overflow: hidden;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h3>Live Feed <button class="info-btn" data-info-key="LIVE_FEED">?</button></h3>
+                </div>
+                <div id="liveFeed" style="font-family: 'JetBrains Mono'; font-size: 12px; display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto;">
+                    <div style="color: var(--text-secondary);">Waiting for stream...</div>
+                </div>
+            </div>
+
+            <!-- G. Provider Distribution -->
+            <div class="glass-panel" style="grid-column: span 2; padding: 16px; border-radius: 12px;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h3>Provider Split <button class="info-btn" data-info-key="PROVIDER_SPLIT">?</button></h3>
+                </div>
+                <div id="providerDistribution"></div>
             </div>
 
         </main>

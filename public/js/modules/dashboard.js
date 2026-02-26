@@ -1,5 +1,6 @@
 /**
- * Mission Control Dashboard (Overview)
+ * Mission Control Dashboard v2
+ * 从通用 LLM 监控转型为"评审→注入→效果→调参"业务仪表盘
  */
 import { formatDate } from './utils.js';
 import { initInfoModal, bindInfoButtons } from './info-modal.js';
@@ -14,8 +15,8 @@ const state = {
 
 function initDashboard() {
     updateTimestamp();
-    initInfoModal(); // Init info modal
-    bindInfoButtons(); // Bind static buttons
+    initInfoModal();
+    bindInfoButtons();
 
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
@@ -113,36 +114,27 @@ async function loadDashboard(days) {
     const { dateFrom, dateTo } = getDateRange(days);
 
     try {
-        const [historyRes, statsRes] = await Promise.all([
+        const [historyRes, statsRes, reviewRes, fewshotRes] = await Promise.all([
             fetchHistory({ limit: 200, dateFrom, dateTo }),
             fetchStatistics({ dateFrom, dateTo }),
+            fetchReviewStats(),
+            fetchFewshotStats(),
         ]);
 
         const records = historyRes.records || [];
         const stats = statsRes.statistics || null;
 
-        const summary = computeSummary(stats, records, historyRes.pagination?.total);
-
-        renderOverview({
-            totalCount: summary.totalCount,
-            avgQuality: summary.avgQuality,
-            avgTokens: summary.avgTokens,
-            avgLatency: summary.avgLatency,
-            days,
-        });
-
-        renderCostSummary({
-            totalCost: summary.totalCost,
-            avgCost: summary.avgCost,
-            currency: summary.currency,
-        });
-
         renderProviderPie(stats?.providerDistribution, records);
-        renderQualityTrend(stats?.qualityTrend, records, days);
         renderTokenTrend(stats?.tokenTrend, records, days);
         renderLatencyTrend(stats?.latencyTrend, records, days);
-
+        renderQualityMini(stats?.qualityTrend, records, days);
+        renderErrorMonitor(stats?.errors);
         renderRecent(records);
+
+        renderReviewPipeline(reviewRes);
+        renderFewshotEffect(fewshotRes);
+
+        bindInfoButtons();
     } catch (err) {
         console.error('Dashboard load error:', err);
     }
@@ -169,6 +161,22 @@ async function fetchStatistics({ dateFrom, dateTo } = {}) {
     return res.json();
 }
 
+async function fetchReviewStats() {
+    try {
+        const res = await fetch('/api/dashboard/review-stats');
+        if (!res.ok) return null;
+        return res.json();
+    } catch { return null; }
+}
+
+async function fetchFewshotStats() {
+    try {
+        const res = await fetch('/api/dashboard/fewshot-stats');
+        if (!res.ok) return null;
+        return res.json();
+    } catch { return null; }
+}
+
 function getDateRange(days) {
     const end = new Date();
     const start = new Date();
@@ -178,120 +186,313 @@ function getDateRange(days) {
     return { dateFrom, dateTo };
 }
 
-function computeSummary(stats, records, totalFromPagination) {
-    if (stats) {
-        return {
-            totalCount: stats.totalCount ?? totalFromPagination ?? records.length,
-            avgQuality: stats.avgQualityScore ?? average(records, r => r.quality_score),
-            avgTokens: stats.avgTokensTotal ?? average(records, r => r.tokens_total),
-            avgLatency: stats.avgLatencyMs ?? average(records, r => r.performance_total_ms),
-            totalCost: stats.totalCost ?? sum(records, r => r.cost_total),
-            avgCost: stats.avgCost ?? average(records, r => r.cost_total),
-            currency: 'USD',
-        };
+// ========== Review Pipeline ==========
+
+function renderReviewPipeline(data) {
+    const container = document.getElementById('reviewPipeline');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!data || !data.eligibility) {
+        container.innerHTML = '<div class="empty-hint">No review data</div>';
+        return;
     }
 
-    return {
-        totalCount: totalFromPagination ?? records.length,
-        avgQuality: average(records, r => r.quality_score),
-        avgTokens: average(records, r => r.tokens_total),
-        avgLatency: average(records, r => r.performance_total_ms),
-        totalCost: sum(records, r => r.cost_total),
-        avgCost: average(records, r => r.cost_total),
-        currency: 'USD',
-    };
+    const eligMap = {};
+    (data.eligibility || []).forEach(r => { eligMap[r.eligibility] = r.count; });
+    const approved = eligMap.approved || 0;
+    const pending = eligMap.pending || 0;
+    const rejected = eligMap.rejected || 0;
+    const total = approved + pending + rejected;
+
+    // Build grid
+    const grid = document.createElement('div');
+    grid.className = 'rp-grid';
+
+    // Left column: eligibility bar + stats
+    const left = document.createElement('div');
+
+    // Eligibility bar
+    if (total > 0) {
+        const bar = document.createElement('div');
+        bar.className = 'eligibility-bar';
+        bar.innerHTML = `
+            <div class="seg-approved" style="width:${(approved / total * 100).toFixed(1)}%"></div>
+            <div class="seg-pending" style="width:${(pending / total * 100).toFixed(1)}%"></div>
+            <div class="seg-rejected" style="width:${(rejected / total * 100).toFixed(1)}%"></div>
+        `;
+        left.appendChild(bar);
+    }
+
+    // Legend
+    const legend = document.createElement('div');
+    legend.className = 'eligibility-legend';
+    legend.innerHTML = `
+        <div class="legend-item"><span class="dot dot-approved"></span> Approved ${approved}</div>
+        <div class="legend-item"><span class="dot dot-pending"></span> Pending ${pending}</div>
+        <div class="legend-item"><span class="dot dot-rejected"></span> Rejected ${rejected}</div>
+    `;
+    left.appendChild(legend);
+
+    // By-language stats
+    const langMap = {};
+    (data.byLang || []).forEach(r => {
+        if (!langMap[r.lang]) langMap[r.lang] = {};
+        langMap[r.lang][r.eligibility] = r.count;
+    });
+    const stats = document.createElement('div');
+    stats.className = 'eligibility-stats';
+    ['en', 'ja'].forEach(lang => {
+        const approvedCount = langMap[lang]?.approved || 0;
+        const totalCount = Object.values(langMap[lang] || {}).reduce((a, b) => a + b, 0);
+        stats.innerHTML += `
+            <div class="stat-item">
+                <div class="stat-value">${approvedCount}</div>
+                <div class="stat-label">${lang.toUpperCase()} Approved / ${totalCount}</div>
+            </div>
+        `;
+    });
+    left.appendChild(stats);
+
+    // Right column: campaign progress + activity chart
+    const right = document.createElement('div');
+
+    // Campaign progress
+    if (data.campaign) {
+        const cp = data.campaign;
+        const cpDiv = document.createElement('div');
+        cpDiv.className = 'campaign-progress';
+        cpDiv.innerHTML = `
+            <div class="cp-header">
+                <span style="font-weight:600;">${escapeHtml(cp.name || 'Active Campaign')}</span>
+                <span>${cp.completion_rate || 0}%</span>
+            </div>
+            <div class="cp-bar">
+                <div class="cp-fill" style="width:${cp.completion_rate || 0}%"></div>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:6px;">
+                ${cp.reviewed_examples || 0} / ${cp.total_examples || 0} reviewed
+                &middot; ${cp.approved_examples || 0} approved
+            </div>
+        `;
+        right.appendChild(cpDiv);
+    } else {
+        const noCP = document.createElement('div');
+        noCP.style.cssText = 'font-size:0.8rem; color:var(--text-secondary); padding:12px; background:#f9fafb; border-radius:8px; text-align:center;';
+        noCP.textContent = 'No active campaign';
+        right.appendChild(noCP);
+    }
+
+    // Review activity chart
+    const activity = data.recentActivity || [];
+    if (activity.length > 0) {
+        const chartDiv = document.createElement('div');
+        chartDiv.id = 'reviewActivityChart';
+        chartDiv.style.cssText = 'width:100%; height:100px; margin-top:12px;';
+        right.appendChild(chartDiv);
+
+        grid.appendChild(left);
+        grid.appendChild(right);
+        container.appendChild(grid);
+
+        const chartData = activity.map(r => ({
+            day: r.day,
+            value: r.reviews,
+            dateObj: new Date(r.day)
+        }));
+        renderLineChart('reviewActivityChart', chartData, '#10b981');
+    } else {
+        grid.appendChild(left);
+        grid.appendChild(right);
+        container.appendChild(grid);
+    }
+
+    // Avg scores
+    if (data.avgScores && data.avgScores.totalReviews > 0) {
+        const scoresDiv = document.createElement('div');
+        scoresDiv.style.cssText = 'display:flex; gap:16px; margin-top:12px; font-size:0.8rem;';
+        const s = data.avgScores;
+        scoresDiv.innerHTML = `
+            <span style="color:var(--text-secondary);">Avg Scores:</span>
+            <span>Sentence <strong>${Number(s.avgSentence || 0).toFixed(1)}</strong></span>
+            <span>Translation <strong>${Number(s.avgTranslation || 0).toFixed(1)}</strong></span>
+            <span>TTS <strong>${Number(s.avgTts || 0).toFixed(1)}</strong></span>
+        `;
+        container.appendChild(scoresDiv);
+    }
 }
 
-function renderOverview({ totalCount, avgQuality, avgTokens, avgLatency, days }) {
-    setText('overviewTotal', formatNumber(totalCount));
-    setText('overviewAvgQuality', formatNumber(avgQuality, 1));
-    setText('overviewAvgTokens', formatNumber(avgTokens, 0));
-    setText('overviewAvgLatency', formatNumber(avgLatency, 0));
-    setText('overviewRange', days ? `Last ${days} days` : 'All time');
-}
+// ========== Few-shot Effectiveness ==========
 
-function renderCostSummary({ totalCost, avgCost, currency }) {
-    setText('costTotal', formatCurrency(totalCost, currency));
-    setText('costAvg', formatCurrency(avgCost, currency));
-    setText('costCurrency', currency || 'USD');
-}
-
-function renderProviderPie(providerDistribution, records) {
-    const container = document.getElementById('providerDistribution');
+function renderFewshotEffect(data) {
+    const container = document.getElementById('fewshotEffect');
     if (!container) return;
-    
     container.innerHTML = '';
-    
-    // Create Layout for Chart + Legend
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'center';
 
-    const chartDiv = document.createElement('div');
-    container.appendChild(chartDiv);
-    
-    const legendDiv = document.createElement('div');
-    legendDiv.className = 'legend-container';
-    legendDiv.style.display = 'flex';
-    legendDiv.style.gap = '12px';
-    legendDiv.style.marginTop = '12px';
-    legendDiv.style.fontSize = '12px';
-    container.appendChild(legendDiv);
+    if (!data || !data.byVariant || data.byVariant.length === 0) {
+        container.innerHTML = '<div class="empty-hint">No few-shot data</div>';
+        return;
+    }
 
-    const data = providerDistribution
-        ? Object.entries(providerDistribution).map(([label, value]) => ({ label, value }))
-        : aggregateProvider(records);
+    const grid = document.createElement('div');
+    grid.className = 'fs-grid';
 
-    if (!data.length) {
+    // Left: comparison card
+    const left = document.createElement('div');
+    const variantMap = {};
+    data.byVariant.forEach(v => { variantMap[v.variant] = v; });
+    const baseline = variantMap.baseline || {};
+    const fewshot = variantMap.fewshot || {};
+
+    const compCard = document.createElement('div');
+    compCard.className = 'comparison-card';
+
+    function fmtNum(v, digits = 1) {
+        if (v === null || v === undefined) return '-';
+        return Number(v).toFixed(digits);
+    }
+
+    function deltaHtml(base, fs, metric) {
+        if (!base || !fs) return '';
+        const diff = fs - base;
+        const pct = base > 0 ? ((diff / base) * 100).toFixed(1) : '0.0';
+        // For tokens and latency, lower is better (negative delta is good)
+        const lowerIsBetter = metric === 'tokens' || metric === 'latency';
+        let cls = 'delta-neutral';
+        if (diff > 0) cls = lowerIsBetter ? 'delta-negative' : 'delta-positive';
+        if (diff < 0) cls = lowerIsBetter ? 'delta-positive' : 'delta-negative';
+        const sign = diff > 0 ? '+' : '';
+        return `<span class="delta-badge ${cls}">${sign}${pct}%</span>`;
+    }
+
+    compCard.innerHTML = `
+        <div class="comp-col baseline">
+            <h4>Baseline</h4>
+            <div class="comp-row"><span class="label">Quality</span><span class="value">${fmtNum(baseline.avgQuality)}</span></div>
+            <div class="comp-row"><span class="label">Tokens</span><span class="value">${fmtNum(baseline.avgTokens, 0)}</span></div>
+            <div class="comp-row"><span class="label">Latency</span><span class="value">${fmtNum(baseline.avgLatency, 0)}ms</span></div>
+            <div class="comp-row"><span class="label">Runs</span><span class="value">${baseline.runs || 0}</span></div>
+        </div>
+        <div class="comp-col fewshot">
+            <h4>Few-shot</h4>
+            <div class="comp-row"><span class="label">Quality</span><span class="value">${fmtNum(fewshot.avgQuality)} ${deltaHtml(baseline.avgQuality, fewshot.avgQuality, 'quality')}</span></div>
+            <div class="comp-row"><span class="label">Tokens</span><span class="value">${fmtNum(fewshot.avgTokens, 0)} ${deltaHtml(baseline.avgTokens, fewshot.avgTokens, 'tokens')}</span></div>
+            <div class="comp-row"><span class="label">Latency</span><span class="value">${fmtNum(fewshot.avgLatency, 0)}ms ${deltaHtml(baseline.avgLatency, fewshot.avgLatency, 'latency')}</span></div>
+            <div class="comp-row"><span class="label">Runs</span><span class="value">${fewshot.runs || 0}</span></div>
+        </div>
+    `;
+    left.appendChild(compCard);
+
+    // Right: injection rate + fallback reasons
+    const right = document.createElement('div');
+
+    // Injection rate
+    const ir = data.injectionRate || {};
+    const enabled = Number(ir.enabled || 0);
+    const total = Number(ir.total || 0);
+    const rate = total > 0 ? ((enabled / total) * 100).toFixed(1) : '0.0';
+
+    const irDiv = document.createElement('div');
+    irDiv.className = 'injection-rate';
+    irDiv.innerHTML = `
+        <div class="rate-value">${rate}%</div>
+        <div class="rate-label">Injection Rate (${enabled}/${total})</div>
+    `;
+    right.appendChild(irDiv);
+
+    // Fallback reasons
+    const fallbacks = data.fallbackReasons || [];
+    if (fallbacks.length > 0) {
+        const fbTitle = document.createElement('div');
+        fbTitle.style.cssText = 'font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;';
+        fbTitle.textContent = 'Fallback Reasons';
+        right.appendChild(fbTitle);
+
+        const ul = document.createElement('ul');
+        ul.className = 'fallback-list';
+        fallbacks.forEach(fb => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span class="fb-reason">${escapeHtml(fb.fallback_reason)}</span>
+                <span class="fb-count">${fb.count}</span>
+            `;
+            ul.appendChild(li);
+        });
+        right.appendChild(ul);
+    }
+
+    grid.appendChild(left);
+    grid.appendChild(right);
+    container.appendChild(grid);
+}
+
+// ========== Error Monitor ==========
+
+function renderErrorMonitor(errors) {
+    const container = document.getElementById('errorMonitor');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!errors) {
+        container.innerHTML = '<div class="empty-hint">No error data</div>';
+        return;
+    }
+
+    const total = errors.total || 0;
+    const rate = errors.rate != null ? Number(errors.rate).toFixed(1) : '0.0';
+
+    const summary = document.createElement('div');
+    summary.className = 'error-summary';
+    const color = total === 0 ? 'var(--color-success)' : 'var(--color-error)';
+    summary.innerHTML = `
+        <span class="error-total" style="color:${color};">${total}</span>
+        <span class="error-rate">${rate}% error rate</span>
+    `;
+    container.appendChild(summary);
+
+    const byType = errors.byType || [];
+    if (byType.length > 0) {
+        const ul = document.createElement('ul');
+        ul.className = 'error-type-list';
+        byType.forEach(e => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span class="et-type">${escapeHtml(e.error_type || 'unknown')}</span>
+                <span class="et-count">${e.count}</span>
+            `;
+            ul.appendChild(li);
+        });
+        container.appendChild(ul);
+    }
+}
+
+// ========== Quality Mini ==========
+
+function renderQualityMini(trend, records, days) {
+    const container = document.getElementById('qualityMini');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const scores = records
+        .map(r => Number(r.quality_score))
+        .filter(v => !Number.isNaN(v) && v > 0);
+
+    if (scores.length === 0) {
         container.innerHTML = '<div class="empty-hint">No data</div>';
         return;
     }
 
-    const width = 200;
-    const height = 200;
-    const radius = Math.min(width, height) / 2 - 10;
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const color = avg >= 85 ? 'var(--color-success)' : avg >= 70 ? 'var(--color-warning)' : 'var(--color-error)';
 
-    const svg = d3.select(chartDiv)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-        .attr('transform', `translate(${width / 2},${height / 2})`);
-
-    const color = d3.scaleOrdinal()
-        .domain(data.map(d => d.label))
-        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
-
-    const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
-
-    svg.selectAll('path')
-        .data(pie(data))
-        .enter()
-        .append('path')
-        .attr('d', arc)
-        .attr('fill', d => color(d.data.label))
-        .attr('stroke', 'rgba(255,255,255,0.1)')
-        .attr('stroke-width', 1);
-
-    data.forEach(item => {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '4px';
-        row.innerHTML = `
-            <span style="width:8px; height:8px; border-radius:50%; background:${color(item.label)}"></span>
-            <span style="color:var(--text-slate);">${item.label}</span>
-            <span style="font-weight:600;">${item.value}</span>
-        `;
-        legendDiv.appendChild(row);
-    });
+    container.innerHTML = `
+        <div class="qm-score" style="color:${color};">${avg.toFixed(1)}</div>
+        <div class="qm-label">Avg Score (${days}d)</div>
+        <div class="qm-note">Template compliance check, not content quality</div>
+    `;
 }
 
-function renderQualityTrend(trend, records, days) {
-    const data = buildTrendSeries(trend, records, days, 'quality');
-    renderLineChart('qualityTrendChart', data, '#10b981');
-}
+// ========== Trend Charts ==========
 
 function renderTokenTrend(trend, records, days) {
     const data = buildTrendSeries(trend, records, days, 'tokens');
@@ -348,8 +549,123 @@ function buildDailySeries(records, selector) {
         .sort((a, b) => a.dateObj - b.dateObj);
 }
 
+// ========== Provider Pie ==========
+
+function renderProviderPie(providerDistribution, records) {
+    const container = document.getElementById('providerDistribution');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+
+    const chartDiv = document.createElement('div');
+    container.appendChild(chartDiv);
+
+    const legendDiv = document.createElement('div');
+    legendDiv.className = 'legend-container';
+    legendDiv.style.display = 'flex';
+    legendDiv.style.gap = '12px';
+    legendDiv.style.marginTop = '12px';
+    legendDiv.style.fontSize = '12px';
+    container.appendChild(legendDiv);
+
+    const data = providerDistribution
+        ? Object.entries(providerDistribution).map(([label, value]) => ({ label, value }))
+        : aggregateProvider(records);
+
+    if (!data.length) {
+        container.innerHTML = '<div class="empty-hint">No data</div>';
+        return;
+    }
+
+    const width = 200;
+    const height = 200;
+    const radius = Math.min(width, height) / 2 - 10;
+
+    const svg = d3.select(chartDiv)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
+
+    const color = d3.scaleOrdinal()
+        .domain(data.map(d => d.label))
+        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
+
+    const pie = d3.pie().value(d => d.value);
+    const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
+
+    svg.selectAll('path')
+        .data(pie(data))
+        .enter()
+        .append('path')
+        .attr('d', arc)
+        .attr('fill', d => color(d.data.label))
+        .attr('stroke', 'rgba(255,255,255,0.1)')
+        .attr('stroke-width', 1);
+
+    data.forEach(item => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '4px';
+        row.innerHTML = `
+            <span style="width:8px; height:8px; border-radius:50%; background:${color(item.label)}"></span>
+            <span style="color:var(--text-secondary);">${item.label}</span>
+            <span style="font-weight:600;">${item.value}</span>
+        `;
+        legendDiv.appendChild(row);
+    });
+}
+
+// ========== Live Feed ==========
+
+function renderRecent(records) {
+    const container = document.getElementById('liveFeed');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!records.length) {
+        container.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">No recent records</div>';
+        return;
+    }
+
+    const top = records.slice(0, 10);
+    top.forEach(r => {
+        const div = document.createElement('div');
+        div.style.padding = '8px';
+        div.style.borderBottom = '1px solid rgba(0,0,0,0.05)';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+
+        const score = r.quality_score || 0;
+        const color = score >= 80 ? 'var(--color-success)' : score >= 60 ? 'var(--color-warning)' : 'var(--color-error)';
+
+        div.innerHTML = `
+            <div style="display:flex; flex-direction:column;">
+                <span style="color:var(--text-primary); font-weight:600;">${escapeHtml(r.phrase)}</span>
+                <span style="font-size:10px; color:var(--text-secondary);">${formatDate(r.created_at)}</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span class="badge" style="font-size:10px;">${escapeHtml(r.llm_provider)}</span>
+                <span style="font-family:'JetBrains Mono'; color:${color}; font-size:11px;">${formatNumber(score, 0)}</span>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// ========== Generic Line Chart ==========
+
 function renderLineChart(containerId, data, color) {
     const container = document.getElementById(containerId);
+    if (!container) return;
     container.innerHTML = '';
 
     if (!data.length) {
@@ -416,42 +732,7 @@ function renderLineChart(containerId, data, color) {
     svg.selectAll('path.domain, line').style('stroke', 'rgba(148,163,184,0.3)');
 }
 
-function renderRecent(records) {
-    const container = document.getElementById('liveFeed');
-    if (!container) return;
-    
-    container.innerHTML = '';
-
-    if (!records.length) {
-        container.innerHTML = '<div style="color:var(--text-muted); padding:8px;">No recent records</div>';
-        return;
-    }
-
-    const top = records.slice(0, 10);
-    top.forEach(r => {
-        const div = document.createElement('div');
-        div.style.padding = '8px';
-        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        div.style.display = 'flex';
-        div.style.justifyContent = 'space-between';
-        div.style.alignItems = 'center';
-        
-        const score = r.quality_score || 0;
-        const color = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
-        
-        div.innerHTML = `
-            <div style="display:flex; flex-direction:column;">
-                <span style="color:var(--text); font-weight:600;">${escapeCell(r.phrase)}</span>
-                <span style="font-size:10px; color:var(--muted);">${formatDate(r.created_at)}</span>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <span class="badge" style="font-size:10px;">${escapeCell(r.llm_provider)}</span>
-                <span style="font-family:'JetBrains Mono'; color:${color}; font-size:11px;">${formatNumber(score, 0)}</span>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
+// ========== Utilities ==========
 
 function aggregateProvider(records = []) {
     const map = new Map();
@@ -462,23 +743,6 @@ function aggregateProvider(records = []) {
     return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
 }
 
-function average(records, selector) {
-    if (!records.length) return 0;
-    const values = records.map(selector).map(Number).filter(v => !Number.isNaN(v));
-    if (!values.length) return 0;
-    return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-function sum(records, selector) {
-    if (!records.length) return 0;
-    return records.map(selector).map(Number).filter(v => !Number.isNaN(v)).reduce((a, b) => a + b, 0);
-}
-
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
 function formatNumber(value, digits = 0) {
     if (value === null || value === undefined || Number.isNaN(value)) return '-';
     const num = typeof value === 'number' ? value : Number(value);
@@ -486,14 +750,7 @@ function formatNumber(value, digits = 0) {
     return num.toFixed(digits);
 }
 
-function formatCurrency(value, currency) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    return `${num.toFixed(5)} ${currency || 'USD'}`;
-}
-
-function escapeCell(value) {
+function escapeHtml(value) {
     if (value === null || value === undefined) return '-';
     return String(value).replace(/[&<>"']/g, (ch) => ({
         '&': '&amp;',

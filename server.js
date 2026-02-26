@@ -1169,6 +1169,33 @@ app.get('/api/recent', (req, res) => {
     }
 });
 
+// ========== Dashboard 聚合 API ==========
+
+app.get('/api/dashboard/review-stats', (req, res) => {
+    try {
+        const reviewStats = dbService.getReviewStats();
+        const activeCampaign = exampleReviewService.getActiveCampaign();
+        let campaignProgress = null;
+        if (activeCampaign) {
+            campaignProgress = exampleReviewService.getCampaignProgress(activeCampaign.id);
+        }
+        res.json({ success: true, ...reviewStats, campaign: campaignProgress });
+    } catch (e) {
+        console.error('[API /dashboard/review-stats] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/dashboard/fewshot-stats', (req, res) => {
+    try {
+        const stats = dbService.getFewShotStats();
+        res.json({ success: true, ...stats });
+    } catch (e) {
+        console.error('[API /dashboard/fewshot-stats] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ========== 例句评审与注入门控 API ==========
 
 app.get('/api/review/campaigns', (req, res) => {

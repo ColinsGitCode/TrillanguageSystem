@@ -97,21 +97,41 @@ export const METRIC_DEFINITIONS = {
             </ul>
         `
     },
-    "API_FUEL": {
-        title: "API 配额 (API Fuel)",
-        content: "<p>当前配置的 API Key 的额度使用情况。百分比表示已用额度占月度总限额的比例。如果使用本地模型，此项通常仅作参考或显示为 0%。</p>"
-    },
     "DATA_CORE": {
         title: "数据核心 (Data Core)",
         content: "<p>本地文件系统存储占用统计。包含所有生成的 Markdown 文档、HTML 页面以及 WAV/MP3 音频文件。</p>"
     },
-    "MODEL_ARENA": {
-        title: "模型竞技场 (Model Arena)",
-        content: "<p>对比不同模型在生产环境中的表现。统计相同或相似任务下的平均生成速度 (Speed) 和平均质量评分 (Quality)。用于辅助选型。</p>"
+    "REVIEW_PIPELINE": {
+        title: "评审管线 (Review Pipeline)",
+        content: `
+            <p>例句级人工评审与样本池管理，是 few-shot 注入的质量门控。</p>
+            <ul>
+                <li><strong>Approved (已通过)</strong>: 三维评分（原句/翻译/TTS）达标且拒绝率低于阈值，可注入 few-shot。</li>
+                <li><strong>Pending (待审)</strong>: 已入池但尚未评审或未达到最低投票数。</li>
+                <li><strong>Rejected (已拒绝)</strong>: 评分不达标或拒绝率过高，不会被注入。</li>
+            </ul>
+            <p>Eligibility 计算：overall = 0.45*sentence + 0.45*translation + 0.1*tts，需同时满足 overall≥4.2、sentence≥4.0、translation≥4.0、tts≥3.0。</p>
+        `
+    },
+    "FEWSHOT_EFFECT": {
+        title: "Few-shot 效果 (Few-shot Effectiveness)",
+        content: `
+            <p>对比 baseline（无注入）与 fewshot（注入高质量样本）两种生成策略的效果。</p>
+            <ul>
+                <li><strong>Quality</strong>: 模板合规评分均值对比。</li>
+                <li><strong>Tokens</strong>: prompt token 消耗对比（fewshot 会增加 token 开销）。</li>
+                <li><strong>Latency</strong>: 端到端延迟对比。</li>
+                <li><strong>Injection Rate</strong>: 成功启用 fewshot 注入的生成占比。</li>
+                <li><strong>Fallback Reasons</strong>: 未能成功注入的原因分布（如样本池不足、token 预算超限等）。</li>
+            </ul>
+        `
     },
     "QUALITY_SIGNAL": {
-        title: "质量信号趋势 (Quality Signal)",
-        content: "<p>过去一段时间内，所有生成记录的平均质量评分变化曲线。用于监控模型性能的稳定性。</p>"
+        title: "模板合规分 (Quality Signal)",
+        content: `
+            <p>注意：此分数仅反映<strong>模板合规性</strong>（JSON 结构完整、字段齐全、三语覆盖、例句数量），不能评估翻译质量或例句自然度。正常输出通常在 85-95 分。</p>
+            <p>内容质量评估请参考"评审管线"中的人工评分。</p>
+        `
     },
     "LIVE_FEED": {
         title: "实时动态 (Live Feed)",
@@ -128,10 +148,6 @@ export const METRIC_DEFINITIONS = {
     "TOKEN_TREND": {
         title: "Token 趋势 (Token Trend)",
         content: "<p>每日消耗的 Token 总量（输入+输出）变化趋势。反映系统的负载情况。</p>"
-    },
-    "COST_TREND": {
-        title: "成本趋势 (Cost Trend)",
-        content: "<p>每日 API 调用成本的变化趋势。仅针对付费 API (如 Gemini/OpenAI) 计费，本地模型成本为 0。</p>"
     },
     "LATENCY_TREND": {
         title: "延迟趋势 (Latency Trend)",

@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.3
-**更新日期**: 2026-02-24
+**版本**: 3.4
+**更新日期**: 2026-02-25
 
 ## 1. 核心目录
 
@@ -37,6 +37,7 @@ scripts/
   export_round_trend_dataset.js
   generate_round_kpi_report.js
   gemini-host-proxy.js
+  updateLegacyCardStyle.js
 ```
 
 ## 2. 运行栈
@@ -146,6 +147,19 @@ scripts/
 - 记录路径（容器内）：`/data/trilingual_records`
 - DB 默认：`/data/trilingual_records/trilingual_records.db`
 - 删除接口支持“记录+文件”联动清理
+
+### 9.1 历史卡片样式迁移（v3.4 新增）
+
+- 目标：将历史 `md/html` 卡片中的旧格式外来语标注统一迁移为独立高亮块（不与中文释义同一行）
+- 脚本：`scripts/updateLegacyCardStyle.js`
+- 能力：
+  - 兼容 `- 外来语标注: ...` 与 `- ... - 外来语标注: ...` 两种旧格式
+  - 自动纠正 `日文=英文` 顺序为 `英文 → 日文`
+  - 自动修复旧数据中 loanword span 闭合不平衡问题
+  - 幂等：重复执行不产生额外变更
+- 常用命令：
+  - 预检查：`node scripts/updateLegacyCardStyle.js`
+  - 执行迁移：`npm run cards:migrate-style`（等价 `node scripts/updateLegacyCardStyle.js --apply`）
 
 ## 10. 关键环境变量
 
