@@ -56,6 +56,25 @@ const reviewState = {
     activeCampaign: null,
     reviewer: localStorage.getItem('review_reviewer') || 'owner'
 };
+let selectionFabCleanup = null;
+let activeCardContext = null;
+
+const generationQueueState = {
+    tasks: [],
+    running: false,
+    nextSeq: 1,
+    maxRetries: 2,
+    maxTasks: 100,
+    refreshScheduled: false,
+    retryTimerId: null,
+    panelEl: null,
+    summaryEl: null,
+    listEl: null,
+    toastEl: null,
+    collapseBtn: null,
+    clearDoneBtn: null,
+    retryFailedBtn: null
+};
 
 // Timer State
 let timerInterval = null;
@@ -71,6 +90,7 @@ function init() {
     initModelSelector();
     initGenerator();
     initModal();
+    initGenerationQueuePanel();
     initHistory();
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
@@ -1071,24 +1091,424 @@ function bindAudioButtons(container, defaultFolder = null) {
 }
 
 // ==========================================
-// 文本选取 → 生成卡片
+// 后台生成队列（静默串行，不打断浏览）
 // ==========================================
 
-function initSelectionToGenerate(container) {
-    let fab = document.getElementById('selectionGenFab');
-    if (fab) fab.remove();
+function initGenerationQueuePanel() {
+    const panel = document.createElement('div');
+    panel.id = 'generationQueuePanel';
+    panel.className = 'gen-queue-panel hidden';
+    panel.innerHTML = `
+      <div class="gen-queue-head">
+        <div class="gen-queue-title">TASK QUEUE</div>
+        <div class="gen-queue-actions">
+          <button type="button" class="gen-queue-btn" data-action="retry-failed">重试失败</button>
+          <button type="button" class="gen-queue-btn" data-action="clear-done">清理完成</button>
+          <button type="button" class="gen-queue-btn" data-action="toggle">收起</button>
+        </div>
+      </div>
+      <div class="gen-queue-summary">空闲</div>
+      <div class="gen-queue-list"></div>
+      <div class="gen-queue-toast hidden"></div>
+    `;
+    document.body.appendChild(panel);
 
-    fab = document.createElement('button');
+    generationQueueState.panelEl = panel;
+    generationQueueState.summaryEl = panel.querySelector('.gen-queue-summary');
+    generationQueueState.listEl = panel.querySelector('.gen-queue-list');
+    generationQueueState.toastEl = panel.querySelector('.gen-queue-toast');
+    generationQueueState.retryFailedBtn = panel.querySelector('[data-action="retry-failed"]');
+    generationQueueState.clearDoneBtn = panel.querySelector('[data-action="clear-done"]');
+    generationQueueState.collapseBtn = panel.querySelector('[data-action="toggle"]');
+
+    generationQueueState.retryFailedBtn.onclick = () => {
+        let retried = 0;
+        generationQueueState.tasks.forEach((task) => {
+            if (task.status === 'failed') {
+                task.status = 'queued';
+                task.error = '';
+                task.retryAfter = 0;
+                retried += 1;
+            }
+        });
+        if (retried) {
+            showGenerationQueueToast(`已重试 ${retried} 个失败任务`);
+            renderGenerationQueuePanel();
+            processGenerationQueue();
+        }
+    };
+
+    generationQueueState.clearDoneBtn.onclick = () => {
+        const before = generationQueueState.tasks.length;
+        generationQueueState.tasks = generationQueueState.tasks.filter(
+            (task) => task.status !== 'success' && task.status !== 'cancelled'
+        );
+        const removed = before - generationQueueState.tasks.length;
+        if (removed > 0) {
+            showGenerationQueueToast(`已清理 ${removed} 个已完成任务`);
+            renderGenerationQueuePanel();
+        }
+        if (!generationQueueState.tasks.length) {
+            panel.classList.add('hidden');
+        }
+    };
+
+    generationQueueState.collapseBtn.onclick = () => {
+        const collapsed = panel.classList.toggle('collapsed');
+        generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
+    };
+}
+
+function showGenerationQueueToast(message) {
+    const toast = generationQueueState.toastEl;
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    clearTimeout(showGenerationQueueToast.timerId);
+    showGenerationQueueToast.timerId = setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 2200);
+}
+
+function renderGenerationQueuePanel() {
+    const panel = generationQueueState.panelEl;
+    if (!panel) return;
+
+    const tasks = generationQueueState.tasks;
+    const queued = tasks.filter((task) => task.status === 'queued').length;
+    const running = tasks.filter((task) => task.status === 'running').length;
+    const failed = tasks.filter((task) => task.status === 'failed').length;
+    const success = tasks.filter((task) => task.status === 'success').length;
+
+    const runningTask = tasks.find((task) => task.status === 'running');
+    const runningText = runningTask
+        ? `执行中 #${runningTask.seq}: ${escapeHtml(runningTask.phraseNormalized)}`
+        : '空闲';
+
+    generationQueueState.summaryEl.innerHTML =
+        `待执行 <b>${queued}</b> · 运行 <b>${running}</b> · 成功 <b>${success}</b> · 失败 <b>${failed}</b><br>${runningText}`;
+
+    const preview = tasks.slice(-8).reverse();
+    generationQueueState.listEl.innerHTML = preview.length
+        ? preview.map((task) => {
+            const statusLabel = {
+                queued: 'QUEUED',
+                running: 'RUNNING',
+                success: 'DONE',
+                failed: 'FAILED',
+                cancelled: 'CANCELLED'
+            }[task.status] || task.status.toUpperCase();
+
+            const cls = `status-${task.status}`;
+            const errorText = task.error ? `<div class="gen-queue-item-error">${escapeHtml(task.error)}</div>` : '';
+            return `
+              <div class="gen-queue-item ${cls}">
+                <div class="gen-queue-item-head">
+                  <span class="gen-queue-item-id">#${task.seq}</span>
+                  <span class="gen-queue-item-status">${statusLabel}</span>
+                </div>
+                <div class="gen-queue-item-text">${escapeHtml(task.phraseNormalized)}</div>
+                ${errorText}
+              </div>
+            `;
+        }).join('')
+        : '<div class="gen-queue-empty">暂无任务</div>';
+
+    generationQueueState.retryFailedBtn.disabled = failed === 0;
+    generationQueueState.clearDoneBtn.disabled = success === 0;
+
+    if (tasks.length > 0 || generationQueueState.running) {
+        panel.classList.remove('hidden');
+    }
+}
+
+function hasActiveDuplicateTask(phraseNormalized) {
+    return generationQueueState.tasks.some(
+        (task) =>
+            (task.status === 'queued' || task.status === 'running' || task.status === 'failed') &&
+            task.phraseNormalized === phraseNormalized
+    );
+}
+
+function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {}) {
+    if (!phraseNormalized) return false;
+
+    if (generationQueueState.tasks.length >= generationQueueState.maxTasks) {
+        showGenerationQueueToast(`队列已满（${generationQueueState.maxTasks}）`);
+        return false;
+    }
+
+    if (hasActiveDuplicateTask(phraseNormalized)) {
+        showGenerationQueueToast('该短语已在队列中');
+        return false;
+    }
+
+    const modelMode = store.get('modelMode');
+    const provider = modelMode === 'gemini' ? 'gemini' : 'local';
+    const enableCompare = modelMode === 'compare';
+    const selectedFolder = store.get('selectedFolder') || '';
+
+    const task = {
+        id: `queue_${Date.now()}_${generationQueueState.nextSeq}`,
+        seq: generationQueueState.nextSeq++,
+        phraseRaw,
+        phraseNormalized,
+        source,
+        provider,
+        enableCompare,
+        targetFolder: selectedFolder,
+        llmModel: null,
+        status: 'queued',
+        attempts: 0,
+        error: '',
+        retryAfter: 0,
+        createdAt: Date.now(),
+        finishedAt: 0
+    };
+
+    generationQueueState.tasks.push(task);
+    if (generationQueueState.retryTimerId) {
+        clearTimeout(generationQueueState.retryTimerId);
+        generationQueueState.retryTimerId = null;
+    }
+    renderGenerationQueuePanel();
+    processGenerationQueue();
+    showGenerationQueueToast(`已加入队列 #${task.seq}`);
+    return true;
+}
+
+async function runGenerationTaskFromQueue(task) {
+    const response = await api.generate(task.phraseNormalized, task.provider, task.enableCompare, {
+        targetFolder: task.targetFolder || '',
+        llmModel: task.llmModel || undefined
+    });
+
+    const folder = task.enableCompare
+        ? (response.gemini?.result?.folder || response.local?.result?.folder || response.input?.result?.folder || task.targetFolder || '')
+        : (response.result?.folder || task.targetFolder || '');
+
+    task.resultFolder = folder;
+    task.responseSummary = task.enableCompare
+        ? (response.comparison?.winner ? `winner=${response.comparison.winner}` : 'compare_done')
+        : 'single_done';
+}
+
+function scheduleQueueFolderRefresh() {
+    if (generationQueueState.refreshScheduled) return;
+    generationQueueState.refreshScheduled = true;
+    setTimeout(async () => {
+        generationQueueState.refreshScheduled = false;
+        try {
+            await loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
+        } catch (err) {
+            console.warn('[Queue] refresh folders failed:', err.message);
+        }
+    }, 900);
+}
+
+function processGenerationQueue() {
+    if (generationQueueState.running) return;
+    const now = Date.now();
+    const nextTask = generationQueueState.tasks.find(
+        (task) => task.status === 'queued' && (!task.retryAfter || task.retryAfter <= now)
+    );
+    if (!nextTask) {
+        const nextRetryAt = generationQueueState.tasks
+            .filter((task) => task.status === 'queued' && task.retryAfter > now)
+            .reduce((min, task) => Math.min(min, task.retryAfter), Number.POSITIVE_INFINITY);
+
+        if (Number.isFinite(nextRetryAt) && !generationQueueState.retryTimerId) {
+            const waitMs = Math.max(80, nextRetryAt - now);
+            generationQueueState.retryTimerId = setTimeout(() => {
+                generationQueueState.retryTimerId = null;
+                processGenerationQueue();
+            }, waitMs);
+        }
+        return;
+    }
+
+    if (generationQueueState.retryTimerId) {
+        clearTimeout(generationQueueState.retryTimerId);
+        generationQueueState.retryTimerId = null;
+    }
+
+    generationQueueState.running = true;
+    nextTask.status = 'running';
+    nextTask.error = '';
+    nextTask.attempts += 1;
+    renderGenerationQueuePanel();
+
+    runGenerationTaskFromQueue(nextTask)
+        .then(() => {
+            nextTask.status = 'success';
+            nextTask.finishedAt = Date.now();
+            scheduleQueueFolderRefresh();
+            showGenerationQueueToast(`任务 #${nextTask.seq} 已完成`);
+        })
+        .catch((err) => {
+            const message = String(err?.message || 'generation failed');
+            if (nextTask.attempts <= generationQueueState.maxRetries) {
+                const delay = Math.min(10000, 800 * Math.pow(2, nextTask.attempts - 1));
+                nextTask.status = 'queued';
+                nextTask.retryAfter = Date.now() + delay;
+                nextTask.error = `重试中 (${nextTask.attempts}/${generationQueueState.maxRetries + 1}): ${message}`;
+            } else {
+                nextTask.status = 'failed';
+                nextTask.error = message;
+                nextTask.finishedAt = Date.now();
+                showGenerationQueueToast(`任务 #${nextTask.seq} 失败`);
+            }
+        })
+        .finally(() => {
+            generationQueueState.running = false;
+            renderGenerationQueuePanel();
+            setTimeout(processGenerationQueue, 120);
+        });
+}
+
+// ==========================================
+// 文本选取 → 入后台任务队列
+// ==========================================
+
+function normalizeSelectionPhrase(text) {
+    const cjk = '\u3040-\u30FF\u3400-\u9FFF々〆ヵヶ';
+    let cleaned = String(text || '');
+    cleaned = cleaned
+        .replace(/\u25B6/g, ' ')
+        .replace(/[ \t\r\n]+/g, ' ')
+        .replace(/^[-•\s]+/, '')
+        .replace(/^例句\s*\d+\s*[：:]\s*/i, '')
+        .replace(/^[“"'\s]+|[”"'\s]+$/g, '');
+
+    cleaned = cleaned
+        .replace(new RegExp(`([${cjk}])\\s+([${cjk}])`, 'g'), '$1$2')
+        .replace(new RegExp(`([${cjk}])\\s+([、。！？：；，．])`, 'g'), '$1$2')
+        .replace(new RegExp(`([（(])\\s+([${cjk}])`, 'g'), '$1$2')
+        .replace(new RegExp(`([${cjk}])\\s+([）)])`, 'g'), '$1$2')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    return cleaned;
+}
+
+function collectVisibleSelectionText(node, pieces) {
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+        pieces.push(node.nodeValue || '');
+        return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+        return;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node;
+        const tag = el.tagName.toLowerCase();
+
+        if (['script', 'style', 'audio', 'button', 'rt', 'rp'].includes(tag)) return;
+        if (
+            el.classList?.contains('audio-btn') ||
+            el.classList?.contains('selection-gen-fab') ||
+            el.classList?.contains('loanword-block') ||
+            el.classList?.contains('loanword-label') ||
+            el.classList?.contains('loanword-line') ||
+            el.classList?.contains('loanword-tag')
+        ) {
+            return;
+        }
+
+        if (tag === 'br') {
+            pieces.push('\n');
+            return;
+        }
+
+        if (tag === 'ruby') {
+            Array.from(el.childNodes).forEach((child) => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    const childTag = child.tagName.toLowerCase();
+                    if (childTag === 'rt' || childTag === 'rp') return;
+                }
+                collectVisibleSelectionText(child, pieces);
+            });
+            return;
+        }
+
+        const blockLike = ['div', 'p', 'li', 'ul', 'ol', 'section', 'article', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+        if (blockLike.includes(tag)) pieces.push(' ');
+        Array.from(el.childNodes).forEach((child) => collectVisibleSelectionText(child, pieces));
+        if (blockLike.includes(tag)) pieces.push(' ');
+        return;
+    }
+
+    Array.from(node.childNodes || []).forEach((child) => collectVisibleSelectionText(child, pieces));
+}
+
+function extractRubyBaseText(rubyEl) {
+    if (!rubyEl) return '';
+    const parts = [];
+    Array.from(rubyEl.childNodes).forEach((child) => {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName.toLowerCase();
+            if (tag === 'rt' || tag === 'rp') return;
+        }
+        collectVisibleSelectionText(child, parts);
+    });
+    return normalizeSelectionPhrase(parts.join(' '));
+}
+
+function buildSelectionCandidateFromContainer(container) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+
+    const range = sel.getRangeAt(0);
+    const startInside = container.contains(range.startContainer);
+    const endInside = container.contains(range.endContainer);
+    if (!startInside || !endInside) return null;
+    if (range.collapsed) return null;
+
+    const fragment = range.cloneContents();
+    const pieces = [];
+    collectVisibleSelectionText(fragment, pieces);
+    const rawText = pieces.join(' ').trim();
+    let normalized = normalizeSelectionPhrase(rawText);
+
+    // 用户可能只选中了 rt 注音，尝试回退到 ruby 主体文本。
+    if (!normalized) {
+        const anchorEl =
+            range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer
+                : range.startContainer.parentElement;
+        const rubyEl = anchorEl?.closest?.('ruby');
+        if (rubyEl && container.contains(rubyEl)) {
+            normalized = extractRubyBaseText(rubyEl);
+        }
+    }
+
+    if (!normalized) return null;
+    if (normalized.length > 200) return null;
+    return { rawText, normalized, range };
+}
+
+function initSelectionToGenerate(container) {
+    if (selectionFabCleanup) {
+        selectionFabCleanup();
+        selectionFabCleanup = null;
+    }
+
+    const fab = document.createElement('button');
     fab.id = 'selectionGenFab';
     fab.className = 'selection-gen-fab hidden';
     fab.textContent = '\u2726 Generate Card';
     document.body.appendChild(fab);
 
-    container.addEventListener('mouseup', () => {
-        setTimeout(() => checkSelection(container, fab), 10);
-    });
+    const hideFab = () => fab.classList.add('hidden');
 
+    const onMouseUp = () => {
+        setTimeout(() => checkSelection(container, fab), 10);
+    };
     const onSelChange = () => checkSelection(container, fab);
+
+    container.addEventListener('mouseup', onMouseUp);
     document.addEventListener('selectionchange', onSelChange);
 
     fab.addEventListener('mousedown', (e) => {
@@ -1097,27 +1517,33 @@ function initSelectionToGenerate(container) {
 
     fab.addEventListener('click', (e) => {
         e.stopPropagation();
-        const text = window.getSelection().toString().trim().replace(/\u25B6/g, '').trim();
-        if (!text) return;
+        const candidate = buildSelectionCandidateFromContainer(container);
+        if (!candidate) {
+            hideFab();
+            return;
+        }
 
-        closeModal();
+        enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
+            folder: activeCardContext?.folder || store.get('selectedFolder') || '',
+            baseName: activeCardContext?.baseName || '',
+            generationId: activeCardContext?.generationId || null
+        });
 
-        els.phraseInput.value = text;
-        els.phraseInput.focus();
-
-        fab.classList.add('hidden');
-        window.getSelection().removeAllRanges();
+        hideFab();
+        if (window.getSelection()) window.getSelection().removeAllRanges();
     });
+
+    selectionFabCleanup = () => {
+        container.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('selectionchange', onSelChange);
+        fab.remove();
+    };
 }
 
 function checkSelection(container, fab) {
-    const sel = window.getSelection();
-    const text = sel ? sel.toString().trim().replace(/\u25B6/g, '').trim() : '';
-
-    if (text && text.length >= 1 && text.length <= 200
-        && sel.rangeCount > 0
-        && container.contains(sel.anchorNode)) {
-        const range = sel.getRangeAt(0);
+    const candidate = buildSelectionCandidateFromContainer(container);
+    if (candidate) {
+        const range = candidate.range;
         const rect = range.getBoundingClientRect();
         fab.style.top = `${rect.top + window.scrollY - 40}px`;
         fab.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
@@ -1539,6 +1965,11 @@ function renderCardModal(markdown, title, options = {}) {
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
     const generationId = Number(options.metrics?.id || options.generationId || 0);
+    activeCardContext = {
+        folder: options.folder || store.get('selectedFolder') || '',
+        baseName: options.baseName || '',
+        generationId
+    };
 
     const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder: options.folder || store.get('selectedFolder') });
 
@@ -2113,8 +2544,11 @@ function renderIntelCharts(metrics, suffix = '') {
 function closeModal() {
     els.modalOverlay.classList.remove('show');
     player.stop(); // 关闭卡片时停止播放
-    const fab = document.getElementById('selectionGenFab');
-    if (fab) fab.classList.add('hidden');
+    if (selectionFabCleanup) {
+        selectionFabCleanup();
+        selectionFabCleanup = null;
+    }
+    activeCardContext = null;
     window.getSelection().removeAllRanges();
     setTimeout(() => els.modalOverlay.classList.add('hidden'), 300);
 }

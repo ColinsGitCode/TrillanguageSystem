@@ -40,15 +40,36 @@ class ApiService {
         return res.text(); // Return text (Markdown/HTML)
     }
 
-    async generate(phrase, provider, enableCompare = false) {
+    async generate(phrase, provider, enableCompare = false, options = {}) {
+        let compareFlag = enableCompare;
+        let extra = options || {};
+
+        if (typeof enableCompare === 'object' && enableCompare !== null) {
+            extra = enableCompare;
+            compareFlag = Boolean(enableCompare.enableCompare);
+        }
+
+        const payload = {
+            phrase,
+            llm_provider: provider,
+            enable_compare: Boolean(compareFlag)
+        };
+
+        if (extra.targetFolder) payload.target_folder = extra.targetFolder;
+        if (extra.llmModel) payload.llm_model = extra.llmModel;
+        if (extra.experimentId) payload.experiment_id = extra.experimentId;
+        if (extra.experimentRound !== undefined) payload.experiment_round = extra.experimentRound;
+        if (extra.roundName) payload.round_name = extra.roundName;
+        if (extra.variant) payload.variant = extra.variant;
+        if (extra.isTeacherReference !== undefined) payload.is_teacher_reference = Boolean(extra.isTeacherReference);
+        if (extra.fewshotOptions && typeof extra.fewshotOptions === 'object') {
+            payload.fewshot_options = extra.fewshotOptions;
+        }
+
         return this.fetchJson('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phrase,
-                llm_provider: provider,
-                enable_compare: enableCompare
-            })
+            body: JSON.stringify(payload)
         });
     }
 

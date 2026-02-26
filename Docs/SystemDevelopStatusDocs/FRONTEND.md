@@ -55,10 +55,12 @@ Header (TRILINGUAL RECORDS + Mission Control)
 ### 3.1.2 文本选取即时生成（v3.5 新增）
 
 - 在 CONTENT 区域拖选文字后，选区上方弹出浮动按钮 "✦ Generate Card"
-- 点击按钮 → 关闭弹窗 → 选中文本填入输入框 → 聚焦等待确认
+- 点击按钮后直接进入后台任务队列，不关闭弹窗、不跳转页面
+- 队列按顺序串行执行（并发=1），执行期间不打断当前卡片阅读
 - 自动过滤音频按钮占位符 "▶"，选取超 200 字符时不弹出
+- Ruby-aware 文本提取：忽略 `<rt>/<rp>` 注音，仅保留日语正文入队
 - 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
-- 实现：`initSelectionToGenerate()` + `checkSelection()` (app.js)
+- 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + `processGenerationQueue()` (app.js)
 
 ### 3.1.1 外来语标注展示（v3.4 新增）
 
@@ -126,6 +128,7 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - Mission Control：仪表盘风格
 - 浏览器标签页图标：`favicon-lan.svg`（LAN）
 - 外来语标注：左侧强调线 + 橙色高亮背景 + 粗体胶囊 tag（强调可读性）
+- 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
 
 ## 8. 与后端主线关系
 
