@@ -1,8 +1,8 @@
 # 实现状态报告
 
-**日期**: 2026-02-25
-**版本**: v3.4
-**状态**: 进行中（主链路稳定，评审机制与历史卡片样式治理完成）
+**日期**: 2026-02-26
+**版本**: v3.5
+**状态**: 进行中（主链路稳定，Dashboard 业务化重构与卡片交互增强完成）
 
 ## 1. 当前阶段结论
 
@@ -27,12 +27,19 @@
 
 ### 2.2.1 历史卡片样式治理（v3.4 新增）
 
-- 外来语标注统一改为“独立高亮块”展示，不与中文释义同一行
+- 外来语标注统一改为”独立高亮块”展示，不与中文释义同一行
 - 后端后处理兼容旧格式：`外来语标注: ...` 与同行内嵌形式
 - 前端弹窗渲染增加运行时兼容转换，历史卡片可即刻显示新样式
 - 提供离线迁移脚本：`scripts/updateLegacyCardStyle.js`
   - 支持 `--apply` 批量回填 volume 内历史 md/html
   - 幂等可重复执行，便于后续运维巡检
+
+### 2.2.2 文本选取即时生成（v3.5 新增）
+
+- 卡片 CONTENT 区域支持拖选文字后弹出浮动按钮 “✦ Generate Card”
+- 点击按钮自动关闭弹窗、填入输入框、聚焦等待确认
+- 自动过滤音频按钮占位符，限制选取长度 ≤200 字符
+- 仅作用于 CONTENT tab，INTEL / REVIEW tab 不触发
 
 ### 2.3 可观测与实验
 
@@ -53,7 +60,16 @@
 - finalize 后更新 `eligibility`（pending/approved/rejected）
 - few-shot 可启用 review-gated 优先注入 `approved` 样本
 
-### 2.6 评审机制增强（v3.3 新增）
+### 2.6 Mission Control 业务化重构（v3.5 新增）
+
+- 删除虚荣指标面板（API Fuel / Model Arena / Cost Trend）
+- 新增 Review Pipeline 面板：eligibility 分布 + campaign 进度 + 评审活动折线
+- 新增 Few-shot Effectiveness 面板：baseline vs fewshot 对比 + 注入率 + fallback 原因
+- 补全 Error Monitor 渲染（原空壳）
+- Quality Signal 降级为 mini 指示卡，注明仅为模板合规分
+- 后端新增 `getReviewStats()` / `getFewShotStats()` 聚合查询 + 2 条 API 路由
+
+### 2.7 评审机制增强（v3.3 新增）
 
 - **TTS 独立下限**：`computeEligibility` 新增 `minTts=3.0` 门控，tts 低于阈值直接 rejected，防止 overall 达标但音频不可用的样本注入
 - **采样评审模式**：`finalizeCampaign` 支持 `allowPartial=true` + `minReviewRate` 参数，大批次可按比例抽样评审后 finalize
@@ -91,6 +107,7 @@
 - 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
 - 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`
+- 文本选取即时生成 v3.5：`Docs/SystemDevelopStatusDocs/SELECTION_TO_GENERATE_v3.5.md`
 
 ---
 

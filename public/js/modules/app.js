@@ -1070,6 +1070,63 @@ function bindAudioButtons(container, defaultFolder = null) {
     });
 }
 
+// ==========================================
+// 文本选取 → 生成卡片
+// ==========================================
+
+function initSelectionToGenerate(container) {
+    let fab = document.getElementById('selectionGenFab');
+    if (fab) fab.remove();
+
+    fab = document.createElement('button');
+    fab.id = 'selectionGenFab';
+    fab.className = 'selection-gen-fab hidden';
+    fab.textContent = '\u2726 Generate Card';
+    document.body.appendChild(fab);
+
+    container.addEventListener('mouseup', () => {
+        setTimeout(() => checkSelection(container, fab), 10);
+    });
+
+    const onSelChange = () => checkSelection(container, fab);
+    document.addEventListener('selectionchange', onSelChange);
+
+    fab.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // 防止点击 FAB 时选区被清除
+    });
+
+    fab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = window.getSelection().toString().trim().replace(/\u25B6/g, '').trim();
+        if (!text) return;
+
+        closeModal();
+
+        els.phraseInput.value = text;
+        els.phraseInput.focus();
+
+        fab.classList.add('hidden');
+        window.getSelection().removeAllRanges();
+    });
+}
+
+function checkSelection(container, fab) {
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim().replace(/\u25B6/g, '').trim() : '';
+
+    if (text && text.length >= 1 && text.length <= 200
+        && sel.rangeCount > 0
+        && container.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        fab.style.top = `${rect.top + window.scrollY - 40}px`;
+        fab.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
+        fab.classList.remove('hidden');
+    } else {
+        fab.classList.add('hidden');
+    }
+}
+
 async function ensureActiveReviewCampaign(force = false) {
     if (!force && reviewState.activeCampaign) return reviewState.activeCampaign;
     try {
@@ -1789,6 +1846,10 @@ function renderCardModal(markdown, title, options = {}) {
     // 绑定音频按钮
     bindAudioButtons(els.modalContainer, options.folder || store.get('selectedFolder'));
 
+    // 绑定文本选取 → 生成
+    const cardContent = els.modalContainer.querySelector('#cardContent');
+    if (cardContent) initSelectionToGenerate(cardContent);
+
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => {
         els.modalOverlay.classList.add('show');
@@ -2052,6 +2113,9 @@ function renderIntelCharts(metrics, suffix = '') {
 function closeModal() {
     els.modalOverlay.classList.remove('show');
     player.stop(); // 关闭卡片时停止播放
+    const fab = document.getElementById('selectionGenFab');
+    if (fab) fab.classList.add('hidden');
+    window.getSelection().removeAllRanges();
     setTimeout(() => els.modalOverlay.classList.add('hidden'), 300);
 }
 

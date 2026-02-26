@@ -57,6 +57,8 @@ User Input → Prompt Engine (CoT + Few-shot) → LLM (Gemini API) → JSON Resp
 
 Vanilla JS with marked.js (markdown) and DOMPurify (XSS sanitization). Grid layout with folder sidebar and file panel.
 
+**Text Selection → Generate**: Users can select text within the card CONTENT area. A floating "✦ Generate Card" button appears above the selection. Clicking it closes the card modal, fills the phrase input, and focuses it for confirmation. Implementation: `initSelectionToGenerate()` / `checkSelection()` in `app.js`.
+
 ## Key Conventions
 
 **Prompt Engineering** (services/promptEngine.js):

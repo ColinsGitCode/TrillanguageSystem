@@ -1888,3 +1888,36 @@ h1 {
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* Selection-to-Generate FAB */
+.selection-gen-fab {
+  position: absolute;
+  z-index: 10001;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: auto;
+}
+.selection-gen-fab:hover {
+  background: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.6);
+}
+.selection-gen-fab.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+}
+#cardContent ::selection {
+  background: rgba(59, 130, 246, 0.2);
+  color: inherit;
+}

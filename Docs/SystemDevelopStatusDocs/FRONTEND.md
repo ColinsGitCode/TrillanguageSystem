@@ -1,8 +1,8 @@
 # 前端架构文档
 
-**项目**: Trilingual Records  
-**版本**: 3.4
-**更新日期**: 2026-02-25
+**项目**: Trilingual Records
+**版本**: 3.5
+**更新日期**: 2026-02-26
 
 ## 1. 前端目录
 
@@ -48,9 +48,17 @@ Header (TRILINGUAL RECORDS + Mission Control)
 
 ### 3.1 单卡弹窗 Tabs
 
-- `CONTENT`：卡片正文 + 例句音频
+- `CONTENT`：卡片正文 + 例句音频 + **文本选取即时生成**
 - `INTEL`：质量/Token/性能/Prompt/LLM Output
 - `REVIEW`（有 generationId 时显示）：例句人工评分与评论
+
+### 3.1.2 文本选取即时生成（v3.5 新增）
+
+- 在 CONTENT 区域拖选文字后，选区上方弹出浮动按钮 "✦ Generate Card"
+- 点击按钮 → 关闭弹窗 → 选中文本填入输入框 → 聚焦等待确认
+- 自动过滤音频按钮占位符 "▶"，选取超 200 字符时不弹出
+- 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
+- 实现：`initSelectionToGenerate()` + `checkSelection()` (app.js)
 
 ### 3.1.1 外来语标注展示（v3.4 新增）
 
@@ -89,15 +97,17 @@ Header (TRILINGUAL RECORDS + Mission Control)
 
 ## 5. Mission Control（dashboard）
 
-定位：系统级统计大盘（不是单卡调试页）
+定位：业务级统计大盘，服务"评审→注入→效果→调参"闭环
 
 主要模块：
 
-- 质量趋势
-- Token 趋势
-- 延迟趋势
-- provider 分布
-- 近期记录与基础健康信息
+- Infrastructure（服务健康）
+- Error Monitor（错误监控）
+- Data Core（存储统计）
+- Review Pipeline（评审管线：eligibility 分布 + campaign 进度）
+- Few-shot Effectiveness（注入效果：baseline vs fewshot 对比）
+- Token 趋势 / 延迟趋势 / Quality Signal（模板合规分）
+- Live Feed（实时生成记录）/ Provider Split（供应商分布）
 
 ## 6. 状态管理与 API 封装
 
