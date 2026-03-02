@@ -254,8 +254,18 @@ h1 {
 }
 
 .file-list .list-item-btn.card-type-grammar {
-  background: linear-gradient(180deg, #f0f8ff 0%, #e8f3ff 100%);
-  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #e9fbf9 0%, #d7f4f1 100%);
+  border-color: #81d8d0;
+}
+
+.file-list .list-item-btn.card-type-grammar:hover {
+  border-color: #38b2ac;
+  box-shadow: 0 12px 26px rgba(56, 178, 172, 0.2);
+}
+
+.file-list .list-item-btn.card-type-grammar.active {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.22), 0 12px 24px rgba(20, 184, 166, 0.2);
 }
 
 .file-list .list-item-btn .file-item-title {
@@ -280,9 +290,9 @@ h1 {
 }
 
 .file-list .list-item-btn .file-item-tag.tag-grammar {
-  color: #1d4ed8;
-  background: #dbeafe;
-  border-color: #93c5fd;
+  color: #0f766e;
+  background: #ccf4ef;
+  border-color: #81d8d0;
 }
 
 .file-list .list-item-btn:hover {
