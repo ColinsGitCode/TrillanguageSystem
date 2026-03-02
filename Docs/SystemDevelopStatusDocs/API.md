@@ -1,8 +1,8 @@
 # API 接口文档
 
 **项目**: Trilingual Records  
-**API 版本**: v1  
-**更新日期**: 2026-02-24
+**API 版本**: v1.1  
+**更新日期**: 2026-03-02
 
 ## 1. 总览
 
@@ -53,6 +53,8 @@
   "phrase": "提示词工程",
   "llm_provider": "local",
   "enable_compare": false,
+  "card_type": "trilingual",
+  "source_mode": "input",
   "target_folder": "20260224",
   "llm_model": "qwen2_5_vl",
   "experiment_id": "exp_round_xxx",
@@ -80,6 +82,10 @@
 
 - `llm_provider`: `local` / `gemini`
 - `enable_compare=true`: 同时执行 Gemini + Local，并返回 `comparison`
+- `card_type`: `trilingual` / `grammar_ja`
+  - `trilingual`: 现有中英日三语卡片
+  - `grammar_ja`: 日语语法卡片（中文讲解 + 日语例句）
+- `source_mode`: `input` / `selection` / `ocr`（用于链路追踪）
 - `target_folder`: 指定日期目录；未传则按当前日期
 - `llm_model`: 覆盖模型名（gemini 会透传到 host-proxy）
 - `fewshot_options.reviewGated/reviewOnly/reviewMinOverall`: 控制人工评审门控注入
@@ -91,6 +97,8 @@
   "success": true,
   "experiment_id": "exp_round_xxx",
   "experiment_round": 1,
+  "card_type": "grammar_ja",
+  "source_mode": "selection",
   "provider_requested": "gemini",
   "provider_used": "local",
   "fallback": {
@@ -121,6 +129,8 @@
     "metadata": {
       "provider": "local",
       "model": "qwen2_5_vl",
+      "cardType": "grammar_ja",
+      "sourceMode": "selection",
       "promptText": "...",
       "promptParsed": {},
       "rawOutput": "...",
@@ -190,7 +200,7 @@
 
 ### 4.1 `GET /api/history`
 
-参数：`page`、`limit`、`search`、`provider`、`dateFrom`、`dateTo`
+参数：`page`、`limit`、`search`、`provider`、`card_type`、`dateFrom`、`dateTo`
 
 ### 4.2 `GET /api/history/:id`
 
@@ -218,6 +228,23 @@
 - `GET /api/folders`
 - `GET /api/folders/:folder/files`
 - `GET /api/folders/:folder/files/:file`
+
+`GET /api/folders/:folder/files` 返回项新增：
+
+```json
+{
+  "file": "〜ざるを得ない.html",
+  "title": "〜ざるを得ない",
+  "cardType": "grammar_ja"
+}
+```
+
+### 5.2 删除接口兼容说明
+
+- `DELETE /api/records/by-file` 已兼容历史文件名脏数据（如前导空格）。
+- 删除逻辑会同时尝试：
+  1. DB 记录删除（含音频与观测关联清理）
+  2. 基于 `folder+base` 的文件兜底扫描删除
 
 ### 5.2 记录与文件删除
 

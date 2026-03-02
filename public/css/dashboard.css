@@ -1277,6 +1277,14 @@ button[onclick^="navigator.clipboard"]:hover {
     color: var(--text-secondary);
 }
 
+.queue-recent-head .qtype {
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 2px 7px;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
 .queue-recent-head .qtime {
     margin-left: auto;
     color: #9ca3af;

@@ -16,6 +16,7 @@ class Store {
             llmProvider: localStorage.getItem('llm_provider') || 'local',
             compareMode: localStorage.getItem('compare_mode') === 'true' || false,
             modelMode: localStorage.getItem('model_mode') || 'local', // 'local', 'gemini', 'compare'
+            cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja'
 
             // 历史记录相关
             history: {
@@ -61,6 +62,9 @@ class Store {
         }
         if ('llmProvider' in partialState) {
             localStorage.setItem('llm_provider', partialState.llmProvider);
+        }
+        if ('cardType' in partialState) {
+            localStorage.setItem('card_type', partialState.cardType);
         }
 
         // 触发订阅

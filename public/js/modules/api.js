@@ -63,6 +63,8 @@ class ApiService {
 
         if (extra.targetFolder) payload.target_folder = extra.targetFolder;
         if (extra.llmModel) payload.llm_model = extra.llmModel;
+        if (extra.cardType) payload.card_type = extra.cardType;
+        if (extra.sourceMode) payload.source_mode = extra.sourceMode;
         if (extra.experimentId) payload.experiment_id = extra.experimentId;
         if (extra.experimentRound !== undefined) payload.experiment_round = extra.experimentRound;
         if (extra.roundName) payload.round_name = extra.roundName;

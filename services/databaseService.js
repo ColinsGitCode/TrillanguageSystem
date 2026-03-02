@@ -46,8 +46,30 @@ class DatabaseService {
 
     const schema = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schema);
+    this.ensureSchemaMigrations();
 
     console.log('[Database] Tables initialized');
+  }
+
+  ensureSchemaMigrations() {
+    const columns = this.db.prepare(`PRAGMA table_info(generations)`).all();
+    const columnSet = new Set(columns.map((col) => String(col.name || '').toLowerCase()));
+    const migrations = [];
+
+    if (!columnSet.has('card_type')) {
+      migrations.push(`ALTER TABLE generations ADD COLUMN card_type TEXT NOT NULL DEFAULT 'trilingual'`);
+    }
+    if (!columnSet.has('source_mode')) {
+      migrations.push(`ALTER TABLE generations ADD COLUMN source_mode TEXT`);
+    }
+
+    migrations.forEach((sql) => {
+      try {
+        this.db.exec(sql);
+      } catch (err) {
+        console.warn('[Database] Migration skipped:', sql, err.message);
+      }
+    });
   }
 
   // ========== 写入操作 ==========
@@ -63,12 +85,12 @@ class DatabaseService {
         // 1. 插入主记录
         const genInsert = this.db.prepare(`
           INSERT INTO generations (
-            phrase, phrase_language, llm_provider, llm_model,
+            phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
             folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
             markdown_content, en_translation, ja_translation, zh_translation,
             generation_date, request_id
           ) VALUES (
-            @phrase, @phraseLanguage, @llmProvider, @llmModel,
+            @phrase, @phraseLanguage, @cardType, @sourceMode, @llmProvider, @llmModel,
             @folderName, @baseFilename, @mdFilePath, @htmlFilePath, @metaFilePath,
             @markdownContent, @enTranslation, @jaTranslation, @zhTranslation,
             @generationDate, @requestId
@@ -148,7 +170,7 @@ class DatabaseService {
   /**
    * 分页查询历史记录
    */
-  queryGenerations({ page = 1, limit = 20, provider, dateFrom, dateTo, search }) {
+  queryGenerations({ page = 1, limit = 20, provider, cardType, dateFrom, dateTo, search }) {
     let sql = `
       SELECT g.*,
         (SELECT COUNT(*) FROM audio_files WHERE generation_id = g.id AND status = 'generated') as audio_count,
@@ -163,6 +185,11 @@ class DatabaseService {
     if (provider) {
       sql += ` AND g.llm_provider = @provider`;
       params.provider = provider;
+    }
+
+    if (cardType) {
+      sql += ` AND g.card_type = @cardType`;
+      params.cardType = cardType;
     }
 
     if (dateFrom) {
@@ -193,13 +220,18 @@ class DatabaseService {
   /**
    * 获取总记录数
    */
-  getTotalCount({ provider, dateFrom, dateTo, search }) {
+  getTotalCount({ provider, cardType, dateFrom, dateTo, search }) {
     let sql = `SELECT COUNT(*) as total FROM generations WHERE 1=1`;
     const params = {};
 
     if (provider) {
       sql += ` AND llm_provider = @provider`;
       params.provider = provider;
+    }
+
+    if (cardType) {
+      sql += ` AND card_type = @cardType`;
+      params.cardType = cardType;
     }
 
     if (dateFrom) {

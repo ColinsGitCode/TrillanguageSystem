@@ -1,8 +1,8 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.5
-**更新日期**: 2026-02-26
+**版本**: 3.6
+**更新日期**: 2026-03-02
 
 ## 1. 前端目录
 
@@ -40,10 +40,12 @@ Header (TRILINGUAL RECORDS + Mission Control)
 ### 2.1 关键交互
 
 - 点击主输入区 `Generate` 后任务入后台队列，可继续输入并连续点击生成
+- 支持卡片类型切换：`三语卡片` / `日语语法卡片`
 - 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - 卡片列表支持多列自适应显示
+- 语法卡片在列表中显示淡蓝背景与 `语法` 标签
 
 ## 3. 卡片弹窗（Viewer Modal）
 
@@ -53,15 +55,24 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - `INTEL`：质量/Token/性能/Prompt/LLM Output
 - `REVIEW`（有 generationId 时显示）：例句人工评分与评论
 
-### 3.1.2 文本选取即时生成（v3.5 新增）
+### 3.1.2 文本选取即时生成（v3.6）
 
-- 在 CONTENT 区域拖选文字后，选区上方弹出浮动按钮 "✦ Generate Card"
+- 在 CONTENT 区域拖选文字后，选区上方弹出浮动按钮：
+  - `✦ Generate Card`（生成三语卡）
+  - `📘 语法卡`（生成日语语法卡）
 - 点击按钮后直接进入后台任务队列，不关闭弹窗、不跳转页面
 - 队列按顺序串行执行（并发=1），执行期间不打断当前卡片阅读
 - 自动过滤音频按钮占位符 "▶"，选取超 200 字符时不弹出
 - Ruby-aware 文本提取：忽略 `<rt>/<rp>` 注音，仅保留日语正文入队
 - 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
 - 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + `processGenerationQueue()` (app.js)
+
+### 3.1.3 日语语法卡片（v3.6 新增）
+
+- 输入区新增卡片类型选择器（`🧩 三语卡片` / `📘 日语语法`）
+- 语法卡弹窗头部标识为 `JA GRAMMAR`
+- 内容页显示 `CARD TYPE · 语法卡片`
+- 与三语卡共享：删除、INTEL、REVIEW、队列、历史与可观测能力
 
 ### 3.1.1 外来语标注展示（v3.4 新增）
 
@@ -111,15 +122,17 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - Few-shot Effectiveness（注入效果：baseline vs fewshot 对比）
 - Token 趋势 / 延迟趋势 / Quality Signal（模板合规分）
 - Live Feed（实时生成记录）/ Provider Split（供应商分布）
+- Task Queue 顶部模块显示任务卡片类型（`三语/语法`）
 
 ## 6. 状态管理与 API 封装
 
 - 状态：`store.js`
   - `selectedFolder`、`selectedFile`
   - `llmProvider`、`modelMode`、`compareMode`
+  - `cardType`
 - API：`api.js`
   - 生成/OCR/历史/统计
-  - `generate()` 支持扩展参数透传（如 `target_folder`）以服务后台队列任务
+  - `generate()` 支持扩展参数透传（`target_folder/card_type/source_mode`）以服务后台队列任务
   - 评审 campaign（创建/finalize/rollback）与评分提交
   - 删除与文件读取
 

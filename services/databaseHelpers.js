@@ -61,10 +61,26 @@ function extractTranslation(markdownContent, language) {
 /**
  * 准备生成记录数据
  */
-function prepareGenerationData({ phrase, provider, model, folderName, baseName, filePaths, content }) {
+function prepareGenerationData({
+  phrase,
+  provider,
+  model,
+  folderName,
+  baseName,
+  filePaths,
+  content,
+  cardType = 'trilingual',
+  sourceMode = null
+}) {
+  const normalizedCardType = String(cardType || 'trilingual').toLowerCase() === 'grammar_ja'
+    ? 'grammar_ja'
+    : 'trilingual';
+  const normalizedSourceMode = sourceMode ? String(sourceMode).toLowerCase() : null;
   return {
     phrase,
     phraseLanguage: detectLanguage(phrase),
+    cardType: normalizedCardType,
+    sourceMode: normalizedSourceMode,
     llmProvider: provider,
     llmModel: model,
     folderName,
@@ -156,7 +172,9 @@ function prepareInsertData({
   content,
   observability,
   prompt,
-  audioTasks
+  audioTasks,
+  cardType,
+  sourceMode
 }) {
   return {
     generation: prepareGenerationData({
@@ -166,7 +184,9 @@ function prepareInsertData({
       folderName,
       baseName,
       filePaths,
-      content
+      content,
+      cardType,
+      sourceMode
     }),
     observability: prepareObservabilityData({
       observability,

@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS generations (
   -- 基本信息
   phrase TEXT NOT NULL,
   phrase_language TEXT,
+  card_type TEXT NOT NULL DEFAULT 'trilingual',
+  source_mode TEXT,
 
   -- 提供商信息
   llm_provider TEXT NOT NULL,

@@ -1,8 +1,8 @@
 # 实现状态报告
 
-**日期**: 2026-02-26
-**版本**: v3.5
-**状态**: 进行中（主链路稳定，Dashboard 业务化重构与卡片交互增强完成）
+**日期**: 2026-03-02
+**版本**: v3.6
+**状态**: 进行中（主链路稳定，已新增日语语法卡片与类型化队列）
 
 ## 1. 当前阶段结论
 
@@ -24,6 +24,16 @@
 - OCR 支持 `tesseract/local/auto`
 - `auto` 模式下可从 tesseract 回退到 local OCR
 - 英语与日语例句可批量生成音频并随记录持久化
+
+### 2.2.4 日语语法卡片（v3.6 新增）
+
+- 新增 `card_type=grammar_ja` 生成链路（与三语卡并行）
+- 语法卡内容：中文语法说明 + 日语例句 + 日语例句音频
+- 保持日期目录落盘策略，与三语卡共存于同一 `YYYYMMDD` 目录
+- 生成入口覆盖：
+  - 主输入区（队列化）
+  - 卡片内选中文本（队列化）
+- 队列快照、Mission Control、历史记录均可识别 `card_type/source_mode`
 
 ### 2.2.1 历史卡片样式治理（v3.4 新增）
 
@@ -101,6 +111,7 @@
 5. 并发场景下 rollback + finalize 的竞态尚未测试
 6. 少量历史异常卡片仍可能包含“非结构化调试文本”混入正文，需二次清洗规则
 7. 当前任务队列仅前端内存态，页面刷新会丢失未完成队列（待持久化）
+8. 选中文本直接入语法队列时，若选区含中日混合整句，baseName 可能偏长（建议后续增加归一化截断）
 
 ## 4. 下一步重点
 
@@ -108,6 +119,7 @@
 2. 优化 `tokenBudgetRatio/exampleMaxChars`，压缩增量 token
 3. 将观测指标门禁化（SLO + 发布阈值）
 4. 把评审结果与实验结果联动，形成”评分→注入→效果→回滚调参”闭环
+5. 对语法卡入口增加选区清洗策略（去翻译行、保留核心语法点）
 
 ## 5. 关键文档索引
 
@@ -119,6 +131,7 @@
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
 - 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`
 - 文本选取即时生成 v3.5：`Docs/SystemDevelopStatusDocs/SELECTION_TO_GENERATE_v3.5.md`
+- 日语语法卡与类型化队列 v3.6：`Docs/SystemDevelopStatusDocs/FRONTEND.md` / `Docs/SystemDevelopStatusDocs/API.md`
 
 ---
 

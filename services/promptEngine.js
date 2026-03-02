@@ -74,6 +74,48 @@ const FEWSHOT_EXAMPLES = {
 function buildPrompt(args) {
     const phrase = args.phrase || '';
     const filenameBase = args.filenameBase || '';
+    const cardType = String(args.cardType || 'trilingual').toLowerCase();
+
+    if (cardType === 'grammar_ja') {
+        return `你是日语语法学习卡片生成器。
+输入内容: "${phrase}"
+文件名基础: "${filenameBase}"
+
+严格要求:
+1) 只输出有效 JSON，不要任何额外文本。
+2) markdown_content 必须为 Markdown，结构如下（必须使用“例句1/例句2/例句3”格式以便生成 TTS）:
+# ${phrase}
+## 1. 语法概述（中文）
+- **语法点**: ...
+- **核心结构**: ...
+- **使用场景**: ...
+- **注意事项**: ...
+## 2. 日本語:
+- **例句1**: 日文句子（汉字注音，外来语可标英文）
+  - 纯中文翻译（不含假名/注音/括号读音）
+- **例句2**: 日文句子（汉字注音，外来语可标英文）
+  - 纯中文翻译（不含假名/注音/括号读音）
+- **例句3**: 日文句子（汉字注音，外来语可标英文）
+  - 纯中文翻译（不含假名/注音/括号读音）
+## 3. 常见误用（中文）
+- ...
+
+3) 语法说明只用中文；例句必须是日语。
+4) 日语汉字需加假名(例: 漢字(かんじ))。
+5) audio_tasks 只允许日语例句，必须含3项且 filename_suffix 固定为 _ja_1/_ja_2/_ja_3。
+6) JSON 转义: markdown_content 换行用 \\n，双引号用 \\"。
+禁止: <script>/<iframe>/<object>/<embed>。
+
+JSON 结构:
+{
+  "markdown_content": "...",
+  "audio_tasks": [
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_1" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_2" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_3" }
+  ]
+}`;
+    }
 
     const strictCompactPrompt = `你是中英日三语学习卡片生成器。
 输入短语: "${phrase}"
@@ -126,13 +168,18 @@ JSON 结构:
 
 function buildMarkdownPrompt(args) {
     const phrase = args.phrase || '';
-    const templatePath = process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_3LANS_markdown.md');
+    const cardType = String(args.cardType || 'trilingual').toLowerCase();
+    const templatePath = cardType === 'grammar_ja'
+        ? (process.env.GRAMMAR_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_ja_grammar_markdown.md'))
+        : (process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_3LANS_markdown.md'));
     let template = '';
     try {
         template = fs.readFileSync(templatePath, 'utf8');
     } catch (err) {
         // Fallback to minimal inline prompt if template missing
-        template = `你是中英日三语学习卡片生成器。\n输入短语: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+        template = cardType === 'grammar_ja'
+            ? `你是日语语法学习卡片生成器。\n输入内容: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`
+            : `你是中英日三语学习卡片生成器。\n输入短语: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
     }
 
     return template.replace(/\{\{\s*phrase\s*\}\}/g, phrase);

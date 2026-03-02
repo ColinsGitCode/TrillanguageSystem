@@ -239,9 +239,10 @@ function renderTaskQueueDetails(snapshot) {
     const recentTasks = Array.isArray(snapshot.recentTasks)
         ? snapshot.recentTasks.slice().reverse()
         : [];
+    const cardTypeText = (rawType) => String(rawType || '').toLowerCase() === 'grammar_ja' ? '语法' : '三语';
 
     const activeText = active
-        ? `#${active.seq} · ${escapeHtml(active.phrase || '-')}`
+        ? `#${active.seq} · [${cardTypeText(active.cardType)}] ${escapeHtml(active.phrase || '-')}`
         : 'Idle';
     const updatedAtText = snapshot.updatedAt ? formatDate(snapshot.updatedAt) : '-';
 
@@ -265,6 +266,7 @@ function renderTaskQueueDetails(snapshot) {
                     <div class="queue-recent-head">
                         <span class="qid">#${Number(task.seq || 0)}</span>
                         <span class="qstatus">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
+                        <span class="qtype">${cardTypeText(task.cardType)}</span>
                         <span class="qattempt">try ${Number(task.attempts || 0)}</span>
                         <span class="qtime">${formatQueueTime(task.finishedAt || task.createdAt)}</span>
                     </div>

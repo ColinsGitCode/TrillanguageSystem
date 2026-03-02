@@ -48,19 +48,20 @@ function resolveFolder(folderName) {
     return folderPath;
 }
 
-function readMetaTitle(metaPath) {
+function readMetaInfo(metaPath) {
     try {
         if (!fs.existsSync(metaPath)) return null;
         const raw = fs.readFileSync(metaPath, 'utf-8');
         const data = JSON.parse(raw);
-        if (data && typeof data.phrase === 'string') {
-            const phrase = data.phrase.trim();
-            if (phrase) return phrase;
-        }
+        if (!data || typeof data !== 'object') return null;
+        return {
+            phrase: typeof data.phrase === 'string' ? data.phrase.trim() : '',
+            cardType: typeof data.card_type === 'string' ? data.card_type.trim().toLowerCase() : '',
+            sourceMode: typeof data.source_mode === 'string' ? data.source_mode.trim().toLowerCase() : ''
+        };
     } catch (err) {
         return null;
     }
-    return null;
 }
 
 function readMarkdownTitle(mdPath) {
@@ -84,12 +85,12 @@ function readMarkdownTitle(mdPath) {
     return null;
 }
 
-function getDisplayTitle(folderPath, baseName) {
-    const metaTitle = readMetaTitle(path.join(folderPath, `${baseName}.meta.json`));
-    if (metaTitle) return metaTitle;
-    const mdTitle = readMarkdownTitle(path.join(folderPath, `${baseName}.md`));
-    if (mdTitle) return mdTitle;
-    return baseName;
+function getDisplayMeta(folderPath, baseName) {
+    const metaPath = path.join(folderPath, `${baseName}.meta.json`);
+    const meta = readMetaInfo(metaPath);
+    const title = meta?.phrase || readMarkdownTitle(path.join(folderPath, `${baseName}.md`)) || baseName;
+    const cardType = meta?.cardType === 'grammar_ja' ? 'grammar_ja' : 'trilingual';
+    return { title, cardType };
 }
 
 function listFoldersWithHtml() {
@@ -118,9 +119,11 @@ function listHtmlFilesInFolder(folderName) {
 
     return htmlFiles.map((file) => {
         const baseName = file.replace(/\.html$/i, '');
+        const meta = getDisplayMeta(folderPath, baseName);
         return {
             file,
-            title: getDisplayTitle(folderPath, baseName),
+            title: meta.title,
+            cardType: meta.cardType
         };
     });
 }
@@ -148,23 +151,29 @@ function escapeRegex(value) {
 function deleteRecordFiles(folderName, baseName) {
     const folderPath = resolveFolder(folderName);
     if (!folderPath) throw new Error('Folder not found');
-    const safeBase = String(baseName || '').trim();
-    if (!safeBase) throw new Error('Base name required');
+    const rawBase = String(baseName || '');
+    const trimmedBase = rawBase.trim();
+    if (!trimmedBase) throw new Error('Base name required');
 
-    const candidates = new Set([
-        `${safeBase}.md`,
-        `${safeBase}.html`,
-        `${safeBase}.meta.json`,
-    ]);
+    // 兼容历史脏数据：老文件名可能包含前导空格，删除时同时匹配 raw/trimmed。
+    const baseVariants = Array.from(new Set([rawBase, trimmedBase].filter(Boolean)));
+    const candidates = new Set();
+    baseVariants.forEach((base) => {
+        candidates.add(`${base}.md`);
+        candidates.add(`${base}.html`);
+        candidates.add(`${base}.meta.json`);
+    });
 
-    const audioRegex = new RegExp(`^${escapeRegex(safeBase)}_[\\w-]+\\.(wav|mp3|m4a)$`, 'i');
+    const audioRegexes = baseVariants.map(
+        (base) => new RegExp(`^${escapeRegex(base)}_[\\w-]+\\.(wav|mp3|m4a)$`, 'i')
+    );
     const files = fs.readdirSync(folderPath, { withFileTypes: true })
         .filter((entry) => entry.isFile())
         .map((entry) => entry.name);
 
     const deleted = [];
     for (const name of files) {
-        if (candidates.has(name) || audioRegex.test(name)) {
+        if (candidates.has(name) || audioRegexes.some((re) => re.test(name))) {
             const filePath = path.join(folderPath, name);
             try {
                 fs.unlinkSync(filePath);
@@ -235,7 +244,7 @@ function buildBaseName(phrase, targetDir) {
     let base = raw
         .replace(/[\\/:*?"<>|]/g, '')
         .replace(/[\u0000-\u001F]/g, '')
-        .replace(/\s+$/g, '')
+        .trim()
         .replace(/^\.+$/g, '');
     if (!base || base === '.' || base === '..') {
         base = 'phrase';
@@ -294,9 +303,15 @@ function saveGeneratedFiles(phrase, content, options = {}) {
     fs.writeFileSync(htmlPath, content.html_content, 'utf-8');
     const metaPath = path.join(targetDir, `${baseName}.meta.json`);
     const displayPhrase = String(phrase || '').trim();
+    const cardType = String(options.cardType || 'trilingual').toLowerCase() === 'grammar_ja'
+        ? 'grammar_ja'
+        : 'trilingual';
+    const sourceMode = String(options.sourceMode || '').trim().toLowerCase();
     const meta = {
         phrase: displayPhrase,
         created_at: new Date().toISOString(),
+        card_type: cardType,
+        source_mode: sourceMode || null
     };
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
     

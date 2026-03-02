@@ -17,6 +17,7 @@ const els = {
     // Generator
     phraseInput: document.getElementById('phraseInput'),
     genBtn: document.getElementById('genBtn'),
+    cardTypeHint: document.getElementById('cardTypeHint'),
     
     // Image OCR
     imageDropZone: document.getElementById('imageDropZone'),
@@ -91,6 +92,7 @@ function init() {
     initTabs();
     initImageHandlers();
     initModelSelector();
+    initCardTypeSelector();
     initGenerator();
     initModal();
     initGenerationQueuePanel();
@@ -419,7 +421,15 @@ async function loadFiles(folder, options = {}) {
     try {
         const data = await api.getFiles(folder, noCache);
         const files = (data.files || [])
-            .map(f => typeof f === 'string' ? { file: f, title: f.replace(/\.html$/i, '') } : f)
+            .map((f) => {
+                if (typeof f === 'string') {
+                    return { file: f, title: f.replace(/\.html$/i, ''), cardType: 'trilingual' };
+                }
+                return {
+                    ...f,
+                    cardType: normalizeCardType(f.cardType || f.card_type || 'trilingual')
+                };
+            })
             .filter(f => f && f.file);
             
         store.setState({ files });
@@ -465,19 +475,25 @@ function renderFiles(files) {
     els.fileList.innerHTML = '';
     files.forEach(item => {
         const btn = document.createElement('button');
-        btn.className = 'list-item-btn';
-        btn.textContent = item.title;
+        const cardType = normalizeCardType(item.cardType || item.card_type || 'trilingual');
+        btn.className = `list-item-btn card-type-${cardType === 'grammar_ja' ? 'grammar' : 'trilingual'}`;
+        const tagText = cardType === 'grammar_ja' ? '语法' : '三语';
+        const tagClass = cardType === 'grammar_ja' ? 'tag-grammar' : 'tag-trilingual';
+        btn.innerHTML = `
+          <span class="file-item-title">${escapeHtml(item.title || '')}</span>
+          <span class="file-item-tag ${tagClass}">${tagText}</span>
+        `;
         if (store.get('selectedFile') === item.file) {
             btn.classList.add('active');
         }
-        btn.onclick = () => selectFile(item.file, item.title);
+        btn.onclick = () => selectFile(item.file, item.title, cardType);
         els.fileList.appendChild(btn);
     });
     ensureFileListState();
     els.fileList.appendChild(fileListState);
 }
 
-async function selectFile(file, title) {
+async function selectFile(file, title, cardType = 'trilingual') {
     const folder = store.get('selectedFolder');
     if (!folder) return;
 
@@ -496,7 +512,10 @@ async function selectFile(file, title) {
         ]);
 
         const metrics = recordData ? recordData.record : null;
-        renderCardModal(mdContent, title || baseName, { folder, baseName, metrics });
+        const modalCardType = normalizeCardType(
+            cardType || metrics?.card_type || metrics?.observability?.metadata?.cardType || 'trilingual'
+        );
+        renderCardModal(mdContent, title || baseName, { folder, baseName, metrics, cardType: modalCardType });
     } catch (err) {
         console.error('Render card failed:', err);
         alert('无法加载文件内容');
@@ -553,6 +572,39 @@ function initModelSelector() {
     }
 }
 
+function normalizeCardType(cardType) {
+    return String(cardType || 'trilingual').trim().toLowerCase() === 'grammar_ja'
+        ? 'grammar_ja'
+        : 'trilingual';
+}
+
+function getCardTypeLabel(cardType) {
+    return normalizeCardType(cardType) === 'grammar_ja' ? '日语语法卡片' : '三语学习卡片';
+}
+
+function initCardTypeSelector() {
+    const buttons = document.querySelectorAll('.card-type-btn');
+    const hint = els.cardTypeHint;
+    if (!buttons.length || !hint) return;
+
+    const updateCardTypeUI = (rawType) => {
+        const cardType = normalizeCardType(rawType);
+        store.setState({ cardType });
+        buttons.forEach((btn) => btn.classList.toggle('active', btn.dataset.cardType === cardType));
+        hint.textContent = getCardTypeLabel(cardType);
+        hint.className = `selector-hint ${cardType === 'grammar_ja' ? 'mode-grammar' : 'mode-gemini'}`;
+        els.genBtn.textContent = cardType === 'grammar_ja' ? 'Generate Grammar Card' : 'Generate';
+    };
+
+    updateCardTypeUI(store.get('cardType'));
+
+    buttons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            updateCardTypeUI(btn.dataset.cardType);
+        });
+    });
+}
+
 // ==========================================
 // 生成器逻辑 (Optimized)
 // ==========================================
@@ -564,12 +616,15 @@ function initGenerator() {
             showGenerationQueueToast('请输入短语或句子');
             return;
         }
+        const cardType = normalizeCardType(store.get('cardType'));
 
         const accepted = enqueueBackgroundGenerationTask(phrase, phrase, {
             folder: store.get('selectedFolder') || '',
             baseName: '',
             generationId: null,
-            entry: 'main-input'
+            entry: 'main-input',
+            cardType,
+            sourceMode: 'input'
         });
         if (!accepted) return;
 
@@ -583,7 +638,10 @@ function initGenerator() {
 
 function updateGenUI(isGenerating) {
     els.genBtn.disabled = isGenerating;
-    els.genBtn.textContent = isGenerating ? 'Generating...' : 'Generate';
+    const idleText = normalizeCardType(store.get('cardType')) === 'grammar_ja'
+        ? 'Generate Grammar Card'
+        : 'Generate';
+    els.genBtn.textContent = isGenerating ? 'Generating...' : idleText;
     els.ocrBtn.disabled = isGenerating || !store.get('imageBase64');
 }
 
@@ -1160,8 +1218,9 @@ function renderGenerationQueuePanel() {
     const success = tasks.filter((task) => task.status === 'success').length;
 
     const runningTask = tasks.find((task) => task.status === 'running');
+    const runningType = runningTask ? (normalizeCardType(runningTask.cardType) === 'grammar_ja' ? '语法' : '三语') : '';
     const runningText = runningTask
-        ? `执行中 #${runningTask.seq}: ${escapeHtml(runningTask.phraseNormalized)}`
+        ? `执行中 #${runningTask.seq} [${runningType}]: ${escapeHtml(runningTask.phraseNormalized)}`
         : '空闲';
 
     generationQueueState.summaryEl.innerHTML =
@@ -1177,6 +1236,8 @@ function renderGenerationQueuePanel() {
                 failed: 'FAILED',
                 cancelled: 'CANCELLED'
             }[task.status] || task.status.toUpperCase();
+            const cardType = normalizeCardType(task.cardType || 'trilingual');
+            const cardTypeLabel = cardType === 'grammar_ja' ? '语法' : '三语';
 
             const cls = `status-${task.status}`;
             const errorText = task.error ? `<div class="gen-queue-item-error">${escapeHtml(task.error)}</div>` : '';
@@ -1185,6 +1246,7 @@ function renderGenerationQueuePanel() {
                 <div class="gen-queue-item-head">
                   <span class="gen-queue-item-id">#${task.seq}</span>
                   <span class="gen-queue-item-status">${statusLabel}</span>
+                  <span class="gen-queue-item-type">${cardTypeLabel}</span>
                 </div>
                 <div class="gen-queue-item-text">${escapeHtml(task.phraseNormalized)}</div>
                 ${errorText}
@@ -1227,6 +1289,8 @@ function persistGenerationQueueSnapshot() {
             status: activeTask.status,
             attempts: activeTask.attempts || 0,
             provider: activeTask.provider || '',
+            cardType: normalizeCardType(activeTask.cardType || 'trilingual'),
+            sourceMode: activeTask.sourceMode || '',
             targetFolder: activeTask.targetFolder || '',
             enableCompare: Boolean(activeTask.enableCompare)
         } : null,
@@ -1237,6 +1301,8 @@ function persistGenerationQueueSnapshot() {
             status: task.status,
             attempts: task.attempts || 0,
             provider: task.provider || '',
+            cardType: normalizeCardType(task.cardType || 'trilingual'),
+            sourceMode: task.sourceMode || '',
             targetFolder: task.targetFolder || '',
             enableCompare: Boolean(task.enableCompare),
             error: task.error || '',
@@ -1253,11 +1319,13 @@ function persistGenerationQueueSnapshot() {
     }
 }
 
-function hasActiveDuplicateTask(phraseNormalized) {
+function hasActiveDuplicateTask(phraseNormalized, cardType = 'trilingual') {
+    const normalizedType = normalizeCardType(cardType);
     return generationQueueState.tasks.some(
         (task) =>
             (task.status === 'queued' || task.status === 'running' || task.status === 'failed') &&
-            task.phraseNormalized === phraseNormalized
+            task.phraseNormalized === phraseNormalized &&
+            normalizeCardType(task.cardType) === normalizedType
     );
 }
 
@@ -1269,7 +1337,8 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
         return false;
     }
 
-    if (hasActiveDuplicateTask(phraseNormalized)) {
+    const taskCardType = normalizeCardType(source.cardType || store.get('cardType') || 'trilingual');
+    if (hasActiveDuplicateTask(phraseNormalized, taskCardType)) {
         showGenerationQueueToast('该短语已在队列中');
         return false;
     }
@@ -1278,6 +1347,14 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
     const provider = modelMode === 'gemini' ? 'gemini' : 'local';
     const enableCompare = modelMode === 'compare';
     const sourceEntry = String(source.entry || '').trim().toLowerCase();
+    const inferredSourceMode = String(
+        source.sourceMode ||
+        (sourceEntry === 'selection'
+            ? 'selection'
+            : sourceEntry === 'ocr-input'
+                ? 'ocr'
+                : 'input')
+    ).trim().toLowerCase();
     const explicitTargetFolder = String(source.targetFolder || '').trim();
     const selectedFolder = String(store.get('selectedFolder') || '').trim();
     // 交互式生成默认写入“今日目录”，避免误写到历史目录。
@@ -1293,6 +1370,8 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
         source,
         provider,
         enableCompare,
+        cardType: taskCardType,
+        sourceMode: inferredSourceMode || null,
         targetFolder: taskTargetFolder,
         llmModel: null,
         status: 'queued',
@@ -1317,7 +1396,9 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
 async function runGenerationTaskFromQueue(task) {
     const response = await api.generate(task.phraseNormalized, task.provider, task.enableCompare, {
         targetFolder: task.targetFolder || '',
-        llmModel: task.llmModel || undefined
+        llmModel: task.llmModel || undefined,
+        cardType: normalizeCardType(task.cardType || 'trilingual'),
+        sourceMode: task.sourceMode || undefined
     });
 
     const folder = task.enableCompare
@@ -1542,10 +1623,12 @@ function initSelectionToGenerate(container) {
     dock.className = 'selection-action-dock hidden';
     dock.innerHTML = `
       <button type="button" class="selection-action-btn action-generate" data-action="generate">\u2726 Generate Card</button>
+      <button type="button" class="selection-action-btn action-generate-grammar" data-action="generate-grammar">📘 语法卡</button>
       <button type="button" class="selection-action-btn action-highlight" data-action="highlight">\ud83d\udd8d \u6807\u7ea2</button>
     `;
     document.body.appendChild(dock);
     const generateBtn = dock.querySelector('[data-action="generate"]');
+    const generateGrammarBtn = dock.querySelector('[data-action="generate-grammar"]');
     const highlightBtn = dock.querySelector('[data-action="highlight"]');
 
     const hideDock = () => dock.classList.add('hidden');
@@ -1574,7 +1657,30 @@ function initSelectionToGenerate(container) {
             folder: activeCardContext?.folder || store.get('selectedFolder') || '',
             baseName: activeCardContext?.baseName || '',
             generationId: activeCardContext?.generationId || null,
-            entry: 'selection'
+            entry: 'selection',
+            cardType: 'trilingual',
+            sourceMode: 'selection'
+        });
+
+        hideDock();
+        if (window.getSelection()) window.getSelection().removeAllRanges();
+    });
+
+    generateGrammarBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const candidate = buildSelectionCandidateFromContainer(container);
+        if (!candidate) {
+            hideDock();
+            return;
+        }
+
+        enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
+            folder: activeCardContext?.folder || store.get('selectedFolder') || '',
+            baseName: activeCardContext?.baseName || '',
+            generationId: activeCardContext?.generationId || null,
+            entry: 'selection',
+            cardType: 'grammar_ja',
+            sourceMode: 'selection'
         });
 
         hideDock();
@@ -2118,6 +2224,14 @@ function renderCardModal(markdown, title, options = {}) {
     if (h1Match) displayTitle = h1Match[1];
     const folder = options.folder || store.get('selectedFolder') || '';
     const generationId = Number(options.metrics?.id || options.generationId || 0);
+    const cardType = normalizeCardType(
+        options.cardType ||
+        options.metrics?.card_type ||
+        options.metrics?.observability?.metadata?.cardType ||
+        'trilingual'
+    );
+    const cardTypeMetaLabel = cardType === 'grammar_ja' ? 'JA GRAMMAR' : 'TRILINGUAL';
+    const cardTypeTabLabel = cardType === 'grammar_ja' ? '语法卡片' : '三语卡片';
     const highlightSourceHash = computeTextHash(markdown);
     const highlightStorageKey = buildCardHighlightStorageKey({
         folder,
@@ -2129,6 +2243,7 @@ function renderCardModal(markdown, title, options = {}) {
         folder,
         baseName: options.baseName || '',
         generationId,
+        cardType,
         highlightStorageKey,
         highlightSourceHash
     };
@@ -2222,7 +2337,7 @@ function renderCardModal(markdown, title, options = {}) {
                 <div style="flex:1;">
                     <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono" style="color: var(--neon-blue);">
-                        <span>TRILINGUAL</span>
+                        <span>${cardTypeMetaLabel}</span>
                         <span>::</span>
                         <span>${new Date().getFullYear()}</span>
                     </div>
@@ -2237,6 +2352,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             <!-- Content Tab -->
             <div id="cardContent" class="mc-body mc-content" style="display:block;">
+                <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeTabLabel}</div>
                 ${cardContentHtml}
             </div>
 
@@ -2390,7 +2506,18 @@ function renderCardModal(markdown, title, options = {}) {
             if (confirm('Are you sure you want to delete this record? This cannot be undone.')) {
                 try {
                     if (options.metrics && options.metrics.id) {
-                        await api.deleteRecord(options.metrics.id);
+                        try {
+                            await api.deleteRecord(options.metrics.id);
+                        } catch (err) {
+                            // 历史数据可能存在 DB 记录缺失，回退到按 folder/base 删除文件。
+                            const canFallback = options.folder && options.baseName;
+                            const notFound = /record not found/i.test(String(err?.message || ''));
+                            if (canFallback && notFound) {
+                                await api.deleteRecordByFile(options.folder, options.baseName);
+                            } else {
+                                throw err;
+                            }
+                        }
                     } else if (options.folder && options.baseName) {
                         await api.deleteRecordByFile(options.folder, options.baseName);
                     } else {
@@ -2829,6 +2956,7 @@ function renderHistory(records) {
             <div class="history-item-phrase">${escapeHtml(r.phrase)}</div>
             <div class="history-item-meta">
                 <span>${r.llm_provider === 'gemini' ? '🤖' : '🏠'} ${r.llm_provider}</span>
+                <span>${normalizeCardType(r.card_type) === 'grammar_ja' ? '📘 语法' : '🧩 三语'}</span>
                 <span>${formatDate(r.created_at)}</span>
                 <span class="quality-badge q-${Math.floor(r.quality_score/10)}0">${r.quality_score}</span>
             </div>
@@ -2849,7 +2977,8 @@ function renderHistory(records) {
                 renderCardModal(mdContent, record.phrase, {
                     folder: record.folder_name,
                     baseName: record.base_filename,
-                    metrics: record
+                    metrics: record,
+                    cardType: record.card_type || record.observability?.metadata?.cardType || 'trilingual'
                 });
             } catch (err) {
                 alert('无法加载记录详情');

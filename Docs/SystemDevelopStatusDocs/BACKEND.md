@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.4
-**更新日期**: 2026-02-25
+**版本**: 3.6
+**更新日期**: 2026-03-02
 
 ## 1. 核心目录
 
@@ -53,20 +53,25 @@ scripts/
 ## 3. 生成主链路（单模型）
 
 1. `POST /api/generate` 接收请求，执行限流检查
-2. 构建 baseline prompt +（可选）few-shot 注入
-3. 调用 `local` 或 `gemini`（含自动 fallback）
-4. 后处理与校验（结构、注音、markdown/html）
-5. 生成音频任务并调用 TTS
-6. 保存文件（md/html/meta/audio）
-7. 写入数据库：
+2. 根据 `card_type` 构建 prompt：
+   - `trilingual`：三语卡片模板
+   - `grammar_ja`：日语语法卡片模板（中文讲解 + 日语例句）
+3. 构建 baseline prompt +（可选）few-shot 注入
+4. 调用 `local` 或 `gemini`（含自动 fallback）
+5. 后处理与校验（结构、注音、markdown/html）
+6. 生成音频任务并调用 TTS
+7. 保存文件（md/html/meta/audio）
+8. 写入数据库：
    - `generations`
    - `observability_metrics`
    - `audio_files`
-8. 写入实验追踪：
+9. 写入实验追踪：
    - `few_shot_runs` / `few_shot_examples`
    - `experiment_samples` / `experiment_rounds`
-9. 自动解析例句并写入评审池：
+10. 自动解析例句并写入评审池：
    - `example_units` / `example_unit_sources`
+
+> 说明：`grammar_ja` 当前默认不启用 few-shot 注入，避免把三语样本注入到语法模板。
 
 ## 4. 对比链路（enable_compare）
 
@@ -140,6 +145,13 @@ scripts/
    - `few_shot_runs`、`few_shot_examples`、`experiment_rounds`、`experiment_samples`、`teacher_references`
 4. 评审与注入门控：
    - `example_units`、`example_unit_sources`、`review_campaigns`、`review_campaign_items`、`example_reviews`
+
+### 8.1 generations 新增字段（v3.6）
+
+- `card_type`：`trilingual | grammar_ja`
+- `source_mode`：`input | selection | ocr`
+
+用于区分卡片类型与来源入口，支持后续筛选、统计与可观测追踪。
 
 ## 9. 存储与部署
 

@@ -144,6 +144,20 @@ function resolveGeminiModel(mode, modelOverride) {
     return '';
 }
 
+function normalizeCardType(cardType) {
+    const normalized = String(cardType || 'trilingual').trim().toLowerCase();
+    return normalized === 'grammar_ja' ? 'grammar_ja' : 'trilingual';
+}
+
+function normalizeSourceMode(sourceMode) {
+    const normalized = String(sourceMode || '').trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === 'selection') return 'selection';
+    if (normalized === 'input') return 'input';
+    if (normalized === 'ocr') return 'ocr';
+    return normalized;
+}
+
 function isGeminiUnavailableError(error) {
     const message = String(error?.message || '');
     return /ModelNotFoundError|Requested entity was not found|Gemini proxy error|Error when talking to Gemini API|API key|quota|permission|429|403|404/i.test(message);
@@ -197,6 +211,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   }
 
   perf.mark('promptBuild');
+  const cardType = normalizeCardType(options.cardType);
+  const sourceMode = normalizeSourceMode(options.sourceMode);
   const { targetDir, folderName } = options.targetFolder
     ? ensureFolderDirectory(options.targetFolder)
     : ensureTodayDirectory();
@@ -209,8 +225,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   let prompt = useMarkdownOutput
-      ? buildMarkdownPrompt({ phrase, filenameBase: baseName })
-      : buildPrompt({ phrase, filenameBase: baseName });
+      ? buildMarkdownPrompt({ phrase, filenameBase: baseName, cardType })
+      : buildPrompt({ phrase, filenameBase: baseName, cardType });
 
   const reqFewShot = options.fewshotOptions || {};
   const envFewshotEnabled = String(process.env.ENABLE_GOLDEN_EXAMPLES || '').toLowerCase() === 'true';
@@ -235,7 +251,9 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
     : (reqFewShot.exampleMaxChars ?? process.env.GOLDEN_EXAMPLE_MAX_CHARS ?? 900);
   const reviewGatedDefault = String(process.env.ENABLE_REVIEW_GATED_FEWSHOT || '').toLowerCase() === 'true';
   const fewShotConfig = {
-      enabled: (provider === 'local' || provider === 'gemini') && (enabledOverride !== null ? enabledOverride : providerFewshotEnabled),
+      enabled: cardType === 'trilingual' &&
+        (provider === 'local' || provider === 'gemini') &&
+        (enabledOverride !== null ? enabledOverride : providerFewshotEnabled),
       strategy: reqFewShot.strategy || process.env.GOLDEN_EXAMPLES_STRATEGY || 'HIGH_QUALITY_GEMINI',
       count: toNumberOr(providerDefaultCount, provider === 'gemini' ? 2 : 3),
       minScore: toNumberOr(providerDefaultMinScore, 85),
@@ -402,6 +420,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
     output: content,
     prompt,
     fewShot: fewShotMeta,
+    cardType,
+    sourceMode,
     baseName, targetDir, folderName, // Pass file info for saving
     observability: {
       tokens: usage,
@@ -418,6 +438,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
             : process.env.LLM_MODEL,
         promptText: prompt,  // 在 metadata 中也保存一份
         promptParsed: promptData,
+        cardType,
+        sourceMode,
         outputMode: useMarkdownOutput ? 'markdown' : 'json',
         rawOutput: useMarkdownOutput
           ? (response.rawOutput || content?.markdown_content || '')
@@ -449,6 +471,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
 
 async function handleComparisonMode(phrase, options = {}) {
   console.log('[Comparison] Starting parallel generation...');
+  const cardType = normalizeCardType(options.cardType);
+  const sourceMode = normalizeSourceMode(options.sourceMode);
 
   const results = {
     phrase,
@@ -465,14 +489,18 @@ async function handleComparisonMode(phrase, options = {}) {
       ...(options.geminiOptions || {}),
       experimentId: options.experimentId,
       experimentRound: options.experimentRound,
-      targetFolder: options.targetFolder || ''
+      targetFolder: options.targetFolder || '',
+      cardType,
+      sourceMode
     }),
     generateWithProvider(phrase, 'local', perfLocal, {
       ...(options.localOptions || {}),
       fewshotOptions: options.fewshotOptions || {},
       experimentId: options.experimentId,
       experimentRound: options.experimentRound,
-      targetFolder: options.targetFolder || ''
+      targetFolder: options.targetFolder || '',
+      cardType,
+      sourceMode
     })
   ]);
 
@@ -490,7 +518,9 @@ async function handleComparisonMode(phrase, options = {}) {
       return saveGeneratedFiles(`【输入】${phrase}`, content, {
         baseName: inputBaseName,
         targetDir: baseInfo.targetDir,
-        folderName: baseInfo.folderName
+        folderName: baseInfo.folderName,
+        cardType,
+        sourceMode: sourceMode || 'input'
       });
     } catch (err) {
       console.warn('[Comparison] Input card save failed:', err.message);
@@ -499,7 +529,16 @@ async function handleComparisonMode(phrase, options = {}) {
   };
 
   const finalizeSide = async (label, genValue, perf) => {
-    const { output: content, prompt, observability, baseName, targetDir, folderName } = genValue;
+    const {
+      output: content,
+      prompt,
+      observability,
+      baseName,
+      targetDir,
+      folderName,
+      cardType: sideCardType,
+      sourceMode: sideSourceMode
+    } = genValue;
 
     postProcessGeneratedContent(content);
     const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true });
@@ -520,7 +559,13 @@ async function handleComparisonMode(phrase, options = {}) {
     perf.mark('fileSave');
     let fileResult = null;
     try {
-      fileResult = saveGeneratedFiles(phrase, content, { baseName: compareBaseName, targetDir, folderName });
+      fileResult = saveGeneratedFiles(phrase, content, {
+        baseName: compareBaseName,
+        targetDir,
+        folderName,
+        cardType: sideCardType || cardType,
+        sourceMode: sideSourceMode || sourceMode
+      });
     } catch (e) {
       console.error(`[Comparison] Save failed (${label}):`, e.message);
     }
@@ -555,7 +600,9 @@ async function handleComparisonMode(phrase, options = {}) {
           content,
           observability,
           prompt,
-          audioTasks: content.audio_tasks
+          audioTasks: content.audio_tasks,
+          cardType: sideCardType || cardType,
+          sourceMode: sideSourceMode || sourceMode
         });
         const generationId = dbService.insertGeneration(dbData);
         try {
@@ -722,6 +769,8 @@ app.post('/api/generate', async (req, res) => {
       phrase,
       llm_provider = 'local',
       enable_compare = false,
+      card_type = 'trilingual',
+      source_mode = null,
       target_folder = '',
       experiment_id,
       variant,
@@ -732,6 +781,8 @@ app.post('/api/generate', async (req, res) => {
       llm_model
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
+    const cardType = normalizeCardType(card_type);
+    const sourceMode = normalizeSourceMode(source_mode);
 
     const roundNumber = Number.isFinite(Number(experiment_round))
       ? Math.max(0, Math.floor(Number(experiment_round)))
@@ -747,7 +798,9 @@ app.post('/api/generate', async (req, res) => {
           isTeacherReference: Boolean(is_teacher_reference),
           variantBase: variant || 'compare',
           fewshotOptions: fewshot_options,
-          targetFolder: target_folder || ''
+          targetFolder: target_folder || '',
+          cardType,
+          sourceMode
         });
         return res.json(result);
     }
@@ -758,7 +811,9 @@ app.post('/api/generate', async (req, res) => {
       experimentId: experiment_id || '',
       experimentRound: roundNumber,
       modelOverride: llm_model || null,
-      targetFolder: target_folder || ''
+      targetFolder: target_folder || '',
+      cardType,
+      sourceMode
     });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
     const providerUsed = observability?.metadata?.provider || llm_provider;
@@ -783,7 +838,13 @@ app.post('/api/generate', async (req, res) => {
 
     // Save
     perf.mark('fileSave');
-    const result = saveGeneratedFiles(phrase, content, { baseName, targetDir, folderName });
+    const result = saveGeneratedFiles(phrase, content, {
+      baseName,
+      targetDir,
+      folderName,
+      cardType,
+      sourceMode
+    });
 
     // TTS
     let audio = null;
@@ -813,7 +874,9 @@ app.post('/api/generate', async (req, res) => {
         content,
         observability,
         prompt,
-        audioTasks: audio?.tasks || []
+        audioTasks: audio?.tasks || [],
+        cardType,
+        sourceMode
       });
 
       generationId = dbService.insertGeneration(dbData);
@@ -889,6 +952,8 @@ app.post('/api/generate', async (req, res) => {
         success: true,
         experiment_id: expId,
         experiment_round: roundNumber,
+        card_type: cardType,
+        source_mode: sourceMode,
         provider_requested: llm_provider,
         provider_used: providerUsed,
         fallback: genResult.fallback || null,
@@ -1047,15 +1112,18 @@ app.get('/api/history', (req, res) => {
             limit = 20,
             search,
             provider,
+            card_type,
             dateFrom,
             dateTo
         } = req.query;
+        const cardTypeFilter = card_type ? normalizeCardType(card_type) : null;
 
         const records = dbService.queryGenerations({
             page: Number(page),
             limit: Number(limit),
             search,
             provider,
+            cardType: cardTypeFilter,
             dateFrom,
             dateTo
         });
@@ -1063,6 +1131,7 @@ app.get('/api/history', (req, res) => {
         const total = dbService.getTotalCount({
             search,
             provider,
+            cardType: cardTypeFilter,
             dateFrom,
             dateTo
         });
@@ -1350,12 +1419,18 @@ app.get('/api/folders/:folder/files/:file', (req, res) => {
 app.get('/api/records/by-file', (req, res) => {
     try {
         const folder = String(req.query.folder || '').trim();
-        const base = String(req.query.base || '').trim();
-        if (!folder || !base) {
+        const baseRaw = String(req.query.base || '');
+        const baseTrimmed = baseRaw.trim();
+        if (!folder || !baseTrimmed) {
             return res.status(400).json({ error: 'folder and base are required' });
         }
 
-        const record = dbService.getGenerationByFile(folder, base);
+        const baseCandidates = Array.from(new Set([baseRaw, baseTrimmed].filter(Boolean)));
+        let record = null;
+        for (const candidate of baseCandidates) {
+            record = dbService.getGenerationByFile(folder, candidate);
+            if (record) break;
+        }
         if (!record) {
             return res.status(404).json({ error: 'Record not found' });
         }
@@ -1370,16 +1445,22 @@ app.get('/api/records/by-file', (req, res) => {
 app.delete('/api/records/by-file', (req, res) => {
     try {
         const folder = String(req.query.folder || '').trim();
-        const base = String(req.query.base || '').trim();
-        if (!folder || !base) {
+        const baseRaw = String(req.query.base || '');
+        const baseTrimmed = baseRaw.trim();
+        if (!folder || !baseTrimmed) {
             return res.status(400).json({ error: 'folder and base are required' });
         }
 
         const { deleteRecordFiles } = require('./services/fileManager');
         const deletedPaths = new Set();
+        const baseCandidates = Array.from(new Set([baseRaw, baseTrimmed].filter(Boolean)));
 
         // 1) 尝试按数据库记录删除
-        const record = dbService.getGenerationByFile(folder, base);
+        let record = null;
+        for (const candidate of baseCandidates) {
+            record = dbService.getGenerationByFile(folder, candidate);
+            if (record) break;
+        }
         if (record) {
             const recordDetail = dbService.getGenerationById(record.id);
             const recordFiles = [
@@ -1409,7 +1490,7 @@ app.delete('/api/records/by-file', (req, res) => {
         }
 
         // 2) 兜底：按文件名扫描删除
-        const fallbackDeleted = deleteRecordFiles(folder, base);
+        const fallbackDeleted = deleteRecordFiles(folder, baseRaw);
         fallbackDeleted.forEach((p) => deletedPaths.add(p));
 
         res.json({

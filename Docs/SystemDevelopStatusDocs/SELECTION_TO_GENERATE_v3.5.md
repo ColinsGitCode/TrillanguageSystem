@@ -1,12 +1,17 @@
 # 文本选取与主输入即时生成（静默队列版）
 
-**版本**: v3.5
-**日期**: 2026-02-26
+**版本**: v3.6
+**日期**: 2026-03-02
 **状态**: 已实施
 
 ## 1. 功能概述
 
-在学习卡片 CONTENT 区域保留选区浮动按钮（FAB）`✦ Generate Card`，并将首页主输入 `Generate` 入口一并升级为**静默入队**：
+在学习卡片 CONTENT 区域提供选区浮动按钮：
+
+- `✦ Generate Card`（三语卡）
+- `📘 语法卡`（日语语法卡）
+
+并将首页主输入 `Generate` 入口升级为**静默入队**：
 
 - 点击后任务直接进入后台生成队列
 - 不关闭当前卡片弹窗
@@ -34,6 +39,8 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
 列表静默刷新（保持当前目录与当前卡片阅读上下文）
 ```
 
+> v3.6 补充：同一选区可直接生成语法卡（`card_type=grammar_ja`，`source_mode=selection`）。
+
 ## 2. 技术实现
 
 ### 2.1 核心函数
@@ -48,6 +55,13 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
 | `enqueueBackgroundGenerationTask(...)` | `public/js/modules/app.js` | 入队（去重、队列上限；选区与主输入共用） |
 | `processGenerationQueue()` | `public/js/modules/app.js` | 串行调度执行器（并发=1） |
 | `runGenerationTaskFromQueue(task)` | `public/js/modules/app.js` | 调用 `api.generate()` 完成单任务生成 |
+
+### 2.5 类型化任务（v3.6）
+
+- 队列任务新增字段：
+  - `cardType`: `trilingual | grammar_ja`
+  - `sourceMode`: `input | selection | ocr`
+- 队列去重策略升级：`phrase + cardType` 维度去重（允许同短语分别生成三语卡与语法卡）
 
 ### 2.2 Ruby-aware 选区处理策略
 
