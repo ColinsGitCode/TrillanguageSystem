@@ -11,18 +11,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const state = {
     days: 30,
+    queueTimerId: null
 };
+const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
+const QUEUE_POLL_INTERVAL_MS = 1500;
 
 function initDashboard() {
     updateTimestamp();
     initInfoModal();
     bindInfoButtons();
+    initQueueTelemetry();
 
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
 
     loadDashboard(state.days);
     setupTimeRangeButtons();
+}
+
+function initQueueTelemetry() {
+    renderTaskQueueDetails(readQueueSnapshot());
+
+    if (state.queueTimerId) clearInterval(state.queueTimerId);
+    state.queueTimerId = setInterval(() => {
+        renderTaskQueueDetails(readQueueSnapshot());
+    }, QUEUE_POLL_INTERVAL_MS);
+
+    window.addEventListener('storage', (event) => {
+        if (event.key !== QUEUE_SNAPSHOT_STORAGE_KEY) return;
+        renderTaskQueueDetails(parseQueueSnapshot(event.newValue));
+    });
 }
 
 function updateTimestamp() {
@@ -184,6 +202,88 @@ function getDateRange(days) {
     const dateFrom = start.toISOString().split('T')[0];
     const dateTo = end.toISOString().split('T')[0];
     return { dateFrom, dateTo };
+}
+
+function readQueueSnapshot() {
+    const raw = localStorage.getItem(QUEUE_SNAPSHOT_STORAGE_KEY);
+    return parseQueueSnapshot(raw);
+}
+
+function parseQueueSnapshot(raw) {
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw);
+    } catch (err) {
+        console.warn('[Dashboard] invalid queue snapshot:', err.message);
+        return null;
+    }
+}
+
+function renderTaskQueueDetails(snapshot) {
+    const container = document.getElementById('taskQueueDetails');
+    if (!container) return;
+
+    if (!snapshot || !snapshot.summary) {
+        container.innerHTML = '<div class="empty-hint">No queue telemetry</div>';
+        return;
+    }
+
+    const summary = snapshot.summary || {};
+    const total = Number(summary.total || 0);
+    const queued = Number(summary.queued || 0);
+    const running = Number(summary.running || 0);
+    const success = Number(summary.success || 0);
+    const failed = Number(summary.failed || 0);
+    const cancelled = Number(summary.cancelled || 0);
+    const active = snapshot.activeTask || null;
+    const recentTasks = Array.isArray(snapshot.recentTasks)
+        ? snapshot.recentTasks.slice().reverse()
+        : [];
+
+    const activeText = active
+        ? `#${active.seq} · ${escapeHtml(active.phrase || '-')}`
+        : 'Idle';
+    const updatedAtText = snapshot.updatedAt ? formatDate(snapshot.updatedAt) : '-';
+
+    container.innerHTML = `
+        <div class="queue-metrics-grid">
+            <div class="queue-metric-chip"><span class="k">Total</span><span class="v">${total}</span></div>
+            <div class="queue-metric-chip"><span class="k">Queued</span><span class="v">${queued}</span></div>
+            <div class="queue-metric-chip"><span class="k">Running</span><span class="v">${running}</span></div>
+            <div class="queue-metric-chip"><span class="k">Success</span><span class="v">${success}</span></div>
+            <div class="queue-metric-chip"><span class="k">Failed</span><span class="v">${failed}</span></div>
+            <div class="queue-metric-chip"><span class="k">Cancelled</span><span class="v">${cancelled}</span></div>
+        </div>
+        <div class="queue-active-line">
+            <span class="label">Active Task</span>
+            <span class="value">${activeText}</span>
+            <span class="stamp">Updated ${updatedAtText}</span>
+        </div>
+        <div class="queue-recent-list">
+            ${recentTasks.length ? recentTasks.map((task) => `
+                <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}">
+                    <div class="queue-recent-head">
+                        <span class="qid">#${Number(task.seq || 0)}</span>
+                        <span class="qstatus">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
+                        <span class="qattempt">try ${Number(task.attempts || 0)}</span>
+                        <span class="qtime">${formatQueueTime(task.finishedAt || task.createdAt)}</span>
+                    </div>
+                    <div class="qphrase">${escapeHtml(task.phrase || '-')}</div>
+                </div>
+            `).join('') : '<div class="empty-hint">No queue task records</div>'}
+        </div>
+    `;
+}
+
+function formatQueueTime(value) {
+    const ts = Number(value || 0);
+    if (!Number.isFinite(ts) || ts <= 0) return '-';
+    const delta = Date.now() - ts;
+    if (delta < 1000) return 'just now';
+    if (delta < 60000) return `${Math.floor(delta / 1000)}s ago`;
+    if (delta < 3600000) return `${Math.floor(delta / 60000)}m ago`;
+    if (delta < 86400000) return `${Math.floor(delta / 3600000)}h ago`;
+    return `${Math.floor(delta / 86400000)}d ago`;
 }
 
 // ========== Review Pipeline ==========

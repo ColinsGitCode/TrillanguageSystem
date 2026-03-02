@@ -152,6 +152,18 @@ export const METRIC_DEFINITIONS = {
     "LATENCY_TREND": {
         title: "延迟趋势 (Latency Trend)",
         content: "<p>API 平均响应耗时的变化趋势。反映模型推理速度和网络状况。</p>"
+    },
+    "TASK_QUEUE": {
+        title: "任务队列 (Task Queue)",
+        content: `
+            <p>展示前台学习卡片生成任务队列的实时快照，帮助确认批量任务执行状态。</p>
+            <ul>
+                <li><strong>Total/Queued/Running/Success/Failed</strong>: 队列总量与各状态计数。</li>
+                <li><strong>Active Task</strong>: 当前正在执行的任务短语与编号。</li>
+                <li><strong>Recent Tasks</strong>: 最近任务状态回放（含重试次数和时间）。</li>
+            </ul>
+            <p>该数据来自浏览器本地队列遥测，不依赖后端持久化。</p>
+        `
     }
 };
 

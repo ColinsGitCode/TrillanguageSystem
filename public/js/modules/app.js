@@ -75,6 +75,9 @@ const generationQueueState = {
     clearDoneBtn: null,
     retryFailedBtn: null
 };
+const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
+const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
+const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
 
 // Timer State
 let timerInterval = null;
@@ -520,6 +523,8 @@ function initModelSelector() {
         });
     });
 
+    autoSwitchModelWhenLocalOffline();
+
     function updateModelUI(mode) {
         buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
@@ -530,6 +535,21 @@ function initModelSelector() {
         };
         hint.textContent = hints[mode] || 'LOCAL LLM';
         hint.className = 'selector-hint mode-' + mode;
+    }
+
+    async function autoSwitchModelWhenLocalOffline() {
+        if (store.get('modelMode') !== 'local') return;
+        try {
+            const health = await api.checkHealth();
+            const localService = (health.services || []).find((svc) => String(svc.name || '').includes('Local LLM'));
+            if (localService && localService.status !== 'online') {
+                store.setState({ modelMode: 'gemini' });
+                updateModelUI('gemini');
+                showGenerationQueueToast('检测到本地 LLM 离线，已自动切换到 GEMINI');
+            }
+        } catch (err) {
+            // health 探测失败时维持用户当前选择，避免误切模式
+        }
     }
 }
 
@@ -1114,6 +1134,8 @@ function initGenerationQueuePanel() {
         const collapsed = panel.classList.toggle('collapsed');
         generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
     };
+
+    persistGenerationQueueSnapshot();
 }
 
 function showGenerationQueueToast(message) {
@@ -1177,6 +1199,58 @@ function renderGenerationQueuePanel() {
     if (tasks.length > 0 || generationQueueState.running) {
         panel.classList.remove('hidden');
     }
+
+    persistGenerationQueueSnapshot();
+}
+
+function persistGenerationQueueSnapshot() {
+    const tasks = generationQueueState.tasks || [];
+    const summary = {
+        total: tasks.length,
+        queued: tasks.filter((task) => task.status === 'queued').length,
+        running: tasks.filter((task) => task.status === 'running').length,
+        success: tasks.filter((task) => task.status === 'success').length,
+        failed: tasks.filter((task) => task.status === 'failed').length,
+        cancelled: tasks.filter((task) => task.status === 'cancelled').length
+    };
+
+    const activeTask = tasks.find((task) => task.status === 'running') || null;
+    const snapshot = {
+        version: 1,
+        updatedAt: Date.now(),
+        running: Boolean(generationQueueState.running),
+        summary,
+        activeTask: activeTask ? {
+            id: activeTask.id,
+            seq: activeTask.seq,
+            phrase: activeTask.phraseNormalized,
+            status: activeTask.status,
+            attempts: activeTask.attempts || 0,
+            provider: activeTask.provider || '',
+            targetFolder: activeTask.targetFolder || '',
+            enableCompare: Boolean(activeTask.enableCompare)
+        } : null,
+        recentTasks: tasks.slice(-20).map((task) => ({
+            id: task.id,
+            seq: task.seq,
+            phrase: task.phraseNormalized,
+            status: task.status,
+            attempts: task.attempts || 0,
+            provider: task.provider || '',
+            targetFolder: task.targetFolder || '',
+            enableCompare: Boolean(task.enableCompare),
+            error: task.error || '',
+            createdAt: task.createdAt || 0,
+            finishedAt: task.finishedAt || 0,
+            retryAfter: task.retryAfter || 0
+        }))
+    };
+
+    try {
+        localStorage.setItem(QUEUE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch (err) {
+        console.warn('[Queue] persist snapshot failed:', err.message);
+    }
 }
 
 function hasActiveDuplicateTask(phraseNormalized) {
@@ -1203,7 +1277,13 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
     const modelMode = store.get('modelMode');
     const provider = modelMode === 'gemini' ? 'gemini' : 'local';
     const enableCompare = modelMode === 'compare';
-    const selectedFolder = store.get('selectedFolder') || '';
+    const sourceEntry = String(source.entry || '').trim().toLowerCase();
+    const explicitTargetFolder = String(source.targetFolder || '').trim();
+    const selectedFolder = String(store.get('selectedFolder') || '').trim();
+    // 交互式生成默认写入“今日目录”，避免误写到历史目录。
+    const taskTargetFolder =
+        explicitTargetFolder ||
+        (TODAY_FOLDER_TASK_ENTRIES.has(sourceEntry) ? '' : selectedFolder);
 
     const task = {
         id: `queue_${Date.now()}_${generationQueueState.nextSeq}`,
@@ -1213,7 +1293,7 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
         source,
         provider,
         enableCompare,
-        targetFolder: selectedFolder,
+        targetFolder: taskTargetFolder,
         llmModel: null,
         status: 'queued',
         attempts: 0,
@@ -1304,11 +1384,16 @@ function processGenerationQueue() {
         })
         .catch((err) => {
             const message = String(err?.message || 'generation failed');
+            const retryAfterMs = Number(err?.retryAfterMs || 0);
+            const isRateLimited = Number(err?.status) === 429 || /rate limit/i.test(message);
             if (nextTask.attempts <= generationQueueState.maxRetries) {
-                const delay = Math.min(10000, 800 * Math.pow(2, nextTask.attempts - 1));
+                const baseDelay = Math.min(10000, 800 * Math.pow(2, nextTask.attempts - 1));
+                const delay = isRateLimited && retryAfterMs > 0
+                    ? Math.min(20000, Math.max(baseDelay, retryAfterMs + 250))
+                    : baseDelay;
                 nextTask.status = 'queued';
                 nextTask.retryAfter = Date.now() + delay;
-                nextTask.error = `重试中 (${nextTask.attempts}/${generationQueueState.maxRetries + 1}): ${message}`;
+                nextTask.error = `重试中 (${nextTask.attempts}/${generationQueueState.maxRetries + 1}, ${Math.ceil(delay / 1000)}s 后): ${message}`;
             } else {
                 nextTask.status = 'failed';
                 nextTask.error = message;
@@ -1452,61 +1537,171 @@ function initSelectionToGenerate(container) {
         selectionFabCleanup = null;
     }
 
-    const fab = document.createElement('button');
-    fab.id = 'selectionGenFab';
-    fab.className = 'selection-gen-fab hidden';
-    fab.textContent = '\u2726 Generate Card';
-    document.body.appendChild(fab);
+    const dock = document.createElement('div');
+    dock.id = 'selectionActionDock';
+    dock.className = 'selection-action-dock hidden';
+    dock.innerHTML = `
+      <button type="button" class="selection-action-btn action-generate" data-action="generate">\u2726 Generate Card</button>
+      <button type="button" class="selection-action-btn action-highlight" data-action="highlight">\ud83d\udd8d \u6807\u7ea2</button>
+    `;
+    document.body.appendChild(dock);
+    const generateBtn = dock.querySelector('[data-action="generate"]');
+    const highlightBtn = dock.querySelector('[data-action="highlight"]');
 
-    const hideFab = () => fab.classList.add('hidden');
+    const hideDock = () => dock.classList.add('hidden');
 
     const onMouseUp = () => {
-        setTimeout(() => checkSelection(container, fab), 10);
+        setTimeout(() => checkSelection(container, dock), 10);
     };
-    const onSelChange = () => checkSelection(container, fab);
+    const onSelChange = () => checkSelection(container, dock);
 
     container.addEventListener('mouseup', onMouseUp);
     document.addEventListener('selectionchange', onSelChange);
 
-    fab.addEventListener('mousedown', (e) => {
+    dock.addEventListener('mousedown', (e) => {
         e.preventDefault(); // 防止点击 FAB 时选区被清除
     });
 
-    fab.addEventListener('click', (e) => {
+    generateBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container);
         if (!candidate) {
-            hideFab();
+            hideDock();
             return;
         }
 
         enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
             folder: activeCardContext?.folder || store.get('selectedFolder') || '',
             baseName: activeCardContext?.baseName || '',
-            generationId: activeCardContext?.generationId || null
+            generationId: activeCardContext?.generationId || null,
+            entry: 'selection'
         });
 
-        hideFab();
+        hideDock();
         if (window.getSelection()) window.getSelection().removeAllRanges();
+    });
+
+    highlightBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const candidate = buildSelectionCandidateFromContainer(container);
+        if (!candidate) {
+            hideDock();
+            return;
+        }
+
+        const applied = applyMarkerHighlight(container, candidate.range);
+        hideDock();
+        if (window.getSelection()) window.getSelection().removeAllRanges();
+
+        if (applied) {
+            persistCurrentCardHighlights(container);
+        } else {
+            showGenerationQueueToast('选区无法标红，请缩小选区后重试');
+        }
     });
 
     selectionFabCleanup = () => {
         container.removeEventListener('mouseup', onMouseUp);
         document.removeEventListener('selectionchange', onSelChange);
-        fab.remove();
+        dock.remove();
     };
 }
 
-function checkSelection(container, fab) {
+function checkSelection(container, dock) {
     const candidate = buildSelectionCandidateFromContainer(container);
     if (candidate) {
         const range = candidate.range;
         const rect = range.getBoundingClientRect();
-        fab.style.top = `${rect.top + window.scrollY - 40}px`;
-        fab.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
-        fab.classList.remove('hidden');
+        dock.style.top = `${rect.top + window.scrollY - 44}px`;
+        dock.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
+        dock.classList.remove('hidden');
     } else {
-        fab.classList.add('hidden');
+        dock.classList.add('hidden');
+    }
+}
+
+function applyMarkerHighlight(container, range) {
+    if (!range || range.collapsed) return false;
+    if (!container.contains(range.commonAncestorContainer)) return false;
+
+    // 优先使用标准 surroundContents；复杂选区时退化到 execCommand。
+    try {
+        const marker = document.createElement('mark');
+        marker.className = 'study-highlight-red';
+        range.surroundContents(marker);
+        return true;
+    } catch (err) {
+        try {
+            document.execCommand('styleWithCSS', false, true);
+            return document.execCommand('hiliteColor', false, '#ff8a8a66');
+        } catch (fallbackErr) {
+            return false;
+        }
+    }
+}
+
+function buildCardHighlightStorageKey({ folder = '', baseName = '', generationId = 0, title = '' } = {}) {
+    const keyParts = ['card'];
+    if (folder && baseName) {
+        keyParts.push(`f:${folder}`, `b:${baseName}`);
+    } else if (generationId) {
+        keyParts.push(`g:${generationId}`);
+    } else {
+        keyParts.push(`t:${String(title || '').trim()}`);
+    }
+    return `${CARD_HIGHLIGHT_STORAGE_PREFIX}:${keyParts.join('|')}`;
+}
+
+function computeTextHash(input) {
+    const text = String(input || '');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function loadPersistedCardHighlights(storageKey, sourceHash) {
+    if (!storageKey) return null;
+    try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.version !== 1) return null;
+        if (parsed.sourceHash !== sourceHash) return null;
+        if (typeof parsed.html !== 'string' || !parsed.html.trim()) return null;
+        return sanitizeHtml(parsed.html);
+    } catch (err) {
+        console.warn('[Highlight] load failed:', err.message);
+        return null;
+    }
+}
+
+function persistCurrentCardHighlights(container) {
+    if (!container) return;
+    const storageKey = activeCardContext?.highlightStorageKey || '';
+    const sourceHash = activeCardContext?.highlightSourceHash || '';
+    if (!storageKey || !sourceHash) return;
+    try {
+        const payload = {
+            version: 1,
+            sourceHash,
+            updatedAt: Date.now(),
+            html: container.innerHTML
+        };
+        localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch (err) {
+        console.warn('[Highlight] persist failed:', err.message);
+    }
+}
+
+function clearPersistedCardHighlights(storageKey) {
+    if (!storageKey) return;
+    try {
+        localStorage.removeItem(storageKey);
+    } catch (err) {
+        console.warn('[Highlight] clear failed:', err.message);
     }
 }
 
@@ -1921,14 +2116,26 @@ function renderCardModal(markdown, title, options = {}) {
     let displayTitle = title;
     const h1Match = markdown.match(/^#\s+(.+)$/m);
     if (h1Match) displayTitle = h1Match[1];
+    const folder = options.folder || store.get('selectedFolder') || '';
     const generationId = Number(options.metrics?.id || options.generationId || 0);
-    activeCardContext = {
-        folder: options.folder || store.get('selectedFolder') || '',
+    const highlightSourceHash = computeTextHash(markdown);
+    const highlightStorageKey = buildCardHighlightStorageKey({
+        folder,
         baseName: options.baseName || '',
-        generationId
+        generationId,
+        title: displayTitle
+    });
+    activeCardContext = {
+        folder,
+        baseName: options.baseName || '',
+        generationId,
+        highlightStorageKey,
+        highlightSourceHash
     };
 
-    const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder: options.folder || store.get('selectedFolder') });
+    const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder });
+    const persistedHtml = loadPersistedCardHighlights(highlightStorageKey, highlightSourceHash);
+    const cardContentHtml = persistedHtml || safeHtml;
 
     // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
     let rawMetrics = options.metrics || null;
@@ -2030,7 +2237,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             <!-- Content Tab -->
             <div id="cardContent" class="mc-body mc-content" style="display:block;">
-                ${safeHtml}
+                ${cardContentHtml}
             </div>
 
             <!-- Intel Tab (HUD) -->
@@ -2189,6 +2396,7 @@ function renderCardModal(markdown, title, options = {}) {
                     } else {
                         throw new Error('Cannot identify record to delete');
                     }
+                    clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '');
                     closeModal();
                     loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
                 } catch (e) {

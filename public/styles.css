@@ -1889,33 +1889,68 @@ h1 {
   line-height: 1.5;
 }
 
-/* Selection-to-Generate FAB */
-.selection-gen-fab {
+/* Selection actions: Generate + Marker */
+.selection-action-dock {
   position: absolute;
   z-index: 10011;
   transform: translateX(-50%);
-  padding: 6px 14px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
   transition: opacity 0.15s, transform 0.15s;
   pointer-events: auto;
 }
-.selection-gen-fab:hover {
-  background: #2563eb;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.6);
+
+.selection-action-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
-.selection-gen-fab.hidden {
+
+.selection-action-btn.action-generate {
+  background: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+.selection-action-btn.action-generate:hover {
+  background: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.55);
+}
+
+.selection-action-btn.action-highlight {
+  background: #dc2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+}
+.selection-action-btn.action-highlight:hover {
+  background: #b91c1c;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.55);
+}
+
+.selection-action-dock.hidden {
   opacity: 0;
   pointer-events: none;
   transform: translateX(-50%) translateY(4px);
+}
+
+#cardContent mark.study-highlight-red {
+  background: linear-gradient(180deg, rgba(255, 179, 179, 0.42) 0%, rgba(239, 68, 68, 0.42) 100%);
+  color: inherit;
+  padding: 0 0.06em;
+  border-radius: 0.16em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 /* Silent generation queue */

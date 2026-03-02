@@ -11,7 +11,13 @@ class ApiService {
             
             if (!res.ok) {
                 const detail = data.details && Array.isArray(data.details) ? data.details.join('；') : '';
-                throw new Error(data.error + (detail ? ` (${detail})` : ''));
+                const err = new Error(data.error + (detail ? ` (${detail})` : ''));
+                err.status = res.status;
+                err.payload = data;
+                if (typeof data.retry_after_ms === 'number') {
+                    err.retryAfterMs = data.retry_after_ms;
+                }
+                throw err;
             }
             return data;
         } catch (error) {

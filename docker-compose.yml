@@ -10,6 +10,7 @@ services:
     environment:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
+      - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
       - DB_PATH=/data/trilingual_records/trilingual_records.db
       - OCR_PROVIDER=tesseract
       - OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr

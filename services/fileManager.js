@@ -9,6 +9,36 @@ const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 // We will resolve it similarly.
 
 const baseDir = path.resolve(RECORDS_PATH);
+const RECORDS_TIMEZONE = process.env.RECORDS_TIMEZONE || process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Shanghai';
+let timezoneWarningPrinted = false;
+
+function getTodayFolderName() {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: RECORDS_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(new Date());
+        const year = parts.find((part) => part.type === 'year')?.value;
+        const month = parts.find((part) => part.type === 'month')?.value;
+        const day = parts.find((part) => part.type === 'day')?.value;
+        if (year && month && day) {
+            return `${year}${month}${day}`;
+        }
+    } catch (err) {
+        if (!timezoneWarningPrinted) {
+            timezoneWarningPrinted = true;
+            console.warn(`[FileManager] Invalid RECORDS_TIMEZONE="${RECORDS_TIMEZONE}", fallback to system local date.`);
+        }
+    }
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
+}
 
 function resolveFolder(folderName) {
     const safeName = folderName || '';
@@ -153,11 +183,7 @@ function deleteRecordFiles(folderName, baseName) {
  * @returns {string} The full path to today's directory.
  */
 function ensureTodayDirectory() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const folderName = `${year}${month}${day}`;
+    const folderName = getTodayFolderName();
     
     const targetDir = path.join(baseDir, folderName);
     
