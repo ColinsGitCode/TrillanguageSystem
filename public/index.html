@@ -26,8 +26,25 @@
             <p class="eyebrow">Trilingual Records</p>
           </div>
           <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite">
-            <span class="hero-queue-dot" aria-hidden="true"></span>
-            <span id="heroTaskQueueStatusText">Task Queue Idle</span>
+            <div class="hero-queue-main">
+              <span class="hero-queue-dot" aria-hidden="true"></span>
+              <span id="heroTaskQueueState" class="hero-queue-state">IDLE</span>
+              <span id="heroTaskQueueTask" class="hero-queue-task">Task Queue Idle</span>
+              <span id="heroTaskQueueElapsed" class="hero-queue-elapsed hidden">00:00</span>
+            </div>
+            <div class="hero-queue-meta">
+              <div id="heroTaskQueueProgressText" class="hero-queue-progress-text">队列进度：暂无任务</div>
+              <div class="hero-queue-progress-track" id="heroTaskQueueProgressTrack">
+                <div class="hero-queue-progress-fill" id="heroTaskQueueProgressBar"></div>
+              </div>
+              <div class="hero-queue-chips">
+                <span class="hero-queue-chip" id="heroTaskQueueChipQ">待执行 0</span>
+                <span class="hero-queue-chip" id="heroTaskQueueChipR">运行中 0</span>
+                <span class="hero-queue-chip" id="heroTaskQueueChipS">已完成 0</span>
+                <span class="hero-queue-chip" id="heroTaskQueueChipF">失败 0</span>
+              </div>
+            </div>
+            <button id="heroTaskQueueRetryBtn" class="hero-queue-retry hidden" type="button">Retry Failed</button>
           </div>
           <a href="dashboard.html" class="dashboard-link" target="_blank">
             🚀 Mission Control

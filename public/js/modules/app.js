@@ -52,7 +52,17 @@ const els = {
     // Context Menu
     contextMenu: document.getElementById('contextMenu'),
     heroTaskQueueStatus: document.getElementById('heroTaskQueueStatus'),
-    heroTaskQueueStatusText: document.getElementById('heroTaskQueueStatusText'),
+    heroTaskQueueState: document.getElementById('heroTaskQueueState'),
+    heroTaskQueueTask: document.getElementById('heroTaskQueueTask'),
+    heroTaskQueueProgressText: document.getElementById('heroTaskQueueProgressText'),
+    heroTaskQueueProgressTrack: document.getElementById('heroTaskQueueProgressTrack'),
+    heroTaskQueueProgressBar: document.getElementById('heroTaskQueueProgressBar'),
+    heroTaskQueueChipQ: document.getElementById('heroTaskQueueChipQ'),
+    heroTaskQueueChipR: document.getElementById('heroTaskQueueChipR'),
+    heroTaskQueueChipS: document.getElementById('heroTaskQueueChipS'),
+    heroTaskQueueChipF: document.getElementById('heroTaskQueueChipF'),
+    heroTaskQueueElapsed: document.getElementById('heroTaskQueueElapsed'),
+    heroTaskQueueRetryBtn: document.getElementById('heroTaskQueueRetryBtn'),
 
     // Setup
     setupOverlay: document.getElementById('setupOverlay'),
@@ -92,6 +102,8 @@ const SELECTION_HIGHLIGHT_MAX_CHARS = 2000;
 // Timer State
 let timerInterval = null;
 let timerStartTime = null;
+let heroTaskQueueElapsedTimerId = null;
+let heroTaskQueueElapsedTaskId = null;
 
 // ==========================================
 // 初始化与事件绑定
@@ -1209,7 +1221,7 @@ function initGenerationQueuePanel() {
     generationQueueState.clearDoneBtn = panel.querySelector('[data-action="clear-done"]');
     generationQueueState.collapseBtn = panel.querySelector('[data-action="toggle"]');
 
-    generationQueueState.retryFailedBtn.onclick = () => {
+    const retryFailedTasks = () => {
         let retried = 0;
         generationQueueState.tasks.forEach((task) => {
             if (task.status === 'failed') {
@@ -1225,6 +1237,13 @@ function initGenerationQueuePanel() {
             processGenerationQueue();
         }
     };
+    generationQueueState.retryFailedBtn.onclick = retryFailedTasks;
+    if (els.heroTaskQueueRetryBtn) {
+        els.heroTaskQueueRetryBtn.onclick = (e) => {
+            e.stopPropagation();
+            retryFailedTasks();
+        };
+    }
 
     generationQueueState.clearDoneBtn.onclick = () => {
         const before = generationQueueState.tasks.length;
@@ -1245,6 +1264,14 @@ function initGenerationQueuePanel() {
         const collapsed = panel.classList.toggle('collapsed');
         generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
     };
+
+    if (els.heroTaskQueueStatus) {
+        els.heroTaskQueueStatus.onclick = () => {
+            panel.classList.remove('hidden');
+            panel.classList.remove('collapsed');
+            generationQueueState.collapseBtn.textContent = '收起';
+        };
+    }
 
     updateHeroTaskQueueStatus();
     persistGenerationQueueSnapshot();
@@ -1267,38 +1294,126 @@ function truncateQueuePhrase(text, maxLength = 36) {
     return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
+function stopHeroTaskQueueElapsedTimer() {
+    if (heroTaskQueueElapsedTimerId) {
+        clearInterval(heroTaskQueueElapsedTimerId);
+        heroTaskQueueElapsedTimerId = null;
+    }
+    heroTaskQueueElapsedTaskId = null;
+}
+
+function renderHeroTaskQueueElapsed(task, elapsedEl) {
+    if (!task || !elapsedEl) return;
+    const startedAt = Number(task.startedAt || 0);
+    const elapsedMs = startedAt > 0 ? Math.max(0, Date.now() - startedAt) : 0;
+    elapsedEl.textContent = formatTime(elapsedMs);
+}
+
+function ensureHeroTaskQueueElapsedTimer(task, elapsedEl) {
+    if (!task || !elapsedEl) {
+        stopHeroTaskQueueElapsedTimer();
+        return;
+    }
+
+    renderHeroTaskQueueElapsed(task, elapsedEl);
+    if (heroTaskQueueElapsedTaskId === task.id && heroTaskQueueElapsedTimerId) {
+        return;
+    }
+
+    stopHeroTaskQueueElapsedTimer();
+    heroTaskQueueElapsedTaskId = task.id;
+    heroTaskQueueElapsedTimerId = setInterval(() => {
+        const runningTask = generationQueueState.tasks.find(
+            (candidate) => candidate.id === heroTaskQueueElapsedTaskId && candidate.status === 'running'
+        );
+        if (!runningTask) {
+            stopHeroTaskQueueElapsedTimer();
+            if (elapsedEl) {
+                elapsedEl.classList.add('hidden');
+                elapsedEl.textContent = '00:00';
+            }
+            return;
+        }
+        renderHeroTaskQueueElapsed(runningTask, elapsedEl);
+    }, 1000);
+}
+
 function updateHeroTaskQueueStatus() {
     const statusEl = els.heroTaskQueueStatus;
-    const statusTextEl = els.heroTaskQueueStatusText;
-    if (!statusEl || !statusTextEl) return;
+    const stateEl = els.heroTaskQueueState;
+    const taskEl = els.heroTaskQueueTask;
+    const progressTextEl = els.heroTaskQueueProgressText;
+    const progressTrack = els.heroTaskQueueProgressTrack;
+    const progressBar = els.heroTaskQueueProgressBar;
+    const chipQ = els.heroTaskQueueChipQ;
+    const chipR = els.heroTaskQueueChipR;
+    const chipS = els.heroTaskQueueChipS;
+    const chipF = els.heroTaskQueueChipF;
+    const elapsedEl = els.heroTaskQueueElapsed;
+    const retryBtn = els.heroTaskQueueRetryBtn;
+    if (!statusEl || !stateEl || !taskEl) return;
 
     const tasks = generationQueueState.tasks || [];
     const queued = tasks.filter((task) => task.status === 'queued').length;
     const running = tasks.filter((task) => task.status === 'running').length;
     const failed = tasks.filter((task) => task.status === 'failed').length;
     const success = tasks.filter((task) => task.status === 'success').length;
+    const total = queued + running + failed + success;
     const activeTask = tasks.find((task) => task.status === 'running') || null;
+    const doneRate = total > 0 ? Math.max(0, Math.min(100, Math.round(((success + failed) / total) * 100))) : 0;
+
+    if (chipQ) chipQ.textContent = `待执行 ${queued}`;
+    if (chipR) chipR.textContent = `运行中 ${running}`;
+    if (chipS) chipS.textContent = `已完成 ${success}`;
+    if (chipF) chipF.textContent = `失败 ${failed}`;
+
+    if (progressTrack) progressTrack.classList.toggle('hidden', total === 0);
+    if (progressBar) progressBar.style.width = `${doneRate}%`;
+    if (progressTextEl) {
+        progressTextEl.textContent = total > 0
+            ? `队列进度：${doneRate}%（${success + failed}/${total}）`
+            : '队列进度：暂无任务';
+    }
+    if (retryBtn) retryBtn.classList.toggle('hidden', failed === 0);
 
     if (activeTask) {
         const cardType = normalizeCardType(activeTask.cardType) === 'grammar_ja' ? '语法' : '三语';
-        const phrase = truncateQueuePhrase(activeTask.phraseNormalized, 34);
+        const phrase = truncateQueuePhrase(activeTask.phraseNormalized, 30);
+        if (!activeTask.startedAt) {
+            activeTask.startedAt = activeTask.createdAt || Date.now();
+        }
         statusEl.className = 'hero-queue-status is-active';
-        statusTextEl.textContent = `RUNNING #${activeTask.seq} [${cardType}] ${phrase} · 待${queued} 成${success} 失${failed}`;
+        stateEl.textContent = 'RUNNING';
+        taskEl.textContent = `#${activeTask.seq} [${cardType}] ${phrase}`;
+        if (elapsedEl) {
+            elapsedEl.classList.remove('hidden');
+            ensureHeroTaskQueueElapsedTimer(activeTask, elapsedEl);
+        }
         statusEl.title = `当前执行：#${activeTask.seq} ${activeTask.phraseNormalized}`;
         return;
     }
 
+    stopHeroTaskQueueElapsedTimer();
+    if (elapsedEl) {
+        elapsedEl.classList.add('hidden');
+        elapsedEl.textContent = '00:00';
+    }
+
     if (queued > 0 || failed > 0 || running > 0) {
         const nextTask = tasks.find((task) => task.status === 'queued') || null;
-        const nextText = nextTask ? ` · 下一条 #${nextTask.seq} ${truncateQueuePhrase(nextTask.phraseNormalized, 24)}` : '';
-        statusEl.className = 'hero-queue-status is-waiting';
-        statusTextEl.textContent = `QUEUED ${queued} · 成功${success} · 失败${failed}${nextText}`;
-        statusEl.title = '任务队列待执行中';
+        const hasOnlyFailed = queued === 0 && failed > 0;
+        statusEl.className = hasOnlyFailed ? 'hero-queue-status is-failed' : 'hero-queue-status is-waiting';
+        stateEl.textContent = hasOnlyFailed ? 'FAILED' : 'QUEUED';
+        taskEl.textContent = nextTask
+            ? `下一条 #${nextTask.seq} ${truncateQueuePhrase(nextTask.phraseNormalized, 26)}`
+            : '等待处理失败任务';
+        statusEl.title = hasOnlyFailed ? '当前仅存在失败任务' : '任务队列待执行中';
         return;
     }
 
     statusEl.className = 'hero-queue-status is-idle';
-    statusTextEl.textContent = `Task Queue Idle · 成功${success} · 失败${failed}`;
+    stateEl.textContent = 'IDLE';
+    taskEl.textContent = 'Task Queue Idle';
     statusEl.title = '当前无运行任务';
 }
 
@@ -1384,6 +1499,7 @@ function persistGenerationQueueSnapshot() {
             phrase: activeTask.phraseNormalized,
             status: activeTask.status,
             attempts: activeTask.attempts || 0,
+            startedAt: activeTask.startedAt || 0,
             provider: activeTask.provider || '',
             cardType: normalizeCardType(activeTask.cardType || 'trilingual'),
             sourceMode: activeTask.sourceMode || '',
@@ -1403,6 +1519,7 @@ function persistGenerationQueueSnapshot() {
             enableCompare: Boolean(task.enableCompare),
             error: task.error || '',
             createdAt: task.createdAt || 0,
+            startedAt: task.startedAt || 0,
             finishedAt: task.finishedAt || 0,
             retryAfter: task.retryAfter || 0
         }))
@@ -1475,6 +1592,7 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
         error: '',
         retryAfter: 0,
         createdAt: Date.now(),
+        startedAt: 0,
         finishedAt: 0
     };
 
@@ -1549,7 +1667,10 @@ function processGenerationQueue() {
     generationQueueState.running = true;
     nextTask.status = 'running';
     nextTask.error = '';
+    nextTask.retryAfter = 0;
     nextTask.attempts += 1;
+    nextTask.startedAt = Date.now();
+    nextTask.finishedAt = 0;
     renderGenerationQueuePanel();
 
     runGenerationTaskFromQueue(nextTask)

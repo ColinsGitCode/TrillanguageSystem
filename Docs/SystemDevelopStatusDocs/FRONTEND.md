@@ -156,6 +156,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + Mission Control)
 - 外来语标注：左侧强调线 + 橙色高亮背景 + 粗体胶囊 tag（强调可读性）
 - 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
 - 顶部 Header 常驻任务队列缩略状态条：运行中/等待中/空闲（Task Queue Idle）一目了然
+  - 运行中新增实时计时器（`mm:ss`），显示当前任务已执行时长
 - 学习卡片弹窗整体下调，避免遮挡顶部任务队列状态条
 - 字体体系（2026-03-03）：
   - `styles.css` 与 `modern-card.css` 统一字体变量：`--font-ui / --font-ja / --font-display / --font-mono`
