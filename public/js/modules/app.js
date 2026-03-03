@@ -79,6 +79,8 @@ const generationQueueState = {
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
 const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
+const SELECTION_GENERATE_MAX_CHARS = 200;
+const SELECTION_HIGHLIGHT_MAX_CHARS = 2000;
 
 // Timer State
 let timerInterval = null;
@@ -1584,7 +1586,8 @@ function extractRubyBaseText(rubyEl) {
     return normalizeSelectionPhrase(parts.join(' '));
 }
 
-function buildSelectionCandidateFromContainer(container) {
+function buildSelectionCandidateFromContainer(container, options = {}) {
+    const { maxLength = SELECTION_HIGHLIGHT_MAX_CHARS } = options;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return null;
 
@@ -1613,7 +1616,7 @@ function buildSelectionCandidateFromContainer(container) {
     }
 
     if (!normalized) return null;
-    if (normalized.length > 200) return null;
+    if (normalized.length > maxLength) return null;
     return { rawText, normalized, range };
 }
 
@@ -1652,9 +1655,12 @@ function initSelectionToGenerate(container) {
 
     generateBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const candidate = buildSelectionCandidateFromContainer(container);
+        const candidate = buildSelectionCandidateFromContainer(container, {
+            maxLength: SELECTION_GENERATE_MAX_CHARS
+        });
         if (!candidate) {
             hideDock();
+            showGenerationQueueToast('选区超长或无效：生成任务最多支持 200 字');
             return;
         }
 
@@ -1673,9 +1679,12 @@ function initSelectionToGenerate(container) {
 
     generateGrammarBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const candidate = buildSelectionCandidateFromContainer(container);
+        const candidate = buildSelectionCandidateFromContainer(container, {
+            maxLength: SELECTION_GENERATE_MAX_CHARS
+        });
         if (!candidate) {
             hideDock();
+            showGenerationQueueToast('选区超长或无效：生成任务最多支持 200 字');
             return;
         }
 
@@ -1694,7 +1703,9 @@ function initSelectionToGenerate(container) {
 
     highlightBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const candidate = buildSelectionCandidateFromContainer(container);
+        const candidate = buildSelectionCandidateFromContainer(container, {
+            maxLength: SELECTION_HIGHLIGHT_MAX_CHARS
+        });
         if (!candidate) {
             hideDock();
             return;
@@ -1719,7 +1730,9 @@ function initSelectionToGenerate(container) {
 }
 
 function checkSelection(container, dock) {
-    const candidate = buildSelectionCandidateFromContainer(container);
+    const candidate = buildSelectionCandidateFromContainer(container, {
+        maxLength: SELECTION_HIGHLIGHT_MAX_CHARS
+    });
     if (candidate) {
         const range = candidate.range;
         const rect = range.getBoundingClientRect();
@@ -1734,21 +1747,93 @@ function checkSelection(container, dock) {
 function applyMarkerHighlight(container, range) {
     if (!range || range.collapsed) return false;
     if (!container.contains(range.commonAncestorContainer)) return false;
+    const comparePoints = (aNode, aOffset, bNode, bOffset) => {
+        if (aNode === bNode) {
+            if (aOffset === bOffset) return 0;
+            return aOffset < bOffset ? -1 : 1;
+        }
+        const pointRange = document.createRange();
+        pointRange.setStart(aNode, aOffset);
+        pointRange.collapse(true);
+        const cmp = pointRange.comparePoint(bNode, bOffset);
+        if (cmp < 0) return 1;
+        if (cmp > 0) return -1;
+        return 0;
+    };
 
-    // 优先使用标准 surroundContents；复杂选区时退化到 execCommand。
-    try {
+    const isHighlightableTextNode = (textNode) => {
+        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return false;
+        if (!textNode.nodeValue || !textNode.nodeValue.trim()) return false;
+        const parentEl = textNode.parentElement;
+        if (!parentEl) return false;
+        if (parentEl.closest('rt, rp, button, audio, source, script, style, .selection-action-dock')) return false;
+        if (parentEl.closest('mark.study-highlight-red')) return false;
+        return true;
+    };
+
+    const textNodes = [];
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    while (current) {
+        textNodes.push(current);
+        current = walker.nextNode();
+    }
+
+    const fragments = [];
+    textNodes.forEach((textNode) => {
+        if (!isHighlightableTextNode(textNode)) return;
+
+        const length = textNode.nodeValue.length;
+        const endVsNodeStart = comparePoints(range.endContainer, range.endOffset, textNode, 0);
+        if (endVsNodeStart <= 0) return; // range.end <= node.start
+        const startVsNodeEnd = comparePoints(range.startContainer, range.startOffset, textNode, length);
+        if (startVsNodeEnd >= 0) return; // range.start >= node.end
+
+        let startOffset = 0;
+        if (comparePoints(range.startContainer, range.startOffset, textNode, 0) > 0) {
+            startOffset = range.startContainer === textNode ? range.startOffset : 0;
+        }
+
+        let endOffset = length;
+        if (comparePoints(range.endContainer, range.endOffset, textNode, length) < 0) {
+            endOffset = range.endContainer === textNode ? range.endOffset : length;
+        }
+
+        if (startOffset >= endOffset) return;
+        fragments.push({ textNode, startOffset, endOffset });
+    });
+
+    if (!fragments.length) return false;
+
+    let applied = false;
+    fragments.forEach((fragment) => {
+        const { textNode, startOffset, endOffset } = fragment;
+        if (!textNode.parentNode) return;
+
+        let selectedNode = textNode;
+        const totalLength = selectedNode.nodeValue.length;
+        const safeStart = Math.max(0, Math.min(startOffset, totalLength));
+        const safeEnd = Math.max(safeStart, Math.min(endOffset, totalLength));
+        if (safeStart >= safeEnd) return;
+
+        if (safeStart > 0) {
+            selectedNode = selectedNode.splitText(safeStart);
+        }
+        const selectedLength = safeEnd - safeStart;
+        if (selectedLength < selectedNode.nodeValue.length) {
+            selectedNode.splitText(selectedLength);
+        }
+        if (!selectedNode.parentNode) return;
+        if (selectedNode.parentElement && selectedNode.parentElement.closest('mark.study-highlight-red')) return;
+
         const marker = document.createElement('mark');
         marker.className = 'study-highlight-red';
-        range.surroundContents(marker);
-        return true;
-    } catch (err) {
-        try {
-            document.execCommand('styleWithCSS', false, true);
-            return document.execCommand('hiliteColor', false, '#ff8a8a66');
-        } catch (fallbackErr) {
-            return false;
-        }
-    }
+        selectedNode.parentNode.insertBefore(marker, selectedNode);
+        marker.appendChild(selectedNode);
+        applied = true;
+    });
+
+    return applied;
 }
 
 function buildCardHighlightStorageKey({ folder = '', baseName = '', generationId = 0, title = '' } = {}) {

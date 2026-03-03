@@ -2141,7 +2141,9 @@ h1 {
   transform: translateX(-50%) translateY(4px);
 }
 
-#cardContent mark.study-highlight-red {
+.mc-content mark.study-highlight-red,
+#cardContent mark.study-highlight-red,
+#compareContent mark.study-highlight-red {
   background: linear-gradient(180deg, rgba(255, 179, 179, 0.42) 0%, rgba(239, 68, 68, 0.42) 100%);
   color: inherit;
   padding: 0 0.06em;

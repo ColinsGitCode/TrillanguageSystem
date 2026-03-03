@@ -63,12 +63,14 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 在 CONTENT 区域拖选文字后，选区上方弹出浮动按钮：
   - `✦ Generate Card`（生成三语卡）
   - `📘 语法卡`（生成日语语法卡）
+  - `🖍 标红`（对当前卡片正文执行持久化高亮）
 - 点击按钮后直接进入后台任务队列，不关闭弹窗、不跳转页面
 - 队列按顺序串行执行（并发=1），执行期间不打断当前卡片阅读
 - 自动过滤音频按钮占位符 "▶"，选取超 200 字符时不弹出
 - Ruby-aware 文本提取：忽略 `<rt>/<rp>` 注音，仅保留日语正文入队
 - 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
 - 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + `processGenerationQueue()` (app.js)
+- 标红实现（2026-03-03 修复）：弃用 `surroundContents/execCommand` 单路径，改为文本节点切片包裹 `mark`，兼容跨节点选区（含 ruby）
 
 ### 3.1.3 日语语法卡片（v3.6 新增）
 
