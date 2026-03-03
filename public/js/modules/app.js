@@ -322,6 +322,12 @@ function pickDefaultFolder(folders) {
     return [...folders].sort((a, b) => b.localeCompare(a))[0];
 }
 
+function formatFolderDisplayName(name) {
+    const match = String(name || '').match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!match) return name;
+    return `${match[1]}.${match[2]}.${match[3]}`;
+}
+
 async function loadFolders(options = {}) {
     const { keepSelection = false, refreshFiles = false, targetSelect = null, noCache = false } = options;
     const state = store.get();
@@ -367,13 +373,11 @@ function renderFolders() {
     // 分组逻辑 (YYYYMM)
     const groups = new Map();
     const misc = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
     folders.forEach(name => {
         const match = name.match(/^(\d{4})(\d{2})(\d{2})$/);
         if (match) {
             const key = `${match[1]}${match[2]}`;
-            const label = `${match[1]}.${monthNames[Number(match[2]) - 1]}`;
+            const label = `${match[1]}.${match[2]}`;
             if (!groups.has(key)) groups.set(key, { label, items: [] });
             groups.get(key).items.push(name);
         } else {
@@ -391,7 +395,8 @@ function renderFolders() {
         
         items.sort((a, b) => b.localeCompare(a)).forEach(name => {
             const btn = document.createElement('button');
-            btn.textContent = name;
+            btn.textContent = formatFolderDisplayName(name);
+            btn.title = name;
             if (name === selected) btn.classList.add('active');
             btn.onclick = () => selectFolder(name);
             grid.appendChild(btn);

@@ -38,42 +38,44 @@
           <div class="gen-panel">
             <p class="label">New Card</p>
 
-            <!-- 模型选择器 -->
-            <div class="model-selector">
-              <div class="selector-header">
-                <span class="selector-label">模型选择</span>
-                <span class="selector-hint" id="modelHint">LOCAL LLM</span>
+            <div class="selector-row">
+              <!-- 模型选择器 -->
+              <div class="model-selector">
+                <div class="selector-header">
+                  <span class="selector-label">模型选择</span>
+                  <span class="selector-hint" id="modelHint">LOCAL LLM</span>
+                </div>
+                <div class="selector-buttons">
+                  <button class="model-btn" data-mode="local" title="使用本地 LLM (Qwen)">
+                    <span class="model-icon">🏠</span>
+                    <span>LOCAL</span>
+                  </button>
+                  <button class="model-btn" data-mode="gemini" title="使用 Gemini API">
+                    <span class="model-icon">🤖</span>
+                    <span>GEMINI</span>
+                  </button>
+                  <button class="model-btn" data-mode="compare" title="双模型对比">
+                    <span class="model-icon">⚡</span>
+                    <span>COMPARE</span>
+                  </button>
+                </div>
               </div>
-              <div class="selector-buttons">
-                <button class="model-btn" data-mode="local" title="使用本地 LLM (Qwen)">
-                  <span class="model-icon">🏠</span>
-                  <span>LOCAL</span>
-                </button>
-                <button class="model-btn" data-mode="gemini" title="使用 Gemini API">
-                  <span class="model-icon">🤖</span>
-                  <span>GEMINI</span>
-                </button>
-                <button class="model-btn" data-mode="compare" title="双模型对比">
-                  <span class="model-icon">⚡</span>
-                  <span>COMPARE</span>
-                </button>
-              </div>
-            </div>
 
-            <div class="card-type-selector" id="cardTypeSelector">
-              <div class="selector-header">
-                <span class="selector-label">卡片类型</span>
-                <span class="selector-hint mode-gemini" id="cardTypeHint">三语学习卡片</span>
-              </div>
-              <div class="selector-buttons selector-buttons-two">
-                <button class="card-type-btn active" data-card-type="trilingual" title="中英日三语学习卡片">
-                  <span class="model-icon">🧩</span>
-                  <span>三语卡片</span>
-                </button>
-                <button class="card-type-btn" data-card-type="grammar_ja" title="日语语法学习卡片（中文讲解+日语例句）">
-                  <span class="model-icon">📘</span>
-                  <span>日语语法</span>
-                </button>
+              <div class="card-type-selector" id="cardTypeSelector">
+                <div class="selector-header">
+                  <span class="selector-label">卡片类型</span>
+                  <span class="selector-hint mode-gemini" id="cardTypeHint">三语学习卡片</span>
+                </div>
+                <div class="selector-buttons selector-buttons-two">
+                  <button class="card-type-btn active" data-card-type="trilingual" title="中英日三语学习卡片">
+                    <span class="model-icon">🧩</span>
+                    <span>三语卡片</span>
+                  </button>
+                  <button class="card-type-btn" data-card-type="grammar_ja" title="日语语法学习卡片（中文讲解+日语例句）">
+                    <span class="model-icon">📘</span>
+                    <span>日语语法</span>
+                  </button>
+                </div>
               </div>
             </div>
 
