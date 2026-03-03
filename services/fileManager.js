@@ -53,11 +53,15 @@ function readMetaInfo(metaPath) {
         if (!fs.existsSync(metaPath)) return null;
         const raw = fs.readFileSync(metaPath, 'utf-8');
         const data = JSON.parse(raw);
+        const createdAtRaw = typeof data.created_at === 'string' ? data.created_at.trim() : '';
+        const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
         if (!data || typeof data !== 'object') return null;
         return {
             phrase: typeof data.phrase === 'string' ? data.phrase.trim() : '',
             cardType: typeof data.card_type === 'string' ? data.card_type.trim().toLowerCase() : '',
-            sourceMode: typeof data.source_mode === 'string' ? data.source_mode.trim().toLowerCase() : ''
+            sourceMode: typeof data.source_mode === 'string' ? data.source_mode.trim().toLowerCase() : '',
+            createdAt: createdAtRaw || '',
+            createdAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null
         };
     } catch (err) {
         return null;
@@ -90,7 +94,11 @@ function getDisplayMeta(folderPath, baseName) {
     const meta = readMetaInfo(metaPath);
     const title = meta?.phrase || readMarkdownTitle(path.join(folderPath, `${baseName}.md`)) || baseName;
     const cardType = meta?.cardType === 'grammar_ja' ? 'grammar_ja' : 'trilingual';
-    return { title, cardType };
+    return {
+        title,
+        cardType,
+        createdAtMs: meta?.createdAtMs || null
+    };
 }
 
 function listFoldersWithHtml() {
@@ -114,18 +122,33 @@ function listHtmlFilesInFolder(folderName) {
     const htmlFiles = fs
         .readdirSync(folderPath, { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.html'))
-        .map((entry) => entry.name)
-        .sort();
+        .map((entry) => {
+            const file = entry.name;
+            const fullPath = path.join(folderPath, file);
+            let fileMtimeMs = 0;
+            try {
+                fileMtimeMs = fs.statSync(fullPath).mtimeMs || 0;
+            } catch (err) {}
 
-    return htmlFiles.map((file) => {
-        const baseName = file.replace(/\.html$/i, '');
-        const meta = getDisplayMeta(folderPath, baseName);
-        return {
-            file,
-            title: meta.title,
-            cardType: meta.cardType
-        };
-    });
+            const baseName = file.replace(/\.html$/i, '');
+            const meta = getDisplayMeta(folderPath, baseName);
+            return {
+                file,
+                title: meta.title,
+                cardType: meta.cardType,
+                sortTimeMs: meta.createdAtMs || fileMtimeMs || 0
+            };
+        })
+        .sort((a, b) => {
+            if (b.sortTimeMs !== a.sortTimeMs) return b.sortTimeMs - a.sortTimeMs;
+            return a.file.localeCompare(b.file, 'zh-Hans-CN');
+        });
+
+    return htmlFiles.map((item) => ({
+        file: item.file,
+        title: item.title,
+        cardType: item.cardType
+    }));
 }
 
 function readFileInFolder(folderName, filename) {

@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.6
-**更新日期**: 2026-03-02
+**版本**: 3.6.6
+**更新日期**: 2026-03-03
 
 ## 1. 核心目录
 
@@ -161,6 +161,14 @@ scripts/
 - 记录路径（容器内）：`/data/trilingual_records`
 - DB 默认：`/data/trilingual_records/trilingual_records.db`
 - 删除接口支持“记录+文件”联动清理
+
+### 9.2 Phrase List 排序规则（v3.6.6）
+
+- `listHtmlFilesInFolder()` 返回按生成时间倒序（最新优先）
+- 排序优先级：
+  1. `*.meta.json` 的 `created_at`
+  2. `.html` 文件 `mtime`
+- 同时间戳下按文件名做稳定排序
 
 ### 9.1 历史卡片样式迁移（v3.4 新增）
 

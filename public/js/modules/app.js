@@ -51,6 +51,8 @@ const els = {
 
     // Context Menu
     contextMenu: document.getElementById('contextMenu'),
+    heroTaskQueueStatus: document.getElementById('heroTaskQueueStatus'),
+    heroTaskQueueStatusText: document.getElementById('heroTaskQueueStatusText'),
 
     // Setup
     setupOverlay: document.getElementById('setupOverlay'),
@@ -1244,6 +1246,7 @@ function initGenerationQueuePanel() {
         generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
     };
 
+    updateHeroTaskQueueStatus();
     persistGenerationQueueSnapshot();
 }
 
@@ -1256,6 +1259,47 @@ function showGenerationQueueToast(message) {
     showGenerationQueueToast.timerId = setTimeout(() => {
         toast.classList.add('hidden');
     }, 2200);
+}
+
+function truncateQueuePhrase(text, maxLength = 36) {
+    const normalized = String(text || '').trim();
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function updateHeroTaskQueueStatus() {
+    const statusEl = els.heroTaskQueueStatus;
+    const statusTextEl = els.heroTaskQueueStatusText;
+    if (!statusEl || !statusTextEl) return;
+
+    const tasks = generationQueueState.tasks || [];
+    const queued = tasks.filter((task) => task.status === 'queued').length;
+    const running = tasks.filter((task) => task.status === 'running').length;
+    const failed = tasks.filter((task) => task.status === 'failed').length;
+    const success = tasks.filter((task) => task.status === 'success').length;
+    const activeTask = tasks.find((task) => task.status === 'running') || null;
+
+    if (activeTask) {
+        const cardType = normalizeCardType(activeTask.cardType) === 'grammar_ja' ? '语法' : '三语';
+        const phrase = truncateQueuePhrase(activeTask.phraseNormalized, 34);
+        statusEl.className = 'hero-queue-status is-active';
+        statusTextEl.textContent = `RUNNING #${activeTask.seq} [${cardType}] ${phrase} · 待${queued} 成${success} 失${failed}`;
+        statusEl.title = `当前执行：#${activeTask.seq} ${activeTask.phraseNormalized}`;
+        return;
+    }
+
+    if (queued > 0 || failed > 0 || running > 0) {
+        const nextTask = tasks.find((task) => task.status === 'queued') || null;
+        const nextText = nextTask ? ` · 下一条 #${nextTask.seq} ${truncateQueuePhrase(nextTask.phraseNormalized, 24)}` : '';
+        statusEl.className = 'hero-queue-status is-waiting';
+        statusTextEl.textContent = `QUEUED ${queued} · 成功${success} · 失败${failed}${nextText}`;
+        statusEl.title = '任务队列待执行中';
+        return;
+    }
+
+    statusEl.className = 'hero-queue-status is-idle';
+    statusTextEl.textContent = `Task Queue Idle · 成功${success} · 失败${failed}`;
+    statusEl.title = '当前无运行任务';
 }
 
 function renderGenerationQueuePanel() {
@@ -1313,6 +1357,7 @@ function renderGenerationQueuePanel() {
         panel.classList.remove('hidden');
     }
 
+    updateHeroTaskQueueStatus();
     persistGenerationQueueSnapshot();
 }
 
