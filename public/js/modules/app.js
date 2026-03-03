@@ -477,11 +477,11 @@ function renderFiles(files) {
         const btn = document.createElement('button');
         const cardType = normalizeCardType(item.cardType || item.card_type || 'trilingual');
         btn.className = `list-item-btn card-type-${cardType === 'grammar_ja' ? 'grammar' : 'trilingual'}`;
-        const tagText = cardType === 'grammar_ja' ? '语法' : '三语';
-        const tagClass = cardType === 'grammar_ja' ? 'tag-grammar' : 'tag-trilingual';
+        const cornerText = cardType === 'grammar_ja' ? '语法卡' : '三语卡';
+        const cornerClass = cardType === 'grammar_ja' ? 'corner-grammar' : 'corner-trilingual';
         btn.innerHTML = `
+          <span class="file-item-corner ${cornerClass}">${cornerText}</span>
           <span class="file-item-title">${escapeHtml(item.title || '')}</span>
-          <span class="file-item-tag ${tagClass}">${tagText}</span>
         `;
         if (store.get('selectedFile') === item.file) {
             btn.classList.add('active');
