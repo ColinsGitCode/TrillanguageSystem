@@ -104,6 +104,17 @@
                   <button id="ocrBtn" class="btn-secondary" disabled>识别文字</button>
                   <button id="clearImageBtn" class="btn-text" disabled>清除</button>
                 </div>
+                <div id="ocrPreview" class="ocr-preview hidden" aria-live="polite">
+                  <div class="ocr-preview-head">
+                    <span class="ocr-preview-title">OCR 结果预览</span>
+                    <div class="ocr-preview-tabs">
+                      <button id="ocrPreviewTabClean" class="ocr-preview-tab active" type="button">清洗后</button>
+                      <button id="ocrPreviewTabRaw" class="ocr-preview-tab" type="button">原文</button>
+                    </div>
+                  </div>
+                  <pre id="ocrPreviewClean" class="ocr-preview-panel active"></pre>
+                  <pre id="ocrPreviewRaw" class="ocr-preview-panel"></pre>
+                </div>
               </div>
             </div>
 

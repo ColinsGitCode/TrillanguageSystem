@@ -24,6 +24,11 @@ const els = {
     imagePreview: document.getElementById('imagePreview'),
     ocrBtn: document.getElementById('ocrBtn'),
     clearImageBtn: document.getElementById('clearImageBtn'),
+    ocrPreview: document.getElementById('ocrPreview'),
+    ocrPreviewRaw: document.getElementById('ocrPreviewRaw'),
+    ocrPreviewClean: document.getElementById('ocrPreviewClean'),
+    ocrPreviewTabRaw: document.getElementById('ocrPreviewTabRaw'),
+    ocrPreviewTabClean: document.getElementById('ocrPreviewTabClean'),
     
     // Progress
     progressBar: document.getElementById('progressBar'),
@@ -950,7 +955,7 @@ function stopTimer() {
 // ==========================================
 
 function initImageHandlers() {
-    const { imageDropZone, ocrBtn, clearImageBtn } = els;
+    const { imageDropZone, ocrBtn, clearImageBtn, ocrPreviewTabRaw, ocrPreviewTabClean } = els;
 
     imageDropZone.addEventListener('dragover', e => { e.preventDefault(); imageDropZone.classList.add('dragover'); });
     imageDropZone.addEventListener('dragleave', () => imageDropZone.classList.remove('dragover'));
@@ -972,6 +977,11 @@ function initImageHandlers() {
         }
     });
 
+    if (ocrPreviewTabRaw && ocrPreviewTabClean) {
+        ocrPreviewTabRaw.addEventListener('click', () => setOcrPreviewView('raw'));
+        ocrPreviewTabClean.addEventListener('click', () => setOcrPreviewView('clean'));
+    }
+
     clearImageBtn.onclick = clearImage;
     ocrBtn.onclick = async () => {
         const base64 = store.get('imageBase64');
@@ -985,8 +995,15 @@ function initImageHandlers() {
             updateStep('ocr', '识别文字...');
             
             const data = await api.ocr(base64);
-            
-            els.phraseInput.value = data.text;
+
+            const normalized = normalizeOcrTextForInput(data.text || '');
+            const fallbackLine = String(data.text || '').replace(/[\r\n]+/g, ' ').trim();
+            const cleanedText = normalized.cleaned || fallbackLine;
+            els.phraseInput.value = cleanedText;
+            showOcrPreview(String(data.text || ''), cleanedText);
+            if (normalized.changed) {
+                showGenerationQueueToast('OCR 结果已清洗为单行，可确认后生成');
+            }
             updateStep('ocr', '识别完成', false);
             setTimeout(hideProgress, 1000);
         } catch (err) {
@@ -1005,6 +1022,8 @@ function handleFile(file) {
         alert('图片过大 (>4MB)');
         return;
     }
+
+    resetOcrPreview();
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -1025,6 +1044,31 @@ function clearImage() {
     els.imageDropZone.querySelector('.drop-hint').classList.remove('hidden');
     els.ocrBtn.disabled = true;
     els.clearImageBtn.disabled = true;
+    resetOcrPreview();
+}
+
+function setOcrPreviewView(view = 'clean') {
+    const isRaw = view === 'raw';
+    if (els.ocrPreviewTabRaw) els.ocrPreviewTabRaw.classList.toggle('active', isRaw);
+    if (els.ocrPreviewTabClean) els.ocrPreviewTabClean.classList.toggle('active', !isRaw);
+    if (els.ocrPreviewRaw) els.ocrPreviewRaw.classList.toggle('active', isRaw);
+    if (els.ocrPreviewClean) els.ocrPreviewClean.classList.toggle('active', !isRaw);
+}
+
+function showOcrPreview(rawText, cleanedText) {
+    if (!els.ocrPreview || !els.ocrPreviewRaw || !els.ocrPreviewClean) return;
+    els.ocrPreviewRaw.textContent = rawText || '';
+    els.ocrPreviewClean.textContent = cleanedText || '';
+    els.ocrPreview.classList.remove('hidden');
+    setOcrPreviewView('clean');
+}
+
+function resetOcrPreview() {
+    if (!els.ocrPreview || !els.ocrPreviewRaw || !els.ocrPreviewClean) return;
+    els.ocrPreviewRaw.textContent = '';
+    els.ocrPreviewClean.textContent = '';
+    els.ocrPreview.classList.add('hidden');
+    setOcrPreviewView('clean');
 }
 
 // ==========================================
@@ -1519,6 +1563,25 @@ function normalizeSelectionPhrase(text) {
         .trim();
 
     return cleaned;
+}
+
+function normalizeOcrTextForInput(text) {
+    const raw = String(text || '');
+    if (!raw.trim()) return { cleaned: '', changed: false };
+
+    let cleaned = raw
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/[\u200B-\u200D\uFEFF]/g, ' ')
+        .replace(/[|¦•◆◇■□●○★☆※]/g, ' ')
+        .replace(/[^\p{L}\p{N}\p{M}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Latin}\p{P}\p{Zs}]/gu, ' ');
+
+    cleaned = normalizeSelectionPhrase(cleaned);
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+    return {
+        cleaned,
+        changed: cleaned !== raw.trim()
+    };
 }
 
 function collectVisibleSelectionText(node, pieces) {
