@@ -1,8 +1,8 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.6
-**更新日期**: 2026-03-02
+**版本**: 3.6.1
+**更新日期**: 2026-03-03
 
 ## 1. 前端目录
 
@@ -46,6 +46,7 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 页面刷新时默认显示最近日期目录
 - 卡片列表支持多列自适应显示
 - 语法卡片在列表中显示淡蓝背景与 `语法` 标签
+- 全站字体统一为中/日/英混排优化方案（方案A）：UI/JA/Mono/Display 四类字体变量
 
 ## 3. 卡片弹窗（Viewer Modal）
 
@@ -144,6 +145,10 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 浏览器标签页图标：`favicon-lan.svg`（LAN）
 - 外来语标注：左侧强调线 + 橙色高亮背景 + 粗体胶囊 tag（强调可读性）
 - 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
+- 字体体系（2026-03-03）：
+  - `styles.css` 与 `modern-card.css` 统一字体变量：`--font-ui / --font-ja / --font-display / --font-mono`
+  - 默认正文采用 `--font-ui`，日语内容（含 ruby）优先 `--font-ja`
+  - 指标与数字面板采用 `--font-mono` + `tabular-nums`，提升可读性与对齐稳定性
 
 ## 8. 与后端主线关系
 

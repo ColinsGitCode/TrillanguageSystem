@@ -7,6 +7,12 @@
   --text: #111827;
   --muted: #6b7280;
   --shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+
+  /* Typography */
+  --font-ui: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --font-ja: "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif;
+  --font-display: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
 }
 
 * {
@@ -15,12 +21,23 @@
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", "SF Pro Display", "Helvetica Neue", sans-serif;
+  font-family: var(--font-ui);
   background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.08), transparent 38%),
     radial-gradient(circle at 80% -10%, rgba(14, 165, 233, 0.08), transparent 32%),
     linear-gradient(135deg, #f7f9fc 0%, #eef2f7 35%, #f8fafc 100%);
   color: var(--text);
   min-height: 100vh;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
 }
 
 .page {
@@ -469,7 +486,7 @@ h1 {
 
 .review-slot {
   font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   color: #64748b;
 }
 
@@ -976,7 +993,7 @@ h1 {
 .prompt-content {
   margin: 0;
   padding: 0.75rem 1rem;
-  font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
   color: #374151;
@@ -1049,7 +1066,7 @@ h1 {
 }
 
 .progress-timer {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
   color: var(--accent);
@@ -1443,11 +1460,13 @@ h1 {
 
 /* Typography Overrides for Sci-Fi Feel */
 .font-mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .font-display {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
 }
 
 /* --- Intel Tab (Card Detail) Specifics --- */
@@ -1518,7 +1537,8 @@ h1 {
 }
 
 .hud-ticker {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--neon-green);
   overflow: hidden;
@@ -1595,7 +1615,7 @@ h1 {
 .selector-hint {
   font-size: 13px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   padding: 4px 10px;
   border-radius: 6px;
   transition: all 0.3s;
@@ -1646,7 +1666,7 @@ h1 {
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
@@ -1663,7 +1683,7 @@ h1 {
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
@@ -1764,7 +1784,7 @@ h1 {
 }
 
 .metric-val {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 16px;
   font-weight: 600;
   flex: 1;
@@ -1805,7 +1825,7 @@ h1 {
 
 .compare-column-header {
   padding: 16px 52px 16px 16px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 700;
   display: flex;
@@ -1919,7 +1939,7 @@ h1 {
 .raw-fallback {
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.5;
   background: #0b1220;
@@ -1994,7 +2014,7 @@ h1 {
 }
 
 .mini-metric span:last-child {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text);
 }
@@ -2004,7 +2024,7 @@ h1 {
   color: #e2e8f0;
   border-radius: 8px;
   padding: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
   max-height: 150px;
@@ -2020,7 +2040,7 @@ h1 {
   padding: 16px;
   margin: 16px;
   color: #dc2626;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2047,7 +2067,7 @@ h1 {
   border: none;
   border-radius: 8px;
   padding: 6px 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   color: #ffffff;
@@ -2128,7 +2148,7 @@ h1 {
 }
 
 .gen-queue-title {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.06em;
   font-weight: 700;
@@ -2170,7 +2190,7 @@ h1 {
 
 .gen-queue-summary b {
   color: #f8fafc;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .gen-queue-list {
@@ -2197,13 +2217,13 @@ h1 {
 }
 
 .gen-queue-item-id {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #94a3b8;
 }
 
 .gen-queue-item-status {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
   color: #cbd5e1;

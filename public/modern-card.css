@@ -14,9 +14,12 @@
   --shadow-card: 0 18px 40px rgba(15, 23, 42, 0.12);
   
   /* Typography */
-  --font-serif: 'Noto Serif SC', 'Noto Serif', serif;
-  --font-sans: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-ui: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --font-ja: "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif;
+  --font-display: "SF Pro Display", "PingFang SC", "Hiragino Mincho ProN", "Songti SC", serif;
+  --font-sans: var(--font-ui);
+  --font-serif: var(--font-display);
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
 }
 
 /* Modal Container Overrides */
@@ -43,6 +46,9 @@
   position: relative;
   border: 1px solid var(--border-subtle);
   font-size: 1.5rem;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Card Header */
@@ -92,6 +98,12 @@
   line-height: 1.2;
   margin-bottom: 0.5rem;
   color: var(--text-ink);
+}
+
+.mc-content :lang(ja),
+.mc-content ruby,
+.mc-content .ja-text {
+  font-family: var(--font-ja);
 }
 
 .mc-meta {
@@ -343,7 +355,9 @@ ruby {
   ruby-position: over;
 }
 rt {
-  font-size: 0.6em;
+  font-size: 0.52em;
+  line-height: 1;
+  letter-spacing: 0.02em;
   color: var(--text-muted);
 }
 
@@ -552,7 +566,7 @@ rt {
 }
 
 .score-main {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 56px;
   font-weight: 700;
   color: var(--neon-green);
@@ -561,7 +575,7 @@ rt {
 }
 
 .score-rank {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 24px;
   color: #d1d5db;
   font-weight: 700;
@@ -575,7 +589,7 @@ rt {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   margin-bottom: 4px;
 }
@@ -594,7 +608,7 @@ rt {
 }
 
 .hud-title {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--sci-text-muted);
@@ -617,7 +631,7 @@ rt {
 .token-stat-row {
   display: flex;
   justify-content: space-between;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   margin-top: 8px;
   color: var(--sci-text-muted);
@@ -630,7 +644,7 @@ rt {
   border: 1px solid rgba(16, 185, 129, 0.2);
   padding: 4px 8px;
   border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   text-align: center;
   align-self: center;
@@ -649,7 +663,7 @@ rt {
   border: 1px solid #e5e7eb;
   padding: 4px 8px;
   border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: #1f2937;
   pointer-events: none;
@@ -685,7 +699,7 @@ rt {
 }
 
 .viewer-tab {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 4px;
@@ -705,7 +719,7 @@ rt {
 
 .viewer-copy {
   margin-left: auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 4px;
@@ -726,7 +740,7 @@ rt {
 
 .viewer-panel {
   display: none;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
