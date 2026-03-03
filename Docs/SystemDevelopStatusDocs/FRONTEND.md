@@ -71,6 +71,10 @@ Header (TRILINGUAL RECORDS + Mission Control)
 - 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
 - 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + `processGenerationQueue()` (app.js)
 - 标红实现（2026-03-03 修复）：弃用 `surroundContents/execCommand` 单路径，改为文本节点切片包裹 `mark`，兼容跨节点选区（含 ruby）
+- 标红持久化（2026-03-03 增强）：
+  - 前端本地缓存（`localStorage`）+ 后端数据库双写
+  - 打开卡片时会优先展示本地缓存，并异步回填/拉取服务端版本
+  - 删除学习卡片时会同步清理对应标红数据
 
 ### 3.1.3 日语语法卡片（v3.6 新增）
 

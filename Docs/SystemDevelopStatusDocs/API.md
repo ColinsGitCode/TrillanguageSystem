@@ -1,8 +1,8 @@
 # API 接口文档
 
 **项目**: Trilingual Records  
-**API 版本**: v1.1  
-**更新日期**: 2026-03-02
+**API 版本**: v1.2  
+**更新日期**: 2026-03-03
 
 ## 1. 总览
 
@@ -26,9 +26,13 @@
 | 文件 | GET | `/folders` | 日期目录列表 |
 | 文件 | GET | `/folders/:folder/files` | 指定目录文件列表 |
 | 文件 | GET | `/folders/:folder/files/:file` | 读取 md/html/音频 |
+| 标红 | GET | `/highlights/by-file` | 按 folder+base+sourceHash 获取标红 |
+| 标红 | PUT | `/highlights/by-file` | 保存/更新标红 |
+| 标红 | DELETE | `/highlights/by-file` | 删除标红（可按 sourceHash） |
 | 记录 | GET | `/records/by-file` | 按 folder+base 查询记录 |
 | 记录 | DELETE | `/records/by-file` | 按 folder+base 删除记录与文件 |
 | 记录 | DELETE | `/records/:id` | 按 generationId 删除记录与文件 |
+| Dashboard | GET | `/dashboard/highlight-stats` | 标红聚合统计 |
 | 实验 | GET | `/experiments/:id` | few-shot 实验导出 |
 | 评审 | GET | `/review/campaigns` | 评审批次列表 |
 | 评审 | GET | `/review/campaigns/active` | 当前激活批次 |
@@ -245,8 +249,9 @@
 - 删除逻辑会同时尝试：
   1. DB 记录删除（含音频与观测关联清理）
   2. 基于 `folder+base` 的文件兜底扫描删除
+- 删除记录时会同步清理 `card_highlights` 标红持久化数据。
 
-### 5.2 记录与文件删除
+### 5.2.1 记录与文件删除
 
 - `DELETE /api/records/:id`
 - `DELETE /api/records/by-file?folder=YYYYMMDD&base=xxx`
@@ -257,6 +262,44 @@
 - `observability_metrics` 记录
 - `audio_files` 记录
 - 对应 `md/html/meta/audio` 物理文件
+
+### 5.3 标红持久化
+
+- `GET /api/highlights/by-file?folder=YYYYMMDD&base=xxx&sourceHash=abc123`
+- `PUT /api/highlights/by-file`
+- `DELETE /api/highlights/by-file?folder=YYYYMMDD&base=xxx[&sourceHash=abc123]`
+
+保存请求体示例：
+
+```json
+{
+  "folder": "20260303",
+  "base": "高可用性と冗長化",
+  "sourceHash": "3f06a8c1",
+  "html": "<h1>...</h1><mark class=\"study-highlight-red\">重点</mark>",
+  "generationId": 123,
+  "version": 1,
+  "updatedBy": "owner"
+}
+```
+
+说明：
+
+- `sourceHash` 用于绑定当前 markdown 源版本，避免旧标红覆盖新内容
+- 返回包含 `markCount` 与 `highlightedChars`，用于后续分析
+
+### 5.4 标红统计
+
+- `GET /api/dashboard/highlight-stats?dateFrom=2026-02-01&dateTo=2026-03-03&provider=gemini&cardType=trilingual`
+
+返回核心字段：
+
+- `overview.highlightedCards`：有标红的卡片数
+- `overview.totalMarks`：标红 `<mark>` 数量总和
+- `overview.totalHighlightedChars`：高亮字符总量
+- `byCardType`：按卡片类型聚合
+- `byProvider`：按模型来源聚合
+- `trend`：按日趋势（近 90 天）
 
 ---
 

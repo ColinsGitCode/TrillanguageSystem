@@ -1874,11 +1874,83 @@ function loadPersistedCardHighlights(storageKey, sourceHash) {
     }
 }
 
+function isSameCardContext(a, b) {
+    if (!a || !b) return false;
+    return (
+        String(a.folder || '') === String(b.folder || '') &&
+        String(a.baseName || '') === String(b.baseName || '') &&
+        String(a.highlightSourceHash || '') === String(b.highlightSourceHash || '')
+    );
+}
+
+function syncLocalHighlightCache(storageKey, sourceHash, html) {
+    if (!storageKey || !sourceHash || typeof html !== 'string' || !html.trim()) return;
+    try {
+        localStorage.setItem(storageKey, JSON.stringify({
+            version: 1,
+            sourceHash,
+            updatedAt: Date.now(),
+            html
+        }));
+    } catch (err) {
+        console.warn('[Highlight] sync local cache failed:', err.message);
+    }
+}
+
+async function hydrateCardHighlightsFromServer(container, context) {
+    if (!container || !context) return;
+    const folder = String(context.folder || '').trim();
+    const baseName = String(context.baseName || '').trim();
+    const sourceHash = String(context.highlightSourceHash || '').trim();
+    if (!folder || !baseName || !sourceHash) return;
+
+    try {
+        const res = await api.getCardHighlight(folder, baseName, sourceHash);
+        const remote = res?.highlight || null;
+        if (!remote || typeof remote.htmlContent !== 'string' || !remote.htmlContent.trim()) return;
+
+        const latestContext = activeCardContext ? { ...activeCardContext } : null;
+        if (!isSameCardContext(context, latestContext)) return;
+
+        const sanitized = sanitizeHtml(remote.htmlContent);
+        if (!sanitized.trim()) return;
+        if (container.innerHTML !== sanitized) {
+            container.innerHTML = sanitized;
+            bindAudioButtons(els.modalContainer, folder);
+        }
+        syncLocalHighlightCache(context.highlightStorageKey, sourceHash, sanitized);
+    } catch (err) {
+        console.warn('[Highlight] hydrate from server failed:', err.message);
+    }
+}
+
+function backfillCardHighlightsToServer(context, html) {
+    if (!context || typeof html !== 'string' || !html.trim()) return;
+    const folder = String(context.folder || '').trim();
+    const baseName = String(context.baseName || '').trim();
+    const sourceHash = String(context.highlightSourceHash || '').trim();
+    if (!folder || !baseName || !sourceHash) return;
+    api.saveCardHighlight({
+        folder,
+        base: baseName,
+        sourceHash,
+        html,
+        generationId: context.generationId || null,
+        version: 1,
+        updatedBy: reviewState.reviewer || 'owner'
+    }).catch((err) => {
+        console.warn('[Highlight] backfill to server failed:', err.message);
+    });
+}
+
 function persistCurrentCardHighlights(container) {
     if (!container) return;
     const storageKey = activeCardContext?.highlightStorageKey || '';
     const sourceHash = activeCardContext?.highlightSourceHash || '';
-    if (!storageKey || !sourceHash) return;
+    const folder = activeCardContext?.folder || '';
+    const baseName = activeCardContext?.baseName || '';
+    const generationId = activeCardContext?.generationId || null;
+    if (!storageKey || !sourceHash || !folder || !baseName) return;
     try {
         const payload = {
             version: 1,
@@ -1887,15 +1959,35 @@ function persistCurrentCardHighlights(container) {
             html: container.innerHTML
         };
         localStorage.setItem(storageKey, JSON.stringify(payload));
+        api.saveCardHighlight({
+            folder,
+            base: baseName,
+            sourceHash,
+            html: container.innerHTML,
+            generationId,
+            version: 1,
+            updatedBy: reviewState.reviewer || 'owner'
+        }).catch((err) => {
+            console.warn('[Highlight] persist to server failed:', err.message);
+        });
     } catch (err) {
         console.warn('[Highlight] persist failed:', err.message);
     }
 }
 
-function clearPersistedCardHighlights(storageKey) {
-    if (!storageKey) return;
+function clearPersistedCardHighlights(storageKey, options = {}) {
+    const folder = activeCardContext?.folder || '';
+    const baseName = activeCardContext?.baseName || '';
+    const sourceHash = activeCardContext?.highlightSourceHash || '';
+    const removeAllVersions = Boolean(options.removeAllVersions);
+    if (!storageKey && !folder) return;
     try {
-        localStorage.removeItem(storageKey);
+        if (storageKey) localStorage.removeItem(storageKey);
+        if (folder && baseName) {
+            api.deleteCardHighlight(folder, baseName, removeAllVersions ? '' : sourceHash).catch((err) => {
+                console.warn('[Highlight] clear remote failed:', err.message);
+            });
+        }
     } catch (err) {
         console.warn('[Highlight] clear failed:', err.message);
     }
@@ -2341,6 +2433,9 @@ function renderCardModal(markdown, title, options = {}) {
     const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder });
     const persistedHtml = loadPersistedCardHighlights(highlightStorageKey, highlightSourceHash);
     const cardContentHtml = persistedHtml || safeHtml;
+    if (persistedHtml) {
+        backfillCardHighlightsToServer({ ...activeCardContext }, persistedHtml);
+    }
 
     // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
     let rawMetrics = options.metrics || null;
@@ -2613,7 +2708,7 @@ function renderCardModal(markdown, title, options = {}) {
                     } else {
                         throw new Error('Cannot identify record to delete');
                     }
-                    clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '');
+                    clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '', { removeAllVersions: true });
                     closeModal();
                     loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
                 } catch (e) {
@@ -2661,7 +2756,10 @@ function renderCardModal(markdown, title, options = {}) {
 
     // 绑定文本选取 → 生成
     const cardContent = els.modalContainer.querySelector('#cardContent');
-    if (cardContent) initSelectionToGenerate(cardContent);
+    if (cardContent) {
+        initSelectionToGenerate(cardContent);
+        hydrateCardHighlightsFromServer(cardContent, { ...activeCardContext });
+    }
 
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => {

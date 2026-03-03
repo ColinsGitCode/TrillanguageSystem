@@ -135,7 +135,7 @@ scripts/
 
 ## 8. 数据模型（摘要）
 
-当前 schema 共 16 张表，分四组：
+当前 schema 共 17 张表，分五组：
 
 1. 业务主表：
    - `generations`、`audio_files`
@@ -145,6 +145,8 @@ scripts/
    - `few_shot_runs`、`few_shot_examples`、`experiment_rounds`、`experiment_samples`、`teacher_references`
 4. 评审与注入门控：
    - `example_units`、`example_unit_sources`、`review_campaigns`、`review_campaign_items`、`example_reviews`
+5. 内容批注与分析：
+   - `card_highlights`（标红 HTML 快照、mark 数、高亮字符数）
 
 ### 8.1 generations 新增字段（v3.6）
 

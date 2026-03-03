@@ -126,6 +126,18 @@
   - 生成任务仍为 200 字上限
   - 标红允许更长选区（2000 字）用于阅读批注
 
+### 2.11 标红后端持久化与统计接口（v3.6.4 新增）
+
+- 新增数据库表 `card_highlights`：按 `folder_name + base_filename + source_hash` 唯一存储卡片标红 HTML 快照
+- 标红保存改为双通路：
+  - 本地 `localStorage`（快速回显）
+  - 服务端 `/api/highlights/by-file`（持久化 + 跨会话）
+- 卡片弹窗打开时新增服务端回填：若服务端有同源哈希版本，则覆盖本地临时状态并重新绑定音频按钮
+- 删除卡片时同步清理标红：
+  - `/api/records/:id`、`/api/records/by-file` 均会触发标红数据删除
+- 新增统计接口 `/api/dashboard/highlight-stats`：
+  - 总卡片数、总标记数、平均标记数、高亮字符数、按 provider/cardType 分布、近 90 天趋势
+
 ### 2.5 Gemini host-proxy 稳定化
 
 - 容器通过 Gateway `18888` 调用宿主机执行器

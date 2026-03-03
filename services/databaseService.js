@@ -14,6 +14,38 @@ const path = require('path');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
+function stripHtmlTags(text) {
+  return String(text || '').replace(/<[^>]+>/g, '');
+}
+
+function decodeBasicHtmlEntities(text) {
+  return String(text || '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function computeHighlightMetricsFromHtml(html) {
+  const input = String(html || '');
+  if (!input.trim()) return { markCount: 0, highlightedChars: 0 };
+
+  const blockMatches = input.match(/<mark\b[^>]*class=(?:"[^"]*\bstudy-highlight-red\b[^"]*"|'[^']*\bstudy-highlight-red\b[^']*')[^>]*>[\s\S]*?<\/mark>/gi) || [];
+  let highlightedChars = 0;
+
+  blockMatches.forEach((block) => {
+    const inner = block
+      .replace(/^<mark\b[^>]*>/i, '')
+      .replace(/<\/mark>$/i, '');
+    const plain = decodeBasicHtmlEntities(stripHtmlTags(inner)).replace(/\s+/g, ' ').trim();
+    highlightedChars += plain.length;
+  });
+
+  return { markCount: blockMatches.length, highlightedChars };
+}
+
 class DatabaseService {
   constructor(dbPath = DEFAULT_DB_PATH) {
     // 确保data目录存在
@@ -70,6 +102,29 @@ class DatabaseService {
         console.warn('[Database] Migration skipped:', sql, err.message);
       }
     });
+
+    // card_highlights: 兼容旧库（schema 17）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS card_highlights (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation_id INTEGER,
+        folder_name TEXT NOT NULL,
+        base_filename TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        html_content TEXT NOT NULL,
+        mark_count INTEGER NOT NULL DEFAULT 0,
+        highlighted_chars INTEGER NOT NULL DEFAULT 0,
+        updated_by TEXT DEFAULT 'ui',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(folder_name, base_filename, source_hash),
+        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ch_generation ON card_highlights(generation_id);
+      CREATE INDEX IF NOT EXISTS idx_ch_file ON card_highlights(folder_name, base_filename);
+      CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
+    `);
   }
 
   // ========== 写入操作 ==========
@@ -300,6 +355,217 @@ class DatabaseService {
     `).get(folderName, baseFilename);
 
     return generation || null;
+  }
+
+  /**
+   * 获取卡片标红（按 folder/base/sourceHash）
+   */
+  getCardHighlightByFile(folderName, baseFilename, sourceHash) {
+    if (!folderName || !baseFilename || !sourceHash) return null;
+    return this.db.prepare(`
+      SELECT
+        id,
+        generation_id AS generationId,
+        folder_name AS folderName,
+        base_filename AS baseFilename,
+        source_hash AS sourceHash,
+        version,
+        html_content AS htmlContent,
+        mark_count AS markCount,
+        highlighted_chars AS highlightedChars,
+        updated_by AS updatedBy,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM card_highlights
+      WHERE folder_name = ?
+        AND base_filename = ?
+        AND source_hash = ?
+      LIMIT 1
+    `).get(folderName, baseFilename, sourceHash) || null;
+  }
+
+  /**
+   * 写入卡片标红（upsert）
+   */
+  upsertCardHighlight(payload = {}) {
+    const folderName = String(payload.folderName || '').trim();
+    const baseFilename = String(payload.baseFilename || '').trim();
+    const sourceHash = String(payload.sourceHash || '').trim();
+    const htmlContent = String(payload.htmlContent || '');
+    if (!folderName || !baseFilename || !sourceHash) {
+      throw new Error('folderName/baseFilename/sourceHash are required');
+    }
+    if (!htmlContent.trim()) {
+      throw new Error('htmlContent is required');
+    }
+
+    const generationId = payload.generationId ? Number(payload.generationId) : null;
+    const version = Number(payload.version || 1);
+    const updatedBy = String(payload.updatedBy || 'ui').trim() || 'ui';
+    const metrics = computeHighlightMetricsFromHtml(htmlContent);
+
+    this.db.prepare(`
+      INSERT INTO card_highlights (
+        generation_id,
+        folder_name,
+        base_filename,
+        source_hash,
+        version,
+        html_content,
+        mark_count,
+        highlighted_chars,
+        updated_by,
+        created_at,
+        updated_at
+      ) VALUES (
+        @generationId,
+        @folderName,
+        @baseFilename,
+        @sourceHash,
+        @version,
+        @htmlContent,
+        @markCount,
+        @highlightedChars,
+        @updatedBy,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT(folder_name, base_filename, source_hash) DO UPDATE SET
+        generation_id = COALESCE(excluded.generation_id, card_highlights.generation_id),
+        version = excluded.version,
+        html_content = excluded.html_content,
+        mark_count = excluded.mark_count,
+        highlighted_chars = excluded.highlighted_chars,
+        updated_by = excluded.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `).run({
+      generationId,
+      folderName,
+      baseFilename,
+      sourceHash,
+      version,
+      htmlContent,
+      markCount: metrics.markCount,
+      highlightedChars: metrics.highlightedChars,
+      updatedBy
+    });
+
+    return this.getCardHighlightByFile(folderName, baseFilename, sourceHash);
+  }
+
+  /**
+   * 删除卡片标红（支持指定 sourceHash 或删除该卡片全部版本）
+   */
+  deleteCardHighlightByFile(folderName, baseFilename, sourceHash = '') {
+    if (!folderName || !baseFilename) return 0;
+    if (sourceHash) {
+      const result = this.db.prepare(`
+        DELETE FROM card_highlights
+        WHERE folder_name = ?
+          AND base_filename = ?
+          AND source_hash = ?
+      `).run(folderName, baseFilename, sourceHash);
+      return result.changes || 0;
+    }
+    const result = this.db.prepare(`
+      DELETE FROM card_highlights
+      WHERE folder_name = ?
+        AND base_filename = ?
+    `).run(folderName, baseFilename);
+    return result.changes || 0;
+  }
+
+  /**
+   * 标红统计（Mission Control / 后续分析）
+   */
+  getHighlightStats({ dateFrom, dateTo, provider, cardType } = {}) {
+    const conditions = ['1=1'];
+    const params = {};
+
+    if (dateFrom) {
+      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) >= @dateFrom`);
+      params.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) <= @dateTo`);
+      params.dateTo = dateTo;
+    }
+    if (provider) {
+      conditions.push(`g.llm_provider = @provider`);
+      params.provider = provider;
+    }
+    if (cardType) {
+      conditions.push(`g.card_type = @cardType`);
+      params.cardType = cardType;
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    const overview = this.db.prepare(`
+      SELECT
+        COUNT(*) AS highlightedCards,
+        SUM(ch.mark_count) AS totalMarks,
+        AVG(ch.mark_count) AS avgMarksPerCard,
+        SUM(ch.highlighted_chars) AS totalHighlightedChars,
+        AVG(ch.highlighted_chars) AS avgHighlightedChars,
+        MAX(ch.updated_at) AS lastUpdatedAt
+      FROM card_highlights ch
+      LEFT JOIN generations g ON g.id = ch.generation_id
+      WHERE ${whereSql}
+    `).get(params);
+
+    const byCardType = this.db.prepare(`
+      SELECT
+        COALESCE(g.card_type, 'unknown') AS cardType,
+        COUNT(*) AS cards,
+        SUM(ch.mark_count) AS marks,
+        AVG(ch.mark_count) AS avgMarks
+      FROM card_highlights ch
+      LEFT JOIN generations g ON g.id = ch.generation_id
+      WHERE ${whereSql}
+      GROUP BY COALESCE(g.card_type, 'unknown')
+      ORDER BY cards DESC
+    `).all(params);
+
+    const byProvider = this.db.prepare(`
+      SELECT
+        COALESCE(g.llm_provider, 'unknown') AS provider,
+        COUNT(*) AS cards,
+        SUM(ch.mark_count) AS marks
+      FROM card_highlights ch
+      LEFT JOIN generations g ON g.id = ch.generation_id
+      WHERE ${whereSql}
+      GROUP BY COALESCE(g.llm_provider, 'unknown')
+      ORDER BY cards DESC
+    `).all(params);
+
+    const trend = this.db.prepare(`
+      SELECT
+        date(ch.updated_at) AS day,
+        COUNT(*) AS cards,
+        SUM(ch.mark_count) AS marks,
+        SUM(ch.highlighted_chars) AS highlightedChars
+      FROM card_highlights ch
+      LEFT JOIN generations g ON g.id = ch.generation_id
+      WHERE ${whereSql}
+      GROUP BY date(ch.updated_at)
+      ORDER BY day DESC
+      LIMIT 90
+    `).all(params);
+
+    return {
+      overview: {
+        highlightedCards: Number(overview?.highlightedCards || 0),
+        totalMarks: Number(overview?.totalMarks || 0),
+        avgMarksPerCard: Number((overview?.avgMarksPerCard || 0).toFixed(2)),
+        totalHighlightedChars: Number(overview?.totalHighlightedChars || 0),
+        avgHighlightedChars: Number((overview?.avgHighlightedChars || 0).toFixed(2)),
+        lastUpdatedAt: overview?.lastUpdatedAt || null
+      },
+      byCardType,
+      byProvider,
+      trend
+    };
   }
 
   /**

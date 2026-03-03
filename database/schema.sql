@@ -585,5 +585,31 @@ CREATE INDEX IF NOT EXISTS idx_er_example ON example_reviews(example_id, campaig
 CREATE INDEX IF NOT EXISTS idx_er_campaign ON example_reviews(campaign_id, updated_at DESC);
 
 -- ========================================
+-- 表 17: card_highlights（卡片标红持久化）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS card_highlights (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER,
+  folder_name TEXT NOT NULL,
+  base_filename TEXT NOT NULL,
+  source_hash TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  html_content TEXT NOT NULL,
+  mark_count INTEGER NOT NULL DEFAULT 0,
+  highlighted_chars INTEGER NOT NULL DEFAULT 0,
+  updated_by TEXT DEFAULT 'ui',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(folder_name, base_filename, source_hash),
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ch_generation ON card_highlights(generation_id);
+CREATE INDEX IF NOT EXISTS idx_ch_file ON card_highlights(folder_name, base_filename);
+CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
+
+-- ========================================
 -- 完成初始化
 -- ========================================

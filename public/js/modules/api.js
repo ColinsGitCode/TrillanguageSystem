@@ -114,6 +114,28 @@ class ApiService {
         return this.fetchJson(url, { method: 'DELETE' });
     }
 
+    async getCardHighlight(folder, base, sourceHash) {
+        const url = `/api/highlights/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(base)}&sourceHash=${encodeURIComponent(sourceHash)}`;
+        return this.fetchJson(url);
+    }
+
+    async saveCardHighlight(payload = {}) {
+        return this.fetchJson('/api/highlights/by-file', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async deleteCardHighlight(folder, base, sourceHash = '') {
+        const params = new URLSearchParams({
+            folder: String(folder || ''),
+            base: String(base || '')
+        });
+        if (sourceHash) params.set('sourceHash', sourceHash);
+        return this.fetchJson(`/api/highlights/by-file?${params.toString()}`, { method: 'DELETE' });
+    }
+
     async checkHealth() {
         return this.fetchJson('/api/health');
     }

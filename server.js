@@ -1265,6 +1265,26 @@ app.get('/api/dashboard/fewshot-stats', (req, res) => {
     }
 });
 
+app.get('/api/dashboard/highlight-stats', (req, res) => {
+    try {
+        const {
+            provider,
+            cardType,
+            dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            dateTo = new Date().toISOString().split('T')[0]
+        } = req.query;
+        const stats = dbService.getHighlightStats({ provider, cardType, dateFrom, dateTo });
+        res.json({
+            success: true,
+            ...stats,
+            period: { dateFrom, dateTo }
+        });
+    } catch (e) {
+        console.error('[API /dashboard/highlight-stats] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ========== 例句评审与注入门控 API ==========
 
 app.get('/api/review/campaigns', (req, res) => {
@@ -1415,6 +1435,81 @@ app.get('/api/folders/:folder/files/:file', (req, res) => {
     } catch (e) { res.status(404).send('Not Found'); }
 });
 
+// 卡片标红：读取（按 folder/base/sourceHash）
+app.get('/api/highlights/by-file', (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const base = String(req.query.base || '').trim();
+        const sourceHash = String(req.query.sourceHash || '').trim();
+        if (!folder || !base || !sourceHash) {
+            return res.status(400).json({ error: 'folder, base and sourceHash are required' });
+        }
+        const highlight = dbService.getCardHighlightByFile(folder, base, sourceHash);
+        res.json({ success: true, highlight: highlight || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 卡片标红：保存（upsert）
+app.put('/api/highlights/by-file', (req, res) => {
+    try {
+        const {
+            folder,
+            base,
+            sourceHash,
+            html,
+            generationId = null,
+            version = 1,
+            updatedBy = 'ui'
+        } = req.body || {};
+
+        const folderName = String(folder || '').trim();
+        const baseFilename = String(base || '').trim();
+        const hash = String(sourceHash || '').trim();
+        const htmlContent = String(html || '');
+        if (!folderName || !baseFilename || !hash) {
+            return res.status(400).json({ error: 'folder, base and sourceHash are required' });
+        }
+        if (!htmlContent.trim()) {
+            return res.status(400).json({ error: 'html is required' });
+        }
+        if (htmlContent.length > 2_000_000) {
+            return res.status(400).json({ error: 'html too large' });
+        }
+
+        const saved = dbService.upsertCardHighlight({
+            folderName,
+            baseFilename,
+            sourceHash: hash,
+            htmlContent,
+            generationId: generationId ? Number(generationId) : null,
+            version: Number(version || 1),
+            updatedBy
+        });
+
+        res.json({ success: true, highlight: saved });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// 卡片标红：删除（可选 sourceHash，默认删该卡片全部版本）
+app.delete('/api/highlights/by-file', (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const base = String(req.query.base || '').trim();
+        const sourceHash = String(req.query.sourceHash || '').trim();
+        if (!folder || !base) {
+            return res.status(400).json({ error: 'folder and base are required' });
+        }
+        const deleted = dbService.deleteCardHighlightByFile(folder, base, sourceHash);
+        res.json({ success: true, deleted });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 根据文件夹+文件名定位记录
 app.get('/api/records/by-file', (req, res) => {
     try {
@@ -1493,10 +1588,17 @@ app.delete('/api/records/by-file', (req, res) => {
         const fallbackDeleted = deleteRecordFiles(folder, baseRaw);
         fallbackDeleted.forEach((p) => deletedPaths.add(p));
 
+        // 3) 清理卡片标红（兼容 generation_id 缺失场景）
+        let highlightDeleted = 0;
+        baseCandidates.forEach((candidate) => {
+            highlightDeleted += dbService.deleteCardHighlightByFile(folder, candidate);
+        });
+
         res.json({
             success: true,
             deletedFiles: deletedPaths.size,
-            recordDeleted: Boolean(record)
+            recordDeleted: Boolean(record),
+            highlightDeleted
         });
     } catch (err) {
         console.error('[API /records/by-file DELETE] Error:', err);
@@ -1589,12 +1691,16 @@ app.delete('/api/records/:id', async (req, res) => {
         // 3. 从数据库删除记录（级联删除会自动删除音频和observability记录）
         dbService.deleteGeneration(recordId);
 
+        // 兼容旧数据：若标红记录未绑定 generation_id，则按 folder/base 再清理一次
+        const highlightDeleted = dbService.deleteCardHighlightByFile(record.folder_name, record.base_filename);
+
         console.log(`[Delete] Record ${recordId} deleted (${deletedCount} files removed)`);
 
         res.json({
             success: true,
             message: 'Record deleted successfully',
-            deletedFiles: deletedCount
+            deletedFiles: deletedCount,
+            highlightDeleted
         });
 
     } catch (err) {
