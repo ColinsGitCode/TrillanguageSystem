@@ -1,7 +1,7 @@
 # 实现状态报告
 
 **日期**: 2026-03-05
-**版本**: v3.6.10
+**版本**: v3.7.0
 **状态**: 进行中（主链路稳定，Mission Control/Knowledge OPS/Knowledge Hub 已拆分为同级页面）
 
 ## 1. 当前阶段结论
@@ -206,6 +206,30 @@
   - 删除确认从原生 `confirm()` 改为弹窗内 popover
   - 增加稳定测试选择器（trigger/cancel/confirm）
   - 删除链路保持兼容：优先按记录 id，失败回退按 `folder/base` 删除
+
+### 2.17 搭配与语块训练功能（v3.6.11）
+
+- 单卡弹窗新增 `TRAIN` 页签，作为学习强化层。
+- 前端本地解析卡片 Markdown：
+  - 提取英文例句并抽取 `collocation` 候选
+  - 提取日语例句并抽取 `chunk` 候选（兼容注音文本）
+- 训练面板提供：
+  - 搭配/语块清单（原句 + 翻译）
+  - 填空练习（答案显隐切换）
+- 该能力不改变生成链路，不引入新 API/新表，属于 UI 侧低风险增强。
+
+### 2.18 TRAIN 高质量化（v3.7.0）
+
+- 生成链路新增同步阶段：主卡片完成后立即生成 `trainingPack`。
+- 训练包策略：`LLM 生成 -> 强校验 -> 修复重试 -> heuristic 回退`。
+- 新增后端接口：
+  - `GET /api/training/by-generation/:id`
+  - `GET /api/training/by-file`
+  - `POST /api/training/by-generation/:id/regenerate`
+- 持久化策略落地：
+  - DB 主存：`card_training_assets`
+  - 同目录 sidecar：`<base>.training.v1.json`
+- 前端 TRAIN 页改为后端优先加载，并显示来源/状态/质量分，支持手动重算。
 
 ### 2.5 Gemini host-proxy 稳定化
 

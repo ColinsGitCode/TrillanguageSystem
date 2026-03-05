@@ -943,6 +943,257 @@ rt {
 }
 
 /* =========================================
+   🧩 Card Training Panel
+   ========================================= */
+
+.card-training-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.card-training-head {
+  border: 1px solid #d7eefc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f3fbff 0%, #eef7ff 100%);
+  padding: 10px 12px;
+}
+
+.card-training-title {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #0369a1;
+  margin-bottom: 8px;
+}
+
+.card-training-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.card-training-chip {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #475569;
+  background: #ffffff;
+  font-family: var(--font-mono);
+}
+
+.card-training-chip.source {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.card-training-chip.status {
+  border-color: #86efac;
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.card-training-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.card-training-tags .tag {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+.card-training-regenerate-btn {
+  margin-left: auto;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.card-training-regenerate-btn:hover {
+  background: #dbeafe;
+}
+
+.card-training-regenerate-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.card-training-warning {
+  margin-top: 8px;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.card-training-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card-training-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.card-training-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-bottom: 7px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.card-training-list,
+.card-training-quiz-list {
+  display: grid;
+  gap: 7px;
+}
+
+.card-training-item,
+.card-training-quiz {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.card-training-item-head,
+.card-training-quiz-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.card-training-lang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-width: 30px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.card-training-lang.en {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.card-training-lang.ja {
+  border-color: #86efac;
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.card-training-key {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.card-training-reading,
+.card-training-grammar,
+.card-training-meaning,
+.card-training-usage,
+.card-training-distractors,
+.card-training-choices {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.card-training-sentence {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.card-training-translation {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.card-training-empty {
+  font-size: 12px;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.card-training-quiz-prompt {
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.card-training-reveal-btn {
+  justify-self: start;
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.card-training-reveal-btn:hover {
+  background: #dbeafe;
+}
+
+.card-training-answer {
+  font-size: 12px;
+  color: #0369a1;
+  border-left: 3px solid #7dd3fc;
+  padding-left: 8px;
+}
+
+@media (max-width: 960px) {
+  .card-training-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================
    ❓ Info Modal & Buttons
    ========================================= */
 

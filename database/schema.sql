@@ -611,7 +611,52 @@ CREATE INDEX IF NOT EXISTS idx_ch_file ON card_highlights(folder_name, base_file
 CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
 
 -- ========================================
--- 表 18: knowledge_jobs（知识分析任务）
+-- 表 18: card_training_assets（TRAIN 训练包持久化）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS card_training_assets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL UNIQUE,
+  folder_name TEXT NOT NULL,
+  base_filename TEXT NOT NULL,
+  card_type TEXT NOT NULL DEFAULT 'trilingual',
+
+  status TEXT NOT NULL DEFAULT 'failed',      -- ready/repaired/fallback/failed
+  source TEXT NOT NULL DEFAULT 'heuristic',   -- llm/repaired/heuristic
+
+  provider_used TEXT,
+  model_used TEXT,
+  prompt_version TEXT,
+  schema_version TEXT NOT NULL DEFAULT 'training_pack_v1',
+
+  quality_score REAL DEFAULT 0,
+  self_confidence REAL DEFAULT 0,
+  coverage_score REAL DEFAULT 0,
+
+  validation_errors_json TEXT,                -- JSON
+  fallback_reason TEXT,
+
+  tokens_input INTEGER DEFAULT 0,
+  tokens_output INTEGER DEFAULT 0,
+  tokens_total INTEGER DEFAULT 0,
+  cost_total REAL DEFAULT 0,
+  latency_ms INTEGER DEFAULT 0,
+
+  payload_json TEXT,                          -- JSON
+  sidecar_file_path TEXT,
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_cta_file ON card_training_assets(folder_name, base_filename);
+CREATE INDEX IF NOT EXISTS idx_cta_updated ON card_training_assets(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cta_status ON card_training_assets(status, updated_at DESC);
+
+-- ========================================
+-- 表 19: knowledge_jobs（知识分析任务）
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS knowledge_jobs (
@@ -636,7 +681,7 @@ CREATE INDEX IF NOT EXISTS idx_kj_status_created ON knowledge_jobs(status, creat
 CREATE INDEX IF NOT EXISTS idx_kj_type_created ON knowledge_jobs(job_type, created_at DESC);
 
 -- ========================================
--- 表 19: knowledge_outputs_raw（批次原始输出留痕）
+-- 表 20: knowledge_outputs_raw（批次原始输出留痕）
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS knowledge_outputs_raw (
@@ -655,7 +700,7 @@ CREATE TABLE IF NOT EXISTS knowledge_outputs_raw (
 CREATE INDEX IF NOT EXISTS idx_kor_job ON knowledge_outputs_raw(job_id, batch_no);
 
 -- ========================================
--- 表 20: knowledge_terms_index（词条索引）
+-- 表 21: knowledge_terms_index（词条索引）
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS knowledge_terms_index (
@@ -683,7 +728,7 @@ CREATE INDEX IF NOT EXISTS idx_kti_lang_profile ON knowledge_terms_index(lang_pr
 CREATE INDEX IF NOT EXISTS idx_kti_updated ON knowledge_terms_index(updated_at DESC);
 
 -- ========================================
--- 表 21: knowledge_issues（问题审计）
+-- 表 22: knowledge_issues（问题审计）
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS knowledge_issues (

@@ -183,6 +183,41 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
     `);
 
+    // card_training_assets: TRAIN 训练包持久化（schema 18）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS card_training_assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation_id INTEGER NOT NULL UNIQUE,
+        folder_name TEXT NOT NULL,
+        base_filename TEXT NOT NULL,
+        card_type TEXT NOT NULL DEFAULT 'trilingual',
+        status TEXT NOT NULL DEFAULT 'failed',
+        source TEXT NOT NULL DEFAULT 'heuristic',
+        provider_used TEXT,
+        model_used TEXT,
+        prompt_version TEXT,
+        schema_version TEXT NOT NULL DEFAULT 'training_pack_v1',
+        quality_score REAL DEFAULT 0,
+        self_confidence REAL DEFAULT 0,
+        coverage_score REAL DEFAULT 0,
+        validation_errors_json TEXT,
+        fallback_reason TEXT,
+        tokens_input INTEGER DEFAULT 0,
+        tokens_output INTEGER DEFAULT 0,
+        tokens_total INTEGER DEFAULT 0,
+        cost_total REAL DEFAULT 0,
+        latency_ms INTEGER DEFAULT 0,
+        payload_json TEXT,
+        sidecar_file_path TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_cta_file ON card_training_assets(folder_name, base_filename);
+      CREATE INDEX IF NOT EXISTS idx_cta_updated ON card_training_assets(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_cta_status ON card_training_assets(status, updated_at DESC);
+    `);
+
     // knowledge analysis tables: 兼容旧库（schema 18+）
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge_jobs (
@@ -440,6 +475,29 @@ class DatabaseService {
       'avg_latency_ms REAL DEFAULT 0',
       'p95_latency_ms REAL DEFAULT 0',
       'options_json TEXT',
+      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
+    ]);
+
+    ensureTableColumns(this.db, 'card_training_assets', [
+      "card_type TEXT NOT NULL DEFAULT 'trilingual'",
+      "status TEXT NOT NULL DEFAULT 'failed'",
+      "source TEXT NOT NULL DEFAULT 'heuristic'",
+      'provider_used TEXT',
+      'model_used TEXT',
+      'prompt_version TEXT',
+      "schema_version TEXT NOT NULL DEFAULT 'training_pack_v1'",
+      'quality_score REAL DEFAULT 0',
+      'self_confidence REAL DEFAULT 0',
+      'coverage_score REAL DEFAULT 0',
+      'validation_errors_json TEXT',
+      'fallback_reason TEXT',
+      'tokens_input INTEGER DEFAULT 0',
+      'tokens_output INTEGER DEFAULT 0',
+      'tokens_total INTEGER DEFAULT 0',
+      'cost_total REAL DEFAULT 0',
+      'latency_ms INTEGER DEFAULT 0',
+      'payload_json TEXT',
+      'sidecar_file_path TEXT',
       'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
     ]);
 
@@ -891,6 +949,188 @@ class DatabaseService {
       byProvider,
       trend
     };
+  }
+
+  mapTrainingAssetRow(row) {
+    if (!row) return null;
+    return {
+      id: Number(row.id || 0),
+      generationId: Number(row.generation_id || 0),
+      folderName: row.folder_name || '',
+      baseFilename: row.base_filename || '',
+      cardType: row.card_type || 'trilingual',
+      status: row.status || 'failed',
+      source: row.source || 'heuristic',
+      providerUsed: row.provider_used || '',
+      modelUsed: row.model_used || '',
+      promptVersion: row.prompt_version || '',
+      schemaVersion: row.schema_version || 'training_pack_v1',
+      qualityScore: Number(row.quality_score || 0),
+      selfConfidence: Number(row.self_confidence || 0),
+      coverageScore: Number(row.coverage_score || 0),
+      validationErrors: safeJsonParse(row.validation_errors_json, []),
+      fallbackReason: row.fallback_reason || null,
+      tokensInput: Number(row.tokens_input || 0),
+      tokensOutput: Number(row.tokens_output || 0),
+      tokensTotal: Number(row.tokens_total || 0),
+      costTotal: Number(row.cost_total || 0),
+      latencyMs: Number(row.latency_ms || 0),
+      payload: safeJsonParse(row.payload_json, null),
+      sidecarFilePath: row.sidecar_file_path || '',
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null
+    };
+  }
+
+  getCardTrainingAssetByGenerationId(generationId) {
+    const id = Number(generationId || 0);
+    if (!id) return null;
+    const row = this.db.prepare(`
+      SELECT *
+      FROM card_training_assets
+      WHERE generation_id = ?
+      LIMIT 1
+    `).get(id);
+    return this.mapTrainingAssetRow(row);
+  }
+
+  getCardTrainingAssetByFile(folderName, baseFilename) {
+    const folder = String(folderName || '').trim();
+    const base = String(baseFilename || '').trim();
+    if (!folder || !base) return null;
+    const row = this.db.prepare(`
+      SELECT *
+      FROM card_training_assets
+      WHERE folder_name = ?
+        AND base_filename = ?
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 1
+    `).get(folder, base);
+    return this.mapTrainingAssetRow(row);
+  }
+
+  upsertCardTrainingAsset(payload = {}) {
+    const generationId = Number(payload.generationId || 0);
+    if (!generationId) throw new Error('generationId is required');
+    const folderName = String(payload.folderName || '').trim();
+    const baseFilename = String(payload.baseFilename || '').trim();
+    if (!folderName || !baseFilename) {
+      throw new Error('folderName/baseFilename are required');
+    }
+
+    this.db.prepare(`
+      INSERT INTO card_training_assets (
+        generation_id,
+        folder_name,
+        base_filename,
+        card_type,
+        status,
+        source,
+        provider_used,
+        model_used,
+        prompt_version,
+        schema_version,
+        quality_score,
+        self_confidence,
+        coverage_score,
+        validation_errors_json,
+        fallback_reason,
+        tokens_input,
+        tokens_output,
+        tokens_total,
+        cost_total,
+        latency_ms,
+        payload_json,
+        sidecar_file_path,
+        created_at,
+        updated_at
+      ) VALUES (
+        @generationId,
+        @folderName,
+        @baseFilename,
+        @cardType,
+        @status,
+        @source,
+        @providerUsed,
+        @modelUsed,
+        @promptVersion,
+        @schemaVersion,
+        @qualityScore,
+        @selfConfidence,
+        @coverageScore,
+        @validationErrorsJson,
+        @fallbackReason,
+        @tokensInput,
+        @tokensOutput,
+        @tokensTotal,
+        @costTotal,
+        @latencyMs,
+        @payloadJson,
+        @sidecarFilePath,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT(generation_id) DO UPDATE SET
+        folder_name = excluded.folder_name,
+        base_filename = excluded.base_filename,
+        card_type = excluded.card_type,
+        status = excluded.status,
+        source = excluded.source,
+        provider_used = excluded.provider_used,
+        model_used = excluded.model_used,
+        prompt_version = excluded.prompt_version,
+        schema_version = excluded.schema_version,
+        quality_score = excluded.quality_score,
+        self_confidence = excluded.self_confidence,
+        coverage_score = excluded.coverage_score,
+        validation_errors_json = excluded.validation_errors_json,
+        fallback_reason = excluded.fallback_reason,
+        tokens_input = excluded.tokens_input,
+        tokens_output = excluded.tokens_output,
+        tokens_total = excluded.tokens_total,
+        cost_total = excluded.cost_total,
+        latency_ms = excluded.latency_ms,
+        payload_json = excluded.payload_json,
+        sidecar_file_path = excluded.sidecar_file_path,
+        updated_at = CURRENT_TIMESTAMP
+    `).run({
+      generationId,
+      folderName,
+      baseFilename,
+      cardType: String(payload.cardType || 'trilingual').trim() || 'trilingual',
+      status: String(payload.status || 'failed').trim() || 'failed',
+      source: String(payload.source || 'heuristic').trim() || 'heuristic',
+      providerUsed: String(payload.providerUsed || '').trim(),
+      modelUsed: String(payload.modelUsed || '').trim(),
+      promptVersion: String(payload.promptVersion || '').trim(),
+      schemaVersion: String(payload.schemaVersion || 'training_pack_v1').trim() || 'training_pack_v1',
+      qualityScore: Number(payload.qualityScore || 0),
+      selfConfidence: Number(payload.selfConfidence || 0),
+      coverageScore: Number(payload.coverageScore || 0),
+      validationErrorsJson: JSON.stringify(Array.isArray(payload.validationErrors) ? payload.validationErrors : []),
+      fallbackReason: payload.fallbackReason ? String(payload.fallbackReason) : null,
+      tokensInput: Number(payload.tokensInput || 0),
+      tokensOutput: Number(payload.tokensOutput || 0),
+      tokensTotal: Number(payload.tokensTotal || 0),
+      costTotal: Number(payload.costTotal || 0),
+      latencyMs: Number(payload.latencyMs || 0),
+      payloadJson: payload.payload ? JSON.stringify(payload.payload) : null,
+      sidecarFilePath: String(payload.sidecarFilePath || '').trim()
+    });
+
+    return this.getCardTrainingAssetByGenerationId(generationId);
+  }
+
+  deleteCardTrainingAssetByFile(folderName, baseFilename) {
+    const folder = String(folderName || '').trim();
+    const base = String(baseFilename || '').trim();
+    if (!folder || !base) return 0;
+    const result = this.db.prepare(`
+      DELETE FROM card_training_assets
+      WHERE folder_name = ?
+        AND base_filename = ?
+    `).run(folder, base);
+    return Number(result.changes || 0);
   }
 
   /**

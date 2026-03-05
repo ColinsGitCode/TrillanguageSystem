@@ -32,6 +32,9 @@
 | 记录 | GET | `/records/by-file` | 按 folder+base 查询记录 |
 | 记录 | DELETE | `/records/by-file` | 按 folder+base 删除记录与文件 |
 | 记录 | DELETE | `/records/:id` | 按 generationId 删除记录与文件 |
+| TRAIN | GET | `/training/by-generation/:id` | 按 generationId 获取训练包 |
+| TRAIN | GET | `/training/by-file` | 按 folder+base 获取训练包 |
+| TRAIN | POST | `/training/by-generation/:id/regenerate` | 重新生成训练包 |
 | Dashboard | GET | `/dashboard/highlight-stats` | 标红聚合统计 |
 | 实验 | GET | `/experiments/:id` | few-shot 实验导出 |
 | 评审 | GET | `/review/campaigns` | 评审批次列表 |
@@ -156,6 +159,12 @@
         "fallbackReason": "budget_reduction"
       }
     }
+  },
+  "training": {
+    "status": "ready",
+    "source": "llm",
+    "qualityScore": 88.6,
+    "assetId": 456
   }
 }
 ```
@@ -207,6 +216,28 @@
 
 - `provider` 支持：`tesseract` / `local` / `auto`
 - `auto` 模式下：优先 tesseract，失败回退 local OCR
+
+---
+
+## 3.2 TRAIN 训练包接口
+
+### `GET /api/training/by-generation/:id`
+
+- 返回指定 generation 的训练包（含 payload、质量、来源、校验错误等）。
+- 未命中返回 `404`.
+
+### `GET /api/training/by-file?folder=YYYYMMDD&base=xxx`
+
+- 通过目录+基础文件名查询训练包（用于历史卡片/无 generationId 场景）。
+- 未命中返回 `404`.
+
+### `POST /api/training/by-generation/:id/regenerate`
+
+- 使用 teacher LLM 重新生成并覆盖该卡片训练包。
+- 同步写入：
+  - DB: `card_training_assets`
+  - 文件 sidecar: `<base>.training.v1.json`
+- 返回最新训练包数据。
 
 ---
 

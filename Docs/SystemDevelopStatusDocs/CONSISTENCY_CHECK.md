@@ -45,10 +45,15 @@
 - P1/P2 修复已对齐：
   - `databaseService.js` 同义边界 key 归一 + `id:<id>` 直查，修复 Knowledge Hub 详情 404
   - `app.js` / `modern-card.css` 删除确认改为内嵌 popover，新增稳定测试选择器
+- TRAIN 高质量化已对齐：
+  - 新增 `services/trainingPackService.js`（LLM 生成/校验/修复/回退）
+  - 新增 `card_training_assets` 表 + `*.training.v1.json` sidecar
+  - 新增 `/api/training/by-generation/:id`、`/api/training/by-file`、`/api/training/by-generation/:id/regenerate`
+  - TRAIN 页改为后端优先加载，失败回退前端规则提取
 
 ## 5. 结论
 
-- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.10）
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.7.0）
 - 当前文档可直接支撑：
   1. 接口联调
   2. 评分与注入机制解释（含 TTS 门控、采样模式、回滚）

@@ -1,7 +1,7 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.6.10
+**版本**: 3.7.0
 **更新日期**: 2026-03-05
 
 ## 1. 核心目录
@@ -33,6 +33,7 @@ services/
   databaseHelpers.js
   healthCheckService.js
   geminiAuthService.js
+  trainingPackService.js
 database/schema.sql
 scripts/
   run_fewshot_rounds.js
@@ -72,6 +73,12 @@ scripts/
    - `experiment_samples` / `experiment_rounds`
 10. 自动解析例句并写入评审池：
    - `example_units` / `example_unit_sources`
+11. 同步生成 TRAIN 训练包（高质量优先）：
+   - teacher LLM 生成 JSON
+   - schema + 语义校验
+   - 失败走修复提示词重试
+   - 再失败走 heuristic 回退
+   - 落库 `card_training_assets` + sidecar `*.training.v1.json`
 
 > 说明：`grammar_ja` 当前默认不启用 few-shot 注入，避免把三语样本注入到语法模板。
 
@@ -147,7 +154,7 @@ scripts/
 
 ## 8. 数据模型（摘要）
 
-当前 schema 已扩展为 27+ 张表，分六组：
+当前 schema 已扩展为 28+ 张表，分七组：
 
 1. 业务主表：
    - `generations`、`audio_files`
@@ -159,8 +166,9 @@ scripts/
    - `example_units`、`example_unit_sources`、`review_campaigns`、`review_campaign_items`、`example_reviews`
 5. 内容批注与分析：
    - `card_highlights`（标红 HTML 快照、mark 数、高亮字符数）
-
-6. 知识任务与知识物化：
+6. TRAIN 训练包：
+   - `card_training_assets`（status/source/quality/tokens/latency/payload）
+7. 知识任务与知识物化：
    - `knowledge_jobs`、`knowledge_outputs_raw`
    - `knowledge_terms_index`
    - `knowledge_issues`
@@ -174,6 +182,18 @@ scripts/
 - `source_mode`：`input | selection | ocr`
 
 用于区分卡片类型与来源入口，支持后续筛选、统计与可观测追踪。
+
+### 8.2 TRAIN 持久化（v3.7.0）
+
+- 新增表：`card_training_assets`
+  - 唯一键：`generation_id`（一张卡片一个当前训练包版本）
+  - 关键字段：`status/source/quality_score/validation_errors_json/payload_json`
+- 同目录 sidecar：`<base>.training.v1.json`
+  - 用于导出、离线复用和目录级运维检查
+- 新增接口：
+  - `GET /api/training/by-generation/:id`
+  - `GET /api/training/by-file`
+  - `POST /api/training/by-generation/:id/regenerate`
 
 ## 9. 存储与部署
 

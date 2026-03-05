@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
 **最后更新**: 2026-03-05
-**版本**: 3.6.10
+**版本**: 3.7.0
 
 ## 1. 项目定位
 
@@ -21,7 +21,7 @@
 - 服务层：`services/*`（LLM、OCR、TTS、few-shot、评审、观测、DB）
 - 存储层：
   - 文件：按日期目录 `YYYYMMDD`
-  - SQLite：27+ 张表（业务 + 观测 + 实验 + 评审 + 知识任务/知识物化）
+  - SQLite：28+ 张表（业务 + 观测 + 实验 + 评审 + TRAIN + 知识任务/知识物化）
 - 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Gateway/Executor
 
 ## 3. 当前功能清单
@@ -152,6 +152,30 @@
   - 删除入口由原生 `confirm()` 改为卡片内嵌确认弹层（popover）
   - 新增稳定测试选择器：`card-delete-trigger/cancel/confirm`
   - 交互更稳定，避免浏览器阻塞弹窗影响自动化与批量操作
+
+### 3.16 搭配与语块训练面板（v3.6.11）
+
+- 单卡弹窗新增 `TRAIN` 标签页（与 CONTENT/INTEL 同级）。
+- 基于当前卡片 Markdown 的例句，前端本地提取：
+  - 英文 `collocations`（2~3 词搭配）
+  - 日语 `chunks`（语块/语法片段）
+- 训练页包含：
+  - 搭配/语块示例（原句 + 中文释义）
+  - 填空训练（可一键显示/隐藏答案）
+- 无需改动主生成链路与数据库，作为轻量学习增强模块直接复用现有卡片内容。
+
+### 3.17 TRAIN 高质量化与持久化（v3.7.0）
+
+- 主卡片生成当次同步产出 `trainingPack`（不再仅依赖前端规则临时抽取）。
+- 质量链路：Teacher LLM 生成 -> JSON/语义校验 -> 修复重试 -> heuristic 回退。
+- 持久化：
+  - DB 表：`card_training_assets`（status/source/quality/tokens/payload）
+  - sidecar：`<base>.training.v1.json`（与卡片文件同目录）
+- 新增 TRAIN API：
+  - `GET /api/training/by-generation/:id`
+  - `GET /api/training/by-file`
+  - `POST /api/training/by-generation/:id/regenerate`
+- 前端 TRAIN 页改为后端优先加载，展示来源标记（LLM高质量/修复后/规则回退）与质量指标，并支持手动重算。
 
 ## 4. 主线技术策略
 

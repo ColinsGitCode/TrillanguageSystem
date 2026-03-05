@@ -325,6 +325,23 @@ class ApiService {
         params.set('limit', String(limit));
         return this.fetchJson(`/api/knowledge/clusters/${encodeURIComponent(clusterKey)}/relations?${params.toString()}`);
     }
+
+    async getTrainingByGeneration(generationId) {
+        return this.fetchJson(`/api/training/by-generation/${encodeURIComponent(generationId)}`);
+    }
+
+    async getTrainingByFile(folder, base) {
+        const params = new URLSearchParams();
+        params.set('folder', String(folder || ''));
+        params.set('base', String(base || ''));
+        return this.fetchJson(`/api/training/by-file?${params.toString()}`);
+    }
+
+    async regenerateTrainingByGeneration(generationId) {
+        return this.fetchJson(`/api/training/by-generation/${encodeURIComponent(generationId)}/regenerate`, {
+            method: 'POST'
+        });
+    }
 }
 
 export const api = new ApiService();

@@ -1,7 +1,7 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.6.10
+**版本**: 3.7.0
 **更新日期**: 2026-03-05
 
 ## 1. 前端目录
@@ -60,6 +60,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 ### 3.1 单卡弹窗 Tabs
 
 - `CONTENT`：卡片正文 + 例句音频 + **文本选取即时生成**
+- `TRAIN`：搭配与语块训练（英文搭配 + 日语语块 + 填空练习）
 - `INTEL`：质量/Token/性能/Prompt/LLM Output
 - `REVIEW`（有 generationId 时显示）：例句人工评分与评论
 
@@ -115,6 +116,20 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
   - 自动化测试点击稳定（不受浏览器阻塞弹窗影响）
   - 用户可在弹窗内完成取消/确认，状态更可控
   - 删除后仍复用原有后端删除链路（含按 `id` 与按 `folder/base` fallback）
+
+### 3.2.2 搭配与语块训练（v3.7.0）
+
+- 入口：单卡弹窗 `TRAIN` 页签。
+- 数据来源优先级：
+  1. 后端持久化训练包（`/api/training/by-generation/:id`）
+  2. 按目录文件回退查询（`/api/training/by-file`）
+  3. 前端临时规则提取（兜底）
+- 能力：
+  - 英文搭配 + 日语语块 + 训练题（填空/选择）
+  - 显示来源与状态：`LLM高质量 / 修复后 / 规则回退`
+  - 显示质量分与覆盖率
+  - 支持 `重新生成训练包`（调用 `POST /api/training/by-generation/:id/regenerate`）
+- 目标：卡片首开即有高质量训练数据，且可追溯、可复用、可重算。
 
 ### 3.3 REVIEW 页能力
 

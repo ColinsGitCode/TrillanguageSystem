@@ -185,10 +185,14 @@ function deleteRecordFiles(folderName, baseName) {
         candidates.add(`${base}.md`);
         candidates.add(`${base}.html`);
         candidates.add(`${base}.meta.json`);
+        candidates.add(`${base}.training.v1.json`);
     });
 
     const audioRegexes = baseVariants.map(
         (base) => new RegExp(`^${escapeRegex(base)}_[\\w-]+\\.(wav|mp3|m4a)$`, 'i')
+    );
+    const trainingRegexes = baseVariants.map(
+        (base) => new RegExp(`^${escapeRegex(base)}\\.training\\.v\\d+\\.json$`, 'i')
     );
     const files = fs.readdirSync(folderPath, { withFileTypes: true })
         .filter((entry) => entry.isFile())
@@ -196,7 +200,7 @@ function deleteRecordFiles(folderName, baseName) {
 
     const deleted = [];
     for (const name of files) {
-        if (candidates.has(name) || audioRegexes.some((re) => re.test(name))) {
+        if (candidates.has(name) || audioRegexes.some((re) => re.test(name)) || trainingRegexes.some((re) => re.test(name))) {
             const filePath = path.join(folderPath, name);
             try {
                 fs.unlinkSync(filePath);

@@ -831,7 +831,7 @@ function renderCompareModal(phrase, geminiResult, localResult, comparison) {
 
     const tabs = els.modalContainer.querySelectorAll('.compare-tabs .tab-btn');
     tabs.forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
             tabs.forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             const targetId = btn.dataset.target;
@@ -1188,6 +1188,522 @@ function bindAudioButtons(container, defaultFolder = null) {
         const url = `/api/folders/${encodeURIComponent(folder)}/files/${encodeURIComponent(src)}`;
         btn.onclick = () => player.play(url, btn);
     });
+}
+
+const TRAINING_EN_STOPWORDS = new Set([
+    'a', 'an', 'the', 'this', 'that', 'these', 'those',
+    'i', 'you', 'he', 'she', 'it', 'we', 'they',
+    'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+    'do', 'does', 'did', 'done', 'have', 'has', 'had',
+    'and', 'or', 'but', 'if', 'then', 'so', 'as',
+    'at', 'by', 'for', 'from', 'in', 'of', 'on', 'to', 'with', 'without',
+    'my', 'your', 'his', 'her', 'its', 'our', 'their',
+    'me', 'him', 'them', 'us',
+    'not', 'no', 'yes', 'very', 'just', 'only', 'also', 'too'
+]);
+
+function stripMarkdownInline(text) {
+    return String(text || '')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function stripJapaneseRubyReading(text) {
+    return String(text || '')
+        .replace(/([一-龯々〆ヵヶ]{1,10})\(([\u3040-\u30FFー・]{1,20})\)/g, '$1')
+        .replace(/\(([\u3040-\u30FFー・]{1,20})\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function hasJapaneseChar(text) {
+    return /[\u3040-\u30FF\u3400-\u9FFF々〆ヵヶ]/.test(String(text || ''));
+}
+
+function escapeRegexLiteral(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseTrainingExamplesFromMarkdown(markdown, cardType = 'trilingual') {
+    const lines = String(markdown || '').split(/\r?\n/);
+    let section = '';
+    let currentExample = null;
+    const enExamples = [];
+    const jaExamples = [];
+
+    const pushExample = (lang, sentenceRaw) => {
+        const sentenceBase = stripMarkdownInline(sentenceRaw);
+        if (!sentenceBase) {
+            currentExample = null;
+            return;
+        }
+        const sentence = lang === 'ja' ? stripJapaneseRubyReading(sentenceBase) : sentenceBase;
+        const item = { lang, sentence, translation: '' };
+        if (lang === 'en') enExamples.push(item);
+        if (lang === 'ja') jaExamples.push(item);
+        currentExample = item;
+    };
+
+    lines.forEach((line) => {
+        const headingMatch = line.match(/^##\s*\d+\.\s*(.+?)\s*:?\s*$/);
+        if (headingMatch) {
+            const heading = headingMatch[1];
+            if (/英文/i.test(heading)) {
+                section = 'en';
+            } else if (/日本語|日语/i.test(heading)) {
+                section = 'ja';
+            } else {
+                section = '';
+            }
+            currentExample = null;
+            return;
+        }
+
+        const exampleMatch = line.match(/^\s*-\s*\*\*例句\d+\*\*:\s*(.+)$/);
+        if (exampleMatch) {
+            if (section === 'en') {
+                pushExample('en', exampleMatch[1]);
+            } else if (section === 'ja') {
+                pushExample('ja', exampleMatch[1]);
+            } else if (normalizeCardType(cardType) === 'grammar_ja') {
+                pushExample('ja', exampleMatch[1]);
+            } else {
+                currentExample = null;
+            }
+            return;
+        }
+
+        if (!currentExample) return;
+        const bulletMatch = line.match(/^\s*-\s+(.+)$/);
+        if (!bulletMatch) return;
+        let text = stripMarkdownInline(bulletMatch[1]);
+        if (!text) return;
+        if (/^外来语标注[:：]/i.test(text)) return;
+        if (/^[A-Z][A-Z\s]+:/.test(text)) return;
+        if (currentExample.lang === 'ja') {
+            text = stripJapaneseRubyReading(text);
+        }
+        if (!currentExample.translation) {
+            currentExample.translation = text;
+        }
+    });
+
+    return {
+        enExamples: enExamples.filter((item) => item.sentence),
+        jaExamples: jaExamples.filter((item) => item.sentence)
+    };
+}
+
+function extractEnglishCollocations(enExamples, phrase, maxCount = 6) {
+    const phraseWords = new Set(
+        (String(phrase || '').toLowerCase().match(/[a-z]+/g) || []).filter((w) => !TRAINING_EN_STOPWORDS.has(w))
+    );
+    const map = new Map();
+
+    enExamples.forEach((example, idx) => {
+        const words = (String(example.sentence || '').toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []);
+        for (let n = 2; n <= 3; n += 1) {
+            for (let i = 0; i <= words.length - n; i += 1) {
+                const chunkWords = words.slice(i, i + n);
+                if (chunkWords.every((w) => TRAINING_EN_STOPWORDS.has(w))) continue;
+                const key = chunkWords.join(' ');
+                const item = map.get(key) || {
+                    text: key,
+                    count: 0,
+                    phraseHit: 0,
+                    sourceIndex: idx,
+                    sourceSentence: example.sentence,
+                    sourceTranslation: example.translation || ''
+                };
+                item.count += 1;
+                if (chunkWords.some((w) => phraseWords.has(w))) item.phraseHit += 1;
+                map.set(key, item);
+            }
+        }
+    });
+
+    return Array.from(map.values())
+        .filter((item) => item.count > 1 || item.phraseHit > 0)
+        .sort((a, b) => {
+            if (b.phraseHit !== a.phraseHit) return b.phraseHit - a.phraseHit;
+            if (b.count !== a.count) return b.count - a.count;
+            return b.text.length - a.text.length;
+        })
+        .slice(0, maxCount)
+        .map((item, idx) => ({
+            id: `en-${idx + 1}`,
+            lang: 'en',
+            type: 'collocation',
+            text: item.text,
+            sourceSentence: item.sourceSentence,
+            sourceTranslation: item.sourceTranslation
+        }));
+}
+
+function extractJapaneseChunks(jaExamples, phrase, maxCount = 6) {
+    const map = new Map();
+    const normalizedPhrase = stripJapaneseRubyReading(String(phrase || ''));
+    const particlePattern = /[一-龯ぁ-んァ-ヶー]{1,10}(?:を|が|に|で|と|へ|から|まで|より|は|も|の)[一-龯ぁ-んァ-ヶー]{1,10}/g;
+    const verbPattern = /[一-龯ぁ-んァ-ヶー]{2,14}(?:する|した|して|している|できる|でき|になる|なった|ている|ない|たい)/g;
+    const grammarLexicon = ['わけでもなく', 'において', 'について', 'に対して', 'として', 'により', 'に向けて', 'ておく', 'てしまう'];
+
+    const addChunk = (chunk, example, idx, boost = 0) => {
+        const text = stripJapaneseRubyReading(chunk).replace(/[、。！？]/g, '').trim();
+        if (!text || text.length < 2 || text.length > 20) return;
+        const item = map.get(text) || {
+            text,
+            count: 0,
+            boost: 0,
+            sourceIndex: idx,
+            sourceSentence: example.sentence,
+            sourceTranslation: example.translation || ''
+        };
+        item.count += 1;
+        item.boost += boost;
+        map.set(text, item);
+    };
+
+    jaExamples.forEach((example, idx) => {
+        const sentence = stripJapaneseRubyReading(example.sentence || '');
+        if (!sentence) return;
+
+        if (normalizedPhrase && hasJapaneseChar(normalizedPhrase) && sentence.includes(normalizedPhrase)) {
+            addChunk(normalizedPhrase, example, idx, 3);
+        }
+
+        grammarLexicon.forEach((pattern) => {
+            if (sentence.includes(pattern)) addChunk(pattern, example, idx, 2);
+        });
+
+        const particleMatches = sentence.match(particlePattern) || [];
+        particleMatches.forEach((chunk) => addChunk(chunk, example, idx, 1));
+
+        const verbMatches = sentence.match(verbPattern) || [];
+        verbMatches.forEach((chunk) => addChunk(chunk, example, idx, 1));
+    });
+
+    return Array.from(map.values())
+        .sort((a, b) => {
+            if (b.boost !== a.boost) return b.boost - a.boost;
+            if (b.count !== a.count) return b.count - a.count;
+            return b.text.length - a.text.length;
+        })
+        .slice(0, maxCount)
+        .map((item, idx) => ({
+            id: `ja-${idx + 1}`,
+            lang: 'ja',
+            type: 'chunk',
+            text: item.text,
+            sourceSentence: item.sourceSentence,
+            sourceTranslation: item.sourceTranslation
+        }));
+}
+
+function buildTrainingQuizzes(items, lang, maxCount = 4) {
+    return items.slice(0, maxCount).map((item, idx) => {
+        const sentence = String(item.sourceSentence || '');
+        let prompt = sentence;
+
+        if (lang === 'en') {
+            const pattern = new RegExp(`\\b${escapeRegexLiteral(item.text)}\\b`, 'i');
+            if (pattern.test(sentence)) {
+                prompt = sentence.replace(pattern, '____');
+            }
+        } else if (item.text && sentence.includes(item.text)) {
+            prompt = sentence.replace(item.text, '＿＿＿＿');
+        }
+
+        if (prompt === sentence && sentence) {
+            prompt = `${sentence}（请找出重点语块）`;
+        }
+
+        return {
+            id: `${lang}-quiz-${idx + 1}`,
+            lang,
+            prompt,
+            answer: item.text,
+            translation: item.sourceTranslation || ''
+        };
+    });
+}
+
+function buildCardTrainingData(markdown, title, cardType = 'trilingual') {
+    const parsed = parseTrainingExamplesFromMarkdown(markdown, cardType);
+    const enItems = extractEnglishCollocations(parsed.enExamples, title, 6);
+    const jaItems = extractJapaneseChunks(parsed.jaExamples, title, 6);
+    return {
+        enItems,
+        jaItems,
+        quizzes: [
+            ...buildTrainingQuizzes(enItems, 'en', 3),
+            ...buildTrainingQuizzes(jaItems, 'ja', 3)
+        ],
+        sampleStats: {
+            enExampleCount: parsed.enExamples.length,
+            jaExampleCount: parsed.jaExamples.length
+        }
+    };
+}
+
+function mapTrainingPayloadToViewData(payload = {}) {
+    const enItems = (Array.isArray(payload.enCollocations) ? payload.enCollocations : []).map((item) => ({
+        id: item.id || '',
+        lang: 'en',
+        text: item.pattern || '',
+        meaning: item.meaningZh || '',
+        usage: item.usageZh || '',
+        sourceSentence: item.exampleEn || '',
+        sourceTranslation: item.exampleZh || '',
+        distractors: Array.isArray(item.distractors) ? item.distractors : []
+    }));
+    const jaItems = (Array.isArray(payload.jaChunks) ? payload.jaChunks : []).map((item) => ({
+        id: item.id || '',
+        lang: 'ja',
+        text: item.chunk || '',
+        reading: item.reading || '',
+        meaning: item.meaningZh || '',
+        usage: item.usageZh || '',
+        sourceSentence: item.exampleJa || '',
+        sourceTranslation: item.exampleZh || '',
+        grammarLabel: item.grammarLabel || '',
+        distractors: Array.isArray(item.distractors) ? item.distractors : []
+    }));
+    const quizzes = (Array.isArray(payload.quizzes) ? payload.quizzes : []).map((item) => ({
+        id: item.id || '',
+        lang: String(item.lang || 'en').toLowerCase() === 'ja' ? 'ja' : 'en',
+        type: String(item.type || 'cloze').toLowerCase() === 'choice' ? 'choice' : 'cloze',
+        prompt: item.question || '',
+        answer: item.answer || '',
+        translation: item.explanationZh || '',
+        choices: Array.isArray(item.choices) ? item.choices : [],
+        relatedUnitIds: Array.isArray(item.relatedUnitIds) ? item.relatedUnitIds : []
+    }));
+
+    return {
+        enItems,
+        jaItems,
+        quizzes,
+        sampleStats: {
+            enExampleCount: enItems.length,
+            jaExampleCount: jaItems.length
+        }
+    };
+}
+
+function buildTrainingSourceLabel(source) {
+    const key = String(source || '').toLowerCase();
+    if (key === 'llm') return 'LLM高质量';
+    if (key === 'repaired') return '修复后';
+    if (key === 'heuristic') return '规则回退';
+    return '未知来源';
+}
+
+function buildTrainingStatusLabel(status) {
+    const key = String(status || '').toLowerCase();
+    if (key === 'ready') return 'READY';
+    if (key === 'repaired') return 'REPAIRED';
+    if (key === 'fallback') return 'FALLBACK';
+    return 'FAILED';
+}
+
+function renderTrainingItems(items, emptyText = '暂无可训练内容') {
+    if (!items.length) {
+        return `<div class="card-training-empty">${escapeHtml(emptyText)}</div>`;
+    }
+    return items.map((item) => `
+        <div class="card-training-item">
+            <div class="card-training-item-head">
+                <span class="card-training-lang ${item.lang}">${item.lang === 'en' ? 'EN' : 'JA'}</span>
+                <span class="card-training-key">${escapeHtml(item.text || '')}</span>
+            </div>
+            ${item.reading ? `<div class="card-training-reading">读音：${escapeHtml(item.reading)}</div>` : ''}
+            ${item.grammarLabel ? `<div class="card-training-grammar">语法标签：${escapeHtml(item.grammarLabel)}</div>` : ''}
+            ${item.meaning ? `<div class="card-training-meaning">释义：${escapeHtml(item.meaning)}</div>` : ''}
+            ${item.usage ? `<div class="card-training-usage">用法：${escapeHtml(item.usage)}</div>` : ''}
+            <div class="card-training-sentence">${escapeHtml(item.sourceSentence || '')}</div>
+            ${item.sourceTranslation ? `<div class="card-training-translation">${escapeHtml(item.sourceTranslation)}</div>` : ''}
+            ${Array.isArray(item.distractors) && item.distractors.length ? `<div class="card-training-distractors">干扰项：${item.distractors.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+function renderTrainingQuizzes(quizzes) {
+    if (!quizzes.length) {
+        return '<div class="card-training-empty">暂无训练题目</div>';
+    }
+    return quizzes.map((item) => `
+        <div class="card-training-quiz">
+            <div class="card-training-quiz-head">
+                <span class="card-training-lang ${item.lang}">${item.lang === 'en' ? 'EN' : 'JA'}</span>
+                <span>${item.type === 'choice' ? '选择训练' : '填空训练'}</span>
+            </div>
+            <div class="card-training-quiz-prompt">${escapeHtml(item.prompt || '')}</div>
+            ${Array.isArray(item.choices) && item.choices.length ? `<div class="card-training-choices">选项：${item.choices.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
+            ${item.translation ? `<div class="card-training-translation">${escapeHtml(item.translation)}</div>` : ''}
+            <button type="button" class="card-training-reveal-btn" data-answer="${escapeHtml(item.answer || '')}">显示答案</button>
+            <div class="card-training-answer hidden">答案：${escapeHtml(item.answer || '')}</div>
+        </div>
+    `).join('');
+}
+
+function bindCardTrainingPanel(container, context = {}) {
+    container.querySelectorAll('.card-training-reveal-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const answer = btn.nextElementSibling;
+            if (!answer) return;
+            const opening = answer.classList.contains('hidden');
+            answer.classList.toggle('hidden', !opening);
+            btn.textContent = opening ? '隐藏答案' : '显示答案';
+        });
+    });
+
+    const regenerateBtn = container.querySelector('[data-action="regenerate-training"]');
+    if (regenerateBtn) {
+        regenerateBtn.addEventListener('click', async () => {
+            const generationId = Number(context.generationId || 0);
+            if (!generationId) return;
+            regenerateBtn.disabled = true;
+            regenerateBtn.textContent = '重算中...';
+            try {
+                await api.regenerateTrainingByGeneration(generationId);
+                await loadCardTrainingPanel({
+                    ...context,
+                    forceRefresh: true
+                });
+                showGenerationQueueToast('训练包已重算并更新');
+            } catch (err) {
+                alert('重算失败: ' + err.message);
+                regenerateBtn.disabled = false;
+                regenerateBtn.textContent = '重新生成训练包';
+            }
+        });
+    }
+}
+
+function renderTrainingPanel(container, viewData, options = {}) {
+    const sourceLabel = buildTrainingSourceLabel(options.source);
+    const statusLabel = buildTrainingStatusLabel(options.status);
+    const qualityScore = Number(options.qualityScore || 0);
+    const coverageScore = Number(options.coverageScore || 0);
+    const canRegenerate = Number(options.generationId || 0) > 0;
+    const updatedAt = options.updatedAt ? formatDate(options.updatedAt) : '';
+    const warningText = Array.isArray(options.validationErrors) && options.validationErrors.length
+        ? options.validationErrors.slice(0, 3).join('；')
+        : '';
+
+    container.innerHTML = `
+      <div class="card-training-wrap">
+        <div class="card-training-head">
+            <div class="card-training-title">搭配与语块训练</div>
+            <div class="card-training-meta">
+                <span class="card-training-chip source">${escapeHtml(sourceLabel)}</span>
+                <span class="card-training-chip status">${escapeHtml(statusLabel)}</span>
+                <span class="card-training-chip">Quality ${qualityScore.toFixed(1)}</span>
+                <span class="card-training-chip">Coverage ${Math.round(coverageScore * 100)}%</span>
+                ${updatedAt ? `<span class="card-training-chip">更新 ${escapeHtml(updatedAt)}</span>` : ''}
+            </div>
+            <div class="card-training-tags">
+                <span class="tag">EN units ${viewData.enItems.length}</span>
+                <span class="tag">JA units ${viewData.jaItems.length}</span>
+                <span class="tag">Quiz ${viewData.quizzes.length}</span>
+                ${canRegenerate ? '<button type="button" class="card-training-regenerate-btn" data-action="regenerate-training">重新生成训练包</button>' : ''}
+            </div>
+            ${warningText ? `<div class="card-training-warning">校验提示：${escapeHtml(warningText)}</div>` : ''}
+        </div>
+        <div class="card-training-grid">
+            <section class="card-training-section">
+                <div class="card-training-section-title">英文搭配</div>
+                <div class="card-training-list">
+                    ${renderTrainingItems(viewData.enItems, '未识别到英文搭配，可先生成带英文例句的卡片。')}
+                </div>
+            </section>
+            <section class="card-training-section">
+                <div class="card-training-section-title">日语语块</div>
+                <div class="card-training-list">
+                    ${renderTrainingItems(viewData.jaItems, '未识别到日语语块，可先生成带日语例句的卡片。')}
+                </div>
+            </section>
+        </div>
+        <section class="card-training-section">
+            <div class="card-training-section-title">训练题</div>
+            <div class="card-training-quiz-list">
+                ${renderTrainingQuizzes(viewData.quizzes)}
+            </div>
+        </section>
+      </div>
+    `;
+}
+
+async function fetchTrainingAssetForCard({ generationId, folder, baseName }) {
+    if (generationId) {
+        try {
+            const data = await api.getTrainingByGeneration(generationId);
+            if (data?.training) return data.training;
+        } catch (err) {
+            if (Number(err?.status) !== 404) {
+                console.warn('[TRAIN] fetch by generation failed:', err.message);
+            }
+        }
+    }
+    if (folder && baseName) {
+        try {
+            const data = await api.getTrainingByFile(folder, baseName);
+            if (data?.training) return data.training;
+        } catch (err) {
+            if (Number(err?.status) !== 404) {
+                console.warn('[TRAIN] fetch by file failed:', err.message);
+            }
+        }
+    }
+    return null;
+}
+
+async function loadCardTrainingPanel({ container, markdown, title, cardType, generationId = 0, folder = '', baseName = '', forceRefresh = false }) {
+    if (!container) return;
+    if (!forceRefresh && container.dataset.loaded === '1') return;
+
+    container.dataset.loaded = 'loading';
+    container.innerHTML = '<div class="card-training-empty">TRAIN 数据加载中...</div>';
+
+    let training = null;
+    try {
+        training = await fetchTrainingAssetForCard({ generationId, folder, baseName });
+    } catch (err) {
+        console.warn('[TRAIN] load training asset failed:', err.message);
+    }
+
+    if (training?.payload) {
+        const viewData = mapTrainingPayloadToViewData(training.payload || {});
+        renderTrainingPanel(container, viewData, {
+            source: training.source,
+            status: training.status,
+            qualityScore: training.qualityScore,
+            coverageScore: training.coverageScore,
+            validationErrors: training.validationErrors,
+            updatedAt: training.updatedAt,
+            generationId
+        });
+        bindCardTrainingPanel(container, { container, generationId, folder, baseName, markdown, title, cardType });
+        container.dataset.loaded = '1';
+        return;
+    }
+
+    const fallbackData = buildCardTrainingData(markdown, title, cardType);
+    renderTrainingPanel(container, fallbackData, {
+        source: 'heuristic',
+        status: 'fallback',
+        qualityScore: 0,
+        coverageScore: 0,
+        validationErrors: ['后端训练包不存在，使用前端临时提取'],
+        updatedAt: null,
+        generationId
+    });
+    bindCardTrainingPanel(container, { container, generationId, folder, baseName, markdown, title, cardType });
+    container.dataset.loaded = '1';
 }
 
 // ==========================================
@@ -2964,6 +3480,7 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
+                    <button class="tab-btn" data-target="cardTraining" style="font-size:12px; padding: 4px 12px; color: #0369a1;">TRAIN</button>
                     <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
                     ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
                     ${generationId ? '<button class="tab-btn" data-target="cardReview" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
@@ -2975,6 +3492,8 @@ function renderCardModal(markdown, title, options = {}) {
                 <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeTabLabel}</div>
                 ${cardContentHtml}
             </div>
+
+            <div id="cardTraining" class="mc-body" style="display:none;"></div>
 
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
@@ -3187,15 +3706,31 @@ function renderCardModal(markdown, title, options = {}) {
     // 绑定 Tab 切换 (带图表渲染触发)
     const tabs = els.modalContainer.querySelectorAll('.tab-btn');
     tabs.forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
             tabs.forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
+            const trainingTab = els.modalContainer.querySelector('#cardTraining');
             const intelTab = els.modalContainer.querySelector('#cardIntel');
             const knowledgeTab = els.modalContainer.querySelector('#cardKnowledge');
             const reviewTab = els.modalContainer.querySelector('#cardReview');
+
+            if (targetId === 'cardTraining') {
+                trainingTab.style.display = 'block';
+                await loadCardTrainingPanel({
+                    container: trainingTab,
+                    markdown,
+                    title: displayTitle,
+                    cardType,
+                    generationId,
+                    folder,
+                    baseName: options.baseName || ''
+                });
+            } else {
+                trainingTab.style.display = 'none';
+            }
             
             if (targetId === 'cardIntel') {
                 intelTab.style.display = 'grid';

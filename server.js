@@ -10,7 +10,7 @@ const { runGeminiCli } = require('./services/geminiCliService');
 const { runGeminiProxy } = require('./services/geminiProxyService');
 const localLlmService = require('./services/localLlmService');
 const tesseractOcrService = require('./services/tesseractOcrService');
-const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('./services/fileManager');
+const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory, deleteRecordFiles } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
@@ -20,6 +20,7 @@ const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
 const exampleReviewService = require('./services/exampleReviewService');
 const knowledgeJobService = require('./services/knowledgeJobService');
+const trainingPackService = require('./services/trainingPackService');
 const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -157,6 +158,140 @@ function normalizeSourceMode(sourceMode) {
     if (normalized === 'input') return 'input';
     if (normalized === 'ocr') return 'ocr';
     return normalized;
+}
+
+function buildTrainingSidecarPath(targetDir, baseName) {
+    if (!targetDir || !baseName) return '';
+    return path.join(targetDir, `${baseName}.training.v1.json`);
+}
+
+function buildTrainingSidecarPayload(trainingAsset, context = {}) {
+    return {
+        schemaVersion: trainingAsset?.schemaVersion || 'training_pack_v1',
+        generatedAt: new Date().toISOString(),
+        generationId: Number(context.generationId || trainingAsset?.generationId || 0) || null,
+        phrase: String(context.phrase || ''),
+        folderName: String(context.folderName || ''),
+        baseName: String(context.baseName || ''),
+        cardType: String(context.cardType || 'trilingual'),
+        status: trainingAsset?.status || 'failed',
+        source: trainingAsset?.source || 'heuristic',
+        providerUsed: trainingAsset?.providerUsed || 'gemini',
+        modelUsed: trainingAsset?.modelUsed || '',
+        promptVersion: trainingAsset?.promptVersion || '',
+        qualityScore: Number(trainingAsset?.qualityScore || 0),
+        coverageScore: Number(trainingAsset?.coverageScore || 0),
+        selfConfidence: Number(trainingAsset?.selfConfidence || 0),
+        validationErrors: Array.isArray(trainingAsset?.validationErrors) ? trainingAsset.validationErrors : [],
+        fallbackReason: trainingAsset?.fallbackReason || null,
+        payload: trainingAsset?.payload || null
+    };
+}
+
+function persistTrainingSidecar(sidecarPath, payload) {
+    if (!sidecarPath) return false;
+    try {
+        fs.writeFileSync(sidecarPath, JSON.stringify(payload, null, 2), 'utf-8');
+        return true;
+    } catch (err) {
+        console.warn('[Training] Failed to write sidecar:', sidecarPath, err.message);
+        return false;
+    }
+}
+
+function summarizeTrainingAsset(trainingAsset) {
+    if (!trainingAsset) {
+        return {
+            status: 'failed',
+            source: 'heuristic',
+            qualityScore: 0,
+            assetId: null
+        };
+    }
+    return {
+        status: trainingAsset.status || 'failed',
+        source: trainingAsset.source || 'heuristic',
+        qualityScore: Number(trainingAsset.qualityScore || 0),
+        assetId: Number(trainingAsset.id || 0) || null
+    };
+}
+
+async function generateAndPersistTrainingAsset(context = {}) {
+    const generationId = Number(context.generationId || 0);
+    if (!generationId) {
+        return {
+            status: 'failed',
+            source: 'heuristic',
+            qualityScore: 0,
+            assetId: null,
+            reason: 'missing_generation_id'
+        };
+    }
+
+    const phrase = String(context.phrase || '').trim();
+    const cardType = normalizeCardType(context.cardType);
+    const markdown = String(context.markdown || '').trim();
+    const folderName = String(context.folderName || '').trim();
+    const baseName = String(context.baseName || '').trim();
+    const targetDir = String(context.targetDir || '').trim();
+    if (!phrase || !markdown || !folderName || !baseName) {
+        return {
+            status: 'failed',
+            source: 'heuristic',
+            qualityScore: 0,
+            assetId: null,
+            reason: 'missing_context'
+        };
+    }
+
+    const trainingResult = await trainingPackService.generateTrainingPack({
+        phrase,
+        cardType,
+        markdown,
+        providerHint: 'gemini',
+        model: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
+        baseName: `${baseName}_train`
+    });
+
+    const sidecarPath = buildTrainingSidecarPath(targetDir, baseName);
+    const sidecarPayload = buildTrainingSidecarPayload(trainingResult, {
+        generationId,
+        phrase,
+        folderName,
+        baseName,
+        cardType
+    });
+    persistTrainingSidecar(sidecarPath, sidecarPayload);
+
+    const saved = dbService.upsertCardTrainingAsset({
+        generationId,
+        folderName,
+        baseFilename: baseName,
+        cardType,
+        status: trainingResult.status,
+        source: trainingResult.source,
+        providerUsed: trainingResult.providerUsed,
+        modelUsed: trainingResult.modelUsed,
+        promptVersion: trainingResult.promptVersion,
+        schemaVersion: trainingResult.schemaVersion,
+        qualityScore: trainingResult.qualityScore,
+        selfConfidence: trainingResult.selfConfidence,
+        coverageScore: trainingResult.coverageScore,
+        validationErrors: trainingResult.validationErrors || [],
+        fallbackReason: trainingResult.fallbackReason || null,
+        tokensInput: trainingResult.tokensInput || 0,
+        tokensOutput: trainingResult.tokensOutput || 0,
+        tokensTotal: trainingResult.tokensTotal || 0,
+        costTotal: trainingResult.costTotal || 0,
+        latencyMs: trainingResult.latencyMs || 0,
+        payload: trainingResult.payload || null,
+        sidecarFilePath: sidecarPath
+    });
+
+    return saved || {
+        ...summarizeTrainingAsset(trainingResult),
+        generationId
+    };
 }
 
 function isGeminiUnavailableError(error) {
@@ -589,6 +724,8 @@ async function handleComparisonMode(phrase, options = {}) {
       outputStructured
     };
 
+    let generationId = null;
+    let trainingSummary = null;
     if (fileResult) {
       try {
         const dbData = prepareInsertData({
@@ -605,7 +742,7 @@ async function handleComparisonMode(phrase, options = {}) {
           cardType: sideCardType || cardType,
           sourceMode: sideSourceMode || sourceMode
         });
-        const generationId = dbService.insertGeneration(dbData);
+        generationId = dbService.insertGeneration(dbData);
         try {
           exampleReviewService.ingestGeneration({
             generationId,
@@ -669,9 +806,39 @@ async function handleComparisonMode(phrase, options = {}) {
       } catch (dbErr) {
         console.error('[Database] Compare insert failed:', dbErr.message);
       }
+
+      if (generationId) {
+        try {
+          const trainingAsset = await generateAndPersistTrainingAsset({
+            generationId,
+            phrase,
+            cardType: sideCardType || cardType,
+            markdown: content.markdown_content,
+            folderName,
+            baseName: fileResult.baseName,
+            targetDir: fileResult.targetDir
+          });
+          trainingSummary = summarizeTrainingAsset(trainingAsset);
+        } catch (trainingErr) {
+          console.warn('[Training] Compare generation failed:', trainingErr.message);
+          trainingSummary = {
+            status: 'failed',
+            source: 'heuristic',
+            qualityScore: 0,
+            assetId: null
+          };
+        }
+      }
     }
 
-    return { output: content, observability, result: fileResult, audio };
+    return {
+      output: content,
+      observability,
+      result: fileResult,
+      audio,
+      generationId: generationId || null,
+      training: trainingSummary
+    };
   };
 
   if (geminiResult.status === 'fulfilled') {
@@ -860,6 +1027,7 @@ app.post('/api/generate', async (req, res) => {
 
     // 插入数据库
     let generationId = null;
+    let trainingSummary = null;
     try {
       const dbData = prepareInsertData({
         phrase,
@@ -949,6 +1117,29 @@ app.post('/api/generate', async (req, res) => {
       }
     }
 
+    if (generationId) {
+      try {
+        const trainingAsset = await generateAndPersistTrainingAsset({
+          generationId,
+          phrase,
+          cardType,
+          markdown: content.markdown_content,
+          folderName,
+          baseName: result.baseName,
+          targetDir: result.targetDir
+        });
+        trainingSummary = summarizeTrainingAsset(trainingAsset);
+      } catch (trainingErr) {
+        console.warn('[Training] Generation failed:', trainingErr.message);
+        trainingSummary = {
+          status: 'failed',
+          source: 'heuristic',
+          qualityScore: 0,
+          assetId: null
+        };
+      }
+    }
+
     res.json({
         success: true,
         experiment_id: expId,
@@ -963,7 +1154,13 @@ app.post('/api/generate', async (req, res) => {
         audio,
         prompt,
         llm_output: content,
-        observability
+        observability,
+        training: trainingSummary || {
+          status: 'failed',
+          source: 'heuristic',
+          qualityScore: 0,
+          assetId: null
+        }
     });
 
   } catch (err) {
@@ -1639,6 +1836,65 @@ app.get('/api/knowledge/summary/latest', (req, res) => {
   }
 });
 
+app.get('/api/training/by-generation/:id', (req, res) => {
+    try {
+        const generationId = Number(req.params.id || 0);
+        if (!generationId) {
+            return res.status(400).json({ error: 'invalid generation id' });
+        }
+        const training = dbService.getCardTrainingAssetByGenerationId(generationId);
+        if (!training) {
+            return res.status(404).json({ error: 'training asset not found' });
+        }
+        res.json({ success: true, training });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/training/by-file', (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const base = String(req.query.base || '').trim();
+        if (!folder || !base) {
+            return res.status(400).json({ error: 'folder and base are required' });
+        }
+        const training = dbService.getCardTrainingAssetByFile(folder, base);
+        if (!training) {
+            return res.status(404).json({ error: 'training asset not found' });
+        }
+        res.json({ success: true, training });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/training/by-generation/:id/regenerate', async (req, res) => {
+    try {
+        const generationId = Number(req.params.id || 0);
+        if (!generationId) {
+            return res.status(400).json({ error: 'invalid generation id' });
+        }
+        const record = dbService.getGenerationById(generationId);
+        if (!record) {
+            return res.status(404).json({ error: 'generation not found' });
+        }
+        const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : '';
+        const training = await generateAndPersistTrainingAsset({
+            generationId: record.id,
+            phrase: record.phrase,
+            cardType: record.card_type,
+            markdown: record.markdown_content || '',
+            folderName: record.folder_name,
+            baseName: record.base_filename,
+            targetDir
+        });
+        res.json({ success: true, training });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/folders', (req, res) => {
     const listFoldersWithHtml = require('./services/fileManager').listFoldersWithHtml; // Lazy require
     try {
@@ -1785,7 +2041,6 @@ app.delete('/api/records/by-file', (req, res) => {
             return res.status(400).json({ error: 'folder and base are required' });
         }
 
-        const { deleteRecordFiles } = require('./services/fileManager');
         const deletedPaths = new Set();
         const baseCandidates = Array.from(new Set([baseRaw, baseTrimmed].filter(Boolean)));
 
@@ -1802,6 +2057,9 @@ app.delete('/api/records/by-file', (req, res) => {
                 recordDetail?.html_file_path,
                 recordDetail?.meta_file_path,
             ].filter(Boolean);
+            if (recordDetail?.md_file_path && recordDetail?.base_filename) {
+                recordFiles.push(buildTrainingSidecarPath(path.dirname(recordDetail.md_file_path), recordDetail.base_filename));
+            }
 
             if (recordDetail?.audioFiles?.length) {
                 recordDetail.audioFiles.forEach((audio) => {
@@ -1832,12 +2090,17 @@ app.delete('/api/records/by-file', (req, res) => {
         baseCandidates.forEach((candidate) => {
             highlightDeleted += dbService.deleteCardHighlightByFile(folder, candidate);
         });
+        let trainingDeleted = 0;
+        baseCandidates.forEach((candidate) => {
+            trainingDeleted += dbService.deleteCardTrainingAssetByFile(folder, candidate);
+        });
 
         res.json({
             success: true,
             deletedFiles: deletedPaths.size,
             recordDeleted: Boolean(record),
-            highlightDeleted
+            highlightDeleted,
+            trainingDeleted
         });
     } catch (err) {
         console.error('[API /records/by-file DELETE] Error:', err);
@@ -1901,7 +2164,10 @@ app.delete('/api/records/:id', async (req, res) => {
         const filesToDelete = [
             record.md_file_path,
             record.html_file_path,
-            record.meta_file_path
+            record.meta_file_path,
+            record.md_file_path && record.base_filename
+                ? buildTrainingSidecarPath(path.dirname(record.md_file_path), record.base_filename)
+                : null
         ].filter(Boolean);
 
         // 获取音频文件路径
@@ -1914,12 +2180,12 @@ app.delete('/api/records/:id', async (req, res) => {
         }
 
         // 删除文件
-        let deletedCount = 0;
+        const deletedPaths = new Set();
         for (const filePath of filesToDelete) {
             try {
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
-                    deletedCount++;
+                    deletedPaths.add(filePath);
                     console.log(`[Delete] Removed file: ${filePath}`);
                 }
             } catch (fileErr) {
@@ -1927,19 +2193,29 @@ app.delete('/api/records/:id', async (req, res) => {
             }
         }
 
+        // 兜底清理：处理历史遗留的音频/sidecar文件（即使未写入 audio_files 表也可清理）
+        try {
+            const fallbackDeleted = deleteRecordFiles(record.folder_name, record.base_filename);
+            fallbackDeleted.forEach((filePath) => deletedPaths.add(filePath));
+        } catch (cleanupErr) {
+            console.warn('[Delete] Fallback file cleanup failed:', cleanupErr.message);
+        }
+
         // 3. 从数据库删除记录（级联删除会自动删除音频和observability记录）
         dbService.deleteGeneration(recordId);
 
         // 兼容旧数据：若标红记录未绑定 generation_id，则按 folder/base 再清理一次
         const highlightDeleted = dbService.deleteCardHighlightByFile(record.folder_name, record.base_filename);
+        const trainingDeleted = dbService.deleteCardTrainingAssetByFile(record.folder_name, record.base_filename);
 
-        console.log(`[Delete] Record ${recordId} deleted (${deletedCount} files removed)`);
+        console.log(`[Delete] Record ${recordId} deleted (${deletedPaths.size} files removed)`);
 
         res.json({
             success: true,
             message: 'Record deleted successfully',
-            deletedFiles: deletedCount,
-            highlightDeleted
+            deletedFiles: deletedPaths.size,
+            highlightDeleted,
+            trainingDeleted
         });
 
     } catch (err) {
