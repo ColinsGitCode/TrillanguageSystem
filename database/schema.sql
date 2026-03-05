@@ -611,5 +611,214 @@ CREATE INDEX IF NOT EXISTS idx_ch_file ON card_highlights(folder_name, base_file
 CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
 
 -- ========================================
+-- 表 18: knowledge_jobs（知识分析任务）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_type TEXT NOT NULL,                     -- summary/index/synonym_boundary/grammar_link/cluster/issues_audit
+  status TEXT NOT NULL DEFAULT 'queued',      -- queued/running/success/partial/failed/cancelled
+  scope_json TEXT,                            -- JSON
+  batch_size INTEGER DEFAULT 50,
+  total_batches INTEGER DEFAULT 0,
+  done_batches INTEGER DEFAULT 0,
+  error_batches INTEGER DEFAULT 0,
+  result_summary_json TEXT,                   -- JSON
+  error_message TEXT,
+  engine_version TEXT DEFAULT 'local-v1',
+  triggered_by TEXT DEFAULT 'owner',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME,
+  finished_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_kj_status_created ON knowledge_jobs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kj_type_created ON knowledge_jobs(job_type, created_at DESC);
+
+-- ========================================
+-- 表 19: knowledge_outputs_raw（批次原始输出留痕）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_outputs_raw (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL,
+  batch_no INTEGER NOT NULL DEFAULT 1,
+  input_digest TEXT,
+  status TEXT NOT NULL DEFAULT 'ok',
+  output_json TEXT NOT NULL,                  -- JSON
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kor_job ON knowledge_outputs_raw(job_id, batch_no);
+
+-- ========================================
+-- 表 20: knowledge_terms_index（词条索引）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_terms_index (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL UNIQUE,
+  phrase TEXT NOT NULL,
+  card_type TEXT,
+  folder_name TEXT,
+  lang_profile TEXT,                          -- zh/en/ja/mixed
+  en_headword TEXT,
+  ja_headword TEXT,
+  zh_headword TEXT,
+  aliases_json TEXT,                          -- JSON array
+  tags_json TEXT,                             -- JSON array
+  score REAL DEFAULT 0,
+  last_job_id INTEGER,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE,
+  FOREIGN KEY (last_job_id) REFERENCES knowledge_jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_kti_phrase ON knowledge_terms_index(phrase);
+CREATE INDEX IF NOT EXISTS idx_kti_lang_profile ON knowledge_terms_index(lang_profile);
+CREATE INDEX IF NOT EXISTS idx_kti_updated ON knowledge_terms_index(updated_at DESC);
+
+-- ========================================
+-- 表 21: knowledge_issues（问题审计）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_issues (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_type TEXT NOT NULL,                   -- duplicate_phrase/audio_missing/format_anomaly
+  severity TEXT NOT NULL DEFAULT 'medium',    -- low/medium/high
+  generation_id INTEGER,
+  phrase TEXT,
+  fingerprint TEXT NOT NULL,
+  detail_json TEXT,                           -- JSON
+  resolved INTEGER DEFAULT 0,
+  last_job_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(issue_type, fingerprint),
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL,
+  FOREIGN KEY (last_job_id) REFERENCES knowledge_jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ki_type_resolved ON knowledge_issues(issue_type, resolved, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ki_generation ON knowledge_issues(generation_id);
+
+-- ========================================
+-- 表 22: knowledge_synonym_groups（语义边界组）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_synonym_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_key TEXT NOT NULL,
+  tone TEXT,
+  register_text TEXT,
+  collocation_note TEXT,
+  misuse_risk TEXT DEFAULT 'medium',
+  recommendation TEXT,
+  confidence REAL DEFAULT 0,
+  coverage_ratio REAL DEFAULT 0,
+  version_job_id INTEGER NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ksg_active_key ON knowledge_synonym_groups(is_active, group_key);
+CREATE INDEX IF NOT EXISTS idx_ksg_version ON knowledge_synonym_groups(version_job_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_synonym_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL,
+  generation_id INTEGER,
+  term TEXT NOT NULL,
+  lang TEXT NOT NULL,                         -- en/ja/zh
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (group_id) REFERENCES knowledge_synonym_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ksm_group ON knowledge_synonym_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_ksm_generation ON knowledge_synonym_members(generation_id);
+
+-- ========================================
+-- 表 23: knowledge_grammar_patterns（语法模式）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_grammar_patterns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pattern TEXT NOT NULL,
+  explanation_zh TEXT,
+  confidence REAL DEFAULT 0,
+  version_job_id INTEGER NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kgp_active_pattern ON knowledge_grammar_patterns(is_active, pattern);
+CREATE INDEX IF NOT EXISTS idx_kgp_version ON knowledge_grammar_patterns(version_job_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_grammar_refs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pattern_id INTEGER NOT NULL,
+  generation_id INTEGER NOT NULL,
+  sentence_excerpt TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(pattern_id, generation_id, sentence_excerpt),
+  FOREIGN KEY (pattern_id) REFERENCES knowledge_grammar_patterns(id) ON DELETE CASCADE,
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kgr_pattern ON knowledge_grammar_refs(pattern_id);
+CREATE INDEX IF NOT EXISTS idx_kgr_generation ON knowledge_grammar_refs(generation_id);
+
+-- ========================================
+-- 表 24: knowledge_clusters（主题聚类）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS knowledge_clusters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cluster_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  description TEXT,
+  keywords_json TEXT,                         -- JSON array
+  confidence REAL DEFAULT 0,
+  version_job_id INTEGER NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kc_active_label ON knowledge_clusters(is_active, label);
+CREATE INDEX IF NOT EXISTS idx_kc_version ON knowledge_clusters(version_job_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_cluster_cards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cluster_id INTEGER NOT NULL,
+  generation_id INTEGER NOT NULL,
+  score REAL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(cluster_id, generation_id),
+  FOREIGN KEY (cluster_id) REFERENCES knowledge_clusters(id) ON DELETE CASCADE,
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
+
+-- ========================================
 -- 完成初始化
 -- ========================================

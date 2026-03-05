@@ -19,6 +19,7 @@ const goldenExamplesService = require('./services/goldenExamplesService');
 const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
 const exampleReviewService = require('./services/exampleReviewService');
+const knowledgeJobService = require('./services/knowledgeJobService');
 const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -1397,6 +1398,141 @@ app.post('/api/review/examples/:id/reviews', (req, res) => {
     res.json({ success: true, review: result });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ========== Knowledge analysis jobs API ==========
+
+app.post('/api/knowledge/jobs/start', (req, res) => {
+  try {
+    const {
+      jobType,
+      scope = {},
+      batchSize = 50,
+      triggeredBy = 'owner'
+    } = req.body || {};
+
+    if (!jobType) {
+      return res.status(400).json({ error: 'jobType is required' });
+    }
+
+    const normalizedScope = {
+      folderFrom: scope.folderFrom || null,
+      folderTo: scope.folderTo || null,
+      cardTypes: Array.isArray(scope.cardTypes) ? scope.cardTypes : undefined,
+      limit: scope.limit ? Number(scope.limit) : undefined
+    };
+
+    const job = knowledgeJobService.startJob({
+      jobType,
+      scope: normalizedScope,
+      batchSize: Number(batchSize || 50),
+      triggeredBy: String(triggeredBy || 'owner')
+    });
+    return res.json({ success: true, job });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/jobs', (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 20);
+    const jobs = knowledgeJobService.listJobs(limit);
+    res.json({ success: true, jobs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/jobs/:id', (req, res) => {
+  try {
+    const jobId = Number(req.params.id);
+    if (!jobId) return res.status(400).json({ error: 'invalid job id' });
+    const job = knowledgeJobService.getJob(jobId);
+    if (!job) return res.status(404).json({ error: 'job not found' });
+    res.json({ success: true, job });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/knowledge/jobs/:id/cancel', (req, res) => {
+  try {
+    const jobId = Number(req.params.id);
+    if (!jobId) return res.status(400).json({ error: 'invalid job id' });
+    const cancelled = knowledgeJobService.cancelJob(jobId);
+    res.json({ success: true, cancelled });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/index', (req, res) => {
+  try {
+    const query = String(req.query.query || '');
+    const limit = Number(req.query.limit || 100);
+    const entries = dbService.getKnowledgeIndex({ query, limit });
+    res.json({ success: true, entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/synonyms', (req, res) => {
+  try {
+    const phrase = String(req.query.phrase || '');
+    if (!phrase) return res.status(400).json({ error: 'phrase is required' });
+    const limit = Number(req.query.limit || 20);
+    const groups = dbService.getKnowledgeSynonymsByPhrase(phrase, limit);
+    res.json({ success: true, groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/grammar', (req, res) => {
+  try {
+    const pattern = String(req.query.pattern || '');
+    const limit = Number(req.query.limit || 30);
+    const patterns = dbService.getKnowledgeGrammarPatterns({ pattern, limit });
+    res.json({ success: true, patterns });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/clusters', (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 20);
+    const clusters = dbService.getKnowledgeClusters(limit);
+    res.json({ success: true, clusters });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/issues', (req, res) => {
+  try {
+    const issueType = req.query.issueType ? String(req.query.issueType) : undefined;
+    const severity = req.query.severity ? String(req.query.severity) : undefined;
+    const resolved = req.query.resolved === undefined
+      ? undefined
+      : ['1', 'true', 'yes'].includes(String(req.query.resolved).toLowerCase());
+    const limit = Number(req.query.limit || 100);
+    const issues = dbService.getKnowledgeIssues({ issueType, severity, resolved, limit });
+    res.json({ success: true, issues });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/summary/latest', (req, res) => {
+  try {
+    const summary = dbService.getLatestKnowledgeSummary();
+    res.json({ success: true, summary: summary || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
