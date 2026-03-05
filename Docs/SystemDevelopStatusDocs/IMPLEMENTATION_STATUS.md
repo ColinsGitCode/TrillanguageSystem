@@ -1,14 +1,15 @@
 # 实现状态报告
 
-**日期**: 2026-03-03
-**版本**: v3.6.6
-**状态**: 进行中（主链路稳定，已新增日语语法卡片与类型化队列）
+**日期**: 2026-03-05
+**版本**: v3.6.8
+**状态**: 进行中（主链路稳定，Mission Control 已接入 Knowledge Ops）
 
 ## 1. 当前阶段结论
 
 - 生成主链路（文本/OCR -> 卡片 -> 音频 -> 落库）稳定
 - few-shot 实验追踪与导出链路可复现
 - 人工评分/评论与 review-gated 注入机制已落地
+- Knowledge Ops（知识任务）已接入 Mission Control，可从 UI 启动/查看任务
 - 主要瓶颈从“机制缺失”转为“样本质量与成本效率平衡”
 
 ## 2. 已完成能力
@@ -158,6 +159,25 @@
   - 优先按 `meta.created_at`
   - 缺失时回退 `.html mtime`
 
+### 2.14 Knowledge Ops 与全量分析验证（v3.6.8）
+
+- Mission Control 顶部新增 `Knowledge Ops` 面板：
+  - task type / scope / batch size 输入
+  - start、jobs 列表、job detail、latest summary 展示
+- 前端新增 API 封装：
+  - `startKnowledgeJob/getKnowledgeJobs/getKnowledgeJob/cancelKnowledgeJob`
+  - `getKnowledgeSummaryLatest/getKnowledgeIndex/getKnowledgeIssues/getKnowledgeGrammar/getKnowledgeClusters/getKnowledgeSynonyms`
+- 后端知识任务 API 已接通并通过预检：
+  - `POST /api/knowledge/jobs/start`
+  - `GET /api/knowledge/jobs` / `GET /api/knowledge/jobs/:id`
+  - `POST /api/knowledge/jobs/:id/cancel`
+  - `GET /api/knowledge/summary/latest` / `index` / `issues` / `grammar` / `clusters` / `synonyms`
+- 2026-03-05 全量任务执行结果（success）：
+  - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
+  - 总卡片：266；index 条目：266；issues：156；grammar patterns：4；clusters：4
+- UI 验证报告已落地：
+  - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+
 ### 2.5 Gemini host-proxy 稳定化
 
 - 容器通过 Gateway `18888` 调用宿主机执行器
@@ -175,6 +195,7 @@
 7. 当前任务队列仅前端内存态，页面刷新会丢失未完成队列（待持久化）
 8. 选中文本直接入语法队列时，若选区含中日混合整句，baseName 可能偏长（建议后续增加归一化截断）
 9. 当前字体方案为系统字体栈，跨终端一致性仍受操作系统字体安装情况影响（后续可选自托管 webfont）
+10. `cancel` 在极短任务场景会出现“已完成导致取消失败”的竞态（表现为 `cancelled=false`），需通过最小执行时间或更细粒度状态机优化体验
 
 ## 4. 下一步重点
 
@@ -183,6 +204,7 @@
 3. 将观测指标门禁化（SLO + 发布阈值）
 4. 把评审结果与实验结果联动，形成”评分→注入→效果→回滚调参”闭环
 5. 对语法卡入口增加选区清洗策略（去翻译行、保留核心语法点）
+6. 基于 `knowledge_issues` 开展第一轮治理（audio_missing / format_anomaly / duplicate_phrase），并建立修复后重跑基线
 
 ## 5. 关键文档索引
 
@@ -190,6 +212,7 @@
 - 后端：`Docs/SystemDevelopStatusDocs/BACKEND.md`
 - 前端：`Docs/SystemDevelopStatusDocs/FRONTEND.md`
 - 最新仓库状态：`Docs/SystemDevelopStatusDocs/repo_status.md`
+- Mission Control UI 验证：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
 - 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
 - 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`

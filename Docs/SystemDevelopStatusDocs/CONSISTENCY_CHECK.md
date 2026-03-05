@@ -1,6 +1,6 @@
 # Repo 文档与代码一致性检查
 
-**检查日期**: 2026-02-26
+**检查日期**: 2026-03-05
 **检查范围**: `Docs/SystemDevelopStatusDocs/*` 对照当前代码主链路
 
 ## 1. 已对齐项
@@ -16,6 +16,10 @@
 - 运维脚本对齐：`scripts/updateLegacyCardStyle.js` 与 `npm run cards:migrate-style` 已记录
 - v3.5 选区生成对齐：`✦ Generate Card` 已切换为静默任务队列（不跳转），并补充 Ruby-aware 选区提取策略
 - v3.5 主入口对齐：首页 `Generate` 入口已切换为静默任务队列（支持连续入队）
+- Knowledge Ops 对齐：
+  - 前端 `dashboard.html/dashboard.js/api.js` 已接入知识任务面板与调用链
+  - 后端 `server.js` 的 `/api/knowledge/*` 路由与 `knowledgeJobService` 已对齐
+  - 文档 `API.md/BACKEND.md/FRONTEND.md` 已覆盖 Knowledge Ops
 
 ## 2. v3.3 评审改进对齐
 
@@ -30,10 +34,19 @@
 - `FEATURE_UPDATE_v2.1.md` 属于历史发布归档，不作为当前实现基线
 - 历史说明保留用于回溯，不影响当前状态判断
 
-## 4. 结论
+## 4. 最新验证补充（2026-03-05）
 
-- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.5）
+- 全量知识任务执行结果已产出并可查询：
+  - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster` 均为 `success`
+  - 结果规模：266 cards / 266 index / 156 issues / 4 grammar patterns / 4 clusters
+- Mission Control UI 验证报告已新增：
+  - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+
+## 5. 结论
+
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.8）
 - 当前文档可直接支撑：
   1. 接口联调
   2. 评分与注入机制解释（含 TTS 门控、采样模式、回滚）
   3. 可观测与实验链路说明
+  4. Mission Control Knowledge Ops 的任务化验证与运行

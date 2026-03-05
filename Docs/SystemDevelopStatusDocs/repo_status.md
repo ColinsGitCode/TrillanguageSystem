@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-03-03
-**版本**: 3.6.6
+**最后更新**: 2026-03-05
+**版本**: 3.6.8
 
 ## 1. 项目定位
 
@@ -17,7 +17,7 @@
 - 服务层：`services/*`（LLM、OCR、TTS、few-shot、评审、观测、DB）
 - 存储层：
   - 文件：按日期目录 `YYYYMMDD`
-  - SQLite：16 张表（业务 + 观测 + 实验 + 评审）
+  - SQLite：27+ 张表（业务 + 观测 + 实验 + 评审 + 知识任务/知识物化）
 - 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Gateway/Executor
 
 ## 3. 当前功能清单
@@ -122,6 +122,16 @@
 - 学习卡片弹窗下调，避免遮挡顶部状态条
 - Phrase List 按生成时间倒序展示（同日最新卡片优先）
 
+### 3.14 Mission Control Knowledge Ops（v3.6.8）
+
+- 在 `dashboard.html` 顶部新增 `Knowledge Ops` 面板
+- 支持 UI 触发知识任务：`summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
+- 支持任务列表、任务详情、最新 summary 与只读结果预览
+- 对应 API 已接通并在 2026-03-05 完成全量执行：
+  - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster` 全部 success
+  - 全量结果：266 cards / 266 index / 156 issues / 4 grammar patterns / 4 clusters
+- UI 验证报告：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+
 ## 4. 主线技术策略
 
 - 默认主链路：本地 LLM
@@ -141,6 +151,7 @@
 - `Docs/SystemDevelopStatusDocs/BACKEND.md`
 - `Docs/SystemDevelopStatusDocs/FRONTEND.md`
 - `Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
+- `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
 - `Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - `Docs/SLIDES_OUTLINES.md`
 
