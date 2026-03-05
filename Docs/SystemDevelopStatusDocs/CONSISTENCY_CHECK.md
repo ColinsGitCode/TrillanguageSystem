@@ -42,10 +42,13 @@
   - 结果规模：266 cards / 266 index / 156 issues / 4 grammar patterns / 4 clusters
 - Mission Control UI 验证报告已新增：
   - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+- P1/P2 修复已对齐：
+  - `databaseService.js` 同义边界 key 归一 + `id:<id>` 直查，修复 Knowledge Hub 详情 404
+  - `app.js` / `modern-card.css` 删除确认改为内嵌 popover，新增稳定测试选择器
 
 ## 5. 结论
 
-- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.9）
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.10）
 - 当前文档可直接支撑：
   1. 接口联调
   2. 评分与注入机制解释（含 TTS 门控、采样模式、回滚）

@@ -56,6 +56,30 @@ function safeJsonParse(text, fallback) {
   }
 }
 
+function normalizeSynonymLookupKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function sanitizeSynonymDisplayKey(value) {
+  const key = String(value || '').trim();
+  if (!key) return '';
+  const lower = key.toLowerCase();
+  if (lower === '...' || lower === 'null' || lower === 'undefined' || lower === 'n/a' || lower === 'na') {
+    return '';
+  }
+  return key;
+}
+
+function buildSynonymDetailKey(row = {}) {
+  const pairKey = sanitizeSynonymDisplayKey(row.pair_key);
+  if (pairKey) return pairKey;
+  const groupKey = sanitizeSynonymDisplayKey(row.group_key);
+  if (groupKey) return groupKey;
+  const rowId = Number(row.id || 0);
+  if (rowId > 0) return `id:${rowId}`;
+  return '';
+}
+
 function readTableColumns(db, tableName) {
   return db.prepare(`PRAGMA table_info(${tableName})`).all();
 }
@@ -2745,7 +2769,7 @@ class DatabaseService {
     return groups.map((group) => ({
       id: group.id,
       groupKey: group.group_key,
-      pairKey: group.pair_key || group.group_key,
+      pairKey: buildSynonymDetailKey(group),
       termA: group.term_a || null,
       termB: group.term_b || null,
       boundaryMatrix: {
@@ -2823,7 +2847,7 @@ class DatabaseService {
       page: normalizedPage,
       pageSize: normalizedPageSize,
       items: rows.map((row) => ({
-        pairKey: row.pair_key || row.group_key,
+        pairKey: buildSynonymDetailKey(row),
         groupKey: row.group_key,
         termA: row.term_a || null,
         termB: row.term_b || null,
@@ -2842,26 +2866,57 @@ class DatabaseService {
   }
 
   getKnowledgeSynonymBoundaryDetail({ pairKey, jobId } = {}) {
-    const normalizedKey = String(pairKey || '').trim().toLowerCase();
-    if (!normalizedKey) return null;
-    const params = { pairKey: normalizedKey };
-    const row = this.db.prepare(jobId
-      ? `
-        SELECT *
-        FROM knowledge_synonym_groups
-        WHERE pair_key = @pairKey
-          AND version_job_id = @jobId
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `
-      : `
-        SELECT *
-        FROM knowledge_synonym_groups
-        WHERE pair_key = @pairKey
-          AND is_active = 1
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `).get(jobId ? { ...params, jobId: Number(jobId) } : params);
+    const rawKey = String(pairKey || '').trim();
+    if (!rawKey) return null;
+
+    const idMatch = rawKey.match(/^id:(\d+)$/i);
+    const normalizedKey = normalizeSynonymLookupKey(rawKey);
+    const baseParams = { pairKey: normalizedKey };
+    let row = null;
+
+    if (idMatch) {
+      const id = Number(idMatch[1]);
+      row = this.db.prepare(jobId
+        ? `
+          SELECT *
+          FROM knowledge_synonym_groups
+          WHERE id = @id
+            AND version_job_id = @jobId
+          LIMIT 1
+        `
+        : `
+          SELECT *
+          FROM knowledge_synonym_groups
+          WHERE id = @id
+            AND is_active = 1
+          LIMIT 1
+        `).get(jobId ? { id, jobId: Number(jobId) } : { id });
+    } else {
+      row = this.db.prepare(jobId
+        ? `
+          SELECT *
+          FROM knowledge_synonym_groups
+          WHERE (
+            LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
+            OR LOWER(TRIM(COALESCE(group_key, ''))) = @pairKey
+          )
+            AND version_job_id = @jobId
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `
+        : `
+          SELECT *
+          FROM knowledge_synonym_groups
+          WHERE (
+            LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
+            OR LOWER(TRIM(COALESCE(group_key, ''))) = @pairKey
+          )
+            AND is_active = 1
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(jobId ? { ...baseParams, jobId: Number(jobId) } : baseParams);
+    }
+
     if (!row) return null;
     const members = this.db.prepare(`
       SELECT generation_id, term, lang
@@ -2874,17 +2929,22 @@ class DatabaseService {
       lang: item.lang || ''
     }));
 
+    const candidateKey = normalizeSynonymLookupKey(
+      sanitizeSynonymDisplayKey(row.pair_key)
+      || sanitizeSynonymDisplayKey(row.group_key)
+      || rawKey
+    );
     const candidates = this.db.prepare(`
       SELECT candidate_score, evidence_hash, evidence_snapshot_json, status, llm_latency_ms, llm_error, updated_at
       FROM knowledge_synonym_candidates
-      WHERE pair_key = @pairKey
+      WHERE LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
       ORDER BY updated_at DESC
       LIMIT 1
-    `).get(params);
+    `).get({ pairKey: candidateKey });
 
     return {
       id: Number(row.id),
-      pairKey: row.pair_key || row.group_key,
+      pairKey: buildSynonymDetailKey(row),
       groupKey: row.group_key || '',
       termA: row.term_a || null,
       termB: row.term_b || null,

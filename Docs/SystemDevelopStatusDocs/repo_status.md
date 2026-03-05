@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
 **最后更新**: 2026-03-05
-**版本**: 3.6.9
+**版本**: 3.6.10
 
 ## 1. 项目定位
 
@@ -141,6 +141,17 @@
   - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster` 全部 success
   - 全量结果：266 cards / 266 index / 156 issues / 4 grammar patterns / 4 clusters
 - UI 验证报告：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+
+### 3.15 Knowledge 同义边界与删除交互修复（v3.6.10）
+
+- 修复 Knowledge Hub 同义边界详情偶发 404：
+  - `pair_key/group_key` 查询统一做 trim + lowercase 归一
+  - 无效 key 自动回退为稳定 `id:<rowId>` 形式，前后端可一致读取
+  - 详情接口新增 `id:<id>` 直查路径，避免脏数据导致详情不可达
+- 修复单卡弹窗删除交互稳定性：
+  - 删除入口由原生 `confirm()` 改为卡片内嵌确认弹层（popover）
+  - 新增稳定测试选择器：`card-delete-trigger/cancel/confirm`
+  - 交互更稳定，避免浏览器阻塞弹窗影响自动化与批量操作
 
 ## 4. 主线技术策略
 

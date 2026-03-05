@@ -1,7 +1,7 @@
 # 实现状态报告
 
 **日期**: 2026-03-05
-**版本**: v3.6.9
+**版本**: v3.6.10
 **状态**: 进行中（主链路稳定，Mission Control/Knowledge OPS/Knowledge Hub 已拆分为同级页面）
 
 ## 1. 当前阶段结论
@@ -195,6 +195,17 @@
   - 公共模块（基础设施状态、任务队列）跨页面复用
 - `dashboard.js` 增加空 DOM 容错，避免多页面复用时因缺失节点抛错
 - 修复知识关联查询排序歧义（`getKnowledgeTermRelations` 使用 `t.score/t.updated_at`）
+
+### 2.16 P1/P2 稳定性修复（v3.6.10）
+
+- P1（Knowledge Hub 同义边界详情 404）：
+  - 同义边界 key 统一归一（trim/lowercase）
+  - 列表 key 失效时回退 `id:<rowId>`
+  - 详情接口支持 `id:<id>` 直查与 `pair_key/group_key` 兼容查询
+- P2（单卡弹窗删除交互不稳定）：
+  - 删除确认从原生 `confirm()` 改为弹窗内 popover
+  - 增加稳定测试选择器（trigger/cancel/confirm）
+  - 删除链路保持兼容：优先按记录 id，失败回退按 `folder/base` 删除
 
 ### 2.5 Gemini host-proxy 稳定化
 

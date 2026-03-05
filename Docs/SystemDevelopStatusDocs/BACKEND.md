@@ -1,7 +1,7 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.6.7
+**版本**: 3.6.10
 **更新日期**: 2026-03-05
 
 ## 1. 核心目录
@@ -128,6 +128,16 @@ scripts/
   - 支持 IPv4 fallback 策略
 
 > 说明：容器内部不要求安装 Gemini CLI；真实 CLI 由宿主机 Host Executor 执行。
+
+### 6.1 知识同义边界 key 归一修复（v3.6.10）
+
+- 问题：历史脏数据下 `pair_key/group_key` 可能为空、包含省略符或大小写/空白不一致，导致 Knowledge Hub 详情查询 404。
+- 修复点（`databaseService.js`）：
+  - 新增 key 规范化方法：trim + lowercase；
+  - 列表输出统一生成稳定 `pairKey`（优先有效 `pair_key`，再 `group_key`，最终 fallback `id:<rowId>`）；
+  - 详情查询支持三种路径：`id:<id>` / `pair_key` / `group_key`；
+  - 查询语句改为 `LOWER(TRIM(...))`，降低脏数据影响。
+- 结果：Knowledge Hub 同义边界列表与详情可稳定联动，异常 key 不再导致前端空页。
 
 ## 7. OCR 机制
 

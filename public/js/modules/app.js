@@ -2941,7 +2941,15 @@ function renderCardModal(markdown, title, options = {}) {
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel" style="background: #ffffff;">
-            <button class="mc-delete" id="mcDeleteBtn" title="Delete Record">🗑️</button>
+            <button class="mc-delete" id="mcDeleteBtn" type="button" title="Delete Record" aria-label="Delete Record" data-testid="card-delete-trigger">🗑️</button>
+            <div class="mc-delete-popover hidden" id="mcDeletePopover" role="dialog" aria-live="polite" aria-label="删除确认">
+                <div class="mc-delete-popover-title">删除此学习卡片？</div>
+                <div class="mc-delete-popover-desc">将删除卡片、音频和关联记录，此操作不可恢复。</div>
+                <div class="mc-delete-popover-actions">
+                    <button class="mc-delete-popover-cancel" id="mcDeleteCancelBtn" type="button" data-testid="card-delete-cancel">取消</button>
+                    <button class="mc-delete-popover-confirm" id="mcDeleteConfirmBtn" type="button" data-testid="card-delete-confirm">确认删除</button>
+                </div>
+            </div>
             <button class="mc-close" id="mcCloseBtn">×</button>
 
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
@@ -3114,36 +3122,63 @@ function renderCardModal(markdown, title, options = {}) {
 
     // 绑定删除按钮
     const deleteBtn = document.getElementById('mcDeleteBtn');
-    if (deleteBtn) {
-        deleteBtn.onclick = async () => {
-            if (confirm('Are you sure you want to delete this record? This cannot be undone.')) {
+    const deletePopover = document.getElementById('mcDeletePopover');
+    const deleteCancelBtn = document.getElementById('mcDeleteCancelBtn');
+    const deleteConfirmBtn = document.getElementById('mcDeleteConfirmBtn');
+    const setDeletePopoverVisible = (visible) => {
+        if (!deletePopover) return;
+        deletePopover.classList.toggle('hidden', !visible);
+        deleteBtn?.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    };
+
+    deleteCancelBtn?.addEventListener('click', () => {
+        setDeletePopoverVisible(false);
+    });
+
+    deleteConfirmBtn?.addEventListener('click', async () => {
+        if (!deleteConfirmBtn || deleteConfirmBtn.disabled) return;
+        deleteConfirmBtn.disabled = true;
+        deleteConfirmBtn.textContent = '删除中...';
+        deleteCancelBtn && (deleteCancelBtn.disabled = true);
+        try {
+            if (options.metrics && options.metrics.id) {
                 try {
-                    if (options.metrics && options.metrics.id) {
-                        try {
-                            await api.deleteRecord(options.metrics.id);
-                        } catch (err) {
-                            // 历史数据可能存在 DB 记录缺失，回退到按 folder/base 删除文件。
-                            const canFallback = options.folder && options.baseName;
-                            const notFound = /record not found/i.test(String(err?.message || ''));
-                            if (canFallback && notFound) {
-                                await api.deleteRecordByFile(options.folder, options.baseName);
-                            } else {
-                                throw err;
-                            }
-                        }
-                    } else if (options.folder && options.baseName) {
+                    await api.deleteRecord(options.metrics.id);
+                } catch (err) {
+                    // 历史数据可能存在 DB 记录缺失，回退到按 folder/base 删除文件。
+                    const canFallback = options.folder && options.baseName;
+                    const notFound = /record not found/i.test(String(err?.message || ''));
+                    if (canFallback && notFound) {
                         await api.deleteRecordByFile(options.folder, options.baseName);
                     } else {
-                        throw new Error('Cannot identify record to delete');
+                        throw err;
                     }
-                    clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '', { removeAllVersions: true });
-                    closeModal();
-                    loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
-                } catch (e) {
-                    alert('Delete failed: ' + e.message);
                 }
+            } else if (options.folder && options.baseName) {
+                await api.deleteRecordByFile(options.folder, options.baseName);
+            } else {
+                throw new Error('Cannot identify record to delete');
             }
+            clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '', { removeAllVersions: true });
+            closeModal();
+            loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
+        } catch (e) {
+            alert('Delete failed: ' + e.message);
+            deleteConfirmBtn.disabled = false;
+            deleteConfirmBtn.textContent = '确认删除';
+            deleteCancelBtn && (deleteCancelBtn.disabled = false);
+        }
+    });
+
+    if (deleteBtn) {
+        deleteBtn.onclick = async () => {
+            const currentlyVisible = deletePopover && !deletePopover.classList.contains('hidden');
+            setDeletePopoverVisible(!currentlyVisible);
         };
+    }
+
+    if (deletePopover) {
+        deletePopover.addEventListener('click', (event) => event.stopPropagation());
     }
 
     // 绑定关闭按钮

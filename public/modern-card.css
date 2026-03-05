@@ -486,6 +486,7 @@ rt {
   position: absolute;
   top: 1rem;
   left: 1rem;
+  z-index: 35;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -512,6 +513,68 @@ rt {
   transform: none;
 }
 
+.mc-delete-popover {
+  position: absolute;
+  top: 1rem;
+  left: 4.4rem;
+  z-index: 34;
+  width: 300px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+  box-shadow: 0 10px 24px rgba(185, 28, 28, 0.18);
+  color: #7f1d1d;
+}
+
+.mc-delete-popover-title {
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.mc-delete-popover-desc {
+  margin-top: 4px;
+  font-size: 0.72em;
+  line-height: 1.35;
+  color: #991b1b;
+}
+
+.mc-delete-popover-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mc-delete-popover-cancel,
+.mc-delete-popover-confirm {
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.7em;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.mc-delete-popover-cancel {
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #7f1d1d;
+}
+
+.mc-delete-popover-confirm {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+.mc-delete-popover-cancel:disabled,
+.mc-delete-popover-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .mc-error .mc-header {
   background: linear-gradient(180deg, rgba(249, 115, 22, 0.16) 0%, #ffffff 100%);
 }
@@ -527,6 +590,12 @@ rt {
   .mc-header { padding: 2rem 1.5rem; }
   .mc-body { padding: 1.5rem 1.5rem; }
   .mc-phrase { font-size: 1.8rem; }
+  .mc-delete-popover {
+    left: 1rem;
+    right: 1rem;
+    top: 4.3rem;
+    width: auto;
+  }
 }
 
 /* =========================================

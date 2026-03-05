@@ -1,7 +1,7 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.6.9
+**版本**: 3.6.10
 **更新日期**: 2026-03-05
 
 ## 1. 前端目录
@@ -103,6 +103,18 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - Prompt / LLM Output 支持 `RAW` / `STRUCT` 切换
 - 支持一键复制
 - 指标说明 `?` 按钮弹窗（info-modal）
+
+### 3.2.1 单卡删除确认弹层（v3.6.10）
+
+- 单卡弹窗删除入口改为内嵌 popover 二次确认，不再依赖原生 `confirm()`。
+- 交互按钮：
+  - `data-testid="card-delete-trigger"`
+  - `data-testid="card-delete-cancel"`
+  - `data-testid="card-delete-confirm"`
+- 价值：
+  - 自动化测试点击稳定（不受浏览器阻塞弹窗影响）
+  - 用户可在弹窗内完成取消/确认，状态更可控
+  - 删除后仍复用原有后端删除链路（含按 `id` 与按 `folder/base` fallback）
 
 ### 3.3 REVIEW 页能力
 
