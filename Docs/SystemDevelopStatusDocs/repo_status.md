@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
 **最后更新**: 2026-03-05
-**版本**: 3.6.8
+**版本**: 3.6.9
 
 ## 1. 项目定位
 
@@ -12,7 +12,11 @@
 
 ## 2. 当前架构
 
-- 前端：`public/index.html`（生成、列表、弹窗） + `public/dashboard.html`（Mission Control）
+- 前端：
+  - `public/index.html`（生成、列表、弹窗）
+  - `public/dashboard.html`（Mission Control）
+  - `public/knowledge-ops.html`（知识任务控制）
+  - `public/knowledge-hub.html`（知识资产浏览）
 - 后端：`server.js`（生成编排、对比、评审、实验导出）
 - 服务层：`services/*`（LLM、OCR、TTS、few-shot、评审、观测、DB）
 - 存储层：
@@ -122,9 +126,15 @@
 - 学习卡片弹窗下调，避免遮挡顶部状态条
 - Phrase List 按生成时间倒序展示（同日最新卡片优先）
 
-### 3.14 Mission Control Knowledge Ops（v3.6.8）
+### 3.14 Knowledge 页面拆分（v3.6.9）
 
-- 在 `dashboard.html` 顶部新增 `Knowledge Ops` 面板
+- `Knowledge OPS` 与 `Knowledge Hub` 从 Mission Control 拆分为同级独立页面
+- 首页右上角入口改为三按钮并列：Mission Control / Knowledge OPS / Knowledge Hub
+- 三个页面 Header 内支持同级导航互跳
+- `dashboard.js` 改为多页面安全初始化：
+  - Mission Control 仅加载统计面板
+  - Knowledge OPS / Hub 仅加载知识任务与结果视图
+  - 公共基础设施状态与任务队列状态可复用
 - 支持 UI 触发知识任务：`summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
 - 支持任务列表、任务详情、最新 summary 与只读结果预览
 - 对应 API 已接通并在 2026-03-05 完成全量执行：

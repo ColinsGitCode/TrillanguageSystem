@@ -45,7 +45,7 @@
         }
     </style>
 </head>
-<body>
+<body data-dashboard-page="mission-control">
     <div class="dashboard-container">
         <!-- 1. Header -->
         <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
@@ -56,6 +56,11 @@
                 <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;">
                     MISSION CONTROL <span style="color: #3b82f6;">// BRIDGE</span>
                 </h1>
+                <nav class="dashboard-page-nav">
+                    <a class="dashboard-page-link active" href="/dashboard.html">Mission Control</a>
+                    <a class="dashboard-page-link" href="/knowledge-ops.html">Knowledge OPS</a>
+                    <a class="dashboard-page-link" href="/knowledge-hub.html">Knowledge Hub</a>
+                </nav>
             </div>
             <div style="display: flex; align-items: center; gap: 24px;">
                 <div class="time-range-selector">
@@ -78,113 +83,6 @@
             </div>
             <div id="taskQueueDetails">
                 <div class="empty-hint">No queue telemetry</div>
-            </div>
-        </section>
-
-        <!-- Knowledge Ops -->
-        <section class="glass-panel knowledge-ops-panel">
-            <div class="card-header">
-                <h3>Knowledge Ops <button class="info-btn" data-info-key="KNOWLEDGE_OPS">?</button></h3>
-            </div>
-            <div class="knowledge-ops-controls">
-                <label class="ko-field">
-                    <span>Task</span>
-                    <select id="knowledgeJobType">
-                        <option value="summary">summary</option>
-                        <option value="index">index</option>
-                        <option value="issues_audit">issues_audit</option>
-                        <option value="synonym_boundary">synonym_boundary</option>
-                        <option value="grammar_link">grammar_link</option>
-                        <option value="cluster">cluster</option>
-                    </select>
-                </label>
-                <label class="ko-field">
-                    <span>From</span>
-                    <input id="knowledgeScopeFrom" type="text" placeholder="2026.03.01" />
-                </label>
-                <label class="ko-field">
-                    <span>To</span>
-                    <input id="knowledgeScopeTo" type="text" placeholder="2026.03.31" />
-                </label>
-                <label class="ko-field">
-                    <span>Limit</span>
-                    <input id="knowledgeScopeLimit" type="number" min="1" max="5000" step="1" placeholder="All" />
-                </label>
-                <label class="ko-field">
-                    <span>Card Type</span>
-                    <select id="knowledgeCardType">
-                        <option value="all">all</option>
-                        <option value="trilingual">trilingual</option>
-                        <option value="grammar_ja">grammar_ja</option>
-                    </select>
-                </label>
-                <label class="ko-field">
-                    <span>Batch</span>
-                    <input id="knowledgeBatchSize" type="number" min="1" max="200" step="1" value="50" />
-                </label>
-                <button id="knowledgeStartBtn" class="ko-start-btn">Start</button>
-            </div>
-            <div id="knowledgeOpsToast" class="knowledge-ops-toast"></div>
-            <div class="knowledge-ops-grid">
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Jobs</div>
-                    <div id="knowledgeJobsList" class="knowledge-jobs-list">
-                        <div class="empty-hint">No jobs</div>
-                    </div>
-                </div>
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Job Detail</div>
-                    <div id="knowledgeJobDetail" class="knowledge-detail-body">
-                        <div class="empty-hint">Select a job</div>
-                    </div>
-                </div>
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Latest Summary</div>
-                    <div id="knowledgeSummaryBrief" class="knowledge-summary-body">
-                        <div class="empty-hint">No summary yet</div>
-                    </div>
-                </div>
-            </div>
-            <div class="knowledge-hub-header">
-                <div class="knowledge-card-title">Knowledge Hub</div>
-                <div id="knowledgeHubCounts" class="knowledge-hub-counts">
-                    <span class="tag">terms 0</span>
-                    <span class="tag">patterns 0</span>
-                    <span class="tag">clusters 0</span>
-                    <span class="tag">issues 0</span>
-                </div>
-            </div>
-            <div class="knowledge-hub-grid">
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Top Terms</div>
-                    <div id="knowledgeHubTerms" class="knowledge-jobs-list">
-                        <div class="empty-hint">No terms</div>
-                    </div>
-                </div>
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Grammar Patterns</div>
-                    <div id="knowledgeHubPatterns" class="knowledge-jobs-list">
-                        <div class="empty-hint">No patterns</div>
-                    </div>
-                </div>
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Clusters</div>
-                    <div id="knowledgeHubClusters" class="knowledge-jobs-list">
-                        <div class="empty-hint">No clusters</div>
-                    </div>
-                </div>
-                <div class="knowledge-card">
-                    <div class="knowledge-card-title">Issue Types</div>
-                    <div id="knowledgeHubIssues" class="knowledge-jobs-list">
-                        <div class="empty-hint">No issues</div>
-                    </div>
-                </div>
-            </div>
-            <div class="knowledge-card">
-                <div class="knowledge-card-title">Relation Inspector</div>
-                <div id="knowledgeRelationInspector" class="knowledge-summary-body">
-                    <div class="empty-hint">Click item in Knowledge Hub to inspect relations</div>
-                </div>
             </div>
         </section>
 

@@ -1,15 +1,15 @@
 # 实现状态报告
 
 **日期**: 2026-03-05
-**版本**: v3.6.8
-**状态**: 进行中（主链路稳定，Mission Control 已接入 Knowledge Ops）
+**版本**: v3.6.9
+**状态**: 进行中（主链路稳定，Mission Control/Knowledge OPS/Knowledge Hub 已拆分为同级页面）
 
 ## 1. 当前阶段结论
 
 - 生成主链路（文本/OCR -> 卡片 -> 音频 -> 落库）稳定
 - few-shot 实验追踪与导出链路可复现
 - 人工评分/评论与 review-gated 注入机制已落地
-- Knowledge Ops（知识任务）已接入 Mission Control，可从 UI 启动/查看任务
+- Knowledge Ops / Knowledge Hub 已从 Mission Control 拆分为独立页面，可同级访问
 - 主要瓶颈从“机制缺失”转为“样本质量与成本效率平衡”
 
 ## 2. 已完成能力
@@ -161,9 +161,13 @@
 
 ### 2.14 Knowledge Ops 与全量分析验证（v3.6.8）
 
-- Mission Control 顶部新增 `Knowledge Ops` 面板：
+- Knowledge Ops 页面（`knowledge-ops.html`）支持：
   - task type / scope / batch size 输入
   - start、jobs 列表、job detail、latest summary 展示
+- Knowledge Hub 页面（`knowledge-hub.html`）支持：
+  - summary/index/issues/grammar/clusters/synonyms 只读浏览
+  - relation inspector 术语关联查询
+- Mission Control 页面（`dashboard.html`）专注业务统计，不再混入知识任务操作
 - 前端新增 API 封装：
   - `startKnowledgeJob/getKnowledgeJobs/getKnowledgeJob/cancelKnowledgeJob`
   - `getKnowledgeSummaryLatest/getKnowledgeIndex/getKnowledgeIssues/getKnowledgeGrammar/getKnowledgeClusters/getKnowledgeSynonyms`
@@ -177,6 +181,20 @@
   - 总卡片：266；index 条目：266；issues：156；grammar patterns：4；clusters：4
 - UI 验证报告已落地：
   - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+
+### 2.15 知识页面拆分与多页初始化（v3.6.9）
+
+- Mission Control 与知识能力拆分为三个同级页面：
+  - `dashboard.html`（Mission Control）
+  - `knowledge-ops.html`（任务控制）
+  - `knowledge-hub.html`（结果浏览）
+- 首页右上角入口改为三按钮组（同级入口）
+- `dashboard.js` 增加页面类型识别（`data-dashboard-page`）：
+  - Mission Control 页面只初始化统计逻辑
+  - Knowledge OPS/Hub 页面只初始化 knowledge 相关逻辑
+  - 公共模块（基础设施状态、任务队列）跨页面复用
+- `dashboard.js` 增加空 DOM 容错，避免多页面复用时因缺失节点抛错
+- 修复知识关联查询排序歧义（`getKnowledgeTermRelations` 使用 `t.score/t.updated_at`）
 
 ### 2.5 Gemini host-proxy 稳定化
 

@@ -265,6 +265,12 @@ select {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
+.dashboard-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 @keyframes queuePulse {
   0% {
     transform: scale(1);
@@ -1026,6 +1032,11 @@ h1 {
 
   .hero-brand {
     min-width: 0;
+  }
+
+  .dashboard-links {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .hero-queue-status {

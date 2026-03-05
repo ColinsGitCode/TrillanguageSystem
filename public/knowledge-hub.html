@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Hub - Three LANS</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
+    <link rel="shortcut icon" href="/favicon-lan.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="modern-card.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+            color: #1f2937;
+        }
+        .dashboard-container {
+            padding: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card-header h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 14px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body data-dashboard-page="knowledge-hub">
+    <div class="dashboard-container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <a href="/" style="color: #6b7280; text-decoration: none; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono'; font-size: 13px; transition: color 0.2s;">
+                    <span style="font-size: 16px;">←</span> TERMINAL
+                </a>
+                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;">
+                    KNOWLEDGE HUB <span style="color: #3b82f6;">// RELATIONS</span>
+                </h1>
+                <nav class="dashboard-page-nav">
+                    <a class="dashboard-page-link" href="/dashboard.html">Mission Control</a>
+                    <a class="dashboard-page-link" href="/knowledge-ops.html">Knowledge OPS</a>
+                    <a class="dashboard-page-link active" href="/knowledge-hub.html">Knowledge Hub</a>
+                </nav>
+            </div>
+            <div style="display: flex; align-items: center; gap: 18px;">
+                <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="status-dot" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);"></div>
+                    <span id="systemStatusText" style="font-family: 'JetBrains Mono'; font-size: 12px; color: #10b981;">SYSTEM ONLINE</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="glass-panel" style="padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+            <div class="card-header" style="margin-bottom: 12px;">
+                <h3>Task Queue <button class="info-btn" data-info-key="TASK_QUEUE">?</button></h3>
+            </div>
+            <div id="taskQueueDetails">
+                <div class="empty-hint">No queue telemetry</div>
+            </div>
+        </section>
+
+        <section class="glass-panel knowledge-ops-panel">
+            <div class="knowledge-hub-header" style="margin-top: 0;">
+                <div class="knowledge-card-title">Knowledge Hub</div>
+                <div id="knowledgeHubCounts" class="knowledge-hub-counts">
+                    <span class="tag">terms 0</span>
+                    <span class="tag">patterns 0</span>
+                    <span class="tag">clusters 0</span>
+                    <span class="tag">issues 0</span>
+                </div>
+            </div>
+            <div class="knowledge-hub-grid">
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Top Terms</div>
+                    <div id="knowledgeHubTerms" class="knowledge-jobs-list">
+                        <div class="empty-hint">No terms</div>
+                    </div>
+                </div>
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Grammar Patterns</div>
+                    <div id="knowledgeHubPatterns" class="knowledge-jobs-list">
+                        <div class="empty-hint">No patterns</div>
+                    </div>
+                </div>
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Clusters</div>
+                    <div id="knowledgeHubClusters" class="knowledge-jobs-list">
+                        <div class="empty-hint">No clusters</div>
+                    </div>
+                </div>
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Issue Types</div>
+                    <div id="knowledgeHubIssues" class="knowledge-jobs-list">
+                        <div class="empty-hint">No issues</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="knowledge-card">
+                <div class="knowledge-card-title">Relation Inspector</div>
+                <div id="knowledgeRelationInspector" class="knowledge-summary-body">
+                    <div class="empty-hint">Click item in Knowledge Hub to inspect relations</div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script type="module" src="js/modules/dashboard.js"></script>
+</body>
+</html>

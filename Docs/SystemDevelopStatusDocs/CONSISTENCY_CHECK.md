@@ -17,7 +17,8 @@
 - v3.5 选区生成对齐：`✦ Generate Card` 已切换为静默任务队列（不跳转），并补充 Ruby-aware 选区提取策略
 - v3.5 主入口对齐：首页 `Generate` 入口已切换为静默任务队列（支持连续入队）
 - Knowledge Ops 对齐：
-  - 前端 `dashboard.html/dashboard.js/api.js` 已接入知识任务面板与调用链
+  - 前端 `knowledge-ops.html/knowledge-hub.html/dashboard.js/api.js` 已接入知识任务与知识浏览调用链
+  - `dashboard.html` 已回归 Mission Control 专注页（不再内嵌知识任务面板）
   - 后端 `server.js` 的 `/api/knowledge/*` 路由与 `knowledgeJobService` 已对齐
   - 文档 `API.md/BACKEND.md/FRONTEND.md` 已覆盖 Knowledge Ops
 
@@ -44,9 +45,9 @@
 
 ## 5. 结论
 
-- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.8）
+- `Docs/SystemDevelopStatusDocs` 当前已与代码主链路一致（v3.6.9）
 - 当前文档可直接支撑：
   1. 接口联调
   2. 评分与注入机制解释（含 TTS 门控、采样模式、回滚）
   3. 可观测与实验链路说明
-  4. Mission Control Knowledge Ops 的任务化验证与运行
+  4. Mission Control + Knowledge OPS + Knowledge Hub 的分页化验证与运行

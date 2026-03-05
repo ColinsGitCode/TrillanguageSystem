@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge OPS - Three LANS</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
+    <link rel="shortcut icon" href="/favicon-lan.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="modern-card.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+            color: #1f2937;
+        }
+        .dashboard-container {
+            padding: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card-header h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 14px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body data-dashboard-page="knowledge-ops">
+    <div class="dashboard-container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <a href="/" style="color: #6b7280; text-decoration: none; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono'; font-size: 13px; transition: color 0.2s;">
+                    <span style="font-size: 16px;">←</span> TERMINAL
+                </a>
+                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;">
+                    KNOWLEDGE OPS <span style="color: #3b82f6;">// WORKBENCH</span>
+                </h1>
+                <nav class="dashboard-page-nav">
+                    <a class="dashboard-page-link" href="/dashboard.html">Mission Control</a>
+                    <a class="dashboard-page-link active" href="/knowledge-ops.html">Knowledge OPS</a>
+                    <a class="dashboard-page-link" href="/knowledge-hub.html">Knowledge Hub</a>
+                </nav>
+            </div>
+            <div style="display: flex; align-items: center; gap: 18px;">
+                <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="status-dot" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);"></div>
+                    <span id="systemStatusText" style="font-family: 'JetBrains Mono'; font-size: 12px; color: #10b981;">SYSTEM ONLINE</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="glass-panel" style="padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+            <div class="card-header" style="margin-bottom: 12px;">
+                <h3>Task Queue <button class="info-btn" data-info-key="TASK_QUEUE">?</button></h3>
+            </div>
+            <div id="taskQueueDetails">
+                <div class="empty-hint">No queue telemetry</div>
+            </div>
+        </section>
+
+        <section class="glass-panel knowledge-ops-panel">
+            <div class="card-header">
+                <h3>Knowledge Ops <button class="info-btn" data-info-key="KNOWLEDGE_OPS">?</button></h3>
+            </div>
+            <div class="knowledge-ops-controls">
+                <label class="ko-field">
+                    <span>Task</span>
+                    <select id="knowledgeJobType">
+                        <option value="summary">summary</option>
+                        <option value="index">index</option>
+                        <option value="issues_audit">issues_audit</option>
+                        <option value="synonym_boundary">synonym_boundary</option>
+                        <option value="grammar_link">grammar_link</option>
+                        <option value="cluster">cluster</option>
+                    </select>
+                </label>
+                <label class="ko-field">
+                    <span>From</span>
+                    <input id="knowledgeScopeFrom" type="text" placeholder="2026.03.01" />
+                </label>
+                <label class="ko-field">
+                    <span>To</span>
+                    <input id="knowledgeScopeTo" type="text" placeholder="2026.03.31" />
+                </label>
+                <label class="ko-field">
+                    <span>Limit</span>
+                    <input id="knowledgeScopeLimit" type="number" min="1" max="5000" step="1" placeholder="All" />
+                </label>
+                <label class="ko-field">
+                    <span>Card Type</span>
+                    <select id="knowledgeCardType">
+                        <option value="all">all</option>
+                        <option value="trilingual">trilingual</option>
+                        <option value="grammar_ja">grammar_ja</option>
+                    </select>
+                </label>
+                <label class="ko-field">
+                    <span>Batch</span>
+                    <input id="knowledgeBatchSize" type="number" min="1" max="200" step="1" value="50" />
+                </label>
+                <button id="knowledgeStartBtn" class="ko-start-btn">Start</button>
+            </div>
+            <div id="knowledgeOpsToast" class="knowledge-ops-toast"></div>
+            <div class="knowledge-ops-grid">
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Jobs</div>
+                    <div id="knowledgeJobsList" class="knowledge-jobs-list">
+                        <div class="empty-hint">No jobs</div>
+                    </div>
+                </div>
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Job Detail</div>
+                    <div id="knowledgeJobDetail" class="knowledge-detail-body">
+                        <div class="empty-hint">Select a job</div>
+                    </div>
+                </div>
+                <div class="knowledge-card">
+                    <div class="knowledge-card-title">Latest Summary</div>
+                    <div id="knowledgeSummaryBrief" class="knowledge-summary-body">
+                        <div class="empty-hint">No summary yet</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script type="module" src="js/modules/dashboard.js"></script>
+</body>
+</html>

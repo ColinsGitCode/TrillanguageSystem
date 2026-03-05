@@ -24,8 +24,16 @@ const state = {
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const QUEUE_POLL_INTERVAL_MS = 1500;
 const KNOWLEDGE_POLL_INTERVAL_MS = 3000;
+const DASHBOARD_PAGE_MISSION = 'mission-control';
+
+function getDashboardPageType() {
+    return String(document.body?.dataset.dashboardPage || DASHBOARD_PAGE_MISSION).trim().toLowerCase();
+}
 
 function initDashboard() {
+    const pageType = getDashboardPageType();
+    const isMissionPage = pageType === DASHBOARD_PAGE_MISSION;
+
     updateTimestamp();
     initInfoModal();
     bindInfoButtons();
@@ -35,8 +43,10 @@ function initDashboard() {
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
 
-    loadDashboard(state.days);
-    setupTimeRangeButtons();
+    if (isMissionPage) {
+        loadDashboard(state.days);
+        setupTimeRangeButtons();
+    }
 }
 
 function initQueueTelemetry() {
@@ -72,18 +82,25 @@ async function fetchInfrastructureStatus() {
         renderStorage(storageService?.details || data.storage);
 
         updateTimestamp();
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-success)';
-        document.getElementById('systemStatusText').textContent = 'System Operational';
+        const statusDot = document.querySelector('.status-dot');
+        const statusText = document.getElementById('systemStatusText');
+        if (statusDot) statusDot.style.backgroundColor = 'var(--color-success)';
+        if (statusText) statusText.textContent = 'System Operational';
     } catch (err) {
         console.error('Infra fetch error:', err);
-        document.querySelector('.status-dot').style.backgroundColor = 'var(--color-error)';
-        document.getElementById('systemStatusText').textContent = 'System Alert';
-        document.querySelector('.status-dot').style.animation = 'none';
+        const statusDot = document.querySelector('.status-dot');
+        const statusText = document.getElementById('systemStatusText');
+        if (statusDot) {
+            statusDot.style.backgroundColor = 'var(--color-error)';
+            statusDot.style.animation = 'none';
+        }
+        if (statusText) statusText.textContent = 'System Alert';
     }
 }
 
 function renderServiceMatrix(services) {
     const container = document.getElementById('serviceMatrix');
+    if (!container) return;
     container.innerHTML = '';
 
     if (!services.length) {
@@ -112,21 +129,25 @@ function renderServiceMatrix(services) {
 
 function renderStorage(storage) {
     if (!storage) return;
+    const storageUsedEl = document.getElementById('storageUsed');
+    const storageBarEl = document.getElementById('storageBar');
+    const storageMetaEl = document.getElementById('storageMeta');
+    if (!storageUsedEl || !storageBarEl || !storageMetaEl) return;
 
     const gbUsed = (storage.used / (1024 * 1024 * 1024)).toFixed(2);
-    document.getElementById('storageUsed').textContent = gbUsed;
+    storageUsedEl.textContent = gbUsed;
 
     const percent = Math.min(storage.percentage || 0, 100);
-    const bar = document.getElementById('storageBar');
-    bar.style.width = `${percent}%`;
+    storageBarEl.style.width = `${percent}%`;
 
-    if (percent > 90) bar.style.backgroundColor = 'var(--color-warning)';
+    if (percent > 90) storageBarEl.style.backgroundColor = 'var(--color-warning)';
 
-    document.getElementById('storageMeta').textContent = `${storage.recordsCount || 0} files total`;
+    storageMetaEl.textContent = `${storage.recordsCount || 0} files total`;
 }
 
 function setupTimeRangeButtons() {
     const buttons = document.querySelectorAll('.time-btn');
+    if (!buttons.length) return;
     buttons.forEach(btn => {
         btn.onclick = () => {
             buttons.forEach(b => b.classList.remove('active'));
@@ -309,51 +330,64 @@ function initKnowledgeOps() {
         document.getElementById('knowledgeHubClusters'),
         document.getElementById('knowledgeHubIssues')
     ];
-    if (!startBtn || !jobsList) return;
+    const hasAnyKnowledgeView = Boolean(
+        startBtn
+        || jobsList
+        || document.getElementById('knowledgeJobDetail')
+        || document.getElementById('knowledgeSummaryBrief')
+        || document.getElementById('knowledgeHubCounts')
+        || document.getElementById('knowledgeRelationInspector')
+        || hubContainers.some(Boolean)
+    );
+    if (!hasAnyKnowledgeView) return;
 
-    startBtn.addEventListener('click', async () => {
-        startBtn.disabled = true;
-        setKnowledgeToast('Starting knowledge job...', '');
-        try {
-            const payload = collectKnowledgeJobPayload();
-            const data = await api.startKnowledgeJob(payload);
-            const job = data?.job || null;
-            if (job?.id) state.selectedKnowledgeJobId = Number(job.id);
-            setKnowledgeToast(`Job #${job?.id || '-'} queued`, 'success');
-            await refreshKnowledgeOps();
-        } catch (err) {
-            setKnowledgeToast(`Failed to start job: ${err.message}`, 'error');
-        } finally {
-            startBtn.disabled = false;
-        }
-    });
-
-    jobsList.addEventListener('click', async (event) => {
-        const cancelBtn = event.target.closest('.ko-cancel-btn');
-        if (cancelBtn) {
-            event.stopPropagation();
-            const jobId = Number(cancelBtn.dataset.jobId || 0);
-            if (!jobId) return;
-            cancelBtn.disabled = true;
+    if (startBtn) {
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            setKnowledgeToast('Starting knowledge job...', '');
             try {
-                await api.cancelKnowledgeJob(jobId);
-                setKnowledgeToast(`Job #${jobId} cancelled`, 'success');
+                const payload = collectKnowledgeJobPayload();
+                const data = await api.startKnowledgeJob(payload);
+                const job = data?.job || null;
+                if (job?.id) state.selectedKnowledgeJobId = Number(job.id);
+                setKnowledgeToast(`Job #${job?.id || '-'} queued`, 'success');
                 await refreshKnowledgeOps();
             } catch (err) {
-                setKnowledgeToast(`Cancel failed: ${err.message}`, 'error');
-                cancelBtn.disabled = false;
+                setKnowledgeToast(`Failed to start job: ${err.message}`, 'error');
+            } finally {
+                startBtn.disabled = false;
             }
-            return;
-        }
+        });
+    }
 
-        const item = event.target.closest('.knowledge-job-item');
-        if (!item) return;
-        const jobId = Number(item.dataset.jobId || 0);
-        if (!jobId) return;
-        state.selectedKnowledgeJobId = jobId;
-        renderKnowledgeJobs(state.knowledgeJobs || []);
-        await renderSelectedKnowledgeJobDetail(state.knowledgeJobs || []);
-    });
+    if (jobsList) {
+        jobsList.addEventListener('click', async (event) => {
+            const cancelBtn = event.target.closest('.ko-cancel-btn');
+            if (cancelBtn) {
+                event.stopPropagation();
+                const jobId = Number(cancelBtn.dataset.jobId || 0);
+                if (!jobId) return;
+                cancelBtn.disabled = true;
+                try {
+                    await api.cancelKnowledgeJob(jobId);
+                    setKnowledgeToast(`Job #${jobId} cancelled`, 'success');
+                    await refreshKnowledgeOps();
+                } catch (err) {
+                    setKnowledgeToast(`Cancel failed: ${err.message}`, 'error');
+                    cancelBtn.disabled = false;
+                }
+                return;
+            }
+
+            const item = event.target.closest('.knowledge-job-item');
+            if (!item) return;
+            const jobId = Number(item.dataset.jobId || 0);
+            if (!jobId) return;
+            state.selectedKnowledgeJobId = jobId;
+            renderKnowledgeJobs(state.knowledgeJobs || []);
+            await renderSelectedKnowledgeJobDetail(state.knowledgeJobs || []);
+        });
+    }
 
     hubContainers.forEach((container) => {
         if (!container) return;
