@@ -1,8 +1,8 @@
 # API 接口文档
 
 **项目**: Trilingual Records  
-**API 版本**: v1.2  
-**更新日期**: 2026-03-03
+**API 版本**: v1.3  
+**更新日期**: 2026-03-05
 
 ## 1. 总览
 
@@ -43,6 +43,16 @@
 | 评审 | POST | `/review/backfill` | 回填历史记录到评审池 |
 | 评审 | GET | `/review/generations/:id/examples` | 获取该卡片例句样本 |
 | 评审 | POST | `/review/examples/:id/reviews` | 保存例句评分/评论 |
+| Knowledge | POST | `/knowledge/jobs/start` | 启动知识分析任务 |
+| Knowledge | GET | `/knowledge/jobs` | 任务列表（倒序） |
+| Knowledge | GET | `/knowledge/jobs/:id` | 任务详情 |
+| Knowledge | POST | `/knowledge/jobs/:id/cancel` | 取消任务（queued/running） |
+| Knowledge | GET | `/knowledge/summary/latest` | 最近 summary 结果 |
+| Knowledge | GET | `/knowledge/index` | 术语索引查询 |
+| Knowledge | GET | `/knowledge/synonyms` | 同义边界分组查询 |
+| Knowledge | GET | `/knowledge/grammar` | 语法模式查询 |
+| Knowledge | GET | `/knowledge/clusters` | 主题聚类查询 |
+| Knowledge | GET | `/knowledge/issues` | 质量问题清单查询 |
 
 ---
 
@@ -222,6 +232,48 @@
 ### 4.5 `GET /api/recent`
 
 参数：`limit`
+
+---
+
+## 4.6 Knowledge Ops 接口
+
+### `POST /api/knowledge/jobs/start`
+
+请求：
+
+```json
+{
+  "jobType": "index",
+  "scope": {
+    "folderFrom": "2026.03.01",
+    "folderTo": "2026.03.05",
+    "cardTypes": ["trilingual"],
+    "limit": 500
+  },
+  "batchSize": 50,
+  "triggeredBy": "dashboard"
+}
+```
+
+`jobType` 支持：`summary | index | synonym_boundary | grammar_link | cluster | issues_audit`
+
+### `GET /api/knowledge/jobs`
+
+参数：`limit`（默认 20）  
+返回字段：`status/totalBatches/doneBatches/errorBatches/resultSummary/errorMessage/startedAt/finishedAt`
+
+### `POST /api/knowledge/jobs/:id/cancel`
+
+取消 queued/running 的任务，返回 `cancelled: true|false`
+
+### 查询端点（只读）
+
+- `GET /api/knowledge/summary/latest`：最近 summary 输出
+- `GET /api/knowledge/index?query=&limit=`
+- `GET /api/knowledge/synonyms?phrase=&limit=`
+- `GET /api/knowledge/grammar?pattern=&limit=`
+- `GET /api/knowledge/clusters?limit=`
+- `GET /api/knowledge/issues?issueType=&severity=&resolved=&limit=`
 
 ---
 

@@ -211,6 +211,73 @@ class ApiService {
             body: JSON.stringify({ limit })
         });
     }
+
+    async startKnowledgeJob(payload = {}) {
+        return this.fetchJson('/api/knowledge/jobs/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getKnowledgeJobs(limit = 20) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/jobs?${params.toString()}`);
+    }
+
+    async getKnowledgeJob(id) {
+        return this.fetchJson(`/api/knowledge/jobs/${encodeURIComponent(id)}`);
+    }
+
+    async cancelKnowledgeJob(id) {
+        return this.fetchJson(`/api/knowledge/jobs/${encodeURIComponent(id)}/cancel`, {
+            method: 'POST'
+        });
+    }
+
+    async getKnowledgeSummaryLatest() {
+        return this.fetchJson('/api/knowledge/summary/latest');
+    }
+
+    async getKnowledgeIndex(params = {}) {
+        const query = new URLSearchParams();
+        if (params.query) query.set('query', String(params.query));
+        if (params.limit) query.set('limit', String(params.limit));
+        const suffix = query.toString();
+        return this.fetchJson(`/api/knowledge/index${suffix ? `?${suffix}` : ''}`);
+    }
+
+    async getKnowledgeSynonyms(phrase, limit = 20) {
+        const query = new URLSearchParams();
+        query.set('phrase', String(phrase || ''));
+        query.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/synonyms?${query.toString()}`);
+    }
+
+    async getKnowledgeGrammar(params = {}) {
+        const query = new URLSearchParams();
+        if (params.pattern) query.set('pattern', String(params.pattern));
+        if (params.limit) query.set('limit', String(params.limit));
+        const suffix = query.toString();
+        return this.fetchJson(`/api/knowledge/grammar${suffix ? `?${suffix}` : ''}`);
+    }
+
+    async getKnowledgeClusters(limit = 20) {
+        const query = new URLSearchParams();
+        query.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/clusters?${query.toString()}`);
+    }
+
+    async getKnowledgeIssues(params = {}) {
+        const query = new URLSearchParams();
+        if (params.issueType) query.set('issueType', String(params.issueType));
+        if (params.severity) query.set('severity', String(params.severity));
+        if (params.resolved !== undefined) query.set('resolved', params.resolved ? 'true' : 'false');
+        if (params.limit) query.set('limit', String(params.limit));
+        const suffix = query.toString();
+        return this.fetchJson(`/api/knowledge/issues${suffix ? `?${suffix}` : ''}`);
+    }
 }
 
 export const api = new ApiService();

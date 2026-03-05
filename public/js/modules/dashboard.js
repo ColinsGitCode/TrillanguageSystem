@@ -4,6 +4,7 @@
  */
 import { formatDate } from './utils.js';
 import { initInfoModal, bindInfoButtons } from './info-modal.js';
+import { api } from './api.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
@@ -11,16 +12,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const state = {
     days: 30,
-    queueTimerId: null
+    queueTimerId: null,
+    knowledgeTimerId: null,
+    selectedKnowledgeJobId: null,
+    knowledgeJobs: [],
+    knowledgeDetailToken: 0
 };
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const QUEUE_POLL_INTERVAL_MS = 1500;
+const KNOWLEDGE_POLL_INTERVAL_MS = 3000;
 
 function initDashboard() {
     updateTimestamp();
     initInfoModal();
     bindInfoButtons();
     initQueueTelemetry();
+    initKnowledgeOps();
 
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
@@ -286,6 +293,360 @@ function formatQueueTime(value) {
     if (delta < 3600000) return `${Math.floor(delta / 60000)}m ago`;
     if (delta < 86400000) return `${Math.floor(delta / 3600000)}h ago`;
     return `${Math.floor(delta / 86400000)}d ago`;
+}
+
+// ========== Knowledge Ops ==========
+
+function initKnowledgeOps() {
+    const startBtn = document.getElementById('knowledgeStartBtn');
+    const jobsList = document.getElementById('knowledgeJobsList');
+    if (!startBtn || !jobsList) return;
+
+    startBtn.addEventListener('click', async () => {
+        startBtn.disabled = true;
+        setKnowledgeToast('Starting knowledge job...', '');
+        try {
+            const payload = collectKnowledgeJobPayload();
+            const data = await api.startKnowledgeJob(payload);
+            const job = data?.job || null;
+            if (job?.id) state.selectedKnowledgeJobId = Number(job.id);
+            setKnowledgeToast(`Job #${job?.id || '-'} queued`, 'success');
+            await refreshKnowledgeOps();
+        } catch (err) {
+            setKnowledgeToast(`Failed to start job: ${err.message}`, 'error');
+        } finally {
+            startBtn.disabled = false;
+        }
+    });
+
+    jobsList.addEventListener('click', async (event) => {
+        const cancelBtn = event.target.closest('.ko-cancel-btn');
+        if (cancelBtn) {
+            event.stopPropagation();
+            const jobId = Number(cancelBtn.dataset.jobId || 0);
+            if (!jobId) return;
+            cancelBtn.disabled = true;
+            try {
+                await api.cancelKnowledgeJob(jobId);
+                setKnowledgeToast(`Job #${jobId} cancelled`, 'success');
+                await refreshKnowledgeOps();
+            } catch (err) {
+                setKnowledgeToast(`Cancel failed: ${err.message}`, 'error');
+                cancelBtn.disabled = false;
+            }
+            return;
+        }
+
+        const item = event.target.closest('.knowledge-job-item');
+        if (!item) return;
+        const jobId = Number(item.dataset.jobId || 0);
+        if (!jobId) return;
+        state.selectedKnowledgeJobId = jobId;
+        renderKnowledgeJobs(state.knowledgeJobs || []);
+        await renderSelectedKnowledgeJobDetail(state.knowledgeJobs || []);
+    });
+
+    refreshKnowledgeOps();
+    if (state.knowledgeTimerId) clearInterval(state.knowledgeTimerId);
+    state.knowledgeTimerId = setInterval(refreshKnowledgeOps, KNOWLEDGE_POLL_INTERVAL_MS);
+}
+
+function collectKnowledgeJobPayload() {
+    const jobType = document.getElementById('knowledgeJobType')?.value || 'summary';
+    const folderFrom = String(document.getElementById('knowledgeScopeFrom')?.value || '').trim();
+    const folderTo = String(document.getElementById('knowledgeScopeTo')?.value || '').trim();
+    const limitRaw = Number(document.getElementById('knowledgeScopeLimit')?.value || 0);
+    const cardType = document.getElementById('knowledgeCardType')?.value || 'all';
+    const batchSizeRaw = Number(document.getElementById('knowledgeBatchSize')?.value || 50);
+
+    const scope = {};
+    if (folderFrom) scope.folderFrom = folderFrom;
+    if (folderTo) scope.folderTo = folderTo;
+    if (Number.isFinite(limitRaw) && limitRaw > 0) scope.limit = limitRaw;
+    if (cardType && cardType !== 'all') scope.cardTypes = [cardType];
+
+    return {
+        jobType,
+        scope,
+        batchSize: Math.max(1, batchSizeRaw || 50),
+        triggeredBy: 'dashboard'
+    };
+}
+
+async function refreshKnowledgeOps() {
+    const token = ++state.knowledgeDetailToken;
+    try {
+        const [jobsRes, summaryRes] = await Promise.all([
+            api.getKnowledgeJobs(20),
+            api.getKnowledgeSummaryLatest()
+        ]);
+        const jobs = Array.isArray(jobsRes?.jobs) ? jobsRes.jobs : [];
+        state.knowledgeJobs = jobs;
+
+        if (!state.selectedKnowledgeJobId && jobs.length) {
+            state.selectedKnowledgeJobId = Number(jobs[0].id);
+        } else if (state.selectedKnowledgeJobId && !jobs.some((job) => Number(job.id) === Number(state.selectedKnowledgeJobId))) {
+            state.selectedKnowledgeJobId = jobs.length ? Number(jobs[0].id) : null;
+        }
+
+        renderKnowledgeJobs(jobs);
+        renderKnowledgeSummary(summaryRes?.summary || null);
+        await renderSelectedKnowledgeJobDetail(jobs, token);
+    } catch (err) {
+        setKnowledgeToast(`Knowledge ops refresh failed: ${err.message}`, 'error');
+    }
+}
+
+function renderKnowledgeJobs(jobs) {
+    const container = document.getElementById('knowledgeJobsList');
+    if (!container) return;
+
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+        container.innerHTML = '<div class="empty-hint">No jobs</div>';
+        return;
+    }
+
+    container.innerHTML = jobs.map((job) => {
+        const jobId = Number(job.id || 0);
+        const selectedClass = Number(state.selectedKnowledgeJobId) === jobId ? 'selected' : '';
+        const status = String(job.status || 'queued').toLowerCase();
+        const progress = formatJobProgress(job);
+        const startedAt = job.startedAt ? formatDate(job.startedAt) : '-';
+        const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
+        const cancellable = status === 'queued' || status === 'running';
+        return `
+            <div class="knowledge-job-item status-${escapeHtml(status)} ${selectedClass}" data-job-id="${jobId}">
+                <div class="knowledge-job-head">
+                    <span>#${jobId}</span>
+                    <span class="badge">${escapeHtml(job.jobType || '-')}</span>
+                    <span>${escapeHtml(status.toUpperCase())}</span>
+                    ${cancellable ? `<button class="ko-cancel-btn" data-job-id="${jobId}">Cancel</button>` : ''}
+                </div>
+                <div class="knowledge-job-meta">
+                    <span>${progress.text}</span>
+                    <span>${startedAt !== '-' ? `Start ${startedAt}` : `Create ${createdAt}`}</span>
+                </div>
+                <div class="knowledge-job-progress"><span style="width:${progress.percent}%;"></span></div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function renderSelectedKnowledgeJobDetail(jobs, token = state.knowledgeDetailToken) {
+    const container = document.getElementById('knowledgeJobDetail');
+    if (!container) return;
+
+    const selected = (Array.isArray(jobs) ? jobs : []).find((job) => Number(job.id) === Number(state.selectedKnowledgeJobId));
+    if (!selected) {
+        container.innerHTML = '<div class="empty-hint">Select a job</div>';
+        return;
+    }
+
+    const progress = formatJobProgress(selected);
+    const duration = formatDuration(selected.startedAt, selected.finishedAt);
+    const summaryKeys = Object.keys(selected.resultSummary || {});
+
+    container.innerHTML = `
+        <div class="knowledge-kv">
+            <div class="k">Job</div><div class="v">#${Number(selected.id)}</div>
+            <div class="k">Type</div><div class="v">${escapeHtml(selected.jobType || '-')}</div>
+            <div class="k">Status</div><div class="v">${escapeHtml(String(selected.status || '-').toUpperCase())}</div>
+            <div class="k">Progress</div><div class="v">${progress.text}</div>
+            <div class="k">Duration</div><div class="v">${duration}</div>
+            <div class="k">Triggered By</div><div class="v">${escapeHtml(selected.triggeredBy || '-')}</div>
+            <div class="k">Summary Keys</div><div class="v">${summaryKeys.length ? escapeHtml(summaryKeys.join(', ')) : '-'}</div>
+        </div>
+        <div id="knowledgePreviewBlock" class="knowledge-preview-block">
+            <div class="empty-hint">Loading preview...</div>
+        </div>
+    `;
+
+    const previewHtml = await loadKnowledgePreview(selected);
+    if (token !== state.knowledgeDetailToken) return;
+    const previewNode = document.getElementById('knowledgePreviewBlock');
+    if (previewNode) previewNode.innerHTML = previewHtml;
+}
+
+function renderKnowledgeSummary(summary) {
+    const container = document.getElementById('knowledgeSummaryBrief');
+    if (!container) return;
+
+    if (!summary) {
+        container.innerHTML = '<div class="empty-hint">No summary yet</div>';
+        return;
+    }
+
+    const topTopics = Array.isArray(summary.topTopics) ? summary.topTopics.slice(0, 4) : [];
+    const actionItems = Array.isArray(summary.actionItems) ? summary.actionItems.slice(0, 3) : [];
+    const observations = Array.isArray(summary.qualityObservations) ? summary.qualityObservations.slice(0, 3) : [];
+
+    container.innerHTML = `
+        <div style="margin-bottom:8px;">${escapeHtml(summary.overview || '-')}</div>
+        <div class="knowledge-inline-tags">
+            ${topTopics.length
+                ? topTopics.map((item) => `<span class="tag">${escapeHtml(item.topic)} · ${Number(item.count || 0)}</span>`).join('')
+                : '<span class="tag">No topics</span>'}
+        </div>
+        <ul class="knowledge-preview-list">
+            ${observations.map((item) => `
+                <li>
+                    <strong>${escapeHtml(String(item.severity || 'info').toUpperCase())}</strong>
+                    · ${escapeHtml(item.finding || '-')}
+                </li>
+            `).join('')}
+            ${actionItems.map((item) => `
+                <li>Action P${Number(item.priority || 0)} · ${escapeHtml(item.action || '-')}</li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+async function loadKnowledgePreview(job) {
+    const status = String(job?.status || '').toLowerCase();
+    if (!['success', 'partial'].includes(status)) {
+        if (status === 'failed') {
+            return `<div class="empty-hint">Job failed: ${escapeHtml(job.errorMessage || 'unknown error')}</div>`;
+        }
+        return `<div class="empty-hint">Preview available after job success</div>`;
+    }
+
+    const jobType = String(job.jobType || '').toLowerCase();
+    try {
+        if (jobType === 'summary') {
+            const data = await api.getKnowledgeSummaryLatest();
+            const summary = data?.summary || null;
+            if (!summary) return '<div class="empty-hint">No summary output</div>';
+            const observations = Array.isArray(summary.qualityObservations) ? summary.qualityObservations.slice(0, 4) : [];
+            return `
+                <ul class="knowledge-preview-list">
+                    ${observations.map((item) => `<li>${escapeHtml(item.finding || '-')}</li>`).join('')}
+                </ul>
+            `;
+        }
+        if (jobType === 'index') {
+            const data = await api.getKnowledgeIndex({ limit: 8 });
+            const entries = Array.isArray(data?.entries) ? data.entries : [];
+            if (!entries.length) return '<div class="empty-hint">No index entries</div>';
+            return `
+                <ul class="knowledge-preview-list">
+                    ${entries.map((item) => `
+                        <li>
+                            <strong>${escapeHtml(item.phrase || '-')}</strong>
+                            · ${escapeHtml(item.cardType || '-')}
+                            · score ${formatNumber(item.score, 0)}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        if (jobType === 'issues_audit') {
+            const data = await api.getKnowledgeIssues({ limit: 12 });
+            const issues = Array.isArray(data?.issues) ? data.issues : [];
+            if (!issues.length) return '<div class="empty-hint">No issues</div>';
+            const byType = {};
+            issues.forEach((item) => {
+                const type = String(item.issueType || 'unknown');
+                byType[type] = (byType[type] || 0) + 1;
+            });
+            return `
+                <div class="knowledge-inline-tags">
+                    ${Object.entries(byType).slice(0, 5).map(([type, count]) => `<span class="tag">${escapeHtml(type)} · ${count}</span>`).join('')}
+                </div>
+                <ul class="knowledge-preview-list">
+                    ${issues.slice(0, 6).map((item) => `
+                        <li>
+                            [${escapeHtml(item.severity || 'na')}] ${escapeHtml(item.phrase || '-')}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        if (jobType === 'grammar_link') {
+            const data = await api.getKnowledgeGrammar({ limit: 8 });
+            const patterns = Array.isArray(data?.patterns) ? data.patterns : [];
+            if (!patterns.length) return '<div class="empty-hint">No grammar patterns</div>';
+            return `
+                <ul class="knowledge-preview-list">
+                    ${patterns.map((item) => `
+                        <li>
+                            <strong>${escapeHtml(item.pattern || '-')}</strong>
+                            · refs ${Array.isArray(item.exampleRefs) ? item.exampleRefs.length : 0}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        if (jobType === 'cluster') {
+            const data = await api.getKnowledgeClusters(8);
+            const clusters = Array.isArray(data?.clusters) ? data.clusters : [];
+            if (!clusters.length) return '<div class="empty-hint">No clusters</div>';
+            return `
+                <ul class="knowledge-preview-list">
+                    ${clusters.map((item) => `
+                        <li>
+                            <strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong>
+                            · cards ${Array.isArray(item.cards) ? item.cards.length : 0}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        if (jobType === 'synonym_boundary') {
+            const indexData = await api.getKnowledgeIndex({ limit: 1 });
+            const seed = Array.isArray(indexData?.entries) ? indexData.entries[0] : null;
+            if (!seed || !seed.phrase) {
+                return '<div class="empty-hint">No synonym seed phrase</div>';
+            }
+            const synonymData = await api.getKnowledgeSynonyms(seed.phrase, 6);
+            const groups = Array.isArray(synonymData?.groups) ? synonymData.groups : [];
+            if (!groups.length) return '<div class="empty-hint">No synonym groups</div>';
+            return `
+                <ul class="knowledge-preview-list">
+                    ${groups.map((item) => `
+                        <li>
+                            <strong>${escapeHtml(item.groupKey || '-')}</strong>
+                            · risk ${escapeHtml(item.misuseRisk || '-')}
+                            · members ${Array.isArray(item.members) ? item.members.length : 0}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        return '<div class="empty-hint">No preview renderer for this task</div>';
+    } catch (err) {
+        return `<div class="empty-hint">Preview load failed: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function formatJobProgress(job) {
+    const total = Number(job?.totalBatches || 0);
+    const done = Number(job?.doneBatches || 0);
+    if (!Number.isFinite(total) || total <= 0) {
+        return { percent: 0, text: `${done}/- batches` };
+    }
+    const percent = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+    return { percent, text: `${done}/${total} batches (${percent}%)` };
+}
+
+function formatDuration(startedAt, finishedAt) {
+    if (!startedAt) return '-';
+    const startTs = Date.parse(startedAt);
+    if (Number.isNaN(startTs)) return '-';
+    const endTs = finishedAt ? Date.parse(finishedAt) : Date.now();
+    if (Number.isNaN(endTs) || endTs <= startTs) return '-';
+    const delta = endTs - startTs;
+    if (delta < 1000) return `${delta}ms`;
+    if (delta < 60000) return `${Math.round(delta / 1000)}s`;
+    if (delta < 3600000) return `${Math.round(delta / 60000)}m`;
+    return `${Math.round(delta / 3600000)}h`;
+}
+
+function setKnowledgeToast(message, tone = '') {
+    const el = document.getElementById('knowledgeOpsToast');
+    if (!el) return;
+    el.classList.remove('error', 'success');
+    if (tone) el.classList.add(tone);
+    el.textContent = message || '';
 }
 
 // ========== Review Pipeline ==========

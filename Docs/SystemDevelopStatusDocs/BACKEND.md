@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.6.6
-**更新日期**: 2026-03-03
+**版本**: 3.6.7
+**更新日期**: 2026-03-05
 
 ## 1. 核心目录
 
@@ -18,6 +18,8 @@ services/
   exampleReviewService.js
   experimentTrackingService.js
   fewShotMetricsService.js
+  knowledgeAnalysisEngine.js
+  knowledgeJobService.js
   observabilityService.js
   statisticsService.js
   tesseractOcrService.js
@@ -135,7 +137,7 @@ scripts/
 
 ## 8. 数据模型（摘要）
 
-当前 schema 共 17 张表，分五组：
+当前 schema 已扩展为 27+ 张表，分六组：
 
 1. 业务主表：
    - `generations`、`audio_files`
@@ -147,6 +149,14 @@ scripts/
    - `example_units`、`example_unit_sources`、`review_campaigns`、`review_campaign_items`、`example_reviews`
 5. 内容批注与分析：
    - `card_highlights`（标红 HTML 快照、mark 数、高亮字符数）
+
+6. 知识任务与知识物化：
+   - `knowledge_jobs`、`knowledge_outputs_raw`
+   - `knowledge_terms_index`
+   - `knowledge_issues`
+   - `knowledge_synonym_groups`、`knowledge_synonym_members`
+   - `knowledge_grammar_patterns`、`knowledge_grammar_refs`
+   - `knowledge_clusters`、`knowledge_cluster_cards`
 
 ### 8.1 generations 新增字段（v3.6）
 
@@ -220,6 +230,7 @@ TTS_JA_ENDPOINT=http://tts-ja:50021
 - 主链路（文本/OCR -> 卡片 -> 音频 -> 落库）稳定可用
 - 双模型对比、实验追踪、观测指标链路已闭环
 - 人工评分/评论与 review-gated few-shot 已落地
+- Knowledge Ops 后端已落地（本地任务队列 + 结果物化 + 只读查询 API）
 - 主要优化方向：
   1. 将观测指标门禁化（SLO + 发布门禁）
   2. 扩充高质量 teacher 与人工通过样本池

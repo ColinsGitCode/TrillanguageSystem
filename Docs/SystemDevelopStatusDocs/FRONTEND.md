@@ -1,8 +1,8 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.6.6
-**更新日期**: 2026-03-03
+**版本**: 3.6.7
+**更新日期**: 2026-03-05
 
 ## 1. 前端目录
 
@@ -134,6 +134,11 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + Mission Control)
 - Token 趋势 / 延迟趋势 / Quality Signal（模板合规分）
 - Live Feed（实时生成记录）/ Provider Split（供应商分布）
 - Task Queue 顶部模块显示任务卡片类型（`三语/语法`）
+- Knowledge Ops（任务启动、运行状态、结果预览、最新 summary）
+  - 支持任务类型：`summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
+  - 支持 scope 参数：日期范围、卡片类型、limit、batch size
+  - 任务列表支持取消 queued/running 任务
+  - 详情区按任务类型展示只读预览（index/issues/grammar/cluster/synonym/summary）
 
 ## 6. 状态管理与 API 封装
 
@@ -145,6 +150,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + Mission Control)
   - 生成/OCR/历史/统计
   - `generate()` 支持扩展参数透传（`target_folder/card_type/source_mode`）以服务后台队列任务
   - 评审 campaign（创建/finalize/rollback）与评分提交
+  - Knowledge Ops（任务启动/取消/列表/详情 + 物化结果查询）
   - 删除与文件读取
 
 ## 7. 视觉与可用性

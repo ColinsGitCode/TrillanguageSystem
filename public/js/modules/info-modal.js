@@ -164,6 +164,19 @@ export const METRIC_DEFINITIONS = {
             </ul>
             <p>该数据来自浏览器本地队列遥测，不依赖后端持久化。</p>
         `
+    },
+    "KNOWLEDGE_OPS": {
+        title: "知识任务中心 (Knowledge Ops)",
+        content: `
+            <p>用于手动触发卡片库的结构化分析任务，并将结果写回知识表。</p>
+            <ul>
+                <li><strong>Task</strong>: 选择分析类型（summary/index/issues 等）。</li>
+                <li><strong>Scope</strong>: 可按日期目录、卡片类型、样本数量限制分析范围。</li>
+                <li><strong>Jobs</strong>: 查看任务状态、进度、失败批次与执行时序。</li>
+                <li><strong>Latest Summary</strong>: 展示最近一次 summary 任务输出，便于快速确认库健康度。</li>
+            </ul>
+            <p>该模块由后端任务队列执行，数据落库后可被后续检索、质量治理与报告功能复用。</p>
+        `
     }
 };
 
