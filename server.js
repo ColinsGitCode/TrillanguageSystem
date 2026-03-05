@@ -1409,7 +1409,8 @@ app.post('/api/knowledge/jobs/start', (req, res) => {
       jobType,
       scope = {},
       batchSize = 50,
-      triggeredBy = 'owner'
+      triggeredBy = 'owner',
+      options = {}
     } = req.body || {};
 
     if (!jobType) {
@@ -1427,7 +1428,17 @@ app.post('/api/knowledge/jobs/start', (req, res) => {
       jobType,
       scope: normalizedScope,
       batchSize: Number(batchSize || 50),
-      triggeredBy: String(triggeredBy || 'owner')
+      triggeredBy: String(triggeredBy || 'owner'),
+      options: {
+        minCandidateScore: options.minCandidateScore,
+        maxPairs: options.maxPairs,
+        maxLlmPairs: options.maxLlmPairs,
+        llmEnabled: options.llmEnabled,
+        model: options.model,
+        promptVersion: options.promptVersion,
+        schemaVersion: options.schemaVersion,
+        llmTimeoutMs: options.llmTimeoutMs
+      }
     });
     return res.json({ success: true, job });
   } catch (err) {
@@ -1486,6 +1497,39 @@ app.get('/api/knowledge/synonyms', (req, res) => {
     const limit = Number(req.query.limit || 20);
     const groups = dbService.getKnowledgeSynonymsByPhrase(phrase, limit);
     res.json({ success: true, groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/synonyms/list', (req, res) => {
+  try {
+    const page = Number(req.query.page || 1);
+    const pageSize = Number(req.query.pageSize || 20);
+    const jobId = req.query.jobId ? Number(req.query.jobId) : undefined;
+    const riskLevel = req.query.riskLevel ? String(req.query.riskLevel) : undefined;
+    const query = req.query.query ? String(req.query.query) : '';
+    const data = dbService.listKnowledgeSynonymBoundaries({
+      jobId,
+      riskLevel,
+      query,
+      page,
+      pageSize
+    });
+    res.json({ success: true, ...data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/synonyms/:pairKey', (req, res) => {
+  try {
+    const pairKey = String(req.params.pairKey || '').trim();
+    if (!pairKey) return res.status(400).json({ error: 'pairKey is required' });
+    const jobId = req.query.jobId ? Number(req.query.jobId) : undefined;
+    const detail = dbService.getKnowledgeSynonymBoundaryDetail({ pairKey, jobId });
+    if (!detail) return res.status(404).json({ error: 'synonym boundary not found' });
+    res.json({ success: true, detail });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

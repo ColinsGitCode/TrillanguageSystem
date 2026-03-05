@@ -19,6 +19,7 @@ const state = {
     knowledgeDetailToken: 0,
     knowledgeRelationToken: 0,
     knowledgeOverview: null,
+    knowledgeSynonymBoundaries: null,
     knowledgeHubSelection: null
 };
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
@@ -325,6 +326,7 @@ function initKnowledgeOps() {
     const startBtn = document.getElementById('knowledgeStartBtn');
     const jobsList = document.getElementById('knowledgeJobsList');
     const hubContainers = [
+        document.getElementById('knowledgeHubSynonyms'),
         document.getElementById('knowledgeHubTerms'),
         document.getElementById('knowledgeHubPatterns'),
         document.getElementById('knowledgeHubClusters'),
@@ -401,9 +403,10 @@ function initKnowledgeOps() {
             state.knowledgeHubSelection = {
                 entityType,
                 key,
-                severity: item.dataset.severity || ''
+                severity: item.dataset.severity || '',
+                jobId: item.dataset.jobId ? Number(item.dataset.jobId) : undefined
             };
-            renderKnowledgeHub(state.knowledgeOverview);
+            renderKnowledgeHub(state.knowledgeOverview, state.knowledgeSynonymBoundaries);
             await renderKnowledgeRelationInspector();
         });
     });
@@ -438,14 +441,16 @@ function collectKnowledgeJobPayload() {
 async function refreshKnowledgeOps() {
     const token = ++state.knowledgeDetailToken;
     try {
-        const [jobsRes, summaryRes, overviewRes] = await Promise.all([
+        const [jobsRes, summaryRes, overviewRes, synonymsRes] = await Promise.all([
             api.getKnowledgeJobs(20),
             api.getKnowledgeSummaryLatest(),
-            api.getKnowledgeOverview(8)
+            api.getKnowledgeOverview(8),
+            api.listKnowledgeSynonymBoundaries({ page: 1, pageSize: 12 })
         ]);
         const jobs = Array.isArray(jobsRes?.jobs) ? jobsRes.jobs : [];
         state.knowledgeJobs = jobs;
         state.knowledgeOverview = overviewRes?.overview || null;
+        state.knowledgeSynonymBoundaries = synonymsRes || { items: [], total: 0, page: 1, pageSize: 12 };
 
         if (!state.selectedKnowledgeJobId && jobs.length) {
             state.selectedKnowledgeJobId = Number(jobs[0].id);
@@ -455,8 +460,8 @@ async function refreshKnowledgeOps() {
 
         renderKnowledgeJobs(jobs);
         renderKnowledgeSummary(summaryRes?.summary || null);
-        ensureKnowledgeHubSelection(state.knowledgeOverview);
-        renderKnowledgeHub(state.knowledgeOverview);
+        ensureKnowledgeHubSelection(state.knowledgeOverview, state.knowledgeSynonymBoundaries);
+        renderKnowledgeHub(state.knowledgeOverview, state.knowledgeSynonymBoundaries);
         await renderSelectedKnowledgeJobDetail(jobs, token);
         await renderKnowledgeRelationInspector();
     } catch (err) {
@@ -568,8 +573,9 @@ function renderKnowledgeSummary(summary) {
     `;
 }
 
-function ensureKnowledgeHubSelection(overview) {
+function ensureKnowledgeHubSelection(overview, synonymData) {
     const data = overview || {};
+    const synonyms = Array.isArray(synonymData?.items) ? synonymData.items : [];
     const topTerms = Array.isArray(data.topTerms) ? data.topTerms : [];
     const topPatterns = Array.isArray(data.topPatterns) ? data.topPatterns : [];
     const topClusters = Array.isArray(data.topClusters) ? data.topClusters : [];
@@ -577,6 +583,9 @@ function ensureKnowledgeHubSelection(overview) {
 
     const exists = (selection) => {
         if (!selection || !selection.entityType || !selection.key) return false;
+        if (selection.entityType === 'synonym') {
+            return synonyms.some((item) => String(item.pairKey || '') === selection.key);
+        }
         if (selection.entityType === 'term') {
             return topTerms.some((item) => String(item.phrase || '') === selection.key);
         }
@@ -596,6 +605,14 @@ function ensureKnowledgeHubSelection(overview) {
     };
 
     if (exists(state.knowledgeHubSelection)) return;
+    if (synonyms.length) {
+        state.knowledgeHubSelection = {
+            entityType: 'synonym',
+            key: String(synonyms[0].pairKey || ''),
+            severity: String(synonyms[0].riskLevel || '')
+        };
+        return;
+    }
     if (topTerms.length) {
         state.knowledgeHubSelection = { entityType: 'term', key: String(topTerms[0].phrase || ''), severity: '' };
         return;
@@ -619,8 +636,9 @@ function ensureKnowledgeHubSelection(overview) {
     state.knowledgeHubSelection = null;
 }
 
-function renderKnowledgeHub(overview) {
+function renderKnowledgeHub(overview, synonymData) {
     const countsNode = document.getElementById('knowledgeHubCounts');
+    const synonymsNode = document.getElementById('knowledgeHubSynonyms');
     const termsNode = document.getElementById('knowledgeHubTerms');
     const patternsNode = document.getElementById('knowledgeHubPatterns');
     const clustersNode = document.getElementById('knowledgeHubClusters');
@@ -629,12 +647,14 @@ function renderKnowledgeHub(overview) {
 
     const data = overview || {};
     const counts = data.counts || {};
+    const synonyms = Array.isArray(synonymData?.items) ? synonymData.items : [];
     const topTerms = Array.isArray(data.topTerms) ? data.topTerms : [];
     const topPatterns = Array.isArray(data.topPatterns) ? data.topPatterns : [];
     const topClusters = Array.isArray(data.topClusters) ? data.topClusters : [];
     const topIssues = Array.isArray(data.topIssues) ? data.topIssues : [];
 
     countsNode.innerHTML = `
+        <span class="tag">synonyms ${Number(synonymData?.total || synonyms.length || 0)}</span>
         <span class="tag">terms ${Number(counts.termCount || 0)}</span>
         <span class="tag">patterns ${Number(counts.grammarPatternCount || 0)}</span>
         <span class="tag">clusters ${Number(counts.clusterCount || 0)}</span>
@@ -643,6 +663,7 @@ function renderKnowledgeHub(overview) {
     `;
 
     const renderList = (container, items, entityType, renderName, renderMeta, getKey, extraDataset = () => '') => {
+        if (!container) return;
         if (!items.length) {
             container.innerHTML = '<div class="empty-hint">No data</div>';
             return;
@@ -668,6 +689,15 @@ function renderKnowledgeHub(overview) {
         }).join('');
     };
 
+    renderList(
+        synonymsNode,
+        synonyms,
+        'synonym',
+        (item) => `${item.termA || '?'} ↔ ${item.termB || '?'}`,
+        (item) => `risk ${item.riskLevel || '-'} · conf ${formatNumber(item.confidence, 2)}`,
+        (item) => item.pairKey || '',
+        (item) => `data-severity="${escapeHtml(item.riskLevel || 'medium')}" data-job-id="${Number(item.versionJobId || 0)}"`
+    );
     renderList(
         termsNode,
         topTerms,
@@ -719,7 +749,11 @@ async function renderKnowledgeRelationInspector() {
         let relation = null;
         let title = '';
         const normalizedType = String(selection.entityType || '').trim();
-        if (normalizedType === 'term') {
+        if (normalizedType === 'synonym') {
+            const data = await api.getKnowledgeSynonymBoundaryDetail(selection.key, { jobId: selection.jobId });
+            relation = data?.detail || null;
+            title = `SYNONYM · ${selection.key}`;
+        } else if (normalizedType === 'term') {
             const data = await api.getKnowledgeTermRelations(selection.key, 20);
             relation = data?.relations || null;
             title = `TERM · ${selection.key}`;
@@ -754,6 +788,35 @@ async function renderKnowledgeRelationInspector() {
         if (token !== state.knowledgeRelationToken) return;
         if (!relation) {
             container.innerHTML = '<div class="empty-hint">No relation data</div>';
+            return;
+        }
+
+        if (normalizedType === 'synonym') {
+            const members = Array.isArray(relation.members) ? relation.members : [];
+            const contextSplit = Array.isArray(relation.contextSplit) ? relation.contextSplit : [];
+            const misuseRisks = Array.isArray(relation.misuseRisks) ? relation.misuseRisks : [];
+            const tagsA = Array.isArray(relation.boundaryTagsA) ? relation.boundaryTagsA : [];
+            const tagsB = Array.isArray(relation.boundaryTagsB) ? relation.boundaryTagsB : [];
+            const pairLabel = `${relation.termA || '?'} ↔ ${relation.termB || '?'}`;
+            container.innerHTML = `
+                <div class="knowledge-inline-tags">
+                    <span class="tag">${escapeHtml(title)}</span>
+                    <span class="tag">${escapeHtml(pairLabel)}</span>
+                    <span class="tag">risk ${escapeHtml(relation.riskLevel || relation.misuseRisk || '-')}</span>
+                    <span class="tag">conf ${formatNumber(relation.confidence, 2)}</span>
+                    <span class="tag">parse ${escapeHtml(relation.parseStatus || 'ok')}</span>
+                </div>
+                <div class="knowledge-rel-grid">
+                    ${renderRelSection('Actionable Hint', [{ value: relation.actionableHint || relation.recommendation || '-' }], (item) => `${escapeHtml(item.value)}`)}
+                    ${renderRelSection('Context Split', contextSplit, (item) => `<strong>${escapeHtml(item.dimension || '-')}</strong> · A:${escapeHtml(item.a || '-')} · B:${escapeHtml(item.b || '-')}<br/><span class="mono">${escapeHtml(item.why || '')}</span>`)}
+                    ${renderRelSection('Misuse Risks', misuseRisks, (item) => `<strong>${escapeHtml(item.severity || '-')}</strong> · ${escapeHtml(item.scenario || '-')}<br/><span class="mono">${escapeHtml(item.risk || '-')}</span>`)}
+                    ${renderRelSection('Boundary Tags', [
+                        { label: relation.termA || 'A', tags: tagsA },
+                        { label: relation.termB || 'B', tags: tagsB }
+                    ], (item) => `<strong>${escapeHtml(item.label)}</strong> · ${escapeHtml((item.tags || []).join(' / ') || '-')}`)}
+                    ${renderRelSection('Members', members, (item) => `<strong>${escapeHtml(item.term || '-')}</strong> <span class="mono">${escapeHtml(item.lang || '-')} · #${Number(item.generationId || 0)}</span>`)}
+                </div>
+            `;
             return;
         }
 
@@ -954,21 +1017,20 @@ async function loadKnowledgePreview(job) {
             `;
         }
         if (jobType === 'synonym_boundary') {
-            const indexData = await api.getKnowledgeIndex({ limit: 1 });
-            const seed = Array.isArray(indexData?.entries) ? indexData.entries[0] : null;
-            if (!seed || !seed.phrase) {
-                return '<div class="empty-hint">No synonym seed phrase</div>';
-            }
-            const synonymData = await api.getKnowledgeSynonyms(seed.phrase, 6);
-            const groups = Array.isArray(synonymData?.groups) ? synonymData.groups : [];
+            const listData = await api.listKnowledgeSynonymBoundaries({
+                jobId: Number(job.id || 0) || undefined,
+                page: 1,
+                pageSize: 8
+            });
+            const groups = Array.isArray(listData?.items) ? listData.items : [];
             if (!groups.length) return '<div class="empty-hint">No synonym groups</div>';
             return `
                 <ul class="knowledge-preview-list">
                     ${groups.map((item) => `
                         <li>
-                            <strong>${escapeHtml(item.groupKey || '-')}</strong>
-                            · risk ${escapeHtml(item.misuseRisk || '-')}
-                            · members ${Array.isArray(item.members) ? item.members.length : 0}
+                            <strong>${escapeHtml(`${item.termA || '?'} ↔ ${item.termB || '?'}`)}</strong>
+                            · risk ${escapeHtml(item.riskLevel || '-')}
+                            · conf ${formatNumber(item.confidence, 2)}
                         </li>
                     `).join('')}
                 </ul>

@@ -11,6 +11,16 @@ const SUPPORTED_TASKS = new Set([
 ]);
 
 const BATCHABLE_TASKS = new Set(['index', 'issues_audit']);
+const DEFAULT_SYNONYM_OPTIONS = {
+  minCandidateScore: 0.62,
+  maxPairs: 120,
+  maxLlmPairs: 24,
+  llmEnabled: false,
+  model: '',
+  promptVersion: 'syn-v1',
+  schemaVersion: '1.0.0',
+  llmTimeoutMs: 120000
+};
 
 function chunkArray(items, size) {
   if (!Array.isArray(items) || items.length === 0) return [];
@@ -20,6 +30,21 @@ function chunkArray(items, size) {
     chunks.push(items.slice(i, i + chunkSize));
   }
   return chunks;
+}
+
+function normalizeSynonymOptions(raw = {}) {
+  const envEnabled = ['1', 'true', 'yes'].includes(String(process.env.KNOWLEDGE_SYNONYM_LLM_ENABLED || '').toLowerCase());
+  const merged = { ...DEFAULT_SYNONYM_OPTIONS, ...(raw || {}) };
+  return {
+    minCandidateScore: Number(merged.minCandidateScore || DEFAULT_SYNONYM_OPTIONS.minCandidateScore),
+    maxPairs: Math.max(1, Number(merged.maxPairs || DEFAULT_SYNONYM_OPTIONS.maxPairs)),
+    maxLlmPairs: Math.max(0, Number(merged.maxLlmPairs || DEFAULT_SYNONYM_OPTIONS.maxLlmPairs)),
+    llmEnabled: merged.llmEnabled == null ? envEnabled : Boolean(merged.llmEnabled),
+    model: merged.model ? String(merged.model) : '',
+    promptVersion: String(merged.promptVersion || DEFAULT_SYNONYM_OPTIONS.promptVersion),
+    schemaVersion: String(merged.schemaVersion || DEFAULT_SYNONYM_OPTIONS.schemaVersion),
+    llmTimeoutMs: Math.max(5000, Number(merged.llmTimeoutMs || DEFAULT_SYNONYM_OPTIONS.llmTimeoutMs))
+  };
 }
 
 class KnowledgeJobService {
@@ -41,6 +66,9 @@ class KnowledgeJobService {
     const jobType = this.validateTaskType(payload.jobType);
     const scope = payload.scope || {};
     const batchSize = Math.max(1, Number(payload.batchSize || 50));
+    const synonymOptions = jobType === 'synonym_boundary'
+      ? normalizeSynonymOptions(payload.options || {})
+      : null;
     const job = dbService.createKnowledgeJob({
       jobType,
       scope,
@@ -48,10 +76,16 @@ class KnowledgeJobService {
       engineVersion: payload.engineVersion || 'local-v1',
       triggeredBy: payload.triggeredBy || 'owner'
     });
+    if (jobType === 'synonym_boundary') {
+      dbService.upsertKnowledgeSynonymJobMeta(job.id, {
+        ...synonymOptions,
+        options: synonymOptions
+      });
+    }
 
     this.queue.push(job.id);
     this.processQueue();
-    return job;
+    return dbService.getKnowledgeJobById(job.id);
   }
 
   listJobs(limit = 20) {
@@ -95,6 +129,9 @@ class KnowledgeJobService {
     const job = dbService.getKnowledgeJobById(jobId);
     if (!job) return;
     if (job.status === 'cancelled') return;
+    const synonymMeta = job.jobType === 'synonym_boundary'
+      ? dbService.getKnowledgeSynonymJobMeta(jobId)
+      : null;
 
     const scope = job.scope || {};
     const cards = dbService.getKnowledgeSourceCards(scope);
@@ -136,7 +173,11 @@ class KnowledgeJobService {
 
       const batchNo = index + 1;
       const batchCards = batches[index];
-      const output = runTask(job.jobType, batchCards);
+      const output = await runTask(
+        job.jobType,
+        batchCards,
+        synonymMeta?.options || synonymMeta || {}
+      );
       const isFailed = output.status === 'failed';
       dbService.insertKnowledgeRawOutput(jobId, batchNo, {
         input: {
@@ -171,7 +212,8 @@ class KnowledgeJobService {
         doneBatches,
         errorBatches,
         quality: aggregate.quality,
-        resultShape: Object.keys(aggregate.result || {})
+        resultShape: Object.keys(aggregate.result || {}),
+        synonymStats: aggregate.result?.stats || null
       },
       finishedAt: new Date().toISOString()
     });
@@ -201,6 +243,22 @@ class KnowledgeJobService {
     } else if (incomingResult.groups) {
       const list = target.result.groups || [];
       target.result.groups = list.concat(incomingResult.groups);
+      if (incomingResult.candidates) {
+        const candidateList = target.result.candidates || [];
+        target.result.candidates = candidateList.concat(incomingResult.candidates);
+      }
+      if (incomingResult.stats) {
+        target.result.stats = {
+          ...(target.result.stats || {}),
+          ...incomingResult.stats
+        };
+      }
+      if (incomingResult.meta) {
+        target.result.meta = {
+          ...(target.result.meta || {}),
+          ...incomingResult.meta
+        };
+      }
     } else if (incomingResult.patterns) {
       const list = target.result.patterns || [];
       target.result.patterns = list.concat(incomingResult.patterns);
@@ -222,7 +280,18 @@ class KnowledgeJobService {
         dbService.replaceKnowledgeIssues(result.issues || [], jobId);
         break;
       case 'synonym_boundary':
-        dbService.replaceKnowledgeSynonymData(result.groups || [], jobId);
+        dbService.saveKnowledgeSynonymCandidates(jobId, result.candidates || []);
+        dbService.replaceKnowledgeSynonymData(result.groups || [], jobId, result.meta || {});
+        dbService.upsertKnowledgeSynonymJobMeta(jobId, {
+          ...(result.meta || {}),
+          candidateCount: Number(result.stats?.candidateCount || (result.candidates || []).length || 0),
+          successCount: Number(result.stats?.llmSuccessCount || 0),
+          failedCount: Number(result.stats?.llmFailedCount || 0),
+          jsonParseRate: Number(result.stats?.jsonParseRate || 0),
+          avgLatencyMs: Number(result.stats?.avgLlmLatencyMs || 0),
+          p95LatencyMs: Number(result.stats?.p95LlmLatencyMs || 0),
+          options: result.meta || {}
+        });
         break;
       case 'grammar_link':
         dbService.replaceKnowledgeGrammarData(result.patterns || [], jobId);

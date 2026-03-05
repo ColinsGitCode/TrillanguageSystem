@@ -261,6 +261,23 @@ class ApiService {
         return this.fetchJson(`/api/knowledge/synonyms?${query.toString()}`);
     }
 
+    async listKnowledgeSynonymBoundaries(params = {}) {
+        const query = new URLSearchParams();
+        if (params.page) query.set('page', String(params.page));
+        if (params.pageSize) query.set('pageSize', String(params.pageSize));
+        if (params.jobId) query.set('jobId', String(params.jobId));
+        if (params.riskLevel) query.set('riskLevel', String(params.riskLevel));
+        if (params.query) query.set('query', String(params.query));
+        return this.fetchJson(`/api/knowledge/synonyms/list?${query.toString()}`);
+    }
+
+    async getKnowledgeSynonymBoundaryDetail(pairKey, params = {}) {
+        const query = new URLSearchParams();
+        if (params.jobId) query.set('jobId', String(params.jobId));
+        const suffix = query.toString();
+        return this.fetchJson(`/api/knowledge/synonyms/${encodeURIComponent(pairKey)}${suffix ? `?${suffix}` : ''}`);
+    }
+
     async getKnowledgeGrammar(params = {}) {
         const query = new URLSearchParams();
         if (params.pattern) query.set('pattern', String(params.pattern));

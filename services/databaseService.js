@@ -56,6 +56,29 @@ function safeJsonParse(text, fallback) {
   }
 }
 
+function readTableColumns(db, tableName) {
+  return db.prepare(`PRAGMA table_info(${tableName})`).all();
+}
+
+function ensureTableColumns(db, tableName, columnDefs = []) {
+  if (!Array.isArray(columnDefs) || columnDefs.length === 0) return;
+  const existing = new Set(
+    readTableColumns(db, tableName).map((col) => String(col.name || '').toLowerCase())
+  );
+  columnDefs.forEach((columnDef) => {
+    const parts = String(columnDef || '').trim().split(/\s+/);
+    const columnName = String(parts[0] || '').trim();
+    if (!columnName) return;
+    if (existing.has(columnName.toLowerCase())) return;
+    try {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDef}`);
+      existing.add(columnName.toLowerCase());
+    } catch (err) {
+      console.warn(`[Database] Column migration skipped: ${tableName}.${columnName} ->`, err.message);
+    }
+  });
+}
+
 class DatabaseService {
   constructor(dbPath = DEFAULT_DB_PATH) {
     // 确保data目录存在
@@ -215,13 +238,29 @@ class DatabaseService {
       CREATE TABLE IF NOT EXISTS knowledge_synonym_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_key TEXT NOT NULL,
+        pair_key TEXT,
+        term_a TEXT,
+        term_b TEXT,
         tone TEXT,
         register_text TEXT,
         collocation_note TEXT,
         misuse_risk TEXT DEFAULT 'medium',
+        risk_level TEXT,
         recommendation TEXT,
+        actionable_hint TEXT,
         confidence REAL DEFAULT 0,
         coverage_ratio REAL DEFAULT 0,
+        model TEXT,
+        prompt_version TEXT,
+        schema_version TEXT,
+        evidence_hash TEXT,
+        result_json TEXT,
+        context_split_json TEXT,
+        misuse_risks_json TEXT,
+        jp_nuance_json TEXT,
+        boundary_tags_a_json TEXT,
+        boundary_tags_b_json TEXT,
+        parse_status TEXT DEFAULT 'ok',
         version_job_id INTEGER NOT NULL,
         is_active INTEGER DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -243,6 +282,48 @@ class DatabaseService {
       );
       CREATE INDEX IF NOT EXISTS idx_ksm_group ON knowledge_synonym_members(group_id);
       CREATE INDEX IF NOT EXISTS idx_ksm_generation ON knowledge_synonym_members(generation_id);
+
+      CREATE TABLE IF NOT EXISTS knowledge_synonym_candidates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id INTEGER NOT NULL,
+        pair_key TEXT NOT NULL,
+        term_a TEXT NOT NULL,
+        term_b TEXT NOT NULL,
+        candidate_score REAL DEFAULT 0,
+        evidence_hash TEXT,
+        evidence_snapshot_json TEXT,
+        status TEXT DEFAULT 'queued',
+        llm_latency_ms INTEGER DEFAULT 0,
+        llm_error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_id, pair_key),
+        FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ksc_job_score ON knowledge_synonym_candidates(job_id, candidate_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_ksc_status ON knowledge_synonym_candidates(status, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS knowledge_synonym_jobs_meta (
+        job_id INTEGER PRIMARY KEY,
+        model TEXT,
+        prompt_version TEXT,
+        schema_version TEXT,
+        min_candidate_score REAL DEFAULT 0.62,
+        max_pairs INTEGER DEFAULT 120,
+        max_llm_pairs INTEGER DEFAULT 24,
+        llm_enabled INTEGER DEFAULT 0,
+        candidate_count INTEGER DEFAULT 0,
+        success_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        json_parse_rate REAL DEFAULT 0,
+        avg_latency_ms REAL DEFAULT 0,
+        p95_latency_ms REAL DEFAULT 0,
+        options_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ksjm_updated ON knowledge_synonym_jobs_meta(updated_at DESC);
 
       CREATE TABLE IF NOT EXISTS knowledge_grammar_patterns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -299,6 +380,51 @@ class DatabaseService {
       );
       CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id);
       CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
+    `);
+
+    ensureTableColumns(this.db, 'knowledge_synonym_groups', [
+      'pair_key TEXT',
+      'term_a TEXT',
+      'term_b TEXT',
+      'risk_level TEXT',
+      'actionable_hint TEXT',
+      'model TEXT',
+      'prompt_version TEXT',
+      'schema_version TEXT',
+      'evidence_hash TEXT',
+      'result_json TEXT',
+      'context_split_json TEXT',
+      'misuse_risks_json TEXT',
+      'jp_nuance_json TEXT',
+      'boundary_tags_a_json TEXT',
+      'boundary_tags_b_json TEXT',
+      "parse_status TEXT DEFAULT 'ok'"
+    ]);
+
+    ensureTableColumns(this.db, 'knowledge_synonym_candidates', [
+      'llm_latency_ms INTEGER DEFAULT 0',
+      'llm_error TEXT',
+      "status TEXT DEFAULT 'queued'",
+      'evidence_hash TEXT',
+      'evidence_snapshot_json TEXT',
+      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
+    ]);
+
+    ensureTableColumns(this.db, 'knowledge_synonym_jobs_meta', [
+      'max_llm_pairs INTEGER DEFAULT 24',
+      'json_parse_rate REAL DEFAULT 0',
+      'avg_latency_ms REAL DEFAULT 0',
+      'p95_latency_ms REAL DEFAULT 0',
+      'options_json TEXT',
+      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
+    ]);
+
+    this.db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ksg_pair_schema_hash ON knowledge_synonym_groups(pair_key, schema_version, evidence_hash);
+      CREATE INDEX IF NOT EXISTS idx_ksg_pair_active ON knowledge_synonym_groups(pair_key, is_active, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ksc_job_score ON knowledge_synonym_candidates(job_id, candidate_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_ksc_status ON knowledge_synonym_candidates(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ksjm_updated ON knowledge_synonym_jobs_meta(updated_at DESC);
     `);
   }
 
@@ -1353,6 +1479,91 @@ class DatabaseService {
     return this.getKnowledgeJobById(result.lastInsertRowid);
   }
 
+  upsertKnowledgeSynonymJobMeta(jobId, meta = {}) {
+    const normalizedJobId = Number(jobId);
+    if (!normalizedJobId) return null;
+    const stmt = this.db.prepare(`
+      INSERT INTO knowledge_synonym_jobs_meta (
+        job_id, model, prompt_version, schema_version, min_candidate_score,
+        max_pairs, max_llm_pairs, llm_enabled, candidate_count, success_count,
+        failed_count, json_parse_rate, avg_latency_ms, p95_latency_ms,
+        options_json, updated_at
+      ) VALUES (
+        @jobId, @model, @promptVersion, @schemaVersion, @minCandidateScore,
+        @maxPairs, @maxLlmPairs, @llmEnabled, @candidateCount, @successCount,
+        @failedCount, @jsonParseRate, @avgLatencyMs, @p95LatencyMs,
+        @optionsJson, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT(job_id) DO UPDATE SET
+        model = excluded.model,
+        prompt_version = excluded.prompt_version,
+        schema_version = excluded.schema_version,
+        min_candidate_score = excluded.min_candidate_score,
+        max_pairs = excluded.max_pairs,
+        max_llm_pairs = excluded.max_llm_pairs,
+        llm_enabled = excluded.llm_enabled,
+        candidate_count = excluded.candidate_count,
+        success_count = excluded.success_count,
+        failed_count = excluded.failed_count,
+        json_parse_rate = excluded.json_parse_rate,
+        avg_latency_ms = excluded.avg_latency_ms,
+        p95_latency_ms = excluded.p95_latency_ms,
+        options_json = excluded.options_json,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run({
+      jobId: normalizedJobId,
+      model: meta.model ? String(meta.model) : null,
+      promptVersion: meta.promptVersion ? String(meta.promptVersion) : null,
+      schemaVersion: meta.schemaVersion ? String(meta.schemaVersion) : null,
+      minCandidateScore: Number(meta.minCandidateScore == null ? 0.62 : meta.minCandidateScore),
+      maxPairs: Math.max(1, Number(meta.maxPairs == null ? 120 : meta.maxPairs)),
+      maxLlmPairs: Math.max(0, Number(meta.maxLlmPairs == null ? 24 : meta.maxLlmPairs)),
+      llmEnabled: meta.llmEnabled ? 1 : 0,
+      candidateCount: Math.max(0, Number(meta.candidateCount || 0)),
+      successCount: Math.max(0, Number(meta.successCount || 0)),
+      failedCount: Math.max(0, Number(meta.failedCount || 0)),
+      jsonParseRate: Number(meta.jsonParseRate || 0),
+      avgLatencyMs: Number(meta.avgLatencyMs || 0),
+      p95LatencyMs: Number(meta.p95LatencyMs || 0),
+      optionsJson: JSON.stringify(meta.options || {})
+    });
+
+    return this.getKnowledgeSynonymJobMeta(normalizedJobId);
+  }
+
+  getKnowledgeSynonymJobMeta(jobId) {
+    const normalizedJobId = Number(jobId);
+    if (!normalizedJobId) return null;
+    const row = this.db.prepare(`
+      SELECT *
+      FROM knowledge_synonym_jobs_meta
+      WHERE job_id = ?
+      LIMIT 1
+    `).get(normalizedJobId);
+    if (!row) return null;
+    return {
+      jobId: row.job_id,
+      model: row.model || null,
+      promptVersion: row.prompt_version || null,
+      schemaVersion: row.schema_version || null,
+      minCandidateScore: Number(row.min_candidate_score || 0),
+      maxPairs: Number(row.max_pairs || 0),
+      maxLlmPairs: Number(row.max_llm_pairs || 0),
+      llmEnabled: Number(row.llm_enabled || 0) === 1,
+      candidateCount: Number(row.candidate_count || 0),
+      successCount: Number(row.success_count || 0),
+      failedCount: Number(row.failed_count || 0),
+      jsonParseRate: Number(row.json_parse_rate || 0),
+      avgLatencyMs: Number(row.avg_latency_ms || 0),
+      p95LatencyMs: Number(row.p95_latency_ms || 0),
+      options: safeJsonParse(row.options_json, {}),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
   updateKnowledgeJobStatus(jobId, patch = {}) {
     const fields = [];
     const params = { jobId };
@@ -1405,6 +1616,9 @@ class DatabaseService {
       LIMIT 1
     `).get(jobId);
     if (!row) return null;
+    const synonymMeta = row.job_type === 'synonym_boundary'
+      ? this.getKnowledgeSynonymJobMeta(row.id)
+      : null;
     return {
       id: row.id,
       jobType: row.job_type,
@@ -1418,6 +1632,7 @@ class DatabaseService {
       errorMessage: row.error_message || null,
       engineVersion: row.engine_version,
       triggeredBy: row.triggered_by,
+      synonymMeta,
       createdAt: row.created_at,
       startedAt: row.started_at,
       finishedAt: row.finished_at
@@ -1431,23 +1646,29 @@ class DatabaseService {
       ORDER BY id DESC
       LIMIT ?
     `).all(Math.max(1, Number(limit || 20)));
-    return rows.map((row) => ({
-      id: row.id,
-      jobType: row.job_type,
-      status: row.status,
-      scope: safeJsonParse(row.scope_json, {}),
-      batchSize: row.batch_size,
-      totalBatches: row.total_batches,
-      doneBatches: row.done_batches,
-      errorBatches: row.error_batches,
-      resultSummary: safeJsonParse(row.result_summary_json, null),
-      errorMessage: row.error_message || null,
-      engineVersion: row.engine_version,
-      triggeredBy: row.triggered_by,
-      createdAt: row.created_at,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at
-    }));
+    return rows.map((row) => {
+      const synonymMeta = row.job_type === 'synonym_boundary'
+        ? this.getKnowledgeSynonymJobMeta(row.id)
+        : null;
+      return {
+        id: row.id,
+        jobType: row.job_type,
+        status: row.status,
+        scope: safeJsonParse(row.scope_json, {}),
+        batchSize: row.batch_size,
+        totalBatches: row.total_batches,
+        doneBatches: row.done_batches,
+        errorBatches: row.error_batches,
+        resultSummary: safeJsonParse(row.result_summary_json, null),
+        errorMessage: row.error_message || null,
+        engineVersion: row.engine_version,
+        triggeredBy: row.triggered_by,
+        synonymMeta,
+        createdAt: row.created_at,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at
+      };
+    });
   }
 
   cancelKnowledgeJob(jobId) {
@@ -1616,20 +1837,104 @@ class DatabaseService {
     return transaction(Array.isArray(issues) ? issues : []);
   }
 
-  replaceKnowledgeSynonymData(groups = [], jobId) {
-    const transaction = this.db.transaction((payload, versionJobId) => {
+  saveKnowledgeSynonymCandidates(jobId, candidates = []) {
+    const normalizedJobId = Number(jobId);
+    if (!normalizedJobId) return 0;
+    const rows = Array.isArray(candidates) ? candidates : [];
+    const transaction = this.db.transaction((payload) => {
+      this.db.prepare(`DELETE FROM knowledge_synonym_candidates WHERE job_id = ?`).run(normalizedJobId);
+      const stmt = this.db.prepare(`
+        INSERT INTO knowledge_synonym_candidates (
+          job_id, pair_key, term_a, term_b, candidate_score,
+          evidence_hash, evidence_snapshot_json, status, llm_latency_ms, llm_error, updated_at
+        ) VALUES (
+          @jobId, @pairKey, @termA, @termB, @candidateScore,
+          @evidenceHash, @evidenceSnapshotJson, @status, @llmLatencyMs, @llmError, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT(job_id, pair_key) DO UPDATE SET
+          term_a = excluded.term_a,
+          term_b = excluded.term_b,
+          candidate_score = excluded.candidate_score,
+          evidence_hash = excluded.evidence_hash,
+          evidence_snapshot_json = excluded.evidence_snapshot_json,
+          status = excluded.status,
+          llm_latency_ms = excluded.llm_latency_ms,
+          llm_error = excluded.llm_error,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+      let count = 0;
+      payload.forEach((item) => {
+        stmt.run({
+          jobId: normalizedJobId,
+          pairKey: String(item.pairKey || ''),
+          termA: String(item.termA || ''),
+          termB: String(item.termB || ''),
+          candidateScore: Number(item.candidateScore || 0),
+          evidenceHash: item.evidenceHash ? String(item.evidenceHash) : null,
+          evidenceSnapshotJson: JSON.stringify(item.evidenceSnapshot || {}),
+          status: String(item.status || 'queued'),
+          llmLatencyMs: Math.max(0, Number(item.llmLatencyMs || 0)),
+          llmError: item.llmError ? String(item.llmError) : null
+        });
+        count += 1;
+      });
+      return count;
+    });
+    return transaction(rows);
+  }
+
+  replaceKnowledgeSynonymData(groups = [], jobId, options = {}) {
+    const transaction = this.db.transaction((payload, versionJobId, extraOptions) => {
       this.db.prepare(`UPDATE knowledge_synonym_groups SET is_active = 0 WHERE is_active = 1`).run();
-      this.db.prepare(`DELETE FROM knowledge_synonym_members WHERE group_id IN (SELECT id FROM knowledge_synonym_groups WHERE version_job_id = ?)`).run(versionJobId);
-      this.db.prepare(`DELETE FROM knowledge_synonym_groups WHERE version_job_id = ?`).run(versionJobId);
 
       const insertGroup = this.db.prepare(`
         INSERT INTO knowledge_synonym_groups (
-          group_key, tone, register_text, collocation_note, misuse_risk,
-          recommendation, confidence, coverage_ratio, version_job_id, is_active
+          group_key, pair_key, term_a, term_b, tone, register_text, collocation_note,
+          misuse_risk, risk_level, recommendation, actionable_hint,
+          confidence, coverage_ratio, model, prompt_version, schema_version,
+          evidence_hash, result_json, context_split_json, misuse_risks_json, jp_nuance_json,
+          boundary_tags_a_json, boundary_tags_b_json, parse_status, version_job_id, is_active
         ) VALUES (
-          @groupKey, @tone, @registerText, @collocationNote, @misuseRisk,
-          @recommendation, @confidence, @coverageRatio, @versionJobId, 1
+          @groupKey, @pairKey, @termA, @termB, @tone, @registerText, @collocationNote,
+          @misuseRisk, @riskLevel, @recommendation, @actionableHint,
+          @confidence, @coverageRatio, @model, @promptVersion, @schemaVersion,
+          @evidenceHash, @resultJson, @contextSplitJson, @misuseRisksJson, @jpNuanceJson,
+          @boundaryTagsAJson, @boundaryTagsBJson, @parseStatus, @versionJobId, 1
         )
+        ON CONFLICT(pair_key, schema_version, evidence_hash) DO UPDATE SET
+          group_key = excluded.group_key,
+          term_a = excluded.term_a,
+          term_b = excluded.term_b,
+          tone = excluded.tone,
+          register_text = excluded.register_text,
+          collocation_note = excluded.collocation_note,
+          misuse_risk = excluded.misuse_risk,
+          risk_level = excluded.risk_level,
+          recommendation = excluded.recommendation,
+          actionable_hint = excluded.actionable_hint,
+          confidence = excluded.confidence,
+          coverage_ratio = excluded.coverage_ratio,
+          model = excluded.model,
+          prompt_version = excluded.prompt_version,
+          schema_version = excluded.schema_version,
+          result_json = excluded.result_json,
+          context_split_json = excluded.context_split_json,
+          misuse_risks_json = excluded.misuse_risks_json,
+          jp_nuance_json = excluded.jp_nuance_json,
+          boundary_tags_a_json = excluded.boundary_tags_a_json,
+          boundary_tags_b_json = excluded.boundary_tags_b_json,
+          parse_status = excluded.parse_status,
+          version_job_id = excluded.version_job_id,
+          is_active = 1,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+      const selectGroupId = this.db.prepare(`
+        SELECT id
+        FROM knowledge_synonym_groups
+        WHERE pair_key = @pairKey
+          AND schema_version = @schemaVersion
+          AND evidence_hash = @evidenceHash
+        LIMIT 1
       `);
       const insertMember = this.db.prepare(`
         INSERT INTO knowledge_synonym_members (
@@ -1638,21 +1943,54 @@ class DatabaseService {
           @groupId, @generationId, @term, @lang
         )
       `);
+      const deleteMembers = this.db.prepare(`DELETE FROM knowledge_synonym_members WHERE group_id = ?`);
 
       let count = 0;
       for (const group of payload) {
+        const pairKey = String(
+          group.pairKey
+          || group.groupKey
+          || `${group.termA || ''}||${group.termB || ''}`
+        ).trim().toLowerCase();
+        const schemaVersion = String(group.schemaVersion || extraOptions.schemaVersion || '1.0.0');
+        const evidenceHash = String(
+          group.evidenceHash
+          || crypto.createHash('sha1').update(`${pairKey}|${schemaVersion}|${versionJobId}`).digest('hex')
+        );
         const result = insertGroup.run({
-          groupKey: String(group.groupKey || ''),
+          groupKey: String(group.groupKey || pairKey),
+          pairKey,
+          termA: group.termA ? String(group.termA) : null,
+          termB: group.termB ? String(group.termB) : null,
           tone: group.boundaryMatrix?.tone || null,
           registerText: group.boundaryMatrix?.register || null,
           collocationNote: group.boundaryMatrix?.collocation || null,
           misuseRisk: group.misuseRisk || 'medium',
+          riskLevel: group.riskLevel || group.misuseRisk || 'medium',
           recommendation: group.recommendation || '',
+          actionableHint: group.actionableHint || null,
           confidence: Number(group.confidence || 0),
           coverageRatio: Number(group.coverageRatio || 0),
+          model: group.model || extraOptions.model || null,
+          promptVersion: group.promptVersion || extraOptions.promptVersion || null,
+          schemaVersion,
+          evidenceHash,
+          resultJson: JSON.stringify(group.resultJson || group.result || {}),
+          contextSplitJson: JSON.stringify(group.contextSplit || []),
+          misuseRisksJson: JSON.stringify(group.misuseRisks || []),
+          jpNuanceJson: JSON.stringify(group.jpNuance || {}),
+          boundaryTagsAJson: JSON.stringify(group.boundaryTagsA || []),
+          boundaryTagsBJson: JSON.stringify(group.boundaryTagsB || []),
+          parseStatus: String(group.parseStatus || 'ok'),
           versionJobId: Number(versionJobId)
         });
-        const groupId = Number(result.lastInsertRowid);
+        let groupId = Number(result.lastInsertRowid || 0);
+        if (!groupId) {
+          const row = selectGroupId.get({ pairKey, schemaVersion, evidenceHash });
+          groupId = row ? Number(row.id) : 0;
+        }
+        if (!groupId) continue;
+        deleteMembers.run(groupId);
         const members = Array.isArray(group.members) ? group.members : [];
         for (const member of members) {
           insertMember.run({
@@ -1667,7 +2005,7 @@ class DatabaseService {
       return count;
     });
 
-    return transaction(Array.isArray(groups) ? groups : [], Number(jobId));
+    return transaction(Array.isArray(groups) ? groups : [], Number(jobId), options || {});
   }
 
   replaceKnowledgeGrammarData(patterns = [], jobId) {
@@ -2376,6 +2714,9 @@ class DatabaseService {
       WHERE g.is_active = 1
         AND (
           g.group_key LIKE @keyword
+          OR g.pair_key LIKE @keyword
+          OR g.term_a LIKE @keyword
+          OR g.term_b LIKE @keyword
           OR m.term LIKE @keyword
         )
       ORDER BY g.updated_at DESC
@@ -2404,18 +2745,182 @@ class DatabaseService {
     return groups.map((group) => ({
       id: group.id,
       groupKey: group.group_key,
+      pairKey: group.pair_key || group.group_key,
+      termA: group.term_a || null,
+      termB: group.term_b || null,
       boundaryMatrix: {
         tone: group.tone,
         register: group.register_text,
         collocation: group.collocation_note
       },
       misuseRisk: group.misuse_risk,
+      riskLevel: group.risk_level || group.misuse_risk || 'medium',
       recommendation: group.recommendation,
+      actionableHint: group.actionable_hint || null,
       confidence: group.confidence,
       coverageRatio: group.coverage_ratio,
+      model: group.model || null,
+      promptVersion: group.prompt_version || null,
+      schemaVersion: group.schema_version || null,
+      parseStatus: group.parse_status || 'ok',
+      contextSplit: safeJsonParse(group.context_split_json, []),
+      misuseRisks: safeJsonParse(group.misuse_risks_json, []),
+      jpNuance: safeJsonParse(group.jp_nuance_json, {}),
+      boundaryTagsA: safeJsonParse(group.boundary_tags_a_json, []),
+      boundaryTagsB: safeJsonParse(group.boundary_tags_b_json, []),
       members: groupedMembers.get(group.id) || [],
       updatedAt: group.updated_at
     }));
+  }
+
+  listKnowledgeSynonymBoundaries({ jobId, riskLevel, query = '', page = 1, pageSize = 20 } = {}) {
+    const normalizedPage = Math.max(1, Number(page || 1));
+    const normalizedPageSize = Math.max(1, Math.min(200, Number(pageSize || 20)));
+    const conditions = ['1=1'];
+    const params = {
+      limit: normalizedPageSize,
+      offset: (normalizedPage - 1) * normalizedPageSize
+    };
+
+    if (jobId) {
+      conditions.push('g.version_job_id = @jobId');
+      params.jobId = Number(jobId);
+    } else {
+      conditions.push('g.is_active = 1');
+    }
+    if (riskLevel) {
+      conditions.push('COALESCE(g.risk_level, g.misuse_risk, \'medium\') = @riskLevel');
+      params.riskLevel = String(riskLevel);
+    }
+    if (String(query || '').trim()) {
+      conditions.push('(g.pair_key LIKE @q OR g.term_a LIKE @q OR g.term_b LIKE @q OR g.group_key LIKE @q)');
+      params.q = `%${String(query).trim()}%`;
+    }
+
+    const totalRow = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM knowledge_synonym_groups g
+      WHERE ${conditions.join(' AND ')}
+    `).get(params);
+
+    const rows = this.db.prepare(`
+      SELECT g.*
+      FROM knowledge_synonym_groups g
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY
+        CASE COALESCE(g.risk_level, g.misuse_risk, 'low')
+          WHEN 'high' THEN 3
+          WHEN 'medium' THEN 2
+          ELSE 1
+        END DESC,
+        g.confidence DESC,
+        g.updated_at DESC
+      LIMIT @limit OFFSET @offset
+    `).all(params);
+
+    return {
+      total: Number(totalRow?.total || 0),
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      items: rows.map((row) => ({
+        pairKey: row.pair_key || row.group_key,
+        groupKey: row.group_key,
+        termA: row.term_a || null,
+        termB: row.term_b || null,
+        riskLevel: row.risk_level || row.misuse_risk || 'medium',
+        confidence: Number(row.confidence || 0),
+        recommendation: row.recommendation || '',
+        actionableHint: row.actionable_hint || '',
+        model: row.model || null,
+        promptVersion: row.prompt_version || null,
+        schemaVersion: row.schema_version || null,
+        parseStatus: row.parse_status || 'ok',
+        updatedAt: row.updated_at,
+        versionJobId: Number(row.version_job_id || 0)
+      }))
+    };
+  }
+
+  getKnowledgeSynonymBoundaryDetail({ pairKey, jobId } = {}) {
+    const normalizedKey = String(pairKey || '').trim().toLowerCase();
+    if (!normalizedKey) return null;
+    const params = { pairKey: normalizedKey };
+    const row = this.db.prepare(jobId
+      ? `
+        SELECT *
+        FROM knowledge_synonym_groups
+        WHERE pair_key = @pairKey
+          AND version_job_id = @jobId
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `
+      : `
+        SELECT *
+        FROM knowledge_synonym_groups
+        WHERE pair_key = @pairKey
+          AND is_active = 1
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `).get(jobId ? { ...params, jobId: Number(jobId) } : params);
+    if (!row) return null;
+    const members = this.db.prepare(`
+      SELECT generation_id, term, lang
+      FROM knowledge_synonym_members
+      WHERE group_id = ?
+      ORDER BY id ASC
+    `).all(row.id).map((item) => ({
+      generationId: item.generation_id ? Number(item.generation_id) : null,
+      term: item.term || '',
+      lang: item.lang || ''
+    }));
+
+    const candidates = this.db.prepare(`
+      SELECT candidate_score, evidence_hash, evidence_snapshot_json, status, llm_latency_ms, llm_error, updated_at
+      FROM knowledge_synonym_candidates
+      WHERE pair_key = @pairKey
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(params);
+
+    return {
+      id: Number(row.id),
+      pairKey: row.pair_key || row.group_key,
+      groupKey: row.group_key || '',
+      termA: row.term_a || null,
+      termB: row.term_b || null,
+      boundaryMatrix: {
+        tone: row.tone || '',
+        register: row.register_text || '',
+        collocation: row.collocation_note || ''
+      },
+      misuseRisk: row.misuse_risk || 'medium',
+      riskLevel: row.risk_level || row.misuse_risk || 'medium',
+      recommendation: row.recommendation || '',
+      actionableHint: row.actionable_hint || '',
+      confidence: Number(row.confidence || 0),
+      coverageRatio: Number(row.coverage_ratio || 0),
+      model: row.model || null,
+      promptVersion: row.prompt_version || null,
+      schemaVersion: row.schema_version || null,
+      parseStatus: row.parse_status || 'ok',
+      result: safeJsonParse(row.result_json, {}),
+      contextSplit: safeJsonParse(row.context_split_json, []),
+      misuseRisks: safeJsonParse(row.misuse_risks_json, []),
+      jpNuance: safeJsonParse(row.jp_nuance_json, {}),
+      boundaryTagsA: safeJsonParse(row.boundary_tags_a_json, []),
+      boundaryTagsB: safeJsonParse(row.boundary_tags_b_json, []),
+      members,
+      candidate: candidates ? {
+        candidateScore: Number(candidates.candidate_score || 0),
+        evidenceHash: candidates.evidence_hash || null,
+        evidenceSnapshot: safeJsonParse(candidates.evidence_snapshot_json, {}),
+        status: candidates.status || 'queued',
+        llmLatencyMs: Number(candidates.llm_latency_ms || 0),
+        llmError: candidates.llm_error || null,
+        updatedAt: candidates.updated_at || null
+      } : null,
+      updatedAt: row.updated_at
+    };
   }
 
   getKnowledgeGrammarPatterns({ pattern = '', limit = 30 } = {}) {

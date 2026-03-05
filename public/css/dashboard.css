@@ -1641,6 +1641,18 @@ button[onclick^="navigator.clipboard"]:hover {
     font-family: var(--font-mono);
 }
 
+.knowledge-hub-item[data-entity-type="synonym"][data-severity="high"] {
+    border-left-color: #ef4444;
+}
+
+.knowledge-hub-item[data-entity-type="synonym"][data-severity="medium"] {
+    border-left-color: #f59e0b;
+}
+
+.knowledge-hub-item[data-entity-type="synonym"][data-severity="low"] {
+    border-left-color: #10b981;
+}
+
 .knowledge-rel-grid {
     display: grid;
     gap: 8px;
