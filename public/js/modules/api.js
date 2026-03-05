@@ -240,6 +240,12 @@ class ApiService {
         return this.fetchJson('/api/knowledge/summary/latest');
     }
 
+    async getKnowledgeOverview(limit = 8) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/overview?${params.toString()}`);
+    }
+
     async getKnowledgeIndex(params = {}) {
         const query = new URLSearchParams();
         if (params.query) query.set('query', String(params.query));
@@ -277,6 +283,30 @@ class ApiService {
         if (params.limit) query.set('limit', String(params.limit));
         const suffix = query.toString();
         return this.fetchJson(`/api/knowledge/issues${suffix ? `?${suffix}` : ''}`);
+    }
+
+    async getKnowledgeCardRelations(generationId, limit = 12) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/cards/${encodeURIComponent(generationId)}/relations?${params.toString()}`);
+    }
+
+    async getKnowledgeTermRelations(term, limit = 20) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/terms/${encodeURIComponent(term)}/relations?${params.toString()}`);
+    }
+
+    async getKnowledgePatternRelations(pattern, limit = 20) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/patterns/${encodeURIComponent(pattern)}/relations?${params.toString()}`);
+    }
+
+    async getKnowledgeClusterRelations(clusterKey, limit = 20) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/knowledge/clusters/${encodeURIComponent(clusterKey)}/relations?${params.toString()}`);
     }
 }
 

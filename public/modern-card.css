@@ -759,6 +759,121 @@ rt {
 }
 
 /* =========================================
+   📚 Card Knowledge Panel
+   ========================================= */
+
+.card-knowledge-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.card-knowledge-head {
+  border: 1px solid #dbe7ff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f1f5ff 100%);
+  padding: 10px 12px;
+}
+
+.card-knowledge-title {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #1d4ed8;
+  margin-bottom: 8px;
+  letter-spacing: 0.03em;
+}
+
+.card-knowledge-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-knowledge-tags .tag {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #334155;
+  background: #ffffff;
+}
+
+.card-knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card-knowledge-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.card-knowledge-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-bottom: 7px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.card-knowledge-list {
+  display: grid;
+  gap: 7px;
+}
+
+.card-knowledge-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 8px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #0f172a;
+}
+
+.card-knowledge-item .mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #64748b;
+}
+
+.card-knowledge-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-knowledge-open {
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.card-knowledge-open:hover {
+  background: #dbeafe;
+}
+
+@media (max-width: 960px) {
+  .card-knowledge-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================
    ❓ Info Modal & Buttons
    ========================================= */
 

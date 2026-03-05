@@ -2474,6 +2474,203 @@ function renderReviewExampleCard(example, campaignId) {
     `;
 }
 
+async function loadCardKnowledgePanel(options = {}) {
+    const generationId = Number(options.generationId || 0);
+    const container = options.container || document.getElementById('cardKnowledge');
+    if (!container) return;
+    if (!generationId) {
+        container.innerHTML = '<div class="review-empty">当前卡片缺少 generationId，无法加载知识关系。</div>';
+        return;
+    }
+
+    if (container.dataset.loadedGenerationId === String(generationId) && container.dataset.loaded === '1') {
+        return;
+    }
+
+    const requestToken = `${generationId}-${Date.now()}`;
+    container.dataset.requestToken = requestToken;
+    container.dataset.loaded = '0';
+    container.innerHTML = '<div class="review-empty">加载 Knowledge 关系中...</div>';
+
+    try {
+        const data = await api.getKnowledgeCardRelations(generationId, 18);
+        if (container.dataset.requestToken !== requestToken) return;
+        const relations = data?.relations || null;
+        if (!relations) {
+            container.innerHTML = '<div class="review-empty">暂无知识关系数据。</div>';
+            return;
+        }
+
+        const term = relations.term || null;
+        const examples = Array.isArray(relations.examples) ? relations.examples : [];
+        const grammarHits = Array.isArray(relations.grammarHits) ? relations.grammarHits : [];
+        const clusters = Array.isArray(relations.clusters) ? relations.clusters : [];
+        const issues = Array.isArray(relations.issues) ? relations.issues : [];
+        const synonymGroups = Array.isArray(relations.synonymGroups) ? relations.synonymGroups : [];
+        const relatedCards = Array.isArray(relations.relatedCards) ? relations.relatedCards : [];
+
+        const provider = relations.card?.provider || 'unknown';
+        const model = relations.card?.model || 'unknown';
+
+        container.innerHTML = `
+            <div class="card-knowledge-wrap">
+                <div class="card-knowledge-head">
+                    <div class="card-knowledge-title">Knowledge Relations</div>
+                    <div class="card-knowledge-tags">
+                        <span class="tag">provider ${escapeHtml(provider)}</span>
+                        <span class="tag">model ${escapeHtml(model)}</span>
+                        <span class="tag">examples ${examples.length}</span>
+                        <span class="tag">patterns ${grammarHits.length}</span>
+                        <span class="tag">clusters ${clusters.length}</span>
+                        <span class="tag">issues ${issues.length}</span>
+                        <span class="tag">related ${relatedCards.length}</span>
+                    </div>
+                </div>
+
+                <div class="card-knowledge-grid">
+                    ${renderCardKnowledgeSection('Term Index', term ? [term] : [], (item) => `
+                        <strong>${escapeHtml(item.phrase || '-')}</strong>
+                        <span class="mono">score ${Number(item.score || 0)} · ${escapeHtml(item.langProfile || '-')}</span>
+                        <span class="mono">EN ${escapeHtml(item.enHeadword || '-')} · JA ${escapeHtml(item.jaHeadword || '-')} · ZH ${escapeHtml(item.zhHeadword || '-')}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Example Units', examples, (item) => `
+                        <strong>${escapeHtml(item.sourceSlot || '-')} · ${escapeHtml((item.lang || '').toUpperCase())}</strong>
+                        <span>${escapeHtml(item.sentence || '-')}</span>
+                        <span class="mono">${escapeHtml(item.translation || '-')}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Grammar Hits', grammarHits, (item) => `
+                        <strong>${escapeHtml(item.pattern || '-')}</strong>
+                        <span class="mono">confidence ${Number(item.confidence || 0).toFixed(2)}</span>
+                        <span>${escapeHtml(item.sentence || '-')}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Clusters', clusters, (item) => `
+                        <strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong>
+                        <span class="mono">key ${escapeHtml(item.clusterKey || '-')} · score ${Number(item.score || 0).toFixed(2)}</span>
+                        <span>${escapeHtml(item.description || '-')}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Open Issues', issues, (item) => `
+                        <strong>${escapeHtml(item.issueType || '-')} · ${escapeHtml(item.severity || 'medium')}</strong>
+                        <span class="mono">${escapeHtml(item.updatedAt || '-')}</span>
+                        <span>${escapeHtml(JSON.stringify(item.detail || {}))}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Synonym Groups', synonymGroups, (item) => `
+                        <strong>${escapeHtml(item.groupKey || '-')}</strong>
+                        <span class="mono">${escapeHtml(item.misuseRisk || '-')} · conf ${Number(item.confidence || 0).toFixed(2)}</span>
+                        <span>${escapeHtml((item.members || []).map((m) => `${m.term}(${m.lang})`).join(', ') || '-')}</span>
+                    `)}
+
+                    ${renderCardKnowledgeSection('Related Cards', relatedCards, (item) => `
+                        <div class="card-knowledge-row-head">
+                            <strong>${escapeHtml(item.phrase || '-')}</strong>
+                            <button
+                                class="card-knowledge-open"
+                                type="button"
+                                data-generation-id="${Number(item.generationId || 0)}"
+                                data-folder="${escapeHtml(item.folderName || '')}"
+                                data-base="${escapeHtml(item.baseName || '')}"
+                                data-phrase="${escapeHtml(item.phrase || '')}"
+                                data-card-type="${escapeHtml(item.cardType || 'trilingual')}"
+                            >
+                                Open
+                            </button>
+                        </div>
+                        <span class="mono">#${Number(item.generationId || 0)} · ${escapeHtml(item.folderName || '-')} / ${escapeHtml(item.baseName || '-')}</span>
+                        <span>${escapeHtml((item.reasons || []).join(', ') || '-')}</span>
+                    `)}
+                </div>
+            </div>
+        `;
+
+        container.dataset.loadedGenerationId = String(generationId);
+        container.dataset.loaded = '1';
+
+        container.querySelectorAll('.card-knowledge-open').forEach((btn) => {
+            btn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const target = event.currentTarget;
+                await openRelationCardFromKnowledge({
+                    generationId: Number(target.dataset.generationId || 0),
+                    folderName: target.dataset.folder || '',
+                    baseName: target.dataset.base || '',
+                    phrase: target.dataset.phrase || '',
+                    cardType: target.dataset.cardType || 'trilingual'
+                });
+            });
+        });
+    } catch (err) {
+        if (container.dataset.requestToken !== requestToken) return;
+        container.innerHTML = `<div class="review-empty">加载关系失败: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderCardKnowledgeSection(title, rows, rowRenderer) {
+    const list = Array.isArray(rows) ? rows : [];
+    return `
+        <section class="card-knowledge-section">
+            <div class="card-knowledge-section-title">${escapeHtml(title)}</div>
+            ${list.length
+                ? `<div class="card-knowledge-list">${list.map((item) => `<div class="card-knowledge-item">${rowRenderer(item)}</div>`).join('')}</div>`
+                : '<div class="review-empty">No data</div>'}
+        </section>
+    `;
+}
+
+async function openRelationCardFromKnowledge(payload = {}) {
+    let folder = String(payload.folderName || '').trim();
+    let baseName = String(payload.baseName || '').trim();
+    let phrase = String(payload.phrase || '').trim();
+    const generationId = Number(payload.generationId || 0);
+    let cardType = normalizeCardType(payload.cardType || 'trilingual');
+    let metrics = null;
+
+    try {
+        if (folder && baseName) {
+            try {
+                const fileRecord = await api.getRecordByFile(folder, baseName);
+                metrics = fileRecord?.record || null;
+                if (metrics) {
+                    cardType = normalizeCardType(metrics.card_type || cardType);
+                    phrase = phrase || metrics.phrase || '';
+                }
+            } catch (err) {
+                console.warn('Load relation record by file failed:', err.message);
+            }
+        }
+
+        if ((!folder || !baseName) && generationId > 0) {
+            const detail = await api.getHistoryDetail(generationId);
+            const record = detail?.record || null;
+            if (record) {
+                folder = String(record.folder_name || '').trim();
+                baseName = String(record.base_filename || '').trim();
+                phrase = phrase || record.phrase || '';
+                metrics = record;
+                cardType = normalizeCardType(record.card_type || cardType);
+            }
+        }
+
+        if (!folder || !baseName) {
+            throw new Error('missing folder/base');
+        }
+
+        const mdContent = await api.getFileContent(folder, `${baseName}.md`);
+        renderCardModal(mdContent, phrase || baseName, {
+            folder,
+            baseName,
+            generationId,
+            metrics,
+            cardType
+        });
+    } catch (err) {
+        alert(`打开关联卡片失败: ${err.message}`);
+    }
+}
+
 function buildIntelHud(metrics, options = {}) {
     const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
     const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'LOCAL').toUpperCase();
@@ -2760,6 +2957,7 @@ function renderCardModal(markdown, title, options = {}) {
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
                     <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
+                    ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
                     ${generationId ? '<button class="tab-btn" data-target="cardReview" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
                 </div>
             </div>
@@ -2909,6 +3107,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             </div>
 
+            ${generationId ? '<div id="cardKnowledge" class="mc-body" style="display:none;"></div>' : ''}
             ${generationId ? '<div id="cardReview" class="mc-body" style="display:none;"></div>' : ''}
         </div>
     `;
@@ -2960,6 +3159,7 @@ function renderCardModal(markdown, title, options = {}) {
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
             const intelTab = els.modalContainer.querySelector('#cardIntel');
+            const knowledgeTab = els.modalContainer.querySelector('#cardKnowledge');
             const reviewTab = els.modalContainer.querySelector('#cardReview');
             
             if (targetId === 'cardIntel') {
@@ -2967,6 +3167,15 @@ function renderCardModal(markdown, title, options = {}) {
                 requestAnimationFrame(() => renderIntelCharts(metrics));
             } else {
                 intelTab.style.display = 'none';
+            }
+
+            if (knowledgeTab) {
+                if (targetId === 'cardKnowledge') {
+                    knowledgeTab.style.display = 'block';
+                    loadCardKnowledgePanel({ generationId, container: knowledgeTab });
+                } else {
+                    knowledgeTab.style.display = 'none';
+                }
             }
 
             if (reviewTab) {

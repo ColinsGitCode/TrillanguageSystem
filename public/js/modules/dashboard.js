@@ -16,7 +16,10 @@ const state = {
     knowledgeTimerId: null,
     selectedKnowledgeJobId: null,
     knowledgeJobs: [],
-    knowledgeDetailToken: 0
+    knowledgeDetailToken: 0,
+    knowledgeRelationToken: 0,
+    knowledgeOverview: null,
+    knowledgeHubSelection: null
 };
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const QUEUE_POLL_INTERVAL_MS = 1500;
@@ -300,6 +303,12 @@ function formatQueueTime(value) {
 function initKnowledgeOps() {
     const startBtn = document.getElementById('knowledgeStartBtn');
     const jobsList = document.getElementById('knowledgeJobsList');
+    const hubContainers = [
+        document.getElementById('knowledgeHubTerms'),
+        document.getElementById('knowledgeHubPatterns'),
+        document.getElementById('knowledgeHubClusters'),
+        document.getElementById('knowledgeHubIssues')
+    ];
     if (!startBtn || !jobsList) return;
 
     startBtn.addEventListener('click', async () => {
@@ -346,6 +355,25 @@ function initKnowledgeOps() {
         await renderSelectedKnowledgeJobDetail(state.knowledgeJobs || []);
     });
 
+    hubContainers.forEach((container) => {
+        if (!container) return;
+        container.addEventListener('click', async (event) => {
+            const item = event.target.closest('.knowledge-hub-item');
+            if (!item) return;
+            const entityType = String(item.dataset.entityType || '').trim();
+            const key = String(item.dataset.key || '').trim();
+            if (!entityType || !key) return;
+
+            state.knowledgeHubSelection = {
+                entityType,
+                key,
+                severity: item.dataset.severity || ''
+            };
+            renderKnowledgeHub(state.knowledgeOverview);
+            await renderKnowledgeRelationInspector();
+        });
+    });
+
     refreshKnowledgeOps();
     if (state.knowledgeTimerId) clearInterval(state.knowledgeTimerId);
     state.knowledgeTimerId = setInterval(refreshKnowledgeOps, KNOWLEDGE_POLL_INTERVAL_MS);
@@ -376,12 +404,14 @@ function collectKnowledgeJobPayload() {
 async function refreshKnowledgeOps() {
     const token = ++state.knowledgeDetailToken;
     try {
-        const [jobsRes, summaryRes] = await Promise.all([
+        const [jobsRes, summaryRes, overviewRes] = await Promise.all([
             api.getKnowledgeJobs(20),
-            api.getKnowledgeSummaryLatest()
+            api.getKnowledgeSummaryLatest(),
+            api.getKnowledgeOverview(8)
         ]);
         const jobs = Array.isArray(jobsRes?.jobs) ? jobsRes.jobs : [];
         state.knowledgeJobs = jobs;
+        state.knowledgeOverview = overviewRes?.overview || null;
 
         if (!state.selectedKnowledgeJobId && jobs.length) {
             state.selectedKnowledgeJobId = Number(jobs[0].id);
@@ -391,7 +421,10 @@ async function refreshKnowledgeOps() {
 
         renderKnowledgeJobs(jobs);
         renderKnowledgeSummary(summaryRes?.summary || null);
+        ensureKnowledgeHubSelection(state.knowledgeOverview);
+        renderKnowledgeHub(state.knowledgeOverview);
         await renderSelectedKnowledgeJobDetail(jobs, token);
+        await renderKnowledgeRelationInspector();
     } catch (err) {
         setKnowledgeToast(`Knowledge ops refresh failed: ${err.message}`, 'error');
     }
@@ -498,6 +531,301 @@ function renderKnowledgeSummary(summary) {
                 <li>Action P${Number(item.priority || 0)} · ${escapeHtml(item.action || '-')}</li>
             `).join('')}
         </ul>
+    `;
+}
+
+function ensureKnowledgeHubSelection(overview) {
+    const data = overview || {};
+    const topTerms = Array.isArray(data.topTerms) ? data.topTerms : [];
+    const topPatterns = Array.isArray(data.topPatterns) ? data.topPatterns : [];
+    const topClusters = Array.isArray(data.topClusters) ? data.topClusters : [];
+    const topIssues = Array.isArray(data.topIssues) ? data.topIssues : [];
+
+    const exists = (selection) => {
+        if (!selection || !selection.entityType || !selection.key) return false;
+        if (selection.entityType === 'term') {
+            return topTerms.some((item) => String(item.phrase || '') === selection.key);
+        }
+        if (selection.entityType === 'pattern') {
+            return topPatterns.some((item) => String(item.pattern || '') === selection.key);
+        }
+        if (selection.entityType === 'cluster') {
+            return topClusters.some((item) => String(item.clusterKey || '') === selection.key);
+        }
+        if (selection.entityType === 'issue') {
+            return topIssues.some((item) => {
+                const key = `${String(item.issueType || '')}::${String(item.severity || '')}`;
+                return key === selection.key;
+            });
+        }
+        return false;
+    };
+
+    if (exists(state.knowledgeHubSelection)) return;
+    if (topTerms.length) {
+        state.knowledgeHubSelection = { entityType: 'term', key: String(topTerms[0].phrase || ''), severity: '' };
+        return;
+    }
+    if (topPatterns.length) {
+        state.knowledgeHubSelection = { entityType: 'pattern', key: String(topPatterns[0].pattern || ''), severity: '' };
+        return;
+    }
+    if (topClusters.length) {
+        state.knowledgeHubSelection = { entityType: 'cluster', key: String(topClusters[0].clusterKey || ''), severity: '' };
+        return;
+    }
+    if (topIssues.length) {
+        state.knowledgeHubSelection = {
+            entityType: 'issue',
+            key: `${String(topIssues[0].issueType || '')}::${String(topIssues[0].severity || '')}`,
+            severity: String(topIssues[0].severity || '')
+        };
+        return;
+    }
+    state.knowledgeHubSelection = null;
+}
+
+function renderKnowledgeHub(overview) {
+    const countsNode = document.getElementById('knowledgeHubCounts');
+    const termsNode = document.getElementById('knowledgeHubTerms');
+    const patternsNode = document.getElementById('knowledgeHubPatterns');
+    const clustersNode = document.getElementById('knowledgeHubClusters');
+    const issuesNode = document.getElementById('knowledgeHubIssues');
+    if (!countsNode || !termsNode || !patternsNode || !clustersNode || !issuesNode) return;
+
+    const data = overview || {};
+    const counts = data.counts || {};
+    const topTerms = Array.isArray(data.topTerms) ? data.topTerms : [];
+    const topPatterns = Array.isArray(data.topPatterns) ? data.topPatterns : [];
+    const topClusters = Array.isArray(data.topClusters) ? data.topClusters : [];
+    const topIssues = Array.isArray(data.topIssues) ? data.topIssues : [];
+
+    countsNode.innerHTML = `
+        <span class="tag">terms ${Number(counts.termCount || 0)}</span>
+        <span class="tag">patterns ${Number(counts.grammarPatternCount || 0)}</span>
+        <span class="tag">clusters ${Number(counts.clusterCount || 0)}</span>
+        <span class="tag">open issues ${Number(counts.openIssueCount || 0)}</span>
+        <span class="tag">jobs ${Number(counts.runningJobs || 0)}R / ${Number(counts.queuedJobs || 0)}Q</span>
+    `;
+
+    const renderList = (container, items, entityType, renderName, renderMeta, getKey, extraDataset = () => '') => {
+        if (!items.length) {
+            container.innerHTML = '<div class="empty-hint">No data</div>';
+            return;
+        }
+        container.innerHTML = items.map((item) => {
+            const key = String(getKey(item) || '').trim();
+            const isActive = Boolean(
+                state.knowledgeHubSelection
+                && state.knowledgeHubSelection.entityType === entityType
+                && state.knowledgeHubSelection.key === key
+            );
+            return `
+                <div
+                    class="knowledge-hub-item ${isActive ? 'active' : ''}"
+                    data-entity-type="${entityType}"
+                    data-key="${escapeHtml(key)}"
+                    ${extraDataset(item)}
+                >
+                    <div class="name">${escapeHtml(renderName(item))}</div>
+                    <div class="meta">${escapeHtml(renderMeta(item))}</div>
+                </div>
+            `;
+        }).join('');
+    };
+
+    renderList(
+        termsNode,
+        topTerms,
+        'term',
+        (item) => item.phrase || '-',
+        (item) => `score ${formatNumber(item.score, 1)} · ${item.folderName || '-'}`,
+        (item) => item.phrase || ''
+    );
+    renderList(
+        patternsNode,
+        topPatterns,
+        'pattern',
+        (item) => item.pattern || '-',
+        (item) => `confidence ${formatNumber(item.confidence, 2)}`,
+        (item) => item.pattern || ''
+    );
+    renderList(
+        clustersNode,
+        topClusters,
+        'cluster',
+        (item) => item.label || item.clusterKey || '-',
+        (item) => `${item.clusterKey || '-'} · cards ${Number(item.cardCount || 0)}`,
+        (item) => item.clusterKey || ''
+    );
+    renderList(
+        issuesNode,
+        topIssues,
+        'issue',
+        (item) => item.issueType || '-',
+        (item) => `${item.severity || 'medium'} · ${Number(item.count || 0)}`,
+        (item) => `${String(item.issueType || '')}::${String(item.severity || '')}`,
+        (item) => `data-severity="${escapeHtml(item.severity || 'medium')}"`
+    );
+}
+
+async function renderKnowledgeRelationInspector() {
+    const token = ++state.knowledgeRelationToken;
+    const container = document.getElementById('knowledgeRelationInspector');
+    const selection = state.knowledgeHubSelection;
+    if (!container) return;
+
+    if (!selection || !selection.entityType || !selection.key) {
+        container.innerHTML = '<div class="empty-hint">Click item in Knowledge Hub to inspect relations</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="empty-hint">Loading relations...</div>';
+    try {
+        let relation = null;
+        let title = '';
+        const normalizedType = String(selection.entityType || '').trim();
+        if (normalizedType === 'term') {
+            const data = await api.getKnowledgeTermRelations(selection.key, 20);
+            relation = data?.relations || null;
+            title = `TERM · ${selection.key}`;
+        } else if (normalizedType === 'pattern') {
+            const data = await api.getKnowledgePatternRelations(selection.key, 20);
+            relation = data?.relations || null;
+            title = `PATTERN · ${selection.key}`;
+        } else if (normalizedType === 'cluster') {
+            const data = await api.getKnowledgeClusterRelations(selection.key, 20);
+            relation = data?.relations || null;
+            title = `CLUSTER · ${selection.key}`;
+        } else if (normalizedType === 'issue') {
+            const [issueType = '', severity = ''] = String(selection.key).split('::');
+            const data = await api.getKnowledgeIssues({ issueType, severity, resolved: false, limit: 30 });
+            const issues = Array.isArray(data?.issues) ? data.issues : [];
+            relation = {
+                issueType,
+                severity,
+                issues,
+                affectedCards: issues.map((item) => ({
+                    generationId: Number(item.generationId || 0),
+                    phrase: item.phrase || '',
+                    reason: `${item.issueType || ''}/${item.severity || ''}`,
+                    detail: item.detail || {}
+                }))
+            };
+            title = `ISSUE · ${issueType || '-'} / ${severity || '-'}`;
+        } else {
+            relation = null;
+        }
+
+        if (token !== state.knowledgeRelationToken) return;
+        if (!relation) {
+            container.innerHTML = '<div class="empty-hint">No relation data</div>';
+            return;
+        }
+
+        if (normalizedType === 'term') {
+            const entries = Array.isArray(relation.matchedEntries) ? relation.matchedEntries : [];
+            const patterns = Array.isArray(relation.patterns) ? relation.patterns : [];
+            const clusters = Array.isArray(relation.clusters) ? relation.clusters : [];
+            const issues = Array.isArray(relation.issues) ? relation.issues : [];
+            const relatedCards = Array.isArray(relation.relatedCards) ? relation.relatedCards : [];
+            container.innerHTML = `
+                <div class="knowledge-inline-tags">
+                    <span class="tag">${escapeHtml(title)}</span>
+                    <span class="tag">entries ${entries.length}</span>
+                    <span class="tag">patterns ${patterns.length}</span>
+                    <span class="tag">clusters ${clusters.length}</span>
+                    <span class="tag">issues ${issues.length}</span>
+                    <span class="tag">cards ${relatedCards.length}</span>
+                </div>
+                <div class="knowledge-rel-grid">
+                    ${renderRelSection('Matched Terms', entries, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> · score ${formatNumber(item.score, 1)} <span class="mono">${escapeHtml(item.folderName || '-')}</span>`)}
+                    ${renderRelSection('Grammar', patterns, (item) => `<strong>${escapeHtml(item.pattern || '-')}</strong> · cards ${Number(item.cardCount || 0)} · conf ${formatNumber(item.confidence, 2)}`)}
+                    ${renderRelSection('Clusters', clusters, (item) => `<strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong> · cards ${Number(item.cardCount || 0)} · conf ${formatNumber(item.confidence, 2)}`)}
+                    ${renderRelSection('Issues', issues, (item) => `<strong>${escapeHtml(item.issueType || '-')}</strong> · ${escapeHtml(item.severity || 'medium')} · ${Number(item.count || 0)}`)}
+                    ${renderRelSection('Related Cards', relatedCards, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> <span class="mono">#${Number(item.generationId || 0)} · ${escapeHtml(item.folderName || '-')} / ${escapeHtml(item.baseName || '-')}</span>`)}
+                </div>
+            `;
+            return;
+        }
+
+        if (normalizedType === 'pattern') {
+            const refs = Array.isArray(relation.refs) ? relation.refs : [];
+            const terms = Array.isArray(relation.terms) ? relation.terms : [];
+            const clusters = Array.isArray(relation.clusters) ? relation.clusters : [];
+            const issues = Array.isArray(relation.issues) ? relation.issues : [];
+            const relatedCards = Array.isArray(relation.relatedCards) ? relation.relatedCards : [];
+            container.innerHTML = `
+                <div class="knowledge-inline-tags">
+                    <span class="tag">${escapeHtml(title)}</span>
+                    <span class="tag">refs ${refs.length}</span>
+                    <span class="tag">terms ${terms.length}</span>
+                    <span class="tag">clusters ${clusters.length}</span>
+                    <span class="tag">issues ${issues.length}</span>
+                </div>
+                <div class="knowledge-rel-grid">
+                    ${renderRelSection('Pattern Detail', [relation.pattern || {}], (item) => `<strong>${escapeHtml(item.pattern || '-')}</strong> · conf ${formatNumber(item.confidence, 2)}<br/><span class="mono">${escapeHtml(item.explanationZh || '-')}</span>`)}
+                    ${renderRelSection('Sentence Refs', refs, (item) => `<strong>${escapeHtml(item.sentence || '-')}</strong><br/><span class="mono">#${Number(item.generationId || 0)} · ${escapeHtml(item.phrase || '-')}</span>`)}
+                    ${renderRelSection('Terms', terms, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> · score ${formatNumber(item.score, 1)}`)}
+                    ${renderRelSection('Clusters', clusters, (item) => `<strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong> · cards ${Number(item.cardCount || 0)}`)}
+                    ${renderRelSection('Related Cards', relatedCards, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> <span class="mono">#${Number(item.generationId || 0)} · ${escapeHtml(item.folderName || '-')} / ${escapeHtml(item.baseName || '-')}</span>`)}
+                    ${renderRelSection('Issues', issues, (item) => `<strong>${escapeHtml(item.issueType || '-')}</strong> · ${escapeHtml(item.severity || 'medium')} · ${Number(item.count || 0)}`)}
+                </div>
+            `;
+            return;
+        }
+
+        if (normalizedType === 'cluster') {
+            const cards = Array.isArray(relation.cards) ? relation.cards : [];
+            const terms = Array.isArray(relation.terms) ? relation.terms : [];
+            const patterns = Array.isArray(relation.patterns) ? relation.patterns : [];
+            const issues = Array.isArray(relation.issues) ? relation.issues : [];
+            container.innerHTML = `
+                <div class="knowledge-inline-tags">
+                    <span class="tag">${escapeHtml(title)}</span>
+                    <span class="tag">cards ${cards.length}</span>
+                    <span class="tag">terms ${terms.length}</span>
+                    <span class="tag">patterns ${patterns.length}</span>
+                    <span class="tag">issues ${issues.length}</span>
+                </div>
+                <div class="knowledge-rel-grid">
+                    ${renderRelSection('Cluster Detail', [relation.cluster || {}], (item) => `<strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong> · conf ${formatNumber(item.confidence, 2)}<br/><span class="mono">${escapeHtml(item.description || '-')}</span>`)}
+                    ${renderRelSection('Cards', cards, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> · score ${formatNumber(item.score, 2)} <span class="mono">${escapeHtml(item.folderName || '-')} / ${escapeHtml(item.baseName || '-')}</span>`)}
+                    ${renderRelSection('Terms', terms, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> · score ${formatNumber(item.score, 1)}`)}
+                    ${renderRelSection('Patterns', patterns, (item) => `<strong>${escapeHtml(item.pattern || '-')}</strong> · cards ${Number(item.cardCount || 0)} · conf ${formatNumber(item.confidence, 2)}`)}
+                    ${renderRelSection('Issues', issues, (item) => `<strong>${escapeHtml(item.issueType || '-')}</strong> · ${escapeHtml(item.severity || 'medium')} · ${Number(item.count || 0)}`)}
+                </div>
+            `;
+            return;
+        }
+
+        const issues = Array.isArray(relation.issues) ? relation.issues : [];
+        const cards = Array.isArray(relation.affectedCards) ? relation.affectedCards : [];
+        container.innerHTML = `
+            <div class="knowledge-inline-tags">
+                <span class="tag">${escapeHtml(title)}</span>
+                <span class="tag">issues ${issues.length}</span>
+                <span class="tag">affected cards ${cards.length}</span>
+            </div>
+            <div class="knowledge-rel-grid">
+                ${renderRelSection('Affected Issues', issues, (item) => `<strong>${escapeHtml(item.phrase || '-')}</strong> · #${Number(item.generationId || 0)} · ${escapeHtml(item.severity || 'medium')}`)}
+            </div>
+        `;
+    } catch (err) {
+        if (token !== state.knowledgeRelationToken) return;
+        container.innerHTML = `<div class="empty-hint">Relation load failed: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderRelSection(title, items, rowRenderer) {
+    const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+    return `
+        <section class="knowledge-rel-section">
+            <div class="title">${escapeHtml(title)}</div>
+            ${rows.length
+                ? `<ul>${rows.map((item) => `<li>${rowRenderer(item)}</li>`).join('')}</ul>`
+                : '<div class="empty-hint">No data</div>'}
+        </section>
     `;
 }
 

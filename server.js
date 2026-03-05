@@ -1527,6 +1527,65 @@ app.get('/api/knowledge/issues', (req, res) => {
   }
 });
 
+app.get('/api/knowledge/overview', (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 8);
+    const overview = dbService.getKnowledgeOverview({ limit });
+    res.json({ success: true, overview });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/cards/:generationId/relations', (req, res) => {
+  try {
+    const generationId = Number(req.params.generationId);
+    if (!generationId) return res.status(400).json({ error: 'invalid generation id' });
+    const limit = Number(req.query.limit || 12);
+    const relations = dbService.getKnowledgeCardRelations(generationId, { limit });
+    if (!relations) return res.status(404).json({ error: 'card not found' });
+    res.json({ success: true, relations });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/terms/:term/relations', (req, res) => {
+  try {
+    const term = String(req.params.term || '').trim();
+    if (!term) return res.status(400).json({ error: 'term is required' });
+    const limit = Number(req.query.limit || 20);
+    const relations = dbService.getKnowledgeTermRelations(term, { limit });
+    res.json({ success: true, relations });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/patterns/:pattern/relations', (req, res) => {
+  try {
+    const pattern = String(req.params.pattern || '').trim();
+    if (!pattern) return res.status(400).json({ error: 'pattern is required' });
+    const limit = Number(req.query.limit || 20);
+    const relations = dbService.getKnowledgePatternRelations(pattern, { limit });
+    res.json({ success: true, relations });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/knowledge/clusters/:clusterKey/relations', (req, res) => {
+  try {
+    const clusterKey = String(req.params.clusterKey || '').trim();
+    if (!clusterKey) return res.status(400).json({ error: 'clusterKey is required' });
+    const limit = Number(req.query.limit || 20);
+    const relations = dbService.getKnowledgeClusterRelations(clusterKey, { limit });
+    res.json({ success: true, relations });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/knowledge/summary/latest', (req, res) => {
   try {
     const summary = dbService.getLatestKnowledgeSummary();
