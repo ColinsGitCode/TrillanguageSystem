@@ -33,6 +33,10 @@ const { prepareInsertData } = require('./services/databaseHelpers');
 const app = express();
 const PORT = process.env.PORT || 3010;
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
+const DEFAULT_LLM_PROVIDER = String(process.env.DEFAULT_LLM_PROVIDER || 'gemini').trim().toLowerCase() === 'local'
+    ? 'local'
+    : 'gemini';
+const DEFAULT_GEMINI_MODEL = process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-3-pro-preview';
 
 app.use(express.static('public'));
 app.use('/data', express.static(RECORDS_PATH));
@@ -58,6 +62,36 @@ function checkGenerateThrottle(req) {
 
 function createExperimentId() {
     return `exp_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+}
+
+function normalizeLlmProvider(value) {
+    return String(value || DEFAULT_LLM_PROVIDER).trim().toLowerCase() === 'local'
+        ? 'local'
+        : 'gemini';
+}
+
+function resolveTrackingModel(provider, modelOverride = '') {
+    const normalizedProvider = normalizeLlmProvider(provider);
+    const explicitModel = String(modelOverride || '').trim();
+    if (explicitModel) return explicitModel;
+    return normalizedProvider === 'local'
+        ? (process.env.LLM_MODEL || 'local-llm')
+        : DEFAULT_GEMINI_MODEL;
+}
+
+function resolveRecordMarkdownContent(record) {
+    const inlineMarkdown = String(record?.markdown_content || '').trim();
+    if (inlineMarkdown) return inlineMarkdown;
+    const mdPath = String(record?.md_file_path || '').trim();
+    if (!mdPath) return '';
+    try {
+        if (fs.existsSync(mdPath)) {
+            return fs.readFileSync(mdPath, 'utf-8');
+        }
+    } catch (err) {
+        console.warn('[Training] Failed to read markdown file for backfill:', mdPath, err.message);
+    }
+    return '';
 }
 
 function truncateExamplesForBudget(examples, outputMode, maxChars) {
@@ -294,6 +328,104 @@ async function generateAndPersistTrainingAsset(context = {}) {
     };
 }
 
+async function backfillTrainingAssets(options = {}) {
+    const limit = Math.max(1, Math.min(200, Number(options.limit || 20)));
+    const force = Boolean(options.force);
+    const rawCardType = String(options.cardType || '').trim();
+    const filters = {
+        limit,
+        force,
+        folderName: String(options.folderName || '').trim(),
+        cardType: rawCardType ? normalizeCardType(rawCardType) : '',
+        provider: String(options.provider || '').trim().toLowerCase()
+    };
+
+    const candidates = dbService.listTrainingBackfillCandidates(filters);
+    const results = [];
+    let readyCount = 0;
+    let repairedCount = 0;
+    let fallbackCount = 0;
+    let failedCount = 0;
+
+    for (const candidate of candidates) {
+        const record = dbService.getGenerationById(candidate.id);
+        if (!record) {
+            results.push({
+                generationId: candidate.id,
+                phrase: candidate.phrase,
+                folderName: candidate.folderName,
+                baseName: candidate.baseFilename,
+                status: 'skipped',
+                reason: 'generation_not_found'
+            });
+            continue;
+        }
+
+        const markdown = resolveRecordMarkdownContent(record);
+        if (!markdown) {
+            results.push({
+                generationId: record.id,
+                phrase: record.phrase,
+                folderName: record.folder_name,
+                baseName: record.base_filename,
+                status: 'skipped',
+                reason: 'markdown_not_found'
+            });
+            continue;
+        }
+
+        const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : path.join(RECORDS_PATH, record.folder_name);
+        const training = await generateAndPersistTrainingAsset({
+            generationId: record.id,
+            phrase: record.phrase,
+            cardType: record.card_type,
+            markdown,
+            folderName: record.folder_name,
+            baseName: record.base_filename,
+            targetDir
+        });
+
+        if (training.status === 'ready') readyCount += 1;
+        else if (training.status === 'repaired') repairedCount += 1;
+        else if (training.status === 'fallback') fallbackCount += 1;
+        else failedCount += 1;
+
+        results.push({
+            generationId: record.id,
+            phrase: record.phrase,
+            folderName: record.folder_name,
+            baseName: record.base_filename,
+            status: training.status || 'failed',
+            source: training.source || 'heuristic',
+            qualityScore: Number(training.qualityScore || 0),
+            assetId: Number(training.id || training.assetId || 0) || null
+        });
+    }
+
+    const summary = dbService.getTrainingBackfillSummary({
+        folderName: filters.folderName,
+        cardType: filters.cardType,
+        provider: filters.provider
+    });
+
+    return {
+        limit,
+        force,
+        requestedFilters: {
+            folderName: filters.folderName || null,
+            cardType: filters.cardType || null,
+            provider: filters.provider || null
+        },
+        processed: results.length,
+        readyCount,
+        repairedCount,
+        fallbackCount,
+        failedCount,
+        results,
+        summary
+    };
+}
+
 function isGeminiUnavailableError(error) {
     const message = String(error?.message || '');
     return /ModelNotFoundError|Requested entity was not found|Gemini proxy error|Error when talking to Gemini API|API key|quota|permission|429|403|404/i.test(message);
@@ -305,7 +437,7 @@ async function generateWithAutoFallback(phrase, provider, perf, options = {}) {
     } catch (error) {
         const fallbackEnabled = typeof options.allowGeminiFallback === 'boolean'
             ? options.allowGeminiFallback
-            : String(process.env.GEMINI_FALLBACK_TO_LOCAL || 'true').toLowerCase() !== 'false';
+            : String(process.env.GEMINI_FALLBACK_TO_LOCAL || 'false').toLowerCase() === 'true';
 
         if (provider !== 'gemini' || !fallbackEnabled || !isGeminiUnavailableError(error)) {
             throw error;
@@ -932,10 +1064,10 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
-    // 默认使用本地LLM（Gemini已封存）
+    // 默认走 Gemini CLI Proxy；仅在显式指定时才使用 local。
     const {
       phrase,
-      llm_provider = 'local',
+      llm_provider = DEFAULT_LLM_PROVIDER,
       enable_compare = false,
       card_type = 'trilingual',
       source_mode = null,
@@ -949,6 +1081,7 @@ app.post('/api/generate', async (req, res) => {
       llm_model
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
+    const requestedProvider = normalizeLlmProvider(llm_provider);
     const cardType = normalizeCardType(card_type);
     const sourceMode = normalizeSourceMode(source_mode);
 
@@ -974,7 +1107,7 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // Mode: Single
-    const genResult = await generateWithAutoFallback(phrase, llm_provider, perf, {
+    const genResult = await generateWithAutoFallback(phrase, requestedProvider, perf, {
       fewshotOptions: fewshot_options,
       experimentId: experiment_id || '',
       experimentRound: roundNumber,
@@ -984,7 +1117,7 @@ app.post('/api/generate', async (req, res) => {
       sourceMode
     });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
-    const providerUsed = observability?.metadata?.provider || llm_provider;
+    const providerUsed = observability?.metadata?.provider || requestedProvider;
 
     postProcessGeneratedContent(content);
 
@@ -1146,7 +1279,7 @@ app.post('/api/generate', async (req, res) => {
         experiment_round: roundNumber,
         card_type: cardType,
         source_mode: sourceMode,
-        provider_requested: llm_provider,
+        provider_requested: requestedProvider,
         provider_used: providerUsed,
         fallback: genResult.fallback || null,
         generationId, // 返回数据库ID
@@ -1172,15 +1305,16 @@ app.post('/api/generate', async (req, res) => {
           experiment_round = 0,
           round_name,
           variant,
-          llm_provider = 'local',
+          llm_provider = DEFAULT_LLM_PROVIDER,
           is_teacher_reference = false,
           llm_model
         } = req.body || {};
+        const requestedProvider = normalizeLlmProvider(llm_provider);
         if (experiment_id && req.body?.phrase) {
           experimentTrackingService.recordExperimentSample({
             generationId: null,
             phrase: req.body.phrase,
-            provider: llm_provider,
+            provider: requestedProvider,
             experimentId: experiment_id,
             roundNumber: experiment_round,
             roundName: round_name || null,
@@ -1190,7 +1324,7 @@ app.post('/api/generate', async (req, res) => {
               quality: { score: 0, dimensions: {} },
               tokens: { total: 0 },
               performance: { totalTime: 0 },
-              metadata: { model: llm_model || (llm_provider === 'local' ? process.env.LLM_MODEL : process.env.GEMINI_MODEL) }
+              metadata: { model: resolveTrackingModel(requestedProvider, llm_model) }
             },
             fewShot: { enabled: false, countUsed: 0 },
             promptText: '',
@@ -1205,9 +1339,10 @@ app.post('/api/generate', async (req, res) => {
 
       // 记录错误到数据库
       try {
+        const requestedProvider = normalizeLlmProvider(req.body?.llm_provider || DEFAULT_LLM_PROVIDER);
         dbService.insertError({
           phrase: req.body.phrase || 'unknown',
-          llmProvider: req.body.llm_provider || 'unknown',
+          llmProvider: requestedProvider,
           requestId: null,
           errorType: err.name || 'UnknownError',
           errorMessage: err.message,
@@ -1834,6 +1969,42 @@ app.get('/api/knowledge/summary/latest', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/training/backfill/summary', (req, res) => {
+    try {
+        const summary = dbService.getTrainingBackfillSummary({
+            folderName: String(req.query.folder || '').trim(),
+            cardType: String(req.query.cardType || '').trim(),
+            provider: String(req.query.provider || '').trim().toLowerCase()
+        });
+        res.json({ success: true, summary });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/training/backfill', async (req, res) => {
+    try {
+        const {
+            limit = 20,
+            force = false,
+            folder = '',
+            cardType = '',
+            provider = ''
+        } = req.body || {};
+
+        const result = await backfillTrainingAssets({
+            limit,
+            force,
+            folderName: folder,
+            cardType,
+            provider
+        });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/training/by-generation/:id', (req, res) => {

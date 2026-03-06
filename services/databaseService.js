@@ -1009,6 +1009,114 @@ class DatabaseService {
     return this.mapTrainingAssetRow(row);
   }
 
+  getTrainingBackfillSummary(filters = {}) {
+    const folderName = String(filters.folderName || '').trim();
+    const cardType = String(filters.cardType || '').trim();
+    const provider = String(filters.provider || '').trim().toLowerCase();
+
+    const where = ['1=1'];
+    const params = {};
+
+    if (folderName) {
+      where.push('g.folder_name = @folderName');
+      params.folderName = folderName;
+    }
+
+    if (cardType) {
+      where.push('g.card_type = @cardType');
+      params.cardType = cardType;
+    }
+
+    if (provider) {
+      where.push('g.llm_provider = @provider');
+      params.provider = provider;
+    }
+
+    const row = this.db.prepare(`
+      SELECT
+        COUNT(*) AS total_generations,
+        SUM(CASE WHEN cta.generation_id IS NOT NULL THEN 1 ELSE 0 END) AS with_training,
+        SUM(CASE WHEN cta.generation_id IS NULL THEN 1 ELSE 0 END) AS missing_training,
+        SUM(CASE WHEN cta.status = 'ready' THEN 1 ELSE 0 END) AS ready_count,
+        SUM(CASE WHEN cta.status = 'repaired' THEN 1 ELSE 0 END) AS repaired_count,
+        SUM(CASE WHEN cta.status = 'fallback' THEN 1 ELSE 0 END) AS fallback_count,
+        SUM(CASE WHEN cta.status = 'failed' THEN 1 ELSE 0 END) AS failed_count
+      FROM generations g
+      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
+      WHERE ${where.join(' AND ')}
+    `).get(params) || {};
+
+    return {
+      totalGenerations: Number(row.total_generations || 0),
+      withTraining: Number(row.with_training || 0),
+      missingTraining: Number(row.missing_training || 0),
+      readyCount: Number(row.ready_count || 0),
+      repairedCount: Number(row.repaired_count || 0),
+      fallbackCount: Number(row.fallback_count || 0),
+      failedCount: Number(row.failed_count || 0)
+    };
+  }
+
+  listTrainingBackfillCandidates(filters = {}) {
+    const limit = Math.max(1, Math.min(200, Number(filters.limit || 20)));
+    const force = Boolean(filters.force);
+    const folderName = String(filters.folderName || '').trim();
+    const cardType = String(filters.cardType || '').trim();
+    const provider = String(filters.provider || '').trim().toLowerCase();
+
+    const where = ['1=1'];
+    const params = { limit };
+
+    if (folderName) {
+      where.push('g.folder_name = @folderName');
+      params.folderName = folderName;
+    }
+
+    if (cardType) {
+      where.push('g.card_type = @cardType');
+      params.cardType = cardType;
+    }
+
+    if (provider) {
+      where.push('g.llm_provider = @provider');
+      params.provider = provider;
+    }
+
+    if (!force) {
+      where.push('cta.generation_id IS NULL');
+    }
+
+    return this.db.prepare(`
+      SELECT
+        g.id,
+        g.phrase,
+        g.card_type,
+        g.folder_name,
+        g.base_filename,
+        g.llm_provider,
+        g.llm_model,
+        g.md_file_path,
+        g.created_at,
+        cta.status AS training_status
+      FROM generations g
+      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY g.created_at DESC, g.id DESC
+      LIMIT @limit
+    `).all(params).map((row) => ({
+      id: Number(row.id || 0),
+      phrase: row.phrase || '',
+      cardType: row.card_type || 'trilingual',
+      folderName: row.folder_name || '',
+      baseFilename: row.base_filename || '',
+      provider: row.llm_provider || '',
+      model: row.llm_model || '',
+      mdFilePath: row.md_file_path || '',
+      createdAt: row.created_at || null,
+      trainingStatus: row.training_status || null
+    }));
+  }
+
   upsertCardTrainingAsset(payload = {}) {
     const generationId = Number(payload.generationId || 0);
     if (!generationId) throw new Error('generationId is required');

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "gemini-proxy": "node scripts/gemini-host-proxy.js",
+    "training:backfill": "node scripts/backfillTrainingAssets.js",
     "cards:migrate-style": "node scripts/updateLegacyCardStyle.js --apply",
     "fewshot:rounds": "node scripts/run_fewshot_rounds.js",
     "fewshot:export-round": "node scripts/export_round_trend_dataset.js",

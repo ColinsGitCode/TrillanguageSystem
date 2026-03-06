@@ -5,6 +5,14 @@
 
 class Store {
     constructor() {
+        const persistedProvider = localStorage.getItem('llm_provider');
+        const persistedModelMode = localStorage.getItem('model_mode');
+        const normalizedProvider = persistedProvider === 'local' || persistedProvider === 'gemini'
+            ? persistedProvider
+            : 'gemini';
+        const normalizedModelMode = ['local', 'gemini', 'compare'].includes(persistedModelMode)
+            ? persistedModelMode
+            : 'gemini';
         this.state = {
             folders: [],
             files: [],
@@ -13,9 +21,9 @@ class Store {
             selectedFileTitle: null,
             imageBase64: null,
             isGenerating: false,
-            llmProvider: localStorage.getItem('llm_provider') || 'local',
+            llmProvider: normalizedProvider,
             compareMode: localStorage.getItem('compare_mode') === 'true' || false,
-            modelMode: localStorage.getItem('model_mode') || 'local', // 'local', 'gemini', 'compare'
+            modelMode: normalizedModelMode, // 'local', 'gemini', 'compare'
             cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja'
 
             // 历史记录相关

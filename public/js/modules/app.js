@@ -575,10 +575,10 @@ function initModelSelector() {
 
         const hints = {
             local: 'LOCAL LLM (Qwen)',
-            gemini: 'GEMINI API',
+            gemini: 'GEMINI CLI PROXY',
             compare: '双模型对比 ⚡'
         };
-        hint.textContent = hints[mode] || 'LOCAL LLM';
+        hint.textContent = hints[mode] || 'GEMINI CLI PROXY';
         hint.className = 'selector-hint mode-' + mode;
     }
 
@@ -2073,7 +2073,10 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
     }
 
     const modelMode = store.get('modelMode');
-    const provider = modelMode === 'gemini' ? 'gemini' : 'local';
+    let provider = 'gemini';
+    if (modelMode === 'local') {
+        provider = 'local';
+    }
     const enableCompare = modelMode === 'compare';
     const sourceEntry = String(source.entry || '').trim().toLowerCase();
     const inferredSourceMode = String(
@@ -3431,7 +3434,7 @@ function renderCardModal(markdown, title, options = {}) {
     };
 
     const tokens = metrics.tokens || { input: 0, output: 0 };
-    const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'local').toUpperCase();
+    const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'gemini').toUpperCase();
     const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
 
     const toText = (val) => {

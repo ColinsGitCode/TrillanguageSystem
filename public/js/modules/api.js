@@ -46,7 +46,7 @@ class ApiService {
         return res.text(); // Return text (Markdown/HTML)
     }
 
-    async generate(phrase, provider, enableCompare = false, options = {}) {
+    async generate(phrase, provider = 'gemini', enableCompare = false, options = {}) {
         let compareFlag = enableCompare;
         let extra = options || {};
 
@@ -57,7 +57,7 @@ class ApiService {
 
         const payload = {
             phrase,
-            llm_provider: provider,
+            llm_provider: provider || 'gemini',
             enable_compare: Boolean(compareFlag)
         };
 
