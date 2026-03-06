@@ -99,7 +99,10 @@ function buildRuntimeOptions(input = {}) {
       breakerRetryDelayDefault
     ),
     resetOnTimeout: parseBoolean(input.resetOnTimeout ?? process.env.TRAINING_PROXY_RESET_ON_TIMEOUT, true),
-    retryOnTimeout: parseBoolean(input.retryOnTimeout ?? process.env.TRAINING_PROXY_RETRY_ON_TIMEOUT, !isBackfill),
+    retryOnTimeout: parseBoolean(
+      input.retryOnTimeout ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_ON_TIMEOUT : process.env.TRAINING_PROXY_RETRY_ON_TIMEOUT),
+      !isBackfill
+    ),
     retryOnBreakerOpen: parseBoolean(
       input.retryOnBreakerOpen ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_ON_BREAKER_OPEN : process.env.TRAINING_RETRY_ON_BREAKER_OPEN),
       true
