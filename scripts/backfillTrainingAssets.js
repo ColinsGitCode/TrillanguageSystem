@@ -9,7 +9,8 @@ function parseArgs(argv = []) {
     force: false,
     folder: '',
     cardType: '',
-    provider: ''
+    provider: '',
+    requestTimeoutMs: Number(process.env.TRAINING_BACKFILL_CLIENT_TIMEOUT_MS || 900000)
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -33,6 +34,9 @@ function parseArgs(argv = []) {
     } else if (arg === '--provider' && next) {
       options.provider = next;
       i += 1;
+    } else if (arg === '--request-timeout-ms' && next) {
+      options.requestTimeoutMs = Number(next) || options.requestTimeoutMs;
+      i += 1;
     }
   }
 
@@ -40,7 +44,21 @@ function parseArgs(argv = []) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const { timeoutMs: rawTimeoutMs, ...fetchOptions } = options;
+  const timeoutMs = Number(rawTimeoutMs || 0);
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const response = await fetch(url, {
+    ...fetchOptions,
+    signal: controller ? controller.signal : fetchOptions.signal
+  }).finally(() => {
+    if (timer) clearTimeout(timer);
+  }).catch((error) => {
+    if (error?.name === 'AbortError') {
+      throw new Error(`request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.error || `HTTP ${response.status}`);
@@ -55,12 +73,13 @@ async function main() {
   if (options.cardType) summaryUrl.searchParams.set('cardType', options.cardType);
   if (options.provider) summaryUrl.searchParams.set('provider', options.provider);
 
-  const before = await fetchJson(summaryUrl);
+  const before = await fetchJson(summaryUrl, { timeoutMs: options.requestTimeoutMs });
   console.log('[TRAIN backfill] before:', JSON.stringify(before.summary, null, 2));
 
   const result = await fetchJson(new URL('/api/training/backfill', options.baseUrl), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    timeoutMs: options.requestTimeoutMs,
     body: JSON.stringify({
       limit: options.limit,
       force: options.force,
@@ -86,7 +105,7 @@ async function main() {
     });
   }
 
-  const after = await fetchJson(summaryUrl);
+  const after = await fetchJson(summaryUrl, { timeoutMs: options.requestTimeoutMs });
   console.log('[TRAIN backfill] after:', JSON.stringify(after.summary, null, 2));
 }
 

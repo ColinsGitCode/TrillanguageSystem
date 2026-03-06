@@ -38,6 +38,83 @@ function normalizeCardType(cardType) {
     : 'trilingual';
 }
 
+function toNumberOr(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function parseBoolean(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+  return fallback;
+}
+
+function buildRuntimeOptions(input = {}) {
+  const runtimeMode = String(input.runtimeMode || 'default').trim().toLowerCase();
+  const isBackfill = runtimeMode === 'backfill';
+  const requestTimeoutDefault = isBackfill ? 45000 : 120000;
+  const repairTimeoutDefault = isBackfill ? 25000 : requestTimeoutDefault;
+  const executionTimeoutDefault = isBackfill ? 35000 : 0;
+  const repairExecutionTimeoutDefault = isBackfill ? 18000 : executionTimeoutDefault;
+  const retriesDefault = isBackfill ? 1 : 1;
+  const repairRetriesDefault = isBackfill ? 0 : 1;
+  const retryDelayDefault = isBackfill ? 600 : 1200;
+  const breakerRetryDelayDefault = isBackfill ? 8000 : 6000;
+  const disableRepairOnTimeoutDefault = isBackfill;
+
+  return {
+    runtimeMode,
+    requestTimeoutMs: toNumberOr(
+      input.requestTimeoutMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_PROXY_TIMEOUT_MS : process.env.TRAINING_PROXY_TIMEOUT_MS),
+      requestTimeoutDefault
+    ),
+    repairTimeoutMs: toNumberOr(
+      input.repairTimeoutMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_REPAIR_TIMEOUT_MS : process.env.TRAINING_REPAIR_TIMEOUT_MS),
+      repairTimeoutDefault
+    ),
+    executionTimeoutMs: toNumberOr(
+      input.executionTimeoutMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_EXECUTION_TIMEOUT_MS : process.env.TRAINING_PROXY_EXECUTION_TIMEOUT_MS),
+      executionTimeoutDefault
+    ),
+    repairExecutionTimeoutMs: toNumberOr(
+      input.repairExecutionTimeoutMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_REPAIR_EXECUTION_TIMEOUT_MS : process.env.TRAINING_REPAIR_EXECUTION_TIMEOUT_MS),
+      repairExecutionTimeoutDefault
+    ),
+    retries: toNumberOr(
+      input.retries ?? (isBackfill ? process.env.TRAINING_BACKFILL_PROXY_RETRIES : process.env.TRAINING_PROXY_RETRIES),
+      retriesDefault
+    ),
+    repairRetries: toNumberOr(
+      input.repairRetries ?? (isBackfill ? process.env.TRAINING_BACKFILL_REPAIR_RETRIES : process.env.TRAINING_REPAIR_RETRIES),
+      repairRetriesDefault
+    ),
+    retryDelayMs: toNumberOr(
+      input.retryDelayMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_DELAY_MS : process.env.TRAINING_PROXY_RETRY_DELAY_MS),
+      retryDelayDefault
+    ),
+    breakerRetryDelayMs: toNumberOr(
+      input.breakerRetryDelayMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_BREAKER_RETRY_DELAY_MS : process.env.TRAINING_BREAKER_RETRY_DELAY_MS),
+      breakerRetryDelayDefault
+    ),
+    resetOnTimeout: parseBoolean(input.resetOnTimeout ?? process.env.TRAINING_PROXY_RESET_ON_TIMEOUT, true),
+    retryOnTimeout: parseBoolean(input.retryOnTimeout ?? process.env.TRAINING_PROXY_RETRY_ON_TIMEOUT, !isBackfill),
+    retryOnBreakerOpen: parseBoolean(
+      input.retryOnBreakerOpen ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_ON_BREAKER_OPEN : process.env.TRAINING_RETRY_ON_BREAKER_OPEN),
+      true
+    ),
+    disableRepairOnTimeout: parseBoolean(
+      input.disableRepairOnTimeout ?? (isBackfill ? process.env.TRAINING_BACKFILL_DISABLE_REPAIR_ON_TIMEOUT : process.env.TRAINING_DISABLE_REPAIR_ON_TIMEOUT),
+      disableRepairOnTimeoutDefault
+    )
+  };
+}
+
+function isTimeoutLikeError(message) {
+  return /timeout|timed out|aborterror|etimedout|gemini cli timeout/i.test(String(message || ''));
+}
+
 function templateReplace(template, vars = {}) {
   return String(template || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => String(vars[key] || ''));
 }
@@ -569,11 +646,18 @@ function getResponseText(resp) {
 async function callTeacherModel(prompt, options = {}) {
   const model = toStr(options.model || TRAINING_MODEL_DEFAULT, TRAINING_MODEL_DEFAULT);
   const baseName = toStr(options.baseName, 'training_pack');
-  const timeoutMs = Number(options.timeoutMs || process.env.TRAINING_PROXY_TIMEOUT_MS || 120000);
+  const timeoutMs = toNumberOr(options.timeoutMs ?? process.env.TRAINING_PROXY_TIMEOUT_MS, 120000);
   const response = await runGeminiProxy(prompt, {
     baseName,
     model,
-    timeoutMs
+    timeoutMs,
+    executionTimeoutMs: toNumberOr(options.executionTimeoutMs, 0),
+    retries: toNumberOr(options.retries, 1),
+    retryDelayMs: toNumberOr(options.retryDelayMs, 1200),
+    breakerRetryDelayMs: toNumberOr(options.breakerRetryDelayMs, 6000),
+    resetOnTimeout: options.resetOnTimeout,
+    retryOnTimeout: options.retryOnTimeout,
+    retryOnBreakerOpen: options.retryOnBreakerOpen
   });
   const rawText = getResponseText(response);
   return {
@@ -601,7 +685,12 @@ async function repairTrainingPack(input = {}) {
   const start = Date.now();
   const llm = await callTeacherModel(prompt, {
     model: input.model,
-    baseName: `${toStr(input.baseName, 'training_pack')}_repair`
+    baseName: `${toStr(input.baseName, 'training_pack')}_repair`,
+    timeoutMs: input.timeoutMs,
+    executionTimeoutMs: input.executionTimeoutMs,
+    retries: input.retries,
+    retryDelayMs: input.retryDelayMs,
+    resetOnTimeout: input.resetOnTimeout
   });
   const latencyMs = Date.now() - start;
   let parsed;
@@ -643,6 +732,7 @@ async function generateTrainingPack(input = {}) {
   const markdown = toStr(input.markdown);
   const model = toStr(input.model || TRAINING_MODEL_DEFAULT, TRAINING_MODEL_DEFAULT);
   const baseName = toStr(input.baseName, 'training_pack');
+  const runtime = buildRuntimeOptions(input);
 
   const template = readTemplate(PROMPT_TEMPLATE_PATH, '');
   const prompt = templateReplace(template, {
@@ -657,7 +747,18 @@ async function generateTrainingPack(input = {}) {
 
   try {
     const llmStart = Date.now();
-    const llm = await callTeacherModel(prompt, { model, baseName });
+    const llm = await callTeacherModel(prompt, {
+      model,
+      baseName,
+      timeoutMs: runtime.requestTimeoutMs,
+      executionTimeoutMs: runtime.executionTimeoutMs,
+      retries: runtime.retries,
+      retryDelayMs: runtime.retryDelayMs,
+      breakerRetryDelayMs: runtime.breakerRetryDelayMs,
+      resetOnTimeout: runtime.resetOnTimeout,
+      retryOnTimeout: runtime.retryOnTimeout,
+      retryOnBreakerOpen: runtime.retryOnBreakerOpen
+    });
     const llmLatency = Date.now() - llmStart;
     attempts.push({ stage: 'llm', model: llm.model, latencyMs: llmLatency });
 
@@ -666,6 +767,30 @@ async function generateTrainingPack(input = {}) {
       parsed = parseJsonFromText(llm.rawText);
     } catch (err) {
       allValidationErrors.push(`llm parse failed: ${err.message}`);
+      if (runtime.disableRepairOnTimeout && isTimeoutLikeError(err.message)) {
+        const fallback = fallbackHeuristicPack({ phrase, cardType, markdown });
+        return {
+          status: fallback.ok ? 'fallback' : 'failed',
+          source: 'heuristic',
+          payload: fallback.ok ? fallback.payload : null,
+          qualityScore: fallback.ok ? fallback.qualityScore : 0,
+          coverageScore: fallback.ok ? fallback.coverageScore : 0,
+          selfConfidence: fallback.ok ? fallback.selfConfidence : 0,
+          validationErrors: allValidationErrors,
+          fallbackReason: 'llm_timeout_skip_repair',
+          providerUsed: 'gemini',
+          modelUsed: model,
+          promptVersion: TRAINING_PROMPT_VERSION,
+          schemaVersion: TRAINING_SCHEMA_VERSION,
+          tokensInput: TokenCounter.estimate(prompt),
+          tokensOutput: TokenCounter.estimate(llm.rawText),
+          tokensTotal: TokenCounter.estimate(prompt) + TokenCounter.estimate(llm.rawText),
+          costTotal: 0,
+          latencyMs: Date.now() - startedAt,
+          rawOutput: llm.rawText,
+          attempts
+        };
+      }
       const repaired = await repairTrainingPack({
         phrase,
         cardType,
@@ -673,7 +798,15 @@ async function generateTrainingPack(input = {}) {
         validationErrors: allValidationErrors,
         rawOutput: llm.rawText,
         model,
-        baseName
+        baseName,
+        timeoutMs: runtime.repairTimeoutMs,
+        executionTimeoutMs: runtime.repairExecutionTimeoutMs,
+        retries: runtime.repairRetries,
+        retryDelayMs: runtime.retryDelayMs,
+        breakerRetryDelayMs: runtime.breakerRetryDelayMs,
+        resetOnTimeout: runtime.resetOnTimeout,
+        retryOnTimeout: runtime.retryOnTimeout,
+        retryOnBreakerOpen: runtime.retryOnBreakerOpen
       });
       attempts.push({ stage: 'repair', model: repaired.model || model, latencyMs: repaired.latencyMs || 0 });
       if (repaired.ok) {
@@ -759,6 +892,30 @@ async function generateTrainingPack(input = {}) {
     }
 
     allValidationErrors.push(...validated.errors);
+    if (runtime.disableRepairOnTimeout && validated.errors.some((error) => isTimeoutLikeError(error))) {
+      const fallback = fallbackHeuristicPack({ phrase, cardType, markdown });
+      return {
+        status: fallback.ok ? 'fallback' : 'failed',
+        source: 'heuristic',
+        payload: fallback.ok ? fallback.payload : null,
+        qualityScore: fallback.ok ? fallback.qualityScore : 0,
+        coverageScore: fallback.ok ? fallback.coverageScore : 0,
+        selfConfidence: fallback.ok ? fallback.selfConfidence : 0,
+        validationErrors: allValidationErrors,
+        fallbackReason: 'llm_timeout_skip_repair',
+        providerUsed: 'gemini',
+        modelUsed: model,
+        promptVersion: TRAINING_PROMPT_VERSION,
+        schemaVersion: TRAINING_SCHEMA_VERSION,
+        tokensInput: TokenCounter.estimate(prompt),
+        tokensOutput: TokenCounter.estimate(llm.rawText),
+        tokensTotal: TokenCounter.estimate(prompt) + TokenCounter.estimate(llm.rawText),
+        costTotal: 0,
+        latencyMs: Date.now() - startedAt,
+        rawOutput: llm.rawText,
+        attempts
+      };
+    }
     const repaired = await repairTrainingPack({
       phrase,
       cardType,
@@ -766,7 +923,15 @@ async function generateTrainingPack(input = {}) {
       validationErrors: allValidationErrors,
       rawOutput: llm.rawText,
       model,
-      baseName
+      baseName,
+      timeoutMs: runtime.repairTimeoutMs,
+      executionTimeoutMs: runtime.repairExecutionTimeoutMs,
+      retries: runtime.repairRetries,
+      retryDelayMs: runtime.retryDelayMs,
+      breakerRetryDelayMs: runtime.breakerRetryDelayMs,
+      resetOnTimeout: runtime.resetOnTimeout,
+      retryOnTimeout: runtime.retryOnTimeout,
+      retryOnBreakerOpen: runtime.retryOnBreakerOpen
     });
     attempts.push({ stage: 'repair', model: repaired.model || model, latencyMs: repaired.latencyMs || 0 });
     if (repaired.ok) {

@@ -177,18 +177,36 @@
   - `POST /api/training/by-generation/:id/regenerate`
 - 前端 TRAIN 页改为后端优先加载，展示来源标记（LLM高质量/修复后/规则回退）与质量指标，并支持手动重算。
 
+### 3.18 TRAIN 历史回填稳态化（v3.7.1）
+
+- 新增回填接口：
+  - `GET /api/training/backfill/summary`
+  - `POST /api/training/backfill`
+- 历史回填链路切换为 `runtimeMode=backfill`：
+  - 独立 timeout / executionTimeout / retry / retryDelay
+  - 回填脚本增加客户端超时参数
+  - timeout 场景可直接跳过 repair，避免长时间阻塞
+- 在回填前主动读取 `18888 /health`：
+  - `breaker_state=closed`：继续 teacher LLM 高质量生成
+  - `breaker_state=open|half_open`：直接快速写入 `heuristic fallback`
+- 当前策略重点是“批量任务可收敛”，不是在配额不足时强行降级 teacher 质量。
+- 当前现场状态：
+  - `gemini-gateway` 可能因 `gemini-3-pro-preview` 配额/容量紧张进入 `half_open`
+  - 因此历史 TRAIN 回填建议在配额恢复后继续执行，以保证 `ready/repaired` 比例
+
 ## 4. 主线技术策略
 
-- 默认主链路：本地 LLM
-- Gemini 作为 teacher / 对照 /补充通道（host-proxy）
-- 质量优化主手段：few-shot + 人工评审门控 + 可观测闭环
+- 默认主链路：Gemini CLI Proxy（host-proxy）
+- Gemini `pro` 作为 teacher / 主高质量生成通道
+- 质量优化主手段：few-shot + 人工评审门控 + 可观测闭环 + TRAIN 高质量训练包
 
 ## 5. 现阶段重点关注
 
-1. 扩大高质量样本池（teacher + approved）
-2. 控制 token 膨胀，提升 gain per 1k token
-3. 把观测指标升级为 SLO/门禁策略
-4. 增强网关异常场景下的自恢复与告警
+1. 等待 `gemini-3-pro-preview` 配额恢复后继续历史 TRAIN 高质量回填
+2. 扩大高质量样本池（teacher + approved）
+3. 控制 token 膨胀，提升 gain per 1k token
+4. 把观测指标升级为 SLO/门禁策略
+5. 增强网关异常场景下的自恢复与告警
 
 ## 6. 关键文档入口
 

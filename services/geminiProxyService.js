@@ -39,6 +39,10 @@ function isRetriableError(message) {
   return isTimeoutLikeError(text) || /Gemini proxy error \(5\d\d\)|fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(text);
 }
 
+function isBreakerOpenError(message) {
+  return /circuit breaker is open|breaker open|upstream_unavailable/i.test(String(message || ''));
+}
+
 function maybeTrim(value) {
   const text = String(value ?? '').trim();
   return text || '';
@@ -174,8 +178,11 @@ async function runGeminiProxy(prompt, options = {}) {
   }
 
   const retries = toNumberOr(options.retries ?? process.env.GEMINI_PROXY_RETRIES, 1);
-  const retryDelayMs = toNumberOr(process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
+  const retryDelayMs = toNumberOr(options.retryDelayMs ?? process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
+  const breakerRetryDelayMs = toNumberOr(options.breakerRetryDelayMs ?? process.env.GEMINI_PROXY_BREAKER_RETRY_DELAY_MS, 6000);
   const resetOnTimeout = parseBoolean(options.resetOnTimeout ?? process.env.GEMINI_PROXY_AUTO_RESET, true);
+  const retryOnTimeout = parseBoolean(options.retryOnTimeout ?? process.env.GEMINI_PROXY_RETRY_ON_TIMEOUT, true);
+  const retryOnBreakerOpen = parseBoolean(options.retryOnBreakerOpen ?? process.env.GEMINI_PROXY_RETRY_ON_BREAKER_OPEN, true);
   const enforceGateway = parseBoolean(options.enforceGateway ?? process.env.GEMINI_PROXY_ENFORCE_GATEWAY, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);
   const headers = buildAuthHeaders(options);
@@ -204,18 +211,22 @@ async function runGeminiProxy(prompt, options = {}) {
           continue;
         }
 
-        const retriable = isRetriableError(error.message);
+        const timeoutLike = isTimeoutLikeError(error.message);
+        const breakerOpen = isBreakerOpenError(error.message);
+        const retriable = isRetriableError(error.message)
+          && !(timeoutLike && !retryOnTimeout)
+          && !(breakerOpen && !retryOnBreakerOpen);
         if (!retriable || attempt >= attempts) {
           i = urlCandidates.length; // break candidate loop
           break;
         }
 
-        if (isTimeoutLikeError(error.message) && resetOnTimeout) {
+        if (timeoutLike && resetOnTimeout) {
           const resetResult = await triggerReset(resetUrl);
           console.warn('[GeminiProxy] timeout detected, reset requested:', resetResult);
         }
 
-        await sleep(retryDelayMs * attempt);
+        await sleep(breakerOpen ? breakerRetryDelayMs : (retryDelayMs * attempt));
         i = urlCandidates.length; // go next attempt
       }
     }

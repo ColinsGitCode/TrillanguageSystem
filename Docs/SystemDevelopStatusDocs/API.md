@@ -35,6 +35,8 @@
 | TRAIN | GET | `/training/by-generation/:id` | 按 generationId 获取训练包 |
 | TRAIN | GET | `/training/by-file` | 按 folder+base 获取训练包 |
 | TRAIN | POST | `/training/by-generation/:id/regenerate` | 重新生成训练包 |
+| TRAIN | GET | `/training/backfill/summary` | 查询历史 TRAIN 回填统计 |
+| TRAIN | POST | `/training/backfill` | 批量回填历史 TRAIN 资产 |
 | Dashboard | GET | `/dashboard/highlight-stats` | 标红聚合统计 |
 | 实验 | GET | `/experiments/:id` | few-shot 实验导出 |
 | 评审 | GET | `/review/campaigns` | 评审批次列表 |
@@ -238,6 +240,38 @@
   - DB: `card_training_assets`
   - 文件 sidecar: `<base>.training.v1.json`
 - 返回最新训练包数据。
+
+### `GET /api/training/backfill/summary`
+
+- 返回历史 TRAIN 资产补全统计：
+  - `totalGenerations`
+  - `withTraining`
+  - `missingTraining`
+  - `readyCount / repairedCount / fallbackCount / failedCount`
+- 支持筛选参数：
+  - `folder`
+  - `cardType`
+  - `provider`
+
+### `POST /api/training/backfill`
+
+- 对历史卡片批量回填 `TRAIN` 训练包。
+- 入参：
+  - `limit`
+  - `force`
+  - `folder`
+  - `cardType`
+  - `provider`
+- 回填策略：
+  - `runtimeMode=backfill`
+  - 优先走 teacher LLM
+  - 若 Gateway breaker 非 `closed`，直接快速回退到 heuristic，避免整批任务长时间阻塞
+  - 每张卡片独立收敛，不因单卡异常拖垮整批
+- 返回：
+  - `processed`
+  - `readyCount / repairedCount / fallbackCount / failedCount`
+  - `results[]`
+  - `summary`
 
 ---
 

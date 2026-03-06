@@ -126,6 +126,169 @@ function toNumberOr(value, fallback) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function looksLikeGateway18888(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.port === '18888';
+  } catch (err) {
+    return false;
+  }
+}
+
+function buildGeminiGatewayHealthUrl() {
+  const apiUrl = process.env.GEMINI_PROXY_URL || 'http://host.docker.internal:18888/api/gemini';
+  if (!looksLikeGateway18888(apiUrl)) return '';
+  try {
+    const parsed = new URL(apiUrl);
+    parsed.pathname = '/health';
+    parsed.search = '';
+    return parsed.toString();
+  } catch (err) {
+    return '';
+  }
+}
+
+function shouldWaitForGatewayRecovery(trainingAsset) {
+  if (!trainingAsset || trainingAsset.status !== 'fallback') return false;
+  const text = [
+    trainingAsset.fallbackReason || '',
+    ...(Array.isArray(trainingAsset.validationErrors) ? trainingAsset.validationErrors : [])
+  ].join(' ');
+  return /circuit breaker is open|breaker open|upstream_unavailable|timeout|timed out|aborterror/i.test(text);
+}
+
+async function waitForGeminiGatewayRecovery() {
+  const healthUrl = buildGeminiGatewayHealthUrl();
+  if (!healthUrl) {
+    return { ok: false, skipped: true, reason: 'no_gateway_health_url' };
+  }
+
+  const timeoutMs = toNumberOr(process.env.TRAINING_BACKFILL_GATEWAY_RECOVERY_TIMEOUT_MS, 20000);
+  const pollMs = toNumberOr(process.env.TRAINING_BACKFILL_GATEWAY_RECOVERY_POLL_MS, 2000);
+  const deadline = Date.now() + timeoutMs;
+  let lastState = 'unknown';
+
+  while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(3000, pollMs));
+    try {
+      const response = await fetch(healthUrl, { signal: controller.signal });
+      if (response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        lastState = String(payload.breaker_state || 'unknown');
+        const inflight = Number(payload.inflight || 0);
+        if (lastState === 'closed' && inflight === 0) {
+          return { ok: true, state: lastState, inflight };
+        }
+      }
+    } catch (err) {
+      lastState = err?.name === 'AbortError' ? 'health_timeout' : String(err.message || 'health_error');
+    } finally {
+      clearTimeout(timer);
+    }
+    await sleep(pollMs);
+  }
+
+  return { ok: false, state: lastState, timeoutMs };
+}
+
+async function getGeminiGatewayHealth() {
+  const healthUrl = buildGeminiGatewayHealthUrl();
+  if (!healthUrl) {
+    return { ok: false, skipped: true, reason: 'no_gateway_health_url' };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(healthUrl, { signal: controller.signal });
+    if (!response.ok) {
+      return { ok: false, state: `http_${response.status}` };
+    }
+    const payload = await response.json().catch(() => ({}));
+    return {
+      ok: true,
+      state: String(payload.breaker_state || 'unknown'),
+      inflight: Number(payload.inflight || 0),
+      busy: Boolean(payload.busy)
+    };
+  } catch (err) {
+    return { ok: false, state: err?.name === 'AbortError' ? 'health_timeout' : String(err.message || 'health_error') };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildTrainingFallbackResult({ phrase, cardType, markdown, reason, latencyMs = 0, validationErrors = [] }) {
+  const fallback = trainingPackService.fallbackHeuristicPack({ phrase, cardType, markdown });
+  return {
+    status: fallback.ok ? 'fallback' : 'failed',
+    source: 'heuristic',
+    payload: fallback.ok ? fallback.payload : null,
+    qualityScore: fallback.ok ? fallback.qualityScore : 0,
+    coverageScore: fallback.ok ? fallback.coverageScore : 0,
+    selfConfidence: fallback.ok ? fallback.selfConfidence : 0,
+    validationErrors,
+    fallbackReason: reason || 'heuristic_fallback',
+    providerUsed: 'gemini',
+    modelUsed: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
+    promptVersion: trainingPackService.TRAINING_PROMPT_VERSION,
+    schemaVersion: trainingPackService.TRAINING_SCHEMA_VERSION,
+    tokensInput: 0,
+    tokensOutput: 0,
+    tokensTotal: 0,
+    costTotal: 0,
+    latencyMs,
+    rawOutput: ''
+  };
+}
+
+function persistTrainingAssetRecord(context = {}, trainingResult) {
+  const generationId = Number(context.generationId || 0);
+  const phrase = String(context.phrase || '').trim();
+  const folderName = String(context.folderName || '').trim();
+  const baseName = String(context.baseName || '').trim();
+  const cardType = normalizeCardType(context.cardType);
+  const targetDir = String(context.targetDir || '').trim();
+  const sidecarPath = buildTrainingSidecarPath(targetDir, baseName);
+  const sidecarPayload = buildTrainingSidecarPayload(trainingResult, {
+    generationId,
+    phrase,
+    folderName,
+    baseName,
+    cardType
+  });
+  persistTrainingSidecar(sidecarPath, sidecarPayload);
+
+  return dbService.upsertCardTrainingAsset({
+    generationId,
+    folderName,
+    baseFilename: baseName,
+    cardType,
+    status: trainingResult.status,
+    source: trainingResult.source,
+    providerUsed: trainingResult.providerUsed,
+    modelUsed: trainingResult.modelUsed,
+    promptVersion: trainingResult.promptVersion,
+    schemaVersion: trainingResult.schemaVersion,
+    qualityScore: trainingResult.qualityScore,
+    selfConfidence: trainingResult.selfConfidence,
+    coverageScore: trainingResult.coverageScore,
+    validationErrors: trainingResult.validationErrors || [],
+    fallbackReason: trainingResult.fallbackReason || null,
+    tokensInput: trainingResult.tokensInput || 0,
+    tokensOutput: trainingResult.tokensOutput || 0,
+    tokensTotal: trainingResult.tokensTotal || 0,
+    costTotal: trainingResult.costTotal || 0,
+    latencyMs: trainingResult.latencyMs || 0,
+    payload: trainingResult.payload || null,
+    sidecarFilePath: sidecarPath
+  });
+}
+
 function normalizeAudioTasks(tasks, baseName) {
   if (!Array.isArray(tasks)) return [];
   return tasks.map((task, index) => {
@@ -278,49 +441,30 @@ async function generateAndPersistTrainingAsset(context = {}) {
         };
     }
 
-    const trainingResult = await trainingPackService.generateTrainingPack({
-        phrase,
-        cardType,
-        markdown,
-        providerHint: 'gemini',
-        model: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
-        baseName: `${baseName}_train`
-    });
+    let trainingResult;
+    try {
+        trainingResult = await trainingPackService.generateTrainingPack({
+            phrase,
+            cardType,
+            markdown,
+            providerHint: 'gemini',
+            model: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
+            baseName: `${baseName}_train`,
+            runtimeMode: context.runtimeMode || 'default'
+        });
+    } catch (err) {
+        trainingResult = buildTrainingFallbackResult({
+            phrase,
+            cardType,
+            markdown,
+            reason: 'generate_training_asset_failed',
+            validationErrors: [`generate_training_asset_failed: ${err.message}`],
+            latencyMs: 0
+        });
+        console.warn('[Training] generateAndPersistTrainingAsset fallback:', err.message);
+    }
 
-    const sidecarPath = buildTrainingSidecarPath(targetDir, baseName);
-    const sidecarPayload = buildTrainingSidecarPayload(trainingResult, {
-        generationId,
-        phrase,
-        folderName,
-        baseName,
-        cardType
-    });
-    persistTrainingSidecar(sidecarPath, sidecarPayload);
-
-    const saved = dbService.upsertCardTrainingAsset({
-        generationId,
-        folderName,
-        baseFilename: baseName,
-        cardType,
-        status: trainingResult.status,
-        source: trainingResult.source,
-        providerUsed: trainingResult.providerUsed,
-        modelUsed: trainingResult.modelUsed,
-        promptVersion: trainingResult.promptVersion,
-        schemaVersion: trainingResult.schemaVersion,
-        qualityScore: trainingResult.qualityScore,
-        selfConfidence: trainingResult.selfConfidence,
-        coverageScore: trainingResult.coverageScore,
-        validationErrors: trainingResult.validationErrors || [],
-        fallbackReason: trainingResult.fallbackReason || null,
-        tokensInput: trainingResult.tokensInput || 0,
-        tokensOutput: trainingResult.tokensOutput || 0,
-        tokensTotal: trainingResult.tokensTotal || 0,
-        costTotal: trainingResult.costTotal || 0,
-        latencyMs: trainingResult.latencyMs || 0,
-        payload: trainingResult.payload || null,
-        sidecarFilePath: sidecarPath
-    });
+    const saved = persistTrainingAssetRecord(context, trainingResult);
 
     return saved || {
         ...summarizeTrainingAsset(trainingResult),
@@ -348,58 +492,105 @@ async function backfillTrainingAssets(options = {}) {
     let failedCount = 0;
 
     for (const candidate of candidates) {
-        const record = dbService.getGenerationById(candidate.id);
-        if (!record) {
-            results.push({
-                generationId: candidate.id,
-                phrase: candidate.phrase,
-                folderName: candidate.folderName,
-                baseName: candidate.baseFilename,
-                status: 'skipped',
-                reason: 'generation_not_found'
-            });
-            continue;
-        }
+        try {
+            const record = dbService.getGenerationById(candidate.id);
+            if (!record) {
+                results.push({
+                    generationId: candidate.id,
+                    phrase: candidate.phrase,
+                    folderName: candidate.folderName,
+                    baseName: candidate.baseFilename,
+                    status: 'skipped',
+                    reason: 'generation_not_found'
+                });
+                continue;
+            }
 
-        const markdown = resolveRecordMarkdownContent(record);
-        if (!markdown) {
+            const markdown = resolveRecordMarkdownContent(record);
+            if (!markdown) {
+                results.push({
+                    generationId: record.id,
+                    phrase: record.phrase,
+                    folderName: record.folder_name,
+                    baseName: record.base_filename,
+                    status: 'skipped',
+                    reason: 'markdown_not_found'
+                });
+                continue;
+            }
+
+            const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : path.join(RECORDS_PATH, record.folder_name);
+            let training;
+            const gatewayHealth = await getGeminiGatewayHealth();
+            const shouldShortCircuit = gatewayHealth.ok && gatewayHealth.state !== 'closed';
+            if (shouldShortCircuit) {
+                const trainingResult = buildTrainingFallbackResult({
+                    phrase: record.phrase,
+                    cardType: record.card_type,
+                    markdown,
+                    reason: `gateway_not_ready_${gatewayHealth.state}`,
+                    validationErrors: [`gateway_not_ready: breaker_state=${gatewayHealth.state}, inflight=${gatewayHealth.inflight}`]
+                });
+                training = persistTrainingAssetRecord({
+                    generationId: record.id,
+                    phrase: record.phrase,
+                    cardType: record.card_type,
+                    folderName: record.folder_name,
+                    baseName: record.base_filename,
+                    targetDir
+                }, trainingResult);
+            } else {
+                training = await generateAndPersistTrainingAsset({
+                    generationId: record.id,
+                    phrase: record.phrase,
+                    cardType: record.card_type,
+                    markdown,
+                    folderName: record.folder_name,
+                    baseName: record.base_filename,
+                    targetDir,
+                    runtimeMode: 'backfill'
+                });
+            }
+
+            if (training.status === 'ready') readyCount += 1;
+            else if (training.status === 'repaired') repairedCount += 1;
+            else if (training.status === 'fallback') fallbackCount += 1;
+            else failedCount += 1;
+
             results.push({
                 generationId: record.id,
                 phrase: record.phrase,
                 folderName: record.folder_name,
                 baseName: record.base_filename,
-                status: 'skipped',
-                reason: 'markdown_not_found'
+                status: training.status || 'failed',
+                source: training.source || 'heuristic',
+                qualityScore: Number(training.qualityScore || 0),
+                assetId: Number(training.id || training.assetId || 0) || null
             });
-            continue;
+
+            if (!shouldShortCircuit && shouldWaitForGatewayRecovery(training)) {
+                const recovery = await waitForGeminiGatewayRecovery();
+                console.warn('[Training backfill] gateway recovery wait:', {
+                    generationId: record.id,
+                    baseName: record.base_filename,
+                    recovery
+                });
+            }
+        } catch (err) {
+            failedCount += 1;
+            results.push({
+                generationId: candidate.id,
+                phrase: candidate.phrase,
+                folderName: candidate.folderName,
+                baseName: candidate.baseFilename,
+                status: 'failed',
+                source: 'heuristic',
+                qualityScore: 0,
+                assetId: null,
+                reason: err.message
+            });
+            console.warn('[Training backfill] candidate failed:', candidate.id, err.message);
         }
-
-        const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : path.join(RECORDS_PATH, record.folder_name);
-        const training = await generateAndPersistTrainingAsset({
-            generationId: record.id,
-            phrase: record.phrase,
-            cardType: record.card_type,
-            markdown,
-            folderName: record.folder_name,
-            baseName: record.base_filename,
-            targetDir
-        });
-
-        if (training.status === 'ready') readyCount += 1;
-        else if (training.status === 'repaired') repairedCount += 1;
-        else if (training.status === 'fallback') fallbackCount += 1;
-        else failedCount += 1;
-
-        results.push({
-            generationId: record.id,
-            phrase: record.phrase,
-            folderName: record.folder_name,
-            baseName: record.base_filename,
-            status: training.status || 'failed',
-            source: training.source || 'heuristic',
-            qualityScore: Number(training.qualityScore || 0),
-            assetId: Number(training.id || training.assetId || 0) || null
-        });
     }
 
     const summary = dbService.getTrainingBackfillSummary({

@@ -242,7 +242,39 @@ curl -s -X POST http://localhost:18888/api/gemini \
   - 缩短 prompt 或拆分批任务
   - 在批量脚本里分组请求并限制并发
 
-### 9.5 `401 UNAUTHORIZED`
+### 9.5 `breaker_state = half_open/open`
+
+原因：
+- 上游 `gemini-3-pro-preview` 配额不足、容量不足，或连续超时
+- Gateway 18888 在连续失败后打开 circuit breaker
+
+典型现象：
+- `GET /health` 仍然返回 `200`
+- 但 `breaker_state` 为 `half_open` 或 `open`
+- `POST /api/gemini` 返回 `503`
+- 业务侧报错：
+  - `Circuit breaker is open`
+  - `UPSTREAM_UNAVAILABLE`
+
+当前工程中的处理：
+- 主生成链路仍保持高质量优先
+- TRAIN 历史回填链路新增 `runtimeMode=backfill`
+  - 若检测到 `breaker_state != closed`
+  - 不再长时间等待 teacher LLM
+  - 直接快速写入 `heuristic fallback`
+  - 目的是保证批处理收敛，不让任务无限挂起
+
+建议：
+- 若当前重点是 TRAIN 质量，不要把 teacher 模型直接降级为 `flash`
+- 应等待 `gemini-3-pro-preview` 配额恢复，再继续大规模历史回填
+- 恢复后先做小批量验证：
+
+```bash
+curl -s http://127.0.0.1:18888/health
+npm run training:backfill -- --limit 3 --request-timeout-ms 300000
+```
+
+### 9.6 `401 UNAUTHORIZED`
 
 原因：Gateway 要求鉴权，调用未带有效密钥。
 

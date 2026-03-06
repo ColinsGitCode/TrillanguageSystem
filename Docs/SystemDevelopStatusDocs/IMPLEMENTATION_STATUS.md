@@ -231,6 +231,20 @@
   - 同目录 sidecar：`<base>.training.v1.json`
 - 前端 TRAIN 页改为后端优先加载，并显示来源/状态/质量分，支持手动重算。
 
+### 2.19 TRAIN 历史回填稳态化（v3.7.1）
+
+- 新增历史回填接口：
+  - `GET /api/training/backfill/summary`
+  - `POST /api/training/backfill`
+- 回填链路增加 `runtimeMode=backfill`：
+  - 独立 timeout / executionTimeout / retry
+  - 回填脚本增加客户端超时
+  - timeout 场景可跳过 repair，避免双倍等待
+- 回填前读取 Gateway `18888 /health`：
+  - 若 `breaker_state != closed`，直接快速落 `heuristic fallback`
+  - 目标是保证批量回填“收敛优先”，不因单卡或单轮上游异常挂死
+- 当前高质量策略不变：历史大批量回填仍建议在 `gemini-3-pro-preview` 配额恢复后继续执行。
+
 ### 2.5 Gemini host-proxy 稳定化
 
 - 容器通过 Gateway `18888` 调用宿主机执行器
@@ -242,6 +256,7 @@
 1. approved 样本池规模不足时，review-gated 提升有限
 2. few-shot 注入在部分场景仍会带来 token 膨胀
 3. Gemini 上游链路受宿主机执行器状态影响
+4. `gemini-3-pro-preview` 配额不足时，18888 Gateway 可能进入 `open/half_open`，导致 TRAIN 历史回填快速 fallback 而非高质量 ready
 4. ~~规则评分与人工质量感知仍存在偏差~~ → 已通过 TTS 独立下限缓解
 5. 并发场景下 rollback + finalize 的竞态尚未测试
 6. 少量历史异常卡片仍可能包含“非结构化调试文本”混入正文，需二次清洗规则
@@ -252,12 +267,13 @@
 
 ## 4. 下一步重点
 
-1. 利用采样评审 + 回滚能力，快速扩充高质量 approved 样本池
-2. 优化 `tokenBudgetRatio/exampleMaxChars`，压缩增量 token
-3. 将观测指标门禁化（SLO + 发布阈值）
-4. 把评审结果与实验结果联动，形成”评分→注入→效果→回滚调参”闭环
-5. 对语法卡入口增加选区清洗策略（去翻译行、保留核心语法点）
-6. 基于 `knowledge_issues` 开展第一轮治理（audio_missing / format_anomaly / duplicate_phrase），并建立修复后重跑基线
+1. 等待 `gemini-3-pro-preview` 配额恢复后，继续历史 TRAIN 高质量回填
+2. 利用采样评审 + 回滚能力，快速扩充高质量 approved 样本池
+3. 优化 `tokenBudgetRatio/exampleMaxChars`，压缩增量 token
+4. 将观测指标门禁化（SLO + 发布阈值）
+5. 把评审结果与实验结果联动，形成”评分→注入→效果→回滚调参”闭环
+6. 对语法卡入口增加选区清洗策略（去翻译行、保留核心语法点）
+7. 基于 `knowledge_issues` 开展第一轮治理（audio_missing / format_anomaly / duplicate_phrase），并建立修复后重跑基线
 
 ## 5. 关键文档索引
 
