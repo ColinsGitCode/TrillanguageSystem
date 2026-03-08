@@ -245,6 +245,29 @@
   - 目标是保证批量回填“收敛优先”，不因单卡或单轮上游异常挂死
 - 当前高质量策略不变：历史大批量回填仍建议在 `gemini-3-pro-preview` 配额恢复后继续执行。
 
+### 2.20 TRAIN 全量完成与抽样验收（v3.7.2）
+
+- 截至 `2026-03-08`，`TRAIN` 资产已完成全库覆盖：
+  - `totalGenerations = 266`
+  - `withTraining = 266`
+  - `missingTraining = 0`
+- 当前状态分布：
+  - `ready = 265`
+  - `repaired = 1`
+  - `fallback = 0`
+  - `failed = 0`
+- 已完成 `39` 个历史 fallback 的定向重算，全部提升为 `ready`。
+- 全量结构校验：
+  - `enCollocations >= 4`
+  - `jaChunks >= 4`
+  - `quizzes >= 4`
+  - 不合格记录数 `0`
+- 抽样验收覆盖 grammar / technical / OCR / repaired 样本，结论为：
+  - 内容不只是“结构满足 schema”，而是具备可直接用于学习训练的搭配、语块和题目
+  - 现阶段主要优化点已转为低分样本精修与长尾时延治理
+- 已输出低分样本精修清单：
+  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+
 ### 2.5 Gemini host-proxy 稳定化
 
 - 容器通过 Gateway `18888` 调用宿主机执行器
@@ -267,11 +290,11 @@
 
 ## 4. 下一步重点
 
-1. 等待 `gemini-3-pro-preview` 配额恢复后，继续历史 TRAIN 高质量回填
+1. 对 `qualityScore <= 95` 的 TRAIN 样本做二次精修与人工抽查
 2. 利用采样评审 + 回滚能力，快速扩充高质量 approved 样本池
 3. 优化 `tokenBudgetRatio/exampleMaxChars`，压缩增量 token
 4. 将观测指标门禁化（SLO + 发布阈值）
-5. 把评审结果与实验结果联动，形成”评分→注入→效果→回滚调参”闭环
+5. 把评审结果与实验结果联动，形成“评分→注入→效果→回滚调参”闭环
 6. 对语法卡入口增加选区清洗策略（去翻译行、保留核心语法点）
 7. 基于 `knowledge_issues` 开展第一轮治理（audio_missing / format_anomaly / duplicate_phrase），并建立修复后重跑基线
 
@@ -282,6 +305,8 @@
 - 前端：`Docs/SystemDevelopStatusDocs/FRONTEND.md`
 - 最新仓库状态：`Docs/SystemDevelopStatusDocs/repo_status.md`
 - Mission Control UI 验证：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+- TRAIN 验收报告：`Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+- TRAIN 精修清单：`Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 - 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
 - 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`

@@ -194,6 +194,29 @@
   - `gemini-gateway` 可能因 `gemini-3-pro-preview` 配额/容量紧张进入 `half_open`
   - 因此历史 TRAIN 回填建议在配额恢复后继续执行，以保证 `ready/repaired` 比例
 
+### 3.19 TRAIN 全量补齐与质量验收（v3.7.2）
+
+- 截至 `2026-03-08`，`TRAIN` 资产已完成全库覆盖：
+  - `totalGenerations = 266`
+  - `withTraining = 266`
+  - `missingTraining = 0`
+- 当前状态分布：
+  - `ready = 265`
+  - `repaired = 1`
+  - `fallback = 0`
+  - `failed = 0`
+- 已完成对历史 `39` 个 fallback 的定向重算，全部提升为 `ready`。
+- 全量结构校验结果：
+  - `enCollocations` 最小值 `4`
+  - `jaChunks` 最小值 `4`
+  - `quizzes` 最小值 `4`
+  - 不合格记录数 `0`
+- 抽样验收结论：
+  - grammar / technical / OCR / repaired 样本均具备实际学习价值
+  - 当前主风险已从“回退数据残留”切换为“少量低分样本的二次精修”和“极少数长尾时延”
+- 已整理 `qualityScore <= 95` 的精修候选清单：
+  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+
 ## 4. 主线技术策略
 
 - 默认主链路：Gemini CLI Proxy（host-proxy）
@@ -202,7 +225,7 @@
 
 ## 5. 现阶段重点关注
 
-1. 等待 `gemini-3-pro-preview` 配额恢复后继续历史 TRAIN 高质量回填
+1. 对 `qualityScore <= 95` 的 TRAIN 样本做二次精修与人工抽查
 2. 扩大高质量样本池（teacher + approved）
 3. 控制 token 膨胀，提升 gain per 1k token
 4. 把观测指标升级为 SLO/门禁策略
@@ -215,6 +238,8 @@
 - `Docs/SystemDevelopStatusDocs/FRONTEND.md`
 - `Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
 - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+- `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+- `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 - `Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - `Docs/SLIDES_OUTLINES.md`
 
