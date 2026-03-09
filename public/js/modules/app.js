@@ -22,6 +22,7 @@ const els = {
     // Image OCR
     imageDropZone: document.getElementById('imageDropZone'),
     imagePreview: document.getElementById('imagePreview'),
+    imageFileInput: document.getElementById('imageFileInput'),
     ocrBtn: document.getElementById('ocrBtn'),
     clearImageBtn: document.getElementById('clearImageBtn'),
     ocrPreview: document.getElementById('ocrPreview'),
@@ -973,15 +974,23 @@ function stopTimer() {
 // ==========================================
 
 function initImageHandlers() {
-    const { imageDropZone, ocrBtn, clearImageBtn, ocrPreviewTabRaw, ocrPreviewTabClean } = els;
+    const { imageDropZone, imageFileInput, ocrBtn, clearImageBtn, ocrPreviewTabRaw, ocrPreviewTabClean } = els;
 
     imageDropZone.addEventListener('dragover', e => { e.preventDefault(); imageDropZone.classList.add('dragover'); });
     imageDropZone.addEventListener('dragleave', () => imageDropZone.classList.remove('dragover'));
+    imageDropZone.addEventListener('click', () => imageFileInput?.click());
     imageDropZone.addEventListener('drop', e => {
         e.preventDefault();
         imageDropZone.classList.remove('dragover');
         handleFile(e.dataTransfer?.files[0]);
     });
+
+    if (imageFileInput) {
+        imageFileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files?.[0]);
+            imageFileInput.value = '';
+        });
+    }
     
     document.addEventListener('paste', e => {
         const items = e.clipboardData?.items;

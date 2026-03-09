@@ -30,13 +30,15 @@
 - 配置文件：
   - `playwright.config.js`
 - 启动脚本：
-  - `scripts/startE2EServer.sh`
+- `scripts/startE2EServer.sh`
 - NPM scripts：
   - `npm run e2e:server`
   - `npm run test:e2e`
   - `npm run test:e2e:headed`
   - `npm run test:e2e:ui`
   - `npm run test:e2e:smoke`
+  - `npm run test:e2e:pages`
+  - `npm run test:e2e:real`
 
 ### 3.2 E2E_TEST_MODE
 
@@ -84,11 +86,27 @@
 5. `TRAIN` 选区生成三语卡与语法卡
 6. 删除卡片并确认列表移除
 
+新增页面级 / OCR 用例：
+
+1. `Mission Control` 页面可加载
+2. `Knowledge OPS` 页面可加载
+3. `Knowledge Hub` 页面可加载
+4. OCR fixture 上传、清洗与输入框回填
+
+低频真实验收用例：
+
+- `tests/e2e/real-gemini.spec.js`
+- 仅在设置 `RUN_REAL_GEMINI_E2E=1` 时执行
+- 默认目标地址：`http://127.0.0.1:3010`
+- 用于验证真实 Gemini CLI Proxy 主链路，不纳入高频 smoke
+
 已验证：
 
 - `2026-03-09`
 - 命令：`npm run test:e2e:smoke`
 - 结果：`6 passed`
+- 命令：`npm run test:e2e`
+- 结果：`10 passed, 1 skipped`
 
 ## 5. 运行方式
 

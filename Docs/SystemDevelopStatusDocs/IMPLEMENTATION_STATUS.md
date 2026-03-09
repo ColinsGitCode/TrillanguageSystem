@@ -294,6 +294,13 @@
 - 已完成首轮回归验证：
   - `npm run test:e2e:smoke`
   - 结果：`6 passed`
+- 已补充第二批回归：
+  - 页面级 smoke：`Mission Control / Knowledge OPS / Knowledge Hub`
+  - OCR fixture 上传、清洗与输入框回填
+  - 低频真实链路验收脚本：`tests/e2e/real-gemini.spec.js`
+- 当前全量 E2E 结果：
+  - `npm run test:e2e`
+  - 结果：`10 passed, 1 skipped`
 - 新增稳定测试选择器：
   - `data-testid` 已覆盖首页关键控件与卡片弹窗关键区域
 - 设计文档：

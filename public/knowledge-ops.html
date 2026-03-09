@@ -33,14 +33,14 @@
         }
     </style>
 </head>
-<body data-dashboard-page="knowledge-ops">
+<body data-dashboard-page="knowledge-ops" data-testid="knowledge-ops-page">
     <div class="dashboard-container">
         <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 16px;">
                 <a href="/" style="color: #6b7280; text-decoration: none; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono'; font-size: 13px; transition: color 0.2s;">
                     <span style="font-size: 16px;">←</span> TERMINAL
                 </a>
-                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;">
+                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;" data-testid="knowledge-ops-title">
                     KNOWLEDGE OPS <span style="color: #3b82f6;">// WORKBENCH</span>
                 </h1>
                 <nav class="dashboard-page-nav">
@@ -62,7 +62,7 @@
             <div class="card-header" style="margin-bottom: 12px;">
                 <h3>Task Queue <button class="info-btn" data-info-key="TASK_QUEUE">?</button></h3>
             </div>
-            <div id="taskQueueDetails">
+            <div id="taskQueueDetails" data-testid="knowledge-ops-task-queue">
                 <div class="empty-hint">No queue telemetry</div>
             </div>
         </section>
@@ -107,13 +107,13 @@
                     <span>Batch</span>
                     <input id="knowledgeBatchSize" type="number" min="1" max="200" step="1" value="50" />
                 </label>
-                <button id="knowledgeStartBtn" class="ko-start-btn">Start</button>
+                <button id="knowledgeStartBtn" class="ko-start-btn" data-testid="knowledge-start-btn">Start</button>
             </div>
             <div id="knowledgeOpsToast" class="knowledge-ops-toast"></div>
             <div class="knowledge-ops-grid">
                 <div class="knowledge-card">
                     <div class="knowledge-card-title">Jobs</div>
-                    <div id="knowledgeJobsList" class="knowledge-jobs-list">
+                    <div id="knowledgeJobsList" class="knowledge-jobs-list" data-testid="knowledge-jobs-list">
                         <div class="empty-hint">No jobs</div>
                     </div>
                 </div>

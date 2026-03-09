@@ -1626,6 +1626,13 @@ app.post('/api/ocr', async (req, res) => {
         const { image, provider, langs } = req.body || {};
         if (!image) return res.status(400).json({ error: 'No image' });
 
+        if (E2E_TEST_MODE) {
+          return res.json({
+            text: 'Queue   state ◆\nキューに追加する\npersistent   highlight',
+            provider: 'e2e-fixture'
+          });
+        }
+
         const selectedProvider = String(provider || process.env.OCR_PROVIDER || 'tesseract').toLowerCase();
         let text = '';
         let actualProvider = selectedProvider;
