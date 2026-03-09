@@ -6,6 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "gemini-proxy": "node scripts/gemini-host-proxy.js",
+    "e2e:server": "bash ./scripts/startE2EServer.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.js",
     "training:backfill": "node scripts/backfillTrainingAssets.js",
     "cards:migrate-style": "node scripts/updateLegacyCardStyle.js --apply",
     "fewshot:rounds": "node scripts/run_fewshot_rounds.js",
@@ -23,5 +28,8 @@
     "kuroshiro": "^1.2.0",
     "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "marked": "^9.1.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
   }
 }

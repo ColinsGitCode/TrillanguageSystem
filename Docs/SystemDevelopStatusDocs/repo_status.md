@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
 **最后更新**: 2026-03-09
-**版本**: 3.7.4
+**版本**: 3.8.0
 
 ## 1. 项目定位
 
@@ -257,6 +257,33 @@
 - `TRAIN` 页恢复高亮后，`重新生成训练包` / `显示答案` 等交互仍可正常绑定
 - 已完成 UI 验证并清理测试产物：
   - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
+
+### 3.22 Playwright E2E 引入（v3.8.0）
+
+- 新增 Playwright 基础设施：
+  - `playwright.config.js`
+  - `scripts/startE2EServer.sh`
+  - `tests/e2e/smoke.spec.js`
+- 新增 `E2E_TEST_MODE=1`：
+  - `/api/generate` 走固定 fixture
+  - 仍会写入目录、数据库与 TRAIN 资产
+  - 跳过真实 LLM/TTS 依赖，保证 smoke 稳定
+- 首批 smoke 用例覆盖：
+  - 首页加载
+  - 主输入生成
+  - 卡片弹窗 tab 切换
+  - TRAIN 显示答案
+  - TRAIN 选区生成
+  - TRAIN 标红刷新恢复
+  - 删除链路
+- 已执行首轮 smoke 回归：
+  - `npm run test:e2e:smoke`
+  - 结果：`6 passed`
+- 新增稳定测试选择器（`data-testid`）：
+  - 首页输入、队列状态、文件/文件夹容器
+  - 卡片弹窗、tab、TRAIN 面板、选区工具条
+- 设计文档：
+  - `Docs/DesignDocs/Playwright_E2E_Testing_Design.md`
 
 ## 4. 主线技术策略
 

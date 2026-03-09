@@ -21,6 +21,7 @@ const experimentTrackingService = require('./services/experimentTrackingService'
 const exampleReviewService = require('./services/exampleReviewService');
 const knowledgeJobService = require('./services/knowledgeJobService');
 const trainingPackService = require('./services/trainingPackService');
+const { buildFixtureContent, buildFixtureObservability, buildTrainingPayload } = require('./services/e2eFixtureService');
 const crypto = require('crypto');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -37,6 +38,7 @@ const DEFAULT_LLM_PROVIDER = String(process.env.DEFAULT_LLM_PROVIDER || 'gemini'
     ? 'local'
     : 'gemini';
 const DEFAULT_GEMINI_MODEL = process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-3-pro-preview';
+const E2E_TEST_MODE = /^(1|true|yes|on)$/i.test(String(process.env.E2E_TEST_MODE || '').trim());
 
 app.use(express.static('public'));
 app.use('/data', express.static(RECORDS_PATH));
@@ -46,6 +48,9 @@ app.use(express.json({ limit: '10mb' }));
 const GENERATE_MIN_INTERVAL_MS = 4000;
 const generationThrottle = new Map();
 function checkGenerateThrottle(req) {
+    if (E2E_TEST_MODE) {
+        return { allowed: true, retryAfterMs: 0 };
+    }
     const key = req.ip || 'unknown';
     const now = Date.now();
     const last = generationThrottle.get(key) || 0;
@@ -355,6 +360,55 @@ function normalizeSourceMode(sourceMode) {
     if (normalized === 'input') return 'input';
     if (normalized === 'ocr') return 'ocr';
     return normalized;
+}
+
+function buildE2ETrainingResult({ phrase, cardType }) {
+  const payload = buildTrainingPayload(phrase, cardType);
+  return {
+    status: 'ready',
+    source: 'llm',
+    payload,
+    qualityScore: 100,
+    coverageScore: 1,
+    selfConfidence: 1,
+    validationErrors: [],
+    fallbackReason: null,
+    providerUsed: 'gemini',
+    modelUsed: 'e2e-fixture',
+    promptVersion: 'e2e_fixture_v1',
+    schemaVersion: trainingPackService.TRAINING_SCHEMA_VERSION,
+    tokensInput: 0,
+    tokensOutput: 0,
+    tokensTotal: 0,
+    costTotal: 0,
+    latencyMs: 0,
+    rawOutput: ''
+  };
+}
+
+function buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMode }) {
+  const content = buildFixtureContent({ phrase, cardType });
+  const observability = buildFixtureObservability({
+    provider: requestedProvider,
+    model: 'e2e-fixture',
+    phrase,
+    cardType,
+    sourceMode
+  });
+  return {
+    output: content,
+    prompt: `E2E fixture prompt for ${String(phrase || '').trim()}`,
+    observability,
+    baseName: '',
+    targetDir: '',
+    folderName: '',
+    fewShot: {
+      enabled: false,
+      examples: [],
+      countUsed: 0
+    },
+    fallback: null
+  };
 }
 
 function buildTrainingSidecarPath(targetDir, baseName) {
@@ -1298,15 +1352,22 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // Mode: Single
-    const genResult = await generateWithAutoFallback(phrase, requestedProvider, perf, {
-      fewshotOptions: fewshot_options,
-      experimentId: experiment_id || '',
-      experimentRound: roundNumber,
-      modelOverride: llm_model || null,
-      targetFolder: target_folder || '',
-      cardType,
-      sourceMode
-    });
+    const genResult = E2E_TEST_MODE
+      ? buildE2EGenerateResult({
+          phrase,
+          cardType,
+          requestedProvider,
+          sourceMode
+        })
+      : await generateWithAutoFallback(phrase, requestedProvider, perf, {
+          fewshotOptions: fewshot_options,
+          experimentId: experiment_id || '',
+          experimentRound: roundNumber,
+          modelOverride: llm_model || null,
+          targetFolder: target_folder || '',
+          cardType,
+          sourceMode
+        });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
     const providerUsed = observability?.metadata?.provider || requestedProvider;
 
@@ -1340,7 +1401,7 @@ app.post('/api/generate', async (req, res) => {
 
     // TTS
     let audio = null;
-    const hasTtsEndpoint = process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT;
+    const hasTtsEndpoint = !E2E_TEST_MODE && (process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT);
     if (hasTtsEndpoint && content.audio_tasks.length) {
         const audioTasks = normalizeAudioTasks(content.audio_tasks, result.baseName);
         audio = await generateAudioBatch(audioTasks, { outputDir: result.targetDir, baseName: result.baseName, extension: 'wav' });
@@ -1443,15 +1504,24 @@ app.post('/api/generate', async (req, res) => {
 
     if (generationId) {
       try {
-        const trainingAsset = await generateAndPersistTrainingAsset({
-          generationId,
-          phrase,
-          cardType,
-          markdown: content.markdown_content,
-          folderName,
-          baseName: result.baseName,
-          targetDir: result.targetDir
-        });
+        const trainingAsset = E2E_TEST_MODE
+          ? persistTrainingAssetRecord({
+              generationId,
+              phrase,
+              cardType,
+              folderName: result.folder,
+              baseName: result.baseName,
+              targetDir: result.targetDir
+            }, buildE2ETrainingResult({ phrase, cardType }))
+          : await generateAndPersistTrainingAsset({
+              generationId,
+              phrase,
+              cardType,
+              markdown: content.markdown_content,
+              folderName: result.folder,
+              baseName: result.baseName,
+              targetDir: result.targetDir
+            });
         trainingSummary = summarizeTrainingAsset(trainingAsset);
       } catch (trainingErr) {
         console.warn('[Training] Generation failed:', trainingErr.message);
@@ -1586,6 +1656,9 @@ app.post('/api/ocr', async (req, res) => {
 app.get('/api/health', async (req, res) => {
     try {
         const status = await HealthCheckService.checkAll();
+        if (status && typeof status === 'object') {
+          status.e2e_test_mode = E2E_TEST_MODE;
+        }
         res.json(status);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -2242,15 +2315,24 @@ app.post('/api/training/by-generation/:id/regenerate', async (req, res) => {
             return res.status(404).json({ error: 'generation not found' });
         }
         const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : '';
-        const training = await generateAndPersistTrainingAsset({
-            generationId: record.id,
-            phrase: record.phrase,
-            cardType: record.card_type,
-            markdown: record.markdown_content || '',
-            folderName: record.folder_name,
-            baseName: record.base_filename,
-            targetDir
-        });
+        const training = E2E_TEST_MODE
+          ? persistTrainingAssetRecord({
+              generationId: record.id,
+              phrase: record.phrase,
+              cardType: record.card_type,
+              folderName: record.folder_name,
+              baseName: record.base_filename,
+              targetDir
+            }, buildE2ETrainingResult({ phrase: record.phrase, cardType: record.card_type }))
+          : await generateAndPersistTrainingAsset({
+              generationId: record.id,
+              phrase: record.phrase,
+              cardType: record.card_type,
+              markdown: record.markdown_content || '',
+              folderName: record.folder_name,
+              baseName: record.base_filename,
+              targetDir
+            });
         res.json({ success: true, training });
     } catch (err) {
         res.status(500).json({ error: err.message });

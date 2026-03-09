@@ -420,6 +420,7 @@ function renderFolders() {
             const btn = document.createElement('button');
             btn.textContent = formatFolderDisplayName(name);
             btn.title = name;
+            btn.dataset.testid = `folder-${name}`;
             if (name === selected) btn.classList.add('active');
             btn.onclick = () => selectFolder(name);
             grid.appendChild(btn);
@@ -505,6 +506,7 @@ function renderFiles(files) {
         const btn = document.createElement('button');
         const cardType = normalizeCardType(item.cardType || item.card_type || 'trilingual');
         btn.className = `list-item-btn card-type-${cardType === 'grammar_ja' ? 'grammar' : 'trilingual'}`;
+        btn.dataset.testid = `file-${cardType}-${String(item.title || item.file || '').trim()}`;
         const cornerText = cardType === 'grammar_ja' ? '语法卡' : '三语卡';
         const cornerClass = cardType === 'grammar_ja' ? 'corner-grammar' : 'corner-trilingual';
         btn.innerHTML = `
@@ -756,7 +758,7 @@ function renderCompareModal(phrase, geminiResult, localResult, comparison) {
 
     const html = `
         <div class="modern-card glass-panel compare-modal">
-            <button class="mc-close" id="mcCloseBtn">×</button>
+            <button class="mc-close" id="mcCloseBtn" data-testid="card-modal-close">×</button>
 
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
                 <div style="flex:1;">
@@ -1598,21 +1600,21 @@ function renderTrainingPanel(container, viewData, options = {}) {
         : '';
 
     container.innerHTML = `
-      <div class="card-training-wrap">
+      <div class="card-training-wrap" data-testid="train-wrap">
         <div class="card-training-head">
-            <div class="card-training-title">搭配与语块训练</div>
-            <div class="card-training-meta">
-                <span class="card-training-chip source">${escapeHtml(sourceLabel)}</span>
-                <span class="card-training-chip status">${escapeHtml(statusLabel)}</span>
-                <span class="card-training-chip">Quality ${qualityScore.toFixed(1)}</span>
-                <span class="card-training-chip">Coverage ${Math.round(coverageScore * 100)}%</span>
-                ${updatedAt ? `<span class="card-training-chip">更新 ${escapeHtml(updatedAt)}</span>` : ''}
+            <div class="card-training-title" data-testid="train-title">搭配与语块训练</div>
+            <div class="card-training-meta" data-testid="train-meta">
+                <span class="card-training-chip source" data-testid="train-source">${escapeHtml(sourceLabel)}</span>
+                <span class="card-training-chip status" data-testid="train-status">${escapeHtml(statusLabel)}</span>
+                <span class="card-training-chip" data-testid="train-quality">Quality ${qualityScore.toFixed(1)}</span>
+                <span class="card-training-chip" data-testid="train-coverage">Coverage ${Math.round(coverageScore * 100)}%</span>
+                ${updatedAt ? `<span class="card-training-chip" data-testid="train-updated">更新 ${escapeHtml(updatedAt)}</span>` : ''}
             </div>
-            <div class="card-training-tags">
+            <div class="card-training-tags" data-testid="train-counts">
                 <span class="tag">EN units ${viewData.enItems.length}</span>
                 <span class="tag">JA units ${viewData.jaItems.length}</span>
                 <span class="tag">Quiz ${viewData.quizzes.length}</span>
-                ${canRegenerate ? '<button type="button" class="card-training-regenerate-btn" data-action="regenerate-training">重新生成训练包</button>' : ''}
+                ${canRegenerate ? '<button type="button" class="card-training-regenerate-btn" data-action="regenerate-training" data-testid="train-regenerate-btn">重新生成训练包</button>' : ''}
             </div>
             ${warningText ? `<div class="card-training-warning">校验提示：${escapeHtml(warningText)}</div>` : ''}
         </div>
@@ -2442,9 +2444,9 @@ function initSelectionToGenerate(container, options = {}) {
     dock.id = 'selectionActionDock';
     dock.className = 'selection-action-dock hidden';
     dock.innerHTML = `
-      <button type="button" class="selection-action-btn action-generate" data-action="generate">\u2726 Generate Card</button>
-      <button type="button" class="selection-action-btn action-generate-grammar" data-action="generate-grammar">📘 语法卡</button>
-      <button type="button" class="selection-action-btn action-highlight" data-action="highlight">\ud83d\udd8d \u6807\u7ea2</button>
+      <button type="button" class="selection-action-btn action-generate" data-action="generate" data-testid="selection-generate-btn">\u2726 Generate Card</button>
+      <button type="button" class="selection-action-btn action-generate-grammar" data-action="generate-grammar" data-testid="selection-generate-grammar-btn">📘 语法卡</button>
+      <button type="button" class="selection-action-btn action-highlight" data-action="highlight" data-testid="selection-highlight-btn">\ud83d\udd8d \u6807\u7ea2</button>
     `;
     document.body.appendChild(dock);
     const generateBtn = dock.querySelector('[data-action="generate"]');
@@ -2554,9 +2556,31 @@ function checkSelection(container, dock, options = {}) {
     if (candidate) {
         const range = candidate.range;
         const rect = range.getBoundingClientRect();
-        dock.style.top = `${rect.top + window.scrollY - 44}px`;
-        dock.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
         dock.classList.remove('hidden');
+        const margin = 12;
+        const viewportTop = window.scrollY + margin;
+        const viewportBottom = window.scrollY + window.innerHeight - margin;
+        const viewportLeft = window.scrollX + margin;
+        const viewportRight = window.scrollX + window.innerWidth - margin;
+        const dockHeight = dock.offsetHeight || 44;
+        const dockWidth = dock.offsetWidth || 260;
+        const anchorX = rect.left + window.scrollX + (rect.width / 2);
+        const preferredTop = rect.top + window.scrollY - dockHeight - 8;
+        const fallbackTop = rect.bottom + window.scrollY + 8;
+        let top = preferredTop;
+        if (top < viewportTop) {
+            top = Math.min(fallbackTop, viewportBottom - dockHeight);
+        }
+        top = Math.max(viewportTop, Math.min(top, viewportBottom - dockHeight));
+
+        const halfDockWidth = dockWidth / 2;
+        const left = Math.max(
+            viewportLeft + halfDockWidth,
+            Math.min(anchorX, viewportRight - halfDockWidth)
+        );
+
+        dock.style.top = `${top}px`;
+        dock.style.left = `${left}px`;
     } else {
         dock.classList.add('hidden');
     }
@@ -3584,11 +3608,11 @@ function renderCardModal(markdown, title, options = {}) {
                     <button class="mc-delete-popover-confirm" id="mcDeleteConfirmBtn" type="button" data-testid="card-delete-confirm">确认删除</button>
                 </div>
             </div>
-            <button class="mc-close" id="mcCloseBtn">×</button>
+            <button class="mc-close" id="mcCloseBtn" data-testid="card-modal-close">×</button>
 
             <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
                 <div style="flex:1;">
-                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);">${escapeHtml(displayTitle)}</h1>
+                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono" style="color: var(--neon-blue);">
                         <span>${cardTypeMetaLabel}</span>
                         <span>::</span>
@@ -3597,21 +3621,21 @@ function renderCardModal(markdown, title, options = {}) {
                 </div>
 
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
-                    <button class="tab-btn active" data-target="cardContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
-                    <button class="tab-btn" data-target="cardTraining" style="font-size:12px; padding: 4px 12px; color: #0369a1;">TRAIN</button>
-                    <button class="tab-btn" data-target="cardIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
-                    ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
-                    ${generationId ? '<button class="tab-btn" data-target="cardReview" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
+                    <button class="tab-btn active" data-target="cardContent" data-testid="tab-content" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
+                    <button class="tab-btn" data-target="cardTraining" data-testid="tab-train" style="font-size:12px; padding: 4px 12px; color: #0369a1;">TRAIN</button>
+                    <button class="tab-btn" data-target="cardIntel" data-testid="tab-intel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
+                    ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" data-testid="tab-knowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
+                    ${generationId ? '<button class="tab-btn" data-target="cardReview" data-testid="tab-review" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
                 </div>
             </div>
 
             <!-- Content Tab -->
-            <div id="cardContent" class="mc-body mc-content" style="display:block;">
+            <div id="cardContent" class="mc-body mc-content" style="display:block;" data-testid="card-content-panel">
                 <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeTabLabel}</div>
                 ${cardContentHtml}
             </div>
 
-            <div id="cardTraining" class="mc-body" style="display:none;"></div>
+            <div id="cardTraining" class="mc-body" style="display:none;" data-testid="card-training-panel"></div>
 
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">

@@ -1,8 +1,8 @@
 # 实现状态报告
 
 **日期**: 2026-03-09
-**版本**: v3.7.4
-**状态**: 进行中（主链路稳定；TRAIN 已全量持久化、精修完成，并补齐 TRAIN 页选区交互）
+**版本**: v3.8.0
+**状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入）
 
 ## 1. 当前阶段结论
 
@@ -271,6 +271,33 @@
   - 高亮恢复后 `重新生成训练包 / 显示答案` 按钮仍可用
 - 测试报告：
   - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
+
+### 2.20 Playwright Smoke 回归（v3.8.0）
+
+- 已引入 `@playwright/test`
+- 已新增配置与启动脚本：
+  - `playwright.config.js`
+  - `scripts/startE2EServer.sh`
+- 新增 `E2E_TEST_MODE`：
+  - 关闭生成节流
+  - `/api/generate` 使用固定 fixture
+  - 继续保存卡片文件、数据库记录与 TRAIN 资产
+  - 跳过真实 TTS
+- 已补充第一批 smoke 用例：
+  - 首页加载
+  - 主输入生成三语卡
+  - 卡片弹窗 tab 切换
+  - TRAIN 答案显示
+  - TRAIN 标红恢复
+  - TRAIN 选区生成三语卡/语法卡
+  - 删除卡片
+- 已完成首轮回归验证：
+  - `npm run test:e2e:smoke`
+  - 结果：`6 passed`
+- 新增稳定测试选择器：
+  - `data-testid` 已覆盖首页关键控件与卡片弹窗关键区域
+- 设计文档：
+  - `Docs/DesignDocs/Playwright_E2E_Testing_Design.md`
 
 ### 2.18 TRAIN 高质量化（v3.7.0）
 

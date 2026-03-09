@@ -25,12 +25,12 @@
           <div class="hero-brand">
             <p class="eyebrow">Trilingual Records</p>
           </div>
-          <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite">
+          <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status">
             <div class="hero-queue-main">
               <span class="hero-queue-dot" aria-hidden="true"></span>
-              <span id="heroTaskQueueState" class="hero-queue-state">IDLE</span>
-              <span id="heroTaskQueueTask" class="hero-queue-task">Task Queue Idle</span>
-              <span id="heroTaskQueueElapsed" class="hero-queue-elapsed hidden">00:00</span>
+              <span id="heroTaskQueueState" class="hero-queue-state" data-testid="hero-queue-state">IDLE</span>
+              <span id="heroTaskQueueTask" class="hero-queue-task" data-testid="hero-queue-task">Task Queue Idle</span>
+              <span id="heroTaskQueueElapsed" class="hero-queue-elapsed hidden" data-testid="hero-queue-elapsed">00:00</span>
             </div>
             <div class="hero-queue-meta">
               <div id="heroTaskQueueProgressText" class="hero-queue-progress-text">队列进度：暂无任务</div>
@@ -69,15 +69,15 @@
                   <span class="selector-hint mode-gemini" id="modelHint">GEMINI CLI PROXY</span>
                 </div>
                 <div class="selector-buttons">
-                  <button class="model-btn" data-mode="local" title="使用本地 LLM (Qwen)">
+                  <button class="model-btn" data-mode="local" title="使用本地 LLM (Qwen)" data-testid="model-local">
                     <span class="model-icon">🏠</span>
                     <span>LOCAL</span>
                   </button>
-                  <button class="model-btn" data-mode="gemini" title="使用 Gemini CLI Proxy">
+                  <button class="model-btn" data-mode="gemini" title="使用 Gemini CLI Proxy" data-testid="model-gemini">
                     <span class="model-icon">🤖</span>
                     <span>GEMINI</span>
                   </button>
-                  <button class="model-btn" data-mode="compare" title="双模型对比">
+                  <button class="model-btn" data-mode="compare" title="双模型对比" data-testid="model-compare">
                     <span class="model-icon">⚡</span>
                     <span>COMPARE</span>
                   </button>
@@ -90,11 +90,11 @@
                   <span class="selector-hint mode-gemini" id="cardTypeHint">三语学习卡片</span>
                 </div>
                 <div class="selector-buttons selector-buttons-two">
-                  <button class="card-type-btn active" data-card-type="trilingual" title="中英日三语学习卡片">
+                  <button class="card-type-btn active" data-card-type="trilingual" title="中英日三语学习卡片" data-testid="card-type-trilingual">
                     <span class="model-icon">🧩</span>
                     <span>三语卡片</span>
                   </button>
-                  <button class="card-type-btn" data-card-type="grammar_ja" title="日语语法学习卡片（中文讲解+日语例句）">
+                  <button class="card-type-btn" data-card-type="grammar_ja" title="日语语法学习卡片（中文讲解+日语例句）" data-testid="card-type-grammar">
                     <span class="model-icon">📘</span>
                     <span>日语语法</span>
                   </button>
@@ -109,8 +109,8 @@
                   <span class="mode-icon">📝</span>
                   <span>文本输入</span>
                 </div>
-                <textarea id="phraseInput" placeholder="输入短语或句子..."></textarea>
-                <button id="genBtn" class="btn-primary">Generate</button>
+                <textarea id="phraseInput" placeholder="输入短语或句子..." data-testid="phrase-input"></textarea>
+                <button id="genBtn" class="btn-primary" data-testid="generate-btn">Generate</button>
               </div>
 
               <!-- 图片识别 -->
@@ -119,13 +119,13 @@
                   <span class="mode-icon">🖼️</span>
                   <span>图片识别</span>
                 </div>
-                <div id="imageDropZone" class="image-drop-zone">
+                <div id="imageDropZone" class="image-drop-zone" data-testid="image-drop-zone">
                   <div class="drop-hint">Ctrl+V 粘贴或拖拽图片</div>
                   <img id="imagePreview" class="hidden" alt="预览" />
                 </div>
                 <div class="image-actions">
-                  <button id="ocrBtn" class="btn-secondary" disabled>识别文字</button>
-                  <button id="clearImageBtn" class="btn-text" disabled>清除</button>
+                  <button id="ocrBtn" class="btn-secondary" disabled data-testid="ocr-btn">识别文字</button>
+                  <button id="clearImageBtn" class="btn-text" disabled data-testid="clear-image-btn">清除</button>
                 </div>
                 <div id="ocrPreview" class="ocr-preview hidden" aria-live="polite">
                   <div class="ocr-preview-head">
@@ -215,7 +215,7 @@
               </div>
               <div class="chip" id="folderCount">0</div>
             </div>
-            <div class="list" id="folderList" role="listbox" aria-label="folder list"></div>
+            <div class="list" id="folderList" role="listbox" aria-label="folder list" data-testid="folder-list"></div>
           </div>
 
           <!-- History Panel -->
@@ -268,13 +268,13 @@
               </div>
               <div class="chip" id="fileCount">0</div>
             </div>
-            <div class="list file-list" id="fileList" role="listbox" aria-label="file list"></div>
+            <div class="list file-list" id="fileList" role="listbox" aria-label="file list" data-testid="file-list"></div>
           </div>
         </article>
       </section>
 
-      <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog">
-        <div class="modal-content" id="modalContainer">
+      <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog" data-testid="card-modal">
+        <div class="modal-content" id="modalContainer" data-testid="card-modal-container">
             <!-- Content injected via JS -->
         </div>
       </div>

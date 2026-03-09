@@ -31,3 +31,7 @@ Docs/assets/
 
 # UI build leftovers
 public/*.bak
+
+# Local E2E artifacts
+.tmp/
+output/playwright/
