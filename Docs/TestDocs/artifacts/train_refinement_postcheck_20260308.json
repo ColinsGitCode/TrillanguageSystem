@@ -1,0 +1,742 @@
+[
+  {
+    "generationId": 259,
+    "folder": "20260209",
+    "baseName": "带节奏",
+    "cardType": "trilingual",
+    "qualityScore": 99.4,
+    "coverageScore": 1,
+    "selfConfidence": 0.98,
+    "en1": {
+      "id": "en-1",
+      "pattern": "sway public opinion",
+      "meaningZh": "左右舆论 / 带节奏",
+      "usageZh": "指用（常指无根据的）言论影响大众看法，带有负面和误导色彩。",
+      "exampleEn": "Don't let him sway public opinion with his baseless claims.",
+      "exampleZh": "别让他用没有根据的说法带节奏。",
+      "distractors": [
+        "play public opinion",
+        "make public opinion"
+      ],
+      "difficulty": 3
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "世論を扇動する",
+      "reading": "せろんをせんどうする",
+      "meaningZh": "煽动舆论 / 带节奏",
+      "usageZh": "用于表达带有贬义的、通过挑拨情绪或使用无根据的主张来引导大众情绪的“带节奏”。",
+      "exampleJa": "彼に世論を扇動させてはいけない。彼の主張には根拠がない。",
+      "exampleZh": "不能让他煽动舆论。他的主张没有根据。",
+      "grammarLabel": "动宾短语",
+      "distractors": [
+        "世論を落ち着かせる",
+        "世論を無視する"
+      ],
+      "difficulty": 3
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "Don't let him ___ public opinion with his baseless claims.",
+      "answer": "sway",
+      "choices": [
+        "sway",
+        "set",
+        "make",
+        "take"
+      ],
+      "explanationZh": "句意为‘别让他用无根据的说法带节奏’，这里填入sway搭配public opinion，表示“左右/煽动舆论”。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 302,
+    "folder": "20260210",
+    "baseName": "没关系",
+    "cardType": "trilingual",
+    "qualityScore": 100,
+    "coverageScore": 1,
+    "selfConfidence": 1,
+    "en1": {
+      "id": "en-1",
+      "pattern": "It's totally fine",
+      "meaningZh": "没关系 / 完全没问题",
+      "usageZh": "用于安抚对方，表示事情完全可以接受，消除对方的顾虑。",
+      "exampleEn": "Oh, don't worry about it, it's totally fine.",
+      "exampleZh": "哦，别担心，没关系。",
+      "distractors": [
+        "It's terrible",
+        "It's totally broken"
+      ],
+      "difficulty": 1
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "大丈夫です",
+      "reading": "だいじょうぶです",
+      "meaningZh": "没关系 / 不要紧",
+      "usageZh": "最常用的表达，用于减轻对方的歉意或担忧，传达“没有问题”的状态。",
+      "exampleJa": "いやいや、大丈夫だよ！",
+      "exampleZh": "不不不，没关系！",
+      "grammarLabel": "Polite Expression",
+      "distractors": [
+        "大問題です",
+        "無理です"
+      ],
+      "difficulty": 1
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "Oh, don't worry about it, it's totally ___.",
+      "answer": "fine",
+      "choices": [
+        "fine",
+        "bad",
+        "wrong",
+        "matter"
+      ],
+      "explanationZh": "固定搭配 'totally fine' 表示'完全没关系，挺好的'，常用于安抚因小事道歉的人。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 310,
+    "folder": "20260210",
+    "baseName": "容器编排",
+    "cardType": "trilingual",
+    "qualityScore": 95.9,
+    "coverageScore": 0.95,
+    "selfConfidence": 0.98,
+    "en1": {
+      "id": "en-1",
+      "pattern": "container orchestration",
+      "meaningZh": "容器编排",
+      "usageZh": "核心术语，用于描述自动化管理和协调容器化应用的整个过程。",
+      "exampleEn": "Hey, are you using Kubernetes for container orchestration these days?",
+      "exampleZh": "嘿，你最近用 Kubernetes 做容器编排了吗？",
+      "distractors": [
+        "container isolation",
+        "container configuration"
+      ],
+      "difficulty": 3
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "コンテナオーケストレーション",
+      "reading": "こんてな おーけすとれーしょん",
+      "meaningZh": "容器编排",
+      "usageZh": "IT行业通用外来语，指代自动化管理容器的过程。",
+      "exampleJa": "最近、コンテナオーケストレーションにはKubernetesを使ってるの？",
+      "exampleZh": "最近，你用 Kubernetes 做容器编排了吗？",
+      "grammarLabel": "名詞",
+      "distractors": [
+        "コンテナ仮想化",
+        "コンテナ管理"
+      ],
+      "difficulty": 3
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "______ really make managing microservices so much easier.",
+      "answer": "Container orchestration tools",
+      "choices": [
+        "Container orchestration tools",
+        "Container configuration files",
+        "Hardware deployment scripts"
+      ],
+      "explanationZh": "根据原文例句，是“容器编排工具（Container orchestration tools）”让微服务管理变得容易。",
+      "relatedUnitIds": [
+        "en-2",
+        "en-3"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 322,
+    "folder": "20260210",
+    "baseName": "提示词工程",
+    "cardType": "trilingual",
+    "qualityScore": 97.1,
+    "coverageScore": 0.98,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "prompt engineering",
+      "meaningZh": "提示词工程",
+      "usageZh": "作为专有名词或不可数名词使用，指代设计和优化大语言模型输入的过程。",
+      "exampleEn": "I guess I need to do some more prompt engineering.",
+      "exampleZh": "看来我得再多做些提示词工程了。",
+      "distractors": [
+        "prompt design",
+        "word engineering"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "プロンプトエンジニアリング",
+      "reading": "ぷろんぷとえんじにありんぐ",
+      "meaningZh": "提示词工程",
+      "usageZh": "外来语，AI领域的专业术语，指优化模型输入的工程。",
+      "exampleJa": "プロンプトエンジニアリングがもっと必要かもね。",
+      "exampleZh": "可能需要更多的提示词工程。",
+      "grammarLabel": "名詞",
+      "distractors": [
+        "プロンプトデザイン",
+        "プログラムエンジニアリング"
+      ],
+      "difficulty": 2
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "I guess I need to do some more ___ ___ to get better results from the AI.",
+      "answer": "prompt engineering",
+      "choices": [
+        "prompt engineering",
+        "prompt design",
+        "word engineering",
+        "text processing"
+      ],
+      "explanationZh": "根据语境，调整输入以获取AI更好结果的过程称为 prompt engineering（提示词工程）。",
+      "relatedUnitIds": [
+        "en-1",
+        "en-2"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 385,
+    "folder": "20251218",
+    "baseName": "こまめに",
+    "cardType": "trilingual",
+    "qualityScore": 99.4,
+    "coverageScore": 1,
+    "selfConfidence": 0.98,
+    "en1": {
+      "id": "en-1",
+      "pattern": "contact [someone] regularly",
+      "meaningZh": "经常联系某人",
+      "usageZh": "表示频繁且有规律地与某人保持沟通。",
+      "exampleEn": "He contacts me regularly.",
+      "exampleZh": "他经常联系我。",
+      "distractors": [
+        "contact rarely",
+        "contact once"
+      ],
+      "difficulty": 1
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "こまめに連絡する",
+      "reading": "こまめにれんらくする",
+      "meaningZh": "经常联系/勤联系",
+      "usageZh": "表示动作频繁、不嫌麻烦地与对方保持联络。",
+      "exampleJa": "彼はこまめに連絡をくれる。",
+      "exampleZh": "他经常联系我。",
+      "grammarLabel": "副词 + 动词",
+      "distractors": [
+        "たまに連絡する",
+        "めったに連絡しない"
+      ],
+      "difficulty": 1
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "He contacts me ___.",
+      "answer": "regularly",
+      "choices": [
+        "regularly",
+        "rarely",
+        "slowly",
+        "hardly"
+      ],
+      "explanationZh": "句意为‘他经常联系我’，regularly 表示‘有规律地、经常地’，符合语境。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 391,
+    "folder": "20251225",
+    "baseName": "细枝末节",
+    "cardType": "trilingual",
+    "qualityScore": 98.5,
+    "coverageScore": 1,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "minor details",
+      "meaningZh": "微小的细节/细枝末节",
+      "usageZh": "常用搭配，指不影响大局的次要信息或事物的一小部分。",
+      "exampleEn": "Don't worry about the minor details right now; let's focus on the big picture.",
+      "exampleZh": "现在别管那些细枝末节了，我们关注一下大局。",
+      "distractors": [
+        "major events",
+        "main issues"
+      ],
+      "difficulty": 1
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "枝葉末節",
+      "reading": "しようまっせつ",
+      "meaningZh": "细枝末节/非本质的部分",
+      "usageZh": "四字熟语，比喻事物的非本质、不重要的细小部分。多用于较生硬的表现或形式上的议论、文章中。",
+      "exampleJa": "本質を見失わず、枝葉末節に拘らないようにしましょう。",
+      "exampleZh": "不要迷失本质，不要拘泥于细枝末节。",
+      "grammarLabel": "名詞/四字熟語",
+      "distractors": [
+        "根幹部分",
+        "重要事項"
+      ],
+      "difficulty": 3
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "The writer often obfuscates the real issues with _____.",
+      "answer": "petty details",
+      "choices": [
+        "petty details",
+        "crucial facts",
+        "core values",
+        "major events"
+      ],
+      "explanationZh": "句意：这位作家经常用细枝末节来混淆真正的问题。petty details 表示琐碎的细节，符合语境。",
+      "relatedUnitIds": [
+        "en-4"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 409,
+    "folder": "20260113",
+    "baseName": "fiddling with",
+    "cardType": "trilingual",
+    "qualityScore": 98.5,
+    "coverageScore": 1,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "nervously fiddling with [object]",
+      "meaningZh": "紧张地摆弄（某物）",
+      "usageZh": "用于描述因为内心紧张、不安而下意识地摸索或玩弄手里的小物件（如笔、戒指等）的习惯性动作。",
+      "exampleEn": "She was nervously fiddling with her pen as she waited for the test to start.",
+      "exampleZh": "她紧张地摆弄着她的笔，等待考试开始。",
+      "distractors": [
+        "nervously playing to",
+        "nervously touching at"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "スマホをいじる",
+      "reading": "スマホをいじる",
+      "meaningZh": "摆弄智能手机",
+      "usageZh": "日常口语中非常高频的表达，指漫无目的地玩手机、滑屏幕。",
+      "exampleJa": "彼は新しいスマホをいじっている。",
+      "exampleZh": "他正在摆弄他的新智能手机。",
+      "grammarLabel": "V (他动词)",
+      "distractors": [
+        "スマホをさわる",
+        "スマホをつかう"
+      ],
+      "difficulty": 1
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "She was nervously ___ her pen as she waited for the test to start.",
+      "answer": "fiddling with",
+      "choices": [
+        "fiddling with",
+        "playing to",
+        "touching at",
+        "holding on"
+      ],
+      "explanationZh": "句意为紧张地‘摆弄’笔，fiddling with 准确表达了漫不经心或因紧张而把玩某物的动作。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 425,
+    "folder": "20260125",
+    "baseName": "日中は元気に過ごしました",
+    "cardType": "trilingual",
+    "qualityScore": 99.4,
+    "coverageScore": 1,
+    "selfConfidence": 0.98,
+    "en1": {
+      "id": "en-1",
+      "pattern": "spend the day + adv.",
+      "meaningZh": "充满活力地度过一天",
+      "usageZh": "动词短语，表示在一天中保持某种状态，常与 actively 或 energetically 连用。",
+      "exampleEn": "The children spent the day energetically playing in the garden.",
+      "exampleZh": "孩子们在花园里充满活力地玩耍，度过了一天。",
+      "distractors": [
+        "take the day",
+        "make the day"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "日中は",
+      "reading": "にっちゅうは",
+      "meaningZh": "在白天，白天的期间",
+      "usageZh": "“日中（白昼）”加上提示助词“は”，用于引出白天发生的情况，常与夜间情况形成对比。",
+      "exampleJa": "日中は暖かかったが、夜は冷え込む。",
+      "exampleZh": "白天很暖和，但到了晚上会变冷。",
+      "grammarLabel": "名词+助词",
+      "distractors": [
+        "一日は",
+        "午後は"
+      ],
+      "difficulty": 1
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "ja",
+      "type": "cloze",
+      "question": "___は元気に過ごしました。（白天过得精神饱满。）",
+      "answer": "日中",
+      "choices": [
+        "日中",
+        "一日",
+        "午前",
+        "夜間"
+      ],
+      "explanationZh": "根据中文释义“白天”，应选择“日中（にっちゅう）”。“一日”是一整天，“夜間”是夜晚。",
+      "relatedUnitIds": [
+        "ja-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 555,
+    "folder": "20260303",
+    "baseName": "可観測性",
+    "cardType": "trilingual",
+    "qualityScore": 99.4,
+    "coverageScore": 1,
+    "selfConfidence": 0.98,
+    "en1": {
+      "id": "en-1",
+      "pattern": "improve our observability",
+      "meaningZh": "提升可观测性",
+      "usageZh": "用于表达需要增强系统暴露内部状态能力的场景，常与系统排错（troubleshooting）连用。",
+      "exampleEn": "We really need to improve our observability, otherwise finding this memory leak is going to take forever.",
+      "exampleZh": "我们真的需要提升可观测性，不然找这个内存泄露得花一辈子。",
+      "distractors": [
+        "increase our monitoring",
+        "upgrade our watching"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "可観測性が低い",
+      "reading": "かかんそくせいがひくい",
+      "meaningZh": "可观测性低",
+      "usageZh": "描述系统缺乏足够的日志或追踪数据，导致难以排查内部状态，通常用作引发问题的背景。",
+      "exampleJa": "最近、システムの可観測性が低くて、バグの原因が全然わからないんだよね。",
+      "exampleZh": "最近系统的可观测性太低了，完全搞不懂bug的原因。",
+      "grammarLabel": "N + が + Adj",
+      "distractors": [
+        "可観測性が浅い",
+        "可観測性が弱い"
+      ],
+      "difficulty": 2
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "We really need to improve our ________, otherwise finding this memory leak is going to take forever.",
+      "answer": "observability",
+      "choices": [
+        "observability",
+        "monitoring",
+        "watching",
+        "predictability"
+      ],
+      "explanationZh": "句意为“提升可观测性以寻找内存泄漏”。monitoring（监控）通常指预设阈值告警，而排查未知的内存泄露更依赖深入的 observability（可观测性）。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 5
+  },
+  {
+    "generationId": 347,
+    "folder": "20260210",
+    "baseName": "model check quick",
+    "cardType": "trilingual",
+    "qualityScore": 100,
+    "coverageScore": 1,
+    "selfConfidence": 1,
+    "en1": {
+      "id": "en-1",
+      "pattern": "do a quick model check",
+      "meaningZh": "进行一次快速模型检查",
+      "usageZh": "日常口语及职场中常用的动宾搭配，表示执行快速检查动作。",
+      "exampleEn": "Let's do a quick model check on the new feature before the daily stand-up.",
+      "exampleZh": "我们在日常站会前对新功能进行一次快速模型检查吧。",
+      "distractors": [
+        "make a quick model check",
+        "take a quick model check"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "クイックモデルチェック",
+      "reading": "クイックモデルチェック",
+      "meaningZh": "快速模型检查",
+      "usageZh": "核心外来语名词，由 quick 和 model check 组合而成。",
+      "exampleJa": "新機能のクイックモデルチェックをしてみようか。",
+      "exampleZh": "我们对新功能进行一次快速模型检查吧。",
+      "grammarLabel": "名词/外来语",
+      "distractors": [
+        "スローモデルチェック",
+        "クイックシステムテスト"
+      ],
+      "difficulty": 2
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "Let's ___ a quick model check on the new feature before the daily stand-up.",
+      "answer": "do",
+      "choices": [
+        "do",
+        "make",
+        "take"
+      ],
+      "explanationZh": "表达“执行/进行快速模型检查”常用搭配是 'do a quick model check'。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 450,
+    "folder": "20260129",
+    "baseName": "字体加载策略",
+    "cardType": "trilingual",
+    "qualityScore": 97.1,
+    "coverageScore": 0.98,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "optimize font loading strategy",
+      "meaningZh": "优化字体加载策略",
+      "usageZh": "用于表达为了提升网站性能（如初始加载时间）而改进字体加载方式。",
+      "exampleEn": "We need to optimize our font loading strategy to improve the website's initial load time.",
+      "exampleZh": "我们需要优化我们的字体加载策略，以改善网站的初始加载时间。",
+      "distractors": [
+        "maximize font loading strategy",
+        "decrease font loading strategy"
+      ],
+      "difficulty": 3
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "フォント読み込み戦略を最適化する",
+      "reading": "フォントよみこみせんりゃくをさいてきかする",
+      "meaningZh": "优化字体加载策略",
+      "usageZh": "表示为了改善网页显示速度和用户体验而对字体加载方案进行优化。",
+      "exampleJa": "ウェブサイトの初期読み込み時間を改善するために、フォント読み込み戦略を最適化する必要があるね。",
+      "exampleZh": "为了改善网站的初始加载时间，我们需要优化字体加载策略。",
+      "grammarLabel": "動詞フレーズ",
+      "distractors": [
+        "フォント読み込み戦略を悪化させる",
+        "フォント読み込み戦略を無視する"
+      ],
+      "difficulty": 3
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "We need to ___ our font loading strategy to improve the website's initial load time.",
+      "answer": "optimize",
+      "choices": [
+        "optimize",
+        "maximize",
+        "decrease",
+        "ignore"
+      ],
+      "explanationZh": "根据句意，为了改善网站的初始加载时间，应该对字体加载策略进行“优化”(optimize)。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 503,
+    "folder": "20260226",
+    "baseName": "差不多",
+    "cardType": "trilingual",
+    "qualityScore": 98.5,
+    "coverageScore": 1,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "almost there",
+      "meaningZh": "快到了 / 差不多完成了",
+      "usageZh": "用于表示距离目的地很近，或某项任务非常接近完成状态。",
+      "exampleEn": "We are almost there, just give me five more minutes.",
+      "exampleZh": "我们差不多到了，再给我五分钟。",
+      "distractors": [
+        "barely there",
+        "already there"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "殆ど完成しました",
+      "reading": "ほとんどかんせいしました",
+      "meaningZh": "差不多完成了",
+      "usageZh": "表示任务或状态非常接近完成。“殆ど”作副词修饰动词。",
+      "exampleJa": "デザインは殆ど完成しました。",
+      "exampleZh": "设计差不多完成了。",
+      "grammarLabel": "副词 + 动词连用形",
+      "distractors": [
+        "少し完成しました",
+        "まだ完成していません"
+      ],
+      "difficulty": 2
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "Is the new design ready? Yeah, it's ___.",
+      "answer": "close enough",
+      "choices": [
+        "close enough",
+        "far away",
+        "barely there"
+      ],
+      "explanationZh": "表达“勉强可以、差不多了”，英文习惯用 close enough。",
+      "relatedUnitIds": [
+        "en-2"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  },
+  {
+    "generationId": 270,
+    "folder": "20260209",
+    "baseName": "多模型对比",
+    "cardType": "trilingual",
+    "qualityScore": 98.5,
+    "coverageScore": 1,
+    "selfConfidence": 0.95,
+    "en1": {
+      "id": "en-1",
+      "pattern": "do a multi-model comparison",
+      "meaningZh": "进行多模型对比",
+      "usageZh": "日常工作交流中表示“执行或开展”对比，动词用 do。",
+      "exampleEn": "We need to do a multi-model comparison to see which AI performs best.",
+      "exampleZh": "我们需要进行多模型对比，看看哪个AI表现最好。",
+      "distractors": [
+        "make a multi-model comparison",
+        "play a multi-model comparison"
+      ],
+      "difficulty": 2
+    },
+    "ja1": {
+      "id": "ja-1",
+      "chunk": "多モデル比較をする",
+      "reading": "たモデルひかくをする",
+      "meaningZh": "进行多模型对比",
+      "usageZh": "最基础的动宾搭配，表示执行对比这个动作。",
+      "exampleJa": "色々なモデルの多モデル比較をして、どれが一番使えるか見つけよう。",
+      "exampleZh": "进行各种模型的多模型对比，看看哪个最实用。",
+      "grammarLabel": "動詞フレーズ",
+      "distractors": [
+        "多モデル比較をみる",
+        "多モデル比較をいく"
+      ],
+      "difficulty": 2
+    },
+    "quiz1": {
+      "id": "q-1",
+      "lang": "en",
+      "type": "cloze",
+      "question": "We need to ___ a multi-model comparison to see which AI performs best.",
+      "answer": "do",
+      "choices": [
+        "do",
+        "make",
+        "play",
+        "take"
+      ],
+      "explanationZh": "英语中表示“进行”多模型对比，常用的简单动词搭配是 do a comparison，不能用 make 或 play。",
+      "relatedUnitIds": [
+        "en-1"
+      ]
+    },
+    "enCount": 4,
+    "jaCount": 4,
+    "quizCount": 4
+  }
+]

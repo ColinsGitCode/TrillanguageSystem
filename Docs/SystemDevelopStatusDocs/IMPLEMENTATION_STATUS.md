@@ -1,8 +1,8 @@
 # 实现状态报告
 
-**日期**: 2026-03-05
-**版本**: v3.7.0
-**状态**: 进行中（主链路稳定，Mission Control/Knowledge OPS/Knowledge Hub 已拆分为同级页面）
+**日期**: 2026-03-09
+**版本**: v3.7.3
+**状态**: 进行中（主链路稳定；TRAIN 已全量持久化、精修完成并完成 UI 一致性验证）
 
 ## 1. 当前阶段结论
 
@@ -10,7 +10,7 @@
 - few-shot 实验追踪与导出链路可复现
 - 人工评分/评论与 review-gated 注入机制已落地
 - Knowledge Ops / Knowledge Hub 已从 Mission Control 拆分为独立页面，可同级访问
-- 主要瓶颈从“机制缺失”转为“样本质量与成本效率平衡”
+- TRAIN 历史资产已全量补齐，当前主要问题已从“缺失/回退”转为“长期质量闭环与后续知识复用”
 
 ## 2. 已完成能力
 
@@ -218,6 +218,34 @@
   - 填空练习（答案显隐切换）
 - 该能力不改变生成链路，不引入新 API/新表，属于 UI 侧低风险增强。
 
+### 2.18 TRAIN 高质量化、全量回填与精修闭环（v3.7.x）
+
+- `POST /api/generate` 已支持同步产出 `trainingPack`，并持久化到：
+  - `card_training_assets`
+  - `<base>.training.v1.json`
+- 历史卡片 TRAIN 资产已完成全量补齐：
+  - `totalGenerations = 266`
+  - `withTraining = 266`
+  - `missingTraining = 0`
+- 当前状态分布：
+  - `ready = 265`
+  - `repaired = 1`
+  - `fallback = 0`
+  - `failed = 0`
+- 已完成对旧 `fallback` 样本的定向重算，全部提升为可用高质量资产
+- 已完成 `qualityScore <= 95` 的 13 条低分候选精修：
+  - 平均 `qualityScore`：`92.42 -> 98.59`
+  - 当前低分候选数：`0`
+- 已对 3 条代表样本做人工导向二次修正：
+  - `409 / fiddling with`
+  - `391 / 细枝末节`
+  - `503 / 差不多`
+- 已完成浏览器端 TRAIN UI 一致性抽查，验证前端展示与数据库/sidecar 数据一致
+- 验收与执行报告：
+  - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+  - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+
 ### 2.18 TRAIN 高质量化（v3.7.0）
 
 - 生成链路新增同步阶段：主卡片完成后立即生成 `trainingPack`。
@@ -307,6 +335,7 @@
 - Mission Control UI 验证：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
 - TRAIN 验收报告：`Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
 - TRAIN 精修清单：`Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+- TRAIN 精修执行报告：`Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
 - 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
 - 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`

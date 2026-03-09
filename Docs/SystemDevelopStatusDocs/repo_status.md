@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-03-05
-**版本**: 3.7.0
+**最后更新**: 2026-03-09
+**版本**: 3.7.3
 
 ## 1. 项目定位
 
@@ -217,6 +217,29 @@
 - 已整理 `qualityScore <= 95` 的精修候选清单：
   - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 
+### 3.20 TRAIN 低分样本精修与 UI 一致性验证（v3.7.3）
+
+- 已对 `qualityScore <= 95` 的 `13` 条样本完成逐条精修，结果：
+  - 提升 `13`
+  - 持平 `0`
+  - 下降 `0`
+- 平均 `qualityScore`：
+  - `92.42 -> 98.59`
+- 当前全库低分样本数：
+  - `qualityScore <= 95` 为 `0`
+- 对 `409 / fiddling with`、`391 / 细枝末节`、`503 / 差不多` 做了人工导向二次修正：
+  - 修复 EN 主训练单元与 quiz 正答一致性
+  - 修复 JA 语块过度具体化问题
+  - 强化“接近完成 / 勉强可接受”这类边界语义拆分
+- 浏览器端已完成 `TRAIN` 页抽查：
+  - `fiddling with`
+  - `细枝末节`
+  - `差不多`
+  三个样本的 UI 展示与数据库/sidecar 数据一致，未发现旧缓存残留
+- 对应报告：
+  - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+  - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+
 ## 4. 主线技术策略
 
 - 默认主链路：Gemini CLI Proxy（host-proxy）
@@ -240,6 +263,7 @@
 - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
 - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
 - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+- `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
 - `Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - `Docs/SLIDES_OUTLINES.md`
 
