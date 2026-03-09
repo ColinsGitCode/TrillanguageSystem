@@ -19,7 +19,28 @@ export function sanitizeHtml(html) {
         return DOMPurify.sanitize(html, {
             USE_PROFILES: { html: true },
             ADD_TAGS: ['audio', 'source', 'ruby', 'rt', 'rp'],
-            ADD_ATTR: ['class', 'src', 'data-src', 'data-folder', 'data-audio-src', 'preload', 'controls', 'href', 'title', 'alt', 'aria-label'],
+            ADD_ATTR: [
+                'class',
+                'src',
+                'data-src',
+                'data-folder',
+                'data-audio-src',
+                'data-answer',
+                'data-action',
+                'data-target',
+                'data-view',
+                'data-viewer',
+                'data-train-section',
+                'data-train-id',
+                'data-train-field',
+                'data-train-lang',
+                'preload',
+                'controls',
+                'href',
+                'title',
+                'alt',
+                'aria-label'
+            ],
         });
     }
     return html;

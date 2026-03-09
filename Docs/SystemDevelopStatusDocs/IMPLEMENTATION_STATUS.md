@@ -1,8 +1,8 @@
 # 实现状态报告
 
 **日期**: 2026-03-09
-**版本**: v3.7.3
-**状态**: 进行中（主链路稳定；TRAIN 已全量持久化、精修完成并完成 UI 一致性验证）
+**版本**: v3.7.4
+**状态**: 进行中（主链路稳定；TRAIN 已全量持久化、精修完成，并补齐 TRAIN 页选区交互）
 
 ## 1. 当前阶段结论
 
@@ -245,6 +245,32 @@
   - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
   - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
   - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+
+### 2.19 TRAIN 页选区生成与标红恢复（v3.7.4）
+
+- `TRAIN` 页已支持选区工具条，与 `CONTENT` 页保持一致：
+  - `✦ Generate Card`
+  - `📘 语法卡`
+  - `🖍 标红`
+- 选区生成动作已接入现有后台任务队列：
+  - 来源仍为 `selection`
+  - 页面保持在当前卡片弹窗，不自动跳转
+- `TRAIN` 页标红采用独立 highlight context：
+  - `CONTENT` 与 `TRAIN` 分别计算 `sourceHash`
+  - 本地缓存 key 按 `scope=content/train` 区分
+  - 服务端继续复用 `card_highlights`
+- 为支持 `TRAIN` 页恢复后的控件可用性，前端净化白名单已保留：
+  - `data-answer`
+  - `data-action`
+  - `data-target`
+  - `data-view`
+- UI 回归已验证：
+  - 选区生成三语卡成功
+  - 选区生成语法卡成功
+  - 标红刷新后可恢复
+  - 高亮恢复后 `重新生成训练包 / 显示答案` 按钮仍可用
+- 测试报告：
+  - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
 
 ### 2.18 TRAIN 高质量化（v3.7.0）
 

@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
 **最后更新**: 2026-03-09
-**版本**: 3.7.3
+**版本**: 3.7.4
 
 ## 1. 项目定位
 
@@ -239,6 +239,24 @@
 - 对应报告：
   - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
   - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+
+### 3.21 TRAIN 页选区交互增强（v3.7.4）
+
+- `TRAIN` 页已支持选中文字后的三动作浮动工具条：
+  - `✦ Generate Card`
+  - `📘 语法卡`
+  - `🖍 标红`
+- 生成动作复用现有后台任务队列：
+  - 不跳转
+  - 不关闭当前卡片弹窗
+  - 继续停留在当前 `TRAIN` 页浏览上下文
+- `TRAIN` 页标红已支持持久化恢复：
+  - 本地缓存 key 独立按 `scope=train`
+  - 服务端仍复用 `/api/highlights/by-file`
+  - 无需新增数据库表
+- `TRAIN` 页恢复高亮后，`重新生成训练包` / `显示答案` 等交互仍可正常绑定
+- 已完成 UI 验证并清理测试产物：
+  - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
 
 ## 4. 主线技术策略
 

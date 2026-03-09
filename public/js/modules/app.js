@@ -96,6 +96,8 @@ const generationQueueState = {
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
 const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
+const HIGHLIGHT_SCOPE_CONTENT = 'content';
+const HIGHLIGHT_SCOPE_TRAIN = 'train';
 const SELECTION_GENERATE_MAX_CHARS = 200;
 const SELECTION_HIGHLIGHT_MAX_CHARS = 2000;
 
@@ -1515,18 +1517,18 @@ function renderTrainingItems(items, emptyText = '暂无可训练内容') {
         return `<div class="card-training-empty">${escapeHtml(emptyText)}</div>`;
     }
     return items.map((item) => `
-        <div class="card-training-item">
+        <div class="card-training-item" data-train-section="${item.lang === 'en' ? 'enCollocation' : 'jaChunk'}" data-train-id="${escapeHtml(item.id || '')}" data-train-lang="${escapeHtml(item.lang || '')}">
             <div class="card-training-item-head">
-                <span class="card-training-lang ${item.lang}">${item.lang === 'en' ? 'EN' : 'JA'}</span>
-                <span class="card-training-key">${escapeHtml(item.text || '')}</span>
+                <span class="card-training-lang ${item.lang}" data-train-field="lang">${item.lang === 'en' ? 'EN' : 'JA'}</span>
+                <span class="card-training-key" data-train-field="text">${escapeHtml(item.text || '')}</span>
             </div>
-            ${item.reading ? `<div class="card-training-reading">读音：${escapeHtml(item.reading)}</div>` : ''}
-            ${item.grammarLabel ? `<div class="card-training-grammar">语法标签：${escapeHtml(item.grammarLabel)}</div>` : ''}
-            ${item.meaning ? `<div class="card-training-meaning">释义：${escapeHtml(item.meaning)}</div>` : ''}
-            ${item.usage ? `<div class="card-training-usage">用法：${escapeHtml(item.usage)}</div>` : ''}
-            <div class="card-training-sentence">${escapeHtml(item.sourceSentence || '')}</div>
-            ${item.sourceTranslation ? `<div class="card-training-translation">${escapeHtml(item.sourceTranslation)}</div>` : ''}
-            ${Array.isArray(item.distractors) && item.distractors.length ? `<div class="card-training-distractors">干扰项：${item.distractors.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
+            ${item.reading ? `<div class="card-training-reading" data-train-field="reading">读音：${escapeHtml(item.reading)}</div>` : ''}
+            ${item.grammarLabel ? `<div class="card-training-grammar" data-train-field="grammarLabel">语法标签：${escapeHtml(item.grammarLabel)}</div>` : ''}
+            ${item.meaning ? `<div class="card-training-meaning" data-train-field="meaning">释义：${escapeHtml(item.meaning)}</div>` : ''}
+            ${item.usage ? `<div class="card-training-usage" data-train-field="usage">用法：${escapeHtml(item.usage)}</div>` : ''}
+            <div class="card-training-sentence" data-train-field="sourceSentence">${escapeHtml(item.sourceSentence || '')}</div>
+            ${item.sourceTranslation ? `<div class="card-training-translation" data-train-field="sourceTranslation">${escapeHtml(item.sourceTranslation)}</div>` : ''}
+            ${Array.isArray(item.distractors) && item.distractors.length ? `<div class="card-training-distractors" data-train-field="distractors">干扰项：${item.distractors.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
         </div>
     `).join('');
 }
@@ -1536,16 +1538,16 @@ function renderTrainingQuizzes(quizzes) {
         return '<div class="card-training-empty">暂无训练题目</div>';
     }
     return quizzes.map((item) => `
-        <div class="card-training-quiz">
+        <div class="card-training-quiz" data-train-section="quiz" data-train-id="${escapeHtml(item.id || '')}" data-train-lang="${escapeHtml(item.lang || '')}">
             <div class="card-training-quiz-head">
-                <span class="card-training-lang ${item.lang}">${item.lang === 'en' ? 'EN' : 'JA'}</span>
-                <span>${item.type === 'choice' ? '选择训练' : '填空训练'}</span>
+                <span class="card-training-lang ${item.lang}" data-train-field="lang">${item.lang === 'en' ? 'EN' : 'JA'}</span>
+                <span data-train-field="type">${item.type === 'choice' ? '选择训练' : '填空训练'}</span>
             </div>
-            <div class="card-training-quiz-prompt">${escapeHtml(item.prompt || '')}</div>
-            ${Array.isArray(item.choices) && item.choices.length ? `<div class="card-training-choices">选项：${item.choices.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
-            ${item.translation ? `<div class="card-training-translation">${escapeHtml(item.translation)}</div>` : ''}
+            <div class="card-training-quiz-prompt" data-train-field="prompt">${escapeHtml(item.prompt || '')}</div>
+            ${Array.isArray(item.choices) && item.choices.length ? `<div class="card-training-choices" data-train-field="choices">选项：${item.choices.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
+            ${item.translation ? `<div class="card-training-translation" data-train-field="translation">${escapeHtml(item.translation)}</div>` : ''}
             <button type="button" class="card-training-reveal-btn" data-answer="${escapeHtml(item.answer || '')}">显示答案</button>
-            <div class="card-training-answer hidden">答案：${escapeHtml(item.answer || '')}</div>
+            <div class="card-training-answer hidden" data-train-field="answer">答案：${escapeHtml(item.answer || '')}</div>
         </div>
     `).join('');
 }
@@ -1638,6 +1640,17 @@ function renderTrainingPanel(container, viewData, options = {}) {
     `;
 }
 
+function buildTrainingHighlightSourceHash(trainingAsset, viewData) {
+    if (trainingAsset?.payload) {
+        return computeTextHash(JSON.stringify(trainingAsset.payload || {}));
+    }
+    return computeTextHash(JSON.stringify({
+        enItems: viewData?.enItems || [],
+        jaItems: viewData?.jaItems || [],
+        quizzes: viewData?.quizzes || []
+    }));
+}
+
 async function fetchTrainingAssetForCard({ generationId, folder, baseName }) {
     if (generationId) {
         try {
@@ -1676,9 +1689,12 @@ async function loadCardTrainingPanel({ container, markdown, title, cardType, gen
         console.warn('[TRAIN] load training asset failed:', err.message);
     }
 
-    if (training?.payload) {
-        const viewData = mapTrainingPayloadToViewData(training.payload || {});
-        renderTrainingPanel(container, viewData, {
+    const bindContext = { container, generationId, folder, baseName, markdown, title, cardType };
+    const viewData = training?.payload
+        ? mapTrainingPayloadToViewData(training.payload || {})
+        : buildCardTrainingData(markdown, title, cardType);
+    const renderOptions = training?.payload
+        ? {
             source: training.source,
             status: training.status,
             qualityScore: training.qualityScore,
@@ -1686,23 +1702,51 @@ async function loadCardTrainingPanel({ container, markdown, title, cardType, gen
             validationErrors: training.validationErrors,
             updatedAt: training.updatedAt,
             generationId
-        });
-        bindCardTrainingPanel(container, { container, generationId, folder, baseName, markdown, title, cardType });
-        container.dataset.loaded = '1';
-        return;
+        }
+        : {
+            source: 'heuristic',
+            status: 'fallback',
+            qualityScore: 0,
+            coverageScore: 0,
+            validationErrors: ['后端训练包不存在，使用前端临时提取'],
+            updatedAt: null,
+            generationId
+        };
+    const trainingHighlightContext = buildCardHighlightContext({
+        folder,
+        baseName,
+        generationId,
+        title,
+        scope: HIGHLIGHT_SCOPE_TRAIN,
+        sourceHash: buildTrainingHighlightSourceHash(training, viewData)
+    });
+    if (activeCardContext) {
+        activeCardContext.trainingHighlightContext = trainingHighlightContext;
     }
 
-    const fallbackData = buildCardTrainingData(markdown, title, cardType);
-    renderTrainingPanel(container, fallbackData, {
-        source: 'heuristic',
-        status: 'fallback',
-        qualityScore: 0,
-        coverageScore: 0,
-        validationErrors: ['后端训练包不存在，使用前端临时提取'],
-        updatedAt: null,
-        generationId
-    });
-    bindCardTrainingPanel(container, { container, generationId, folder, baseName, markdown, title, cardType });
+    const persistedHtml = trainingHighlightContext
+        ? loadPersistedCardHighlights(
+            trainingHighlightContext.highlightStorageKey,
+            trainingHighlightContext.highlightSourceHash
+        )
+        : null;
+
+    if (persistedHtml) {
+        container.innerHTML = persistedHtml;
+        bindCardTrainingPanel(container, bindContext);
+        if (trainingHighlightContext) {
+            backfillCardHighlightsToServer(trainingHighlightContext, persistedHtml);
+        }
+    } else {
+        renderTrainingPanel(container, viewData, renderOptions);
+        bindCardTrainingPanel(container, bindContext);
+    }
+
+    if (trainingHighlightContext) {
+        await hydrateCardHighlightsFromServer(container, trainingHighlightContext, {
+            onHydrated: () => bindCardTrainingPanel(container, bindContext)
+        });
+    }
     container.dataset.loaded = '1';
 }
 
@@ -2250,6 +2294,17 @@ function normalizeSelectionPhrase(text) {
     return cleaned;
 }
 
+function normalizeTrainingSelectionPhrase(text) {
+    let cleaned = normalizeSelectionPhrase(text);
+    cleaned = cleaned
+        .replace(/^(EN|JA)\s+/i, '')
+        .replace(/^(释义|用法|读音|语法标签|干扰项|选项|答案)\s*[：:]\s*/i, '')
+        .replace(/^(填空训练|选择训练)\s+/i, '')
+        .replace(/^(英文搭配|日语语块|训练题)\s+/i, '')
+        .trim();
+    return cleaned;
+}
+
 function normalizeOcrTextForInput(text) {
     const raw = String(text || '');
     if (!raw.trim()) return { cleaned: '', changed: false };
@@ -2335,7 +2390,10 @@ function extractRubyBaseText(rubyEl) {
 }
 
 function buildSelectionCandidateFromContainer(container, options = {}) {
-    const { maxLength = SELECTION_HIGHLIGHT_MAX_CHARS } = options;
+    const {
+        maxLength = SELECTION_HIGHLIGHT_MAX_CHARS,
+        normalizer = normalizeSelectionPhrase
+    } = options;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return null;
 
@@ -2349,7 +2407,7 @@ function buildSelectionCandidateFromContainer(container, options = {}) {
     const pieces = [];
     collectVisibleSelectionText(fragment, pieces);
     const rawText = pieces.join(' ').trim();
-    let normalized = normalizeSelectionPhrase(rawText);
+    let normalized = normalizer(rawText);
 
     // 用户可能只选中了 rt 注音，尝试回退到 ruby 主体文本。
     if (!normalized) {
@@ -2359,7 +2417,7 @@ function buildSelectionCandidateFromContainer(container, options = {}) {
                 : range.startContainer.parentElement;
         const rubyEl = anchorEl?.closest?.('ruby');
         if (rubyEl && container.contains(rubyEl)) {
-            normalized = extractRubyBaseText(rubyEl);
+            normalized = normalizer(extractRubyBaseText(rubyEl));
         }
     }
 
@@ -2368,11 +2426,17 @@ function buildSelectionCandidateFromContainer(container, options = {}) {
     return { rawText, normalized, range };
 }
 
-function initSelectionToGenerate(container) {
+function initSelectionToGenerate(container, options = {}) {
     if (selectionFabCleanup) {
         selectionFabCleanup();
         selectionFabCleanup = null;
     }
+
+    const {
+        highlightContext = null,
+        selectionOriginTab = HIGHLIGHT_SCOPE_CONTENT,
+        normalizer = normalizeSelectionPhrase
+    } = options;
 
     const dock = document.createElement('div');
     dock.id = 'selectionActionDock';
@@ -2390,9 +2454,9 @@ function initSelectionToGenerate(container) {
     const hideDock = () => dock.classList.add('hidden');
 
     const onMouseUp = () => {
-        setTimeout(() => checkSelection(container, dock), 10);
+        setTimeout(() => checkSelection(container, dock, { normalizer }), 10);
     };
-    const onSelChange = () => checkSelection(container, dock);
+    const onSelChange = () => checkSelection(container, dock, { normalizer });
 
     container.addEventListener('mouseup', onMouseUp);
     document.addEventListener('selectionchange', onSelChange);
@@ -2404,7 +2468,8 @@ function initSelectionToGenerate(container) {
     generateBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container, {
-            maxLength: SELECTION_GENERATE_MAX_CHARS
+            maxLength: SELECTION_GENERATE_MAX_CHARS,
+            normalizer
         });
         if (!candidate) {
             hideDock();
@@ -2418,7 +2483,8 @@ function initSelectionToGenerate(container) {
             generationId: activeCardContext?.generationId || null,
             entry: 'selection',
             cardType: 'trilingual',
-            sourceMode: 'selection'
+            sourceMode: 'selection',
+            selectionOriginTab
         });
 
         hideDock();
@@ -2428,7 +2494,8 @@ function initSelectionToGenerate(container) {
     generateGrammarBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container, {
-            maxLength: SELECTION_GENERATE_MAX_CHARS
+            maxLength: SELECTION_GENERATE_MAX_CHARS,
+            normalizer
         });
         if (!candidate) {
             hideDock();
@@ -2442,7 +2509,8 @@ function initSelectionToGenerate(container) {
             generationId: activeCardContext?.generationId || null,
             entry: 'selection',
             cardType: 'grammar_ja',
-            sourceMode: 'selection'
+            sourceMode: 'selection',
+            selectionOriginTab
         });
 
         hideDock();
@@ -2452,7 +2520,8 @@ function initSelectionToGenerate(container) {
     highlightBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container, {
-            maxLength: SELECTION_HIGHLIGHT_MAX_CHARS
+            maxLength: SELECTION_HIGHLIGHT_MAX_CHARS,
+            normalizer
         });
         if (!candidate) {
             hideDock();
@@ -2464,7 +2533,7 @@ function initSelectionToGenerate(container) {
         if (window.getSelection()) window.getSelection().removeAllRanges();
 
         if (applied) {
-            persistCurrentCardHighlights(container);
+            persistCurrentCardHighlights(container, highlightContext);
         } else {
             showGenerationQueueToast('选区无法标红，请缩小选区后重试');
         }
@@ -2477,9 +2546,10 @@ function initSelectionToGenerate(container) {
     };
 }
 
-function checkSelection(container, dock) {
+function checkSelection(container, dock, options = {}) {
     const candidate = buildSelectionCandidateFromContainer(container, {
-        maxLength: SELECTION_HIGHLIGHT_MAX_CHARS
+        maxLength: SELECTION_HIGHLIGHT_MAX_CHARS,
+        normalizer: options.normalizer || normalizeSelectionPhrase
     });
     if (candidate) {
         const range = candidate.range;
@@ -2584,8 +2654,9 @@ function applyMarkerHighlight(container, range) {
     return applied;
 }
 
-function buildCardHighlightStorageKey({ folder = '', baseName = '', generationId = 0, title = '' } = {}) {
+function buildCardHighlightStorageKey({ folder = '', baseName = '', generationId = 0, title = '', scope = HIGHLIGHT_SCOPE_CONTENT } = {}) {
     const keyParts = ['card'];
+    keyParts.push(`scope:${String(scope || HIGHLIGHT_SCOPE_CONTENT).trim() || HIGHLIGHT_SCOPE_CONTENT}`);
     if (folder && baseName) {
         keyParts.push(`f:${folder}`, `b:${baseName}`);
     } else if (generationId) {
@@ -2594,6 +2665,40 @@ function buildCardHighlightStorageKey({ folder = '', baseName = '', generationId
         keyParts.push(`t:${String(title || '').trim()}`);
     }
     return `${CARD_HIGHLIGHT_STORAGE_PREFIX}:${keyParts.join('|')}`;
+}
+
+function buildCardHighlightContext({
+    folder = '',
+    baseName = '',
+    generationId = 0,
+    title = '',
+    scope = HIGHLIGHT_SCOPE_CONTENT,
+    sourceHash = ''
+} = {}) {
+    const normalizedHash = String(sourceHash || '').trim();
+    if (!normalizedHash) return null;
+    return {
+        folder: String(folder || '').trim(),
+        baseName: String(baseName || '').trim(),
+        generationId: Number(generationId || 0) || null,
+        title: String(title || '').trim(),
+        highlightScope: String(scope || HIGHLIGHT_SCOPE_CONTENT).trim() || HIGHLIGHT_SCOPE_CONTENT,
+        highlightSourceHash: normalizedHash,
+        highlightStorageKey: buildCardHighlightStorageKey({
+            folder,
+            baseName,
+            generationId,
+            title,
+            scope
+        })
+    };
+}
+
+function getActiveHighlightContext(scope = HIGHLIGHT_SCOPE_CONTENT) {
+    if (!activeCardContext) return null;
+    return scope === HIGHLIGHT_SCOPE_TRAIN
+        ? (activeCardContext.trainingHighlightContext || null)
+        : (activeCardContext.contentHighlightContext || null);
 }
 
 function computeTextHash(input) {
@@ -2645,7 +2750,7 @@ function syncLocalHighlightCache(storageKey, sourceHash, html) {
     }
 }
 
-async function hydrateCardHighlightsFromServer(container, context) {
+async function hydrateCardHighlightsFromServer(container, context, options = {}) {
     if (!container || !context) return;
     const folder = String(context.folder || '').trim();
     const baseName = String(context.baseName || '').trim();
@@ -2657,7 +2762,7 @@ async function hydrateCardHighlightsFromServer(container, context) {
         const remote = res?.highlight || null;
         if (!remote || typeof remote.htmlContent !== 'string' || !remote.htmlContent.trim()) return;
 
-        const latestContext = activeCardContext ? { ...activeCardContext } : null;
+        const latestContext = getActiveHighlightContext(context.highlightScope || HIGHLIGHT_SCOPE_CONTENT);
         if (!isSameCardContext(context, latestContext)) return;
 
         const sanitized = sanitizeHtml(remote.htmlContent);
@@ -2665,6 +2770,9 @@ async function hydrateCardHighlightsFromServer(container, context) {
         if (container.innerHTML !== sanitized) {
             container.innerHTML = sanitized;
             bindAudioButtons(els.modalContainer, folder);
+            if (typeof options.onHydrated === 'function') {
+                options.onHydrated(container);
+            }
         }
         syncLocalHighlightCache(context.highlightStorageKey, sourceHash, sanitized);
     } catch (err) {
@@ -2691,13 +2799,14 @@ function backfillCardHighlightsToServer(context, html) {
     });
 }
 
-function persistCurrentCardHighlights(container) {
+function persistCurrentCardHighlights(container, context = null) {
     if (!container) return;
-    const storageKey = activeCardContext?.highlightStorageKey || '';
-    const sourceHash = activeCardContext?.highlightSourceHash || '';
-    const folder = activeCardContext?.folder || '';
-    const baseName = activeCardContext?.baseName || '';
-    const generationId = activeCardContext?.generationId || null;
+    const highlightContext = context || getActiveHighlightContext(activeCardContext?.activeHighlightScope || HIGHLIGHT_SCOPE_CONTENT) || null;
+    const storageKey = highlightContext?.highlightStorageKey || '';
+    const sourceHash = highlightContext?.highlightSourceHash || '';
+    const folder = highlightContext?.folder || '';
+    const baseName = highlightContext?.baseName || '';
+    const generationId = highlightContext?.generationId || null;
     if (!storageKey || !sourceHash || !folder || !baseName) return;
     try {
         const payload = {
@@ -2724,9 +2833,10 @@ function persistCurrentCardHighlights(container) {
 }
 
 function clearPersistedCardHighlights(storageKey, options = {}) {
-    const folder = activeCardContext?.folder || '';
-    const baseName = activeCardContext?.baseName || '';
-    const sourceHash = activeCardContext?.highlightSourceHash || '';
+    const highlightContext = options.context || getActiveHighlightContext(activeCardContext?.activeHighlightScope || HIGHLIGHT_SCOPE_CONTENT) || null;
+    const folder = highlightContext?.folder || '';
+    const baseName = highlightContext?.baseName || '';
+    const sourceHash = highlightContext?.highlightSourceHash || '';
     const removeAllVersions = Boolean(options.removeAllVersions);
     if (!storageKey && !folder) return;
     try {
@@ -3359,27 +3469,32 @@ function renderCardModal(markdown, title, options = {}) {
     );
     const cardTypeMetaLabel = cardType === 'grammar_ja' ? 'JA GRAMMAR' : 'TRILINGUAL';
     const cardTypeTabLabel = cardType === 'grammar_ja' ? '语法卡片' : '三语卡片';
-    const highlightSourceHash = computeTextHash(markdown);
-    const highlightStorageKey = buildCardHighlightStorageKey({
+    const contentHighlightContext = buildCardHighlightContext({
         folder,
         baseName: options.baseName || '',
         generationId,
-        title: displayTitle
+        title: displayTitle,
+        scope: HIGHLIGHT_SCOPE_CONTENT,
+        sourceHash: computeTextHash(markdown)
     });
     activeCardContext = {
         folder,
         baseName: options.baseName || '',
         generationId,
         cardType,
-        highlightStorageKey,
-        highlightSourceHash
+        contentHighlightContext,
+        trainingHighlightContext: null,
+        activeHighlightScope: HIGHLIGHT_SCOPE_CONTENT
     };
 
     const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder });
-    const persistedHtml = loadPersistedCardHighlights(highlightStorageKey, highlightSourceHash);
+    const persistedHtml = loadPersistedCardHighlights(
+        contentHighlightContext?.highlightStorageKey || '',
+        contentHighlightContext?.highlightSourceHash || ''
+    );
     const cardContentHtml = persistedHtml || safeHtml;
     if (persistedHtml) {
-        backfillCardHighlightsToServer({ ...activeCardContext }, persistedHtml);
+        backfillCardHighlightsToServer(contentHighlightContext, persistedHtml);
     }
 
     // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
@@ -3681,7 +3796,20 @@ function renderCardModal(markdown, title, options = {}) {
             } else {
                 throw new Error('Cannot identify record to delete');
             }
-            clearPersistedCardHighlights(activeCardContext?.highlightStorageKey || '', { removeAllVersions: true });
+            const contentCtx = activeCardContext?.contentHighlightContext || null;
+            const trainCtx = activeCardContext?.trainingHighlightContext || null;
+            if (contentCtx) {
+                clearPersistedCardHighlights(contentCtx.highlightStorageKey || '', {
+                    removeAllVersions: true,
+                    context: contentCtx
+                });
+            }
+            if (trainCtx) {
+                clearPersistedCardHighlights(trainCtx.highlightStorageKey || '', {
+                    removeAllVersions: true,
+                    context: trainCtx
+                });
+            }
             closeModal();
             loadFolders({ keepSelection: true, refreshFiles: true, noCache: true });
         } catch (e) {
@@ -3708,6 +3836,34 @@ function renderCardModal(markdown, title, options = {}) {
 
     // 绑定 Tab 切换 (带图表渲染触发)
     const tabs = els.modalContainer.querySelectorAll('.tab-btn');
+    const activateModalSelection = (targetId) => {
+        const cardContent = els.modalContainer.querySelector('#cardContent');
+        const cardTraining = els.modalContainer.querySelector('#cardTraining');
+        if (targetId === 'cardContent' && cardContent) {
+            activeCardContext && (activeCardContext.activeHighlightScope = HIGHLIGHT_SCOPE_CONTENT);
+            initSelectionToGenerate(cardContent, {
+                highlightContext: activeCardContext?.contentHighlightContext || null,
+                selectionOriginTab: HIGHLIGHT_SCOPE_CONTENT,
+                normalizer: normalizeSelectionPhrase
+            });
+            return;
+        }
+        if (targetId === 'cardTraining' && cardTraining) {
+            activeCardContext && (activeCardContext.activeHighlightScope = HIGHLIGHT_SCOPE_TRAIN);
+            initSelectionToGenerate(cardTraining, {
+                highlightContext: activeCardContext?.trainingHighlightContext || null,
+                selectionOriginTab: HIGHLIGHT_SCOPE_TRAIN,
+                normalizer: normalizeTrainingSelectionPhrase
+            });
+            return;
+        }
+        if (selectionFabCleanup) {
+            selectionFabCleanup();
+            selectionFabCleanup = null;
+        }
+        activeCardContext && (activeCardContext.activeHighlightScope = null);
+    };
+
     tabs.forEach(btn => {
         btn.onclick = async () => {
             tabs.forEach(t => t.classList.remove('active'));
@@ -3731,6 +3887,7 @@ function renderCardModal(markdown, title, options = {}) {
                     folder,
                     baseName: options.baseName || ''
                 });
+                activateModalSelection('cardTraining');
             } else {
                 trainingTab.style.display = 'none';
             }
@@ -3759,6 +3916,10 @@ function renderCardModal(markdown, title, options = {}) {
                     reviewTab.style.display = 'none';
                 }
             }
+
+            if (targetId !== 'cardTraining') {
+                activateModalSelection(targetId);
+            }
         };
     });
 
@@ -3768,8 +3929,8 @@ function renderCardModal(markdown, title, options = {}) {
     // 绑定文本选取 → 生成
     const cardContent = els.modalContainer.querySelector('#cardContent');
     if (cardContent) {
-        initSelectionToGenerate(cardContent);
-        hydrateCardHighlightsFromServer(cardContent, { ...activeCardContext });
+        activateModalSelection('cardContent');
+        hydrateCardHighlightsFromServer(cardContent, contentHighlightContext);
     }
 
     els.modalOverlay.classList.remove('hidden');
