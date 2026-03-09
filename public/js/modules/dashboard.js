@@ -487,12 +487,12 @@ function renderKnowledgeJobs(jobs) {
         const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
         const cancellable = status === 'queued' || status === 'running';
         return `
-            <div class="knowledge-job-item status-${escapeHtml(status)} ${selectedClass}" data-job-id="${jobId}">
+            <div class="knowledge-job-item status-${escapeHtml(status)} ${selectedClass}" data-job-id="${jobId}" data-testid="knowledge-job-item">
                 <div class="knowledge-job-head">
                     <span>#${jobId}</span>
                     <span class="badge">${escapeHtml(job.jobType || '-')}</span>
-                    <span>${escapeHtml(status.toUpperCase())}</span>
-                    ${cancellable ? `<button class="ko-cancel-btn" data-job-id="${jobId}">Cancel</button>` : ''}
+                    <span data-testid="knowledge-job-status">${escapeHtml(status.toUpperCase())}</span>
+                    ${cancellable ? `<button class="ko-cancel-btn" data-job-id="${jobId}" data-testid="knowledge-job-cancel">Cancel</button>` : ''}
                 </div>
                 <div class="knowledge-job-meta">
                     <span>${progress.text}</span>

@@ -90,8 +90,9 @@
 
 1. `Mission Control` 页面可加载
 2. `Knowledge OPS` 页面可加载
-3. `Knowledge Hub` 页面可加载
-4. OCR fixture 上传、清洗与输入框回填
+3. `Knowledge OPS` 任务启动与取消
+4. `Knowledge Hub` 页面可加载
+5. OCR fixture 上传、清洗与输入框回填
 
 低频真实验收用例：
 
@@ -99,6 +100,9 @@
 - 仅在设置 `RUN_REAL_GEMINI_E2E=1` 时执行
 - 默认目标地址：`http://127.0.0.1:3010`
 - 用于验证真实 Gemini CLI Proxy 主链路，不纳入高频 smoke
+- 当前已覆盖：
+  - 文本输入生成真实 Gemini 卡片
+  - `TRAIN regenerate` 完成并更新 `updatedAt`
 
 已验证：
 
@@ -106,7 +110,7 @@
 - 命令：`npm run test:e2e:smoke`
 - 结果：`6 passed`
 - 命令：`npm run test:e2e`
-- 结果：`10 passed, 1 skipped`
+- 结果：`11 passed, 1 skipped`
 
 ## 5. 运行方式
 

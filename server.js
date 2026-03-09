@@ -39,6 +39,11 @@ const DEFAULT_LLM_PROVIDER = String(process.env.DEFAULT_LLM_PROVIDER || 'gemini'
     : 'gemini';
 const DEFAULT_GEMINI_MODEL = process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-3-pro-preview';
 const E2E_TEST_MODE = /^(1|true|yes|on)$/i.test(String(process.env.E2E_TEST_MODE || '').trim());
+const e2eKnowledgeJobs = {
+    nextId: 1,
+    jobs: [],
+    timers: new Map()
+};
 
 app.use(express.static('public'));
 app.use('/data', express.static(RECORDS_PATH));
@@ -409,6 +414,100 @@ function buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMod
     },
     fallback: null
   };
+}
+
+function cloneE2EKnowledgeJob(job) {
+    return job ? JSON.parse(JSON.stringify(job)) : null;
+}
+
+function getE2EKnowledgeJob(jobId) {
+    return cloneE2EKnowledgeJob(e2eKnowledgeJobs.jobs.find((job) => Number(job.id) === Number(jobId)) || null);
+}
+
+function listE2EKnowledgeJobs(limit = 20) {
+    return e2eKnowledgeJobs.jobs
+        .slice()
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .slice(0, Math.max(1, Number(limit || 20)))
+        .map(cloneE2EKnowledgeJob);
+}
+
+function clearE2EKnowledgeTimers(jobId) {
+    const timers = e2eKnowledgeJobs.timers.get(Number(jobId));
+    if (timers) {
+        timers.forEach((timer) => clearTimeout(timer));
+        e2eKnowledgeJobs.timers.delete(Number(jobId));
+    }
+}
+
+function scheduleE2EKnowledgeJob(jobId) {
+    const runningTimer = setTimeout(() => {
+        const job = e2eKnowledgeJobs.jobs.find((item) => Number(item.id) === Number(jobId));
+        if (!job || job.status === 'cancelled') return;
+        job.status = 'running';
+        job.startedAt = job.startedAt || new Date().toISOString();
+    }, 80);
+
+    const successTimer = setTimeout(() => {
+        const job = e2eKnowledgeJobs.jobs.find((item) => Number(item.id) === Number(jobId));
+        if (!job || job.status === 'cancelled') return;
+        job.status = 'success';
+        job.startedAt = job.startedAt || new Date().toISOString();
+        job.doneBatches = 1;
+        job.errorBatches = 0;
+        job.finishedAt = new Date().toISOString();
+        job.resultSummary = {
+            task: job.jobType,
+            totalCards: 3,
+            doneBatches: 1,
+            errorBatches: 0,
+            quality: {
+                confidence: 1,
+                coverageRatio: 1
+            },
+            resultShape: ['summary'],
+            synonymStats: null
+        };
+        clearE2EKnowledgeTimers(jobId);
+    }, 4000);
+
+    e2eKnowledgeJobs.timers.set(Number(jobId), [runningTimer, successTimer]);
+}
+
+function createE2EKnowledgeJob(payload = {}) {
+    const jobId = e2eKnowledgeJobs.nextId++;
+    const createdAt = new Date().toISOString();
+    const job = {
+        id: jobId,
+        jobType: String(payload.jobType || 'summary'),
+        status: 'queued',
+        scope: payload.scope || {},
+        batchSize: Math.max(1, Number(payload.batchSize || 50)),
+        triggeredBy: String(payload.triggeredBy || 'dashboard'),
+        engineVersion: 'e2e-fixture',
+        totalBatches: 1,
+        doneBatches: 0,
+        errorBatches: 0,
+        resultSummary: null,
+        createdAt,
+        startedAt: null,
+        finishedAt: null
+    };
+    e2eKnowledgeJobs.jobs.push(job);
+    scheduleE2EKnowledgeJob(jobId);
+    return cloneE2EKnowledgeJob(job);
+}
+
+function cancelE2EKnowledgeJob(jobId) {
+    const job = e2eKnowledgeJobs.jobs.find((item) => Number(item.id) === Number(jobId));
+    if (!job) return false;
+    if (job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') {
+        return cloneE2EKnowledgeJob(job);
+    }
+    clearE2EKnowledgeTimers(jobId);
+    job.status = 'cancelled';
+    job.finishedAt = new Date().toISOString();
+    return cloneE2EKnowledgeJob(job);
 }
 
 function buildTrainingSidecarPath(targetDir, baseName) {
@@ -2020,6 +2119,16 @@ app.post('/api/knowledge/jobs/start', (req, res) => {
       return res.status(400).json({ error: 'jobType is required' });
     }
 
+    if (E2E_TEST_MODE) {
+      const job = createE2EKnowledgeJob({
+        jobType,
+        scope,
+        batchSize,
+        triggeredBy
+      });
+      return res.json({ success: true, job });
+    }
+
     const normalizedScope = {
       folderFrom: scope.folderFrom || null,
       folderTo: scope.folderTo || null,
@@ -2052,6 +2161,9 @@ app.post('/api/knowledge/jobs/start', (req, res) => {
 app.get('/api/knowledge/jobs', (req, res) => {
   try {
     const limit = Number(req.query.limit || 20);
+    if (E2E_TEST_MODE) {
+      return res.json({ success: true, jobs: listE2EKnowledgeJobs(limit) });
+    }
     const jobs = knowledgeJobService.listJobs(limit);
     res.json({ success: true, jobs });
   } catch (err) {
@@ -2063,6 +2175,11 @@ app.get('/api/knowledge/jobs/:id', (req, res) => {
   try {
     const jobId = Number(req.params.id);
     if (!jobId) return res.status(400).json({ error: 'invalid job id' });
+    if (E2E_TEST_MODE) {
+      const job = getE2EKnowledgeJob(jobId);
+      if (!job) return res.status(404).json({ error: 'job not found' });
+      return res.json({ success: true, job });
+    }
     const job = knowledgeJobService.getJob(jobId);
     if (!job) return res.status(404).json({ error: 'job not found' });
     res.json({ success: true, job });
@@ -2075,6 +2192,10 @@ app.post('/api/knowledge/jobs/:id/cancel', (req, res) => {
   try {
     const jobId = Number(req.params.id);
     if (!jobId) return res.status(400).json({ error: 'invalid job id' });
+    if (E2E_TEST_MODE) {
+      const cancelled = cancelE2EKnowledgeJob(jobId);
+      return res.json({ success: true, cancelled: Boolean(cancelled) });
+    }
     const cancelled = knowledgeJobService.cancelJob(jobId);
     res.json({ success: true, cancelled });
   } catch (err) {

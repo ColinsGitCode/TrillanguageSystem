@@ -281,10 +281,13 @@
   - 结果：`6 passed`
 - 已执行第二批 Playwright 回归：
   - 页面级 smoke：`Mission Control / Knowledge OPS / Knowledge Hub`
+  - `Knowledge OPS` 任务启动 / 取消
   - OCR fixture 上传、清洗与输入框回填
   - 低频真实 Gemini 验收脚本（默认 skip）
+    - 文本输入真实生成
+    - `TRAIN regenerate` 验收
 - 当前 `npm run test:e2e` 结果：
-  - `10 passed, 1 skipped`
+  - `11 passed, 1 skipped`
 - 新增稳定测试选择器（`data-testid`）：
   - 首页输入、队列状态、文件/文件夹容器
   - 卡片弹窗、tab、TRAIN 面板、选区工具条

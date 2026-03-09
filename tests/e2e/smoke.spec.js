@@ -46,6 +46,14 @@ async function selectNodeText(page, selector, expectedText) {
   expect(result.ok, result.reason || 'selection failed').toBeTruthy();
 }
 
+async function clickSelectionAction(page, testId) {
+  await page.evaluate((value) => {
+    const btn = document.querySelector(`[data-testid="${value}"]`);
+    if (!btn) throw new Error(`selection action not found: ${value}`);
+    btn.click();
+  }, testId);
+}
+
 async function deleteByFile(request, folder, base) {
   const res = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(base)}`);
   expect(res.ok()).toBeTruthy();
@@ -99,7 +107,7 @@ test.describe.serial('Playwright smoke', () => {
     await expect(page.locator('.card-training-answer').first()).toBeVisible();
 
     await selectNodeText(page, '[data-train-field="text"]', 'persistent highlight');
-    await page.getByTestId('selection-highlight-btn').click({ force: true });
+    await clickSelectionAction(page, 'selection-highlight-btn');
     await expect(page.locator('mark.study-highlight-red').filter({ hasText: 'persistent highlight' })).toHaveCount(1);
 
     await page.reload();
@@ -116,11 +124,11 @@ test.describe.serial('Playwright smoke', () => {
     await page.getByTestId('tab-train').click();
 
     await selectNodeText(page, '[data-train-field="text"]', 'persistent highlight');
-    await page.getByTestId('selection-generate-btn').click({ force: true });
+    await clickSelectionAction(page, 'selection-generate-btn');
     await page.waitForTimeout(300);
 
     await selectNodeText(page, '[data-train-field="text"]', 'キューに追加する');
-    await page.getByTestId('selection-generate-grammar-btn').click({ force: true });
+    await clickSelectionAction(page, 'selection-generate-grammar-btn');
 
     await waitForQueueIdle(page);
     await closeModal(page);
