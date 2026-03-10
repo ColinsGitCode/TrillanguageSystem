@@ -8,46 +8,47 @@ async function waitForQueueIdle(page, timeout = 180000) {
   await expect(page.getByTestId('hero-queue-task')).toContainText('Task Queue Idle', { timeout });
 }
 
+async function startKnowledgeJobAndWait(request, payload, statusPattern = /success|partial/) {
+  const startRes = await request.post(`${realBaseUrl}/api/knowledge/jobs/start`, { data: payload });
+  expect(startRes.ok()).toBeTruthy();
+  const startJson = await startRes.json();
+  const jobId = startJson?.job?.id;
+  expect(jobId).toBeTruthy();
+
+  await expect.poll(async () => {
+    const jobRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
+    expect(jobRes.ok()).toBeTruthy();
+    const jobJson = await jobRes.json();
+    return jobJson.job?.status || '';
+  }, {
+    timeout: 300000,
+    intervals: [2000, 3000, 5000, 8000]
+  }).toMatch(statusPattern);
+
+  const detailRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
+  expect(detailRes.ok()).toBeTruthy();
+  const detailJson = await detailRes.json();
+  return detailJson.job;
+}
+
 test.describe('Real Gemini acceptance', () => {
   test.skip(!runReal, '设置 RUN_REAL_GEMINI_E2E=1 后才执行真实 Gemini 验收');
 
   async function startRealSynonymJob(request, model) {
-    const startRes = await request.post(`${realBaseUrl}/api/knowledge/jobs/start`, {
-      data: {
-        jobType: 'synonym_boundary',
-        batchSize: 266,
-        triggeredBy: 'playwright-real',
-        options: {
-          llmEnabled: true,
-          llmTransport: 'proxy',
-          maxPairs: 1,
-          maxLlmPairs: 1,
-          minCandidateScore: 0,
-          llmTimeoutMs: 120000,
-          model
-        }
+    return startKnowledgeJobAndWait(request, {
+      jobType: 'synonym_boundary',
+      batchSize: 266,
+      triggeredBy: 'playwright-real',
+      options: {
+        llmEnabled: true,
+        llmTransport: 'proxy',
+        maxPairs: 1,
+        maxLlmPairs: 1,
+        minCandidateScore: 0,
+        llmTimeoutMs: 120000,
+        model
       }
     });
-    expect(startRes.ok()).toBeTruthy();
-    const startJson = await startRes.json();
-    const jobId = startJson?.job?.id;
-    expect(jobId).toBeTruthy();
-
-    await expect.poll(async () => {
-      const jobRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
-      expect(jobRes.ok()).toBeTruthy();
-      const jobJson = await jobRes.json();
-      return jobJson.job?.status || '';
-    }, {
-      timeout: 300000,
-      intervals: [2000, 3000, 5000, 8000],
-      message: '等待 synonym_boundary 真实任务完成'
-    }).toMatch(/success|partial/);
-
-    const detailRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
-    expect(detailRes.ok()).toBeTruthy();
-    const detailJson = await detailRes.json();
-    return detailJson.job;
   }
 
   test('Knowledge synonym_boundary 真实 Gemini Proxy 验收', async ({ request }) => {
@@ -103,6 +104,27 @@ test.describe('Real Gemini acceptance', () => {
     await expect(inspector).toContainText(pairLabel, { timeout: 15000 });
     await expect(page.getByTestId('knowledge-synonym-detail-tags')).toContainText('parse ok');
     await expect(page.getByTestId('knowledge-synonym-detail-grid')).toContainText(item.actionableHint || item.recommendation);
+  });
+
+  test('Mission Control 页面可展示最新 Knowledge Summary', async ({ page, request }) => {
+    test.slow();
+    const job = await startKnowledgeJobAndWait(request, {
+      jobType: 'summary',
+      batchSize: 266,
+      triggeredBy: 'playwright-real'
+    });
+    expect(job.status).toMatch(/success|partial/);
+
+    const summaryRes = await request.get(`${realBaseUrl}/api/knowledge/summary/latest`);
+    expect(summaryRes.ok()).toBeTruthy();
+    const summaryJson = await summaryRes.json();
+    const overview = String(summaryJson?.summary?.overview || '').trim();
+    expect(overview).not.toBe('');
+
+    await page.goto(`${realBaseUrl}/dashboard.html`);
+    const panel = page.getByTestId('mission-knowledge-summary');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(overview, { timeout: 15000 });
   });
 
   test('文本输入生成真实 Gemini 卡片', async ({ page, request }) => {

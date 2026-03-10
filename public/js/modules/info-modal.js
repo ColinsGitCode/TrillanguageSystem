@@ -165,6 +165,19 @@ export const METRIC_DEFINITIONS = {
             <p>该数据来自浏览器本地队列遥测，不依赖后端持久化。</p>
         `
     },
+    "KNOWLEDGE_SUMMARY": {
+        title: "知识摘要 (Knowledge Summary)",
+        content: `
+            <p>展示最近一次 summary 知识任务的归纳结论，作为 Mission Control 上的只读知识健康快照。</p>
+            <ul>
+                <li><strong>Overview</strong>: 当前卡片库的总体观察。</li>
+                <li><strong>Top Topics</strong>: 最近分析中最突出的主题分布。</li>
+                <li><strong>Quality Observations</strong>: 自动识别出的质量现象与风险提示。</li>
+                <li><strong>Action Items</strong>: 建议优先处理的后续动作。</li>
+            </ul>
+            <p>Mission Control 只展示摘要结果；任务操作与详细关系排查仍在 Knowledge OPS / Knowledge Hub 内完成。</p>
+        `
+    },
     "KNOWLEDGE_OPS": {
         title: "知识任务中心 (Knowledge Ops)",
         content: `

@@ -2329,7 +2329,7 @@ class DatabaseService {
           group.evidenceHash
           || crypto.createHash('sha1').update(`${pairKey}|${schemaVersion}|${versionJobId}`).digest('hex')
         );
-        const result = insertGroup.run({
+        insertGroup.run({
           groupKey: String(group.groupKey || pairKey),
           pairKey,
           termA: group.termA ? String(group.termA) : null,
@@ -2356,11 +2356,8 @@ class DatabaseService {
           parseStatus: String(group.parseStatus || 'ok'),
           versionJobId: Number(versionJobId)
         });
-        let groupId = Number(result.lastInsertRowid || 0);
-        if (!groupId) {
-          const row = selectGroupId.get({ pairKey, schemaVersion, evidenceHash });
-          groupId = row ? Number(row.id) : 0;
-        }
+        const row = selectGroupId.get({ pairKey, schemaVersion, evidenceHash });
+        const groupId = row ? Number(row.id) : 0;
         if (!groupId) continue;
         deleteMembers.run(groupId);
         const members = Array.isArray(group.members) ? group.members : [];

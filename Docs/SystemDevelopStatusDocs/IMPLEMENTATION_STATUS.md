@@ -324,12 +324,20 @@
     - `TRAIN regenerate` 更新校验
     - `synonym_boundary` 真实 Knowledge Job 启动 / 执行 / 落库 / 详情读取
     - `Knowledge Hub` 页面真实 synonym 列表点击 / Relation Inspector 展示
+    - `Mission Control` 页面真实 Knowledge Summary 展示
+- 新增 nightly 入口：
+  - `npm run test:e2e:real:nightly`
+- 修复真实 synonym 边界验收中的持久化问题：
+  - `replaceKnowledgeSynonymData()` 在 `ON CONFLICT` 路径不再依赖 `lastInsertRowid`
+  - 避免错误的 `group_id` 写入 `knowledge_synonym_members` 触发外键失败
 - 已完成真实 Knowledge 验收：
   - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge synonym_boundary"`
   - 结果：`1 passed`
   - 实测任务：`jobId=26`，`status=success`，`llmSuccessCount=1`，`jsonParseRate=1`
   - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge"`
   - 结果：`2 passed`
+  - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge|Mission Control"`
+  - 结果：`3 passed`
 - 当前全量 E2E 结果：
   - `npm run test:e2e`
   - 结果：`11 passed, 1 skipped`

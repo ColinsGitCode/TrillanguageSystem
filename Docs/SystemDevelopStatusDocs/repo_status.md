@@ -132,7 +132,7 @@
 - 首页右上角入口改为三按钮并列：Mission Control / Knowledge OPS / Knowledge Hub
 - 三个页面 Header 内支持同级导航互跳
 - `dashboard.js` 改为多页面安全初始化：
-  - Mission Control 仅加载统计面板
+  - Mission Control 加载统计面板与最新 Knowledge Summary 摘要（只读）
   - Knowledge OPS / Hub 仅加载知识任务与结果视图
   - 公共基础设施状态与任务队列状态可复用
 - 支持 UI 触发知识任务：`summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
@@ -314,8 +314,17 @@
   - 低频真实 Gemini 验收脚本（默认 skip）
     - 文本输入真实生成
     - `TRAIN regenerate` 验收
+    - `synonym_boundary` 真实 Knowledge Job 启动 / 执行 / 落库 / 详情读取
+    - `Knowledge Hub` 页面真实 synonym 列表点击 / Relation Inspector 展示
+    - `Mission Control` 页面真实 Knowledge Summary 展示
+  - nightly 真实入口：`npm run test:e2e:real:nightly`
+  - 修复真实 synonym 边界验收中的落库外键错误：
+    - `replaceKnowledgeSynonymData()` 不再使用冲突更新路径下不可靠的 `lastInsertRowid`
 - 当前 `npm run test:e2e` 结果：
   - `11 passed, 1 skipped`
+- 已新增 Mission Control Knowledge Summary 真实 UI 验收：
+  - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge|Mission Control"`
+  - 结果：`3 passed`
 - 新增稳定测试选择器（`data-testid`）：
   - 首页输入、队列状态、文件/文件夹容器
   - 卡片弹窗、tab、TRAIN 面板、选区工具条

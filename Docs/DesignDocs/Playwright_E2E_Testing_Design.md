@@ -39,6 +39,8 @@
   - `npm run test:e2e:smoke`
   - `npm run test:e2e:pages`
   - `npm run test:e2e:real`
+  - `npm run test:e2e:real:nightly`
+  - 对应封装脚本：`scripts/runRealNightlyE2E.sh`
 
 ### 3.2 E2E_TEST_MODE
 
@@ -105,7 +107,9 @@
   - `TRAIN regenerate` 完成并更新 `updatedAt`
   - `synonym_boundary` 真实 Knowledge Job 启动、执行、落库与详情读取
   - `Knowledge Hub` 页面真实 synonym 列表点击与 Relation Inspector 详情展示
+  - `Mission Control` 页面展示最近一次 `summary` 任务结果
   - 该用例默认使用 `PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash` 以控制时延与配额消耗
+  - 已提供 nightly 入口：`npm run test:e2e:real:nightly`
 
 新增后端清洗回归：
 
@@ -135,6 +139,9 @@ npm run test:e2e:gemini-sanitize
 - `2026-03-10`
 - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge"`
 - 结果：`2 passed`
+- `2026-03-10`
+- 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge|Mission Control"`
+- 结果：`3 passed`
 
 ## 5. 运行方式
 
@@ -166,6 +173,12 @@ npm run test:e2e:headed
 
 ```bash
 npm run test:e2e:ui
+```
+
+执行 nightly 真实验收：
+
+```bash
+npm run test:e2e:real:nightly
 ```
 
 ## 6. 当前限制
