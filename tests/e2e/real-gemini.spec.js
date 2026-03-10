@@ -11,6 +11,67 @@ async function waitForQueueIdle(page, timeout = 180000) {
 test.describe('Real Gemini acceptance', () => {
   test.skip(!runReal, '设置 RUN_REAL_GEMINI_E2E=1 后才执行真实 Gemini 验收');
 
+  test('Knowledge synonym_boundary 真实 Gemini Proxy 验收', async ({ request }) => {
+    test.slow();
+    const model = String(process.env.PLAYWRIGHT_REAL_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
+
+    const startRes = await request.post(`${realBaseUrl}/api/knowledge/jobs/start`, {
+      data: {
+        jobType: 'synonym_boundary',
+        batchSize: 266,
+        triggeredBy: 'playwright-real',
+        options: {
+          llmEnabled: true,
+          llmTransport: 'proxy',
+          maxPairs: 1,
+          maxLlmPairs: 1,
+          minCandidateScore: 0,
+          llmTimeoutMs: 120000,
+          model
+        }
+      }
+    });
+    expect(startRes.ok()).toBeTruthy();
+    const startJson = await startRes.json();
+    const jobId = startJson?.job?.id;
+    expect(jobId).toBeTruthy();
+
+    await expect.poll(async () => {
+      const jobRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
+      expect(jobRes.ok()).toBeTruthy();
+      const jobJson = await jobRes.json();
+      return jobJson.job?.status || '';
+    }, {
+      timeout: 300000,
+      intervals: [2000, 3000, 5000, 8000],
+      message: '等待 synonym_boundary 真实任务完成'
+    }).toMatch(/success|partial/);
+
+    const detailRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
+    expect(detailRes.ok()).toBeTruthy();
+    const detailJson = await detailRes.json();
+    const job = detailJson.job;
+
+    expect(job.synonymMeta.llmEnabled).toBe(true);
+    expect(job.synonymMeta.llmEnabled).toBeTruthy();
+    expect(job.synonymMeta.maxLlmPairs).toBe(1);
+    expect(Number(job.synonymMeta.successCount || 0)).toBeGreaterThanOrEqual(1);
+    expect(Number(job.synonymMeta.jsonParseRate || 0)).toBeGreaterThan(0);
+
+    const listRes = await request.get(`${realBaseUrl}/api/knowledge/synonyms/list?jobId=${jobId}&pageSize=5`);
+    expect(listRes.ok()).toBeTruthy();
+    const listJson = await listRes.json();
+    expect(Number(listJson.total || 0)).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(listJson.items)).toBeTruthy();
+    expect(listJson.items[0].parseStatus).toBe('ok');
+    expect(String(listJson.items[0].model || '')).toContain(model);
+
+    const synonymDetailRes = await request.get(`${realBaseUrl}/api/knowledge/synonyms/${encodeURIComponent(listJson.items[0].pairKey)}?jobId=${jobId}`);
+    expect(synonymDetailRes.ok()).toBeTruthy();
+    const synonymDetailJson = await synonymDetailRes.json();
+    expect(synonymDetailJson.detail.parseStatus).toBe('ok');
+  });
+
   test('文本输入生成真实 Gemini 卡片', async ({ page, request }) => {
     test.slow();
     const phrase = `PW real gemini ${Date.now()}`;

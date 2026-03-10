@@ -242,6 +242,9 @@
   - 默认传输改为 `proxy`
   - 支持 MCP 诊断文本清洗
   - 清洗后需通过 synonym-boundary JSON 校验才会落为 `parseStatus=ok`
+- 已补真实低频验收：
+  - `synonym_boundary` Knowledge Job 可通过真实 Gemini Proxy 跑通
+  - 实测 `jobId=26`，`status=success`，`llmSuccessCount=1`，`jsonParseRate=1`
 
 - 已对 `qualityScore <= 95` 的 `13` 条样本完成逐条精修，结果：
   - 提升 `13`

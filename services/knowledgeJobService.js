@@ -16,6 +16,7 @@ const DEFAULT_SYNONYM_OPTIONS = {
   maxPairs: 120,
   maxLlmPairs: 24,
   llmEnabled: false,
+  llmTransport: 'proxy',
   model: '',
   promptVersion: 'syn-v1',
   schemaVersion: '1.0.0',
@@ -36,14 +37,17 @@ function normalizeSynonymOptions(raw = {}) {
   const envEnabled = ['1', 'true', 'yes'].includes(String(process.env.KNOWLEDGE_SYNONYM_LLM_ENABLED || '').toLowerCase());
   const merged = { ...DEFAULT_SYNONYM_OPTIONS, ...(raw || {}) };
   return {
-    minCandidateScore: Number(merged.minCandidateScore || DEFAULT_SYNONYM_OPTIONS.minCandidateScore),
-    maxPairs: Math.max(1, Number(merged.maxPairs || DEFAULT_SYNONYM_OPTIONS.maxPairs)),
-    maxLlmPairs: Math.max(0, Number(merged.maxLlmPairs || DEFAULT_SYNONYM_OPTIONS.maxLlmPairs)),
+    minCandidateScore: Number(merged.minCandidateScore ?? DEFAULT_SYNONYM_OPTIONS.minCandidateScore),
+    maxPairs: Math.max(1, Number(merged.maxPairs ?? DEFAULT_SYNONYM_OPTIONS.maxPairs)),
+    maxLlmPairs: Math.max(0, Number(merged.maxLlmPairs ?? DEFAULT_SYNONYM_OPTIONS.maxLlmPairs)),
     llmEnabled: merged.llmEnabled == null ? envEnabled : Boolean(merged.llmEnabled),
+    llmTransport: String(merged.llmTransport || DEFAULT_SYNONYM_OPTIONS.llmTransport).trim().toLowerCase() === 'cli'
+      ? 'cli'
+      : 'proxy',
     model: merged.model ? String(merged.model) : '',
     promptVersion: String(merged.promptVersion || DEFAULT_SYNONYM_OPTIONS.promptVersion),
     schemaVersion: String(merged.schemaVersion || DEFAULT_SYNONYM_OPTIONS.schemaVersion),
-    llmTimeoutMs: Math.max(5000, Number(merged.llmTimeoutMs || DEFAULT_SYNONYM_OPTIONS.llmTimeoutMs))
+    llmTimeoutMs: Math.max(5000, Number(merged.llmTimeoutMs ?? DEFAULT_SYNONYM_OPTIONS.llmTimeoutMs))
   };
 }
 

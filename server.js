@@ -2174,6 +2174,7 @@ app.post('/api/knowledge/jobs/start', (req, res) => {
         maxPairs: options.maxPairs,
         maxLlmPairs: options.maxLlmPairs,
         llmEnabled: options.llmEnabled,
+        llmTransport: options.llmTransport,
         model: options.model,
         promptVersion: options.promptVersion,
         schemaVersion: options.schemaVersion,

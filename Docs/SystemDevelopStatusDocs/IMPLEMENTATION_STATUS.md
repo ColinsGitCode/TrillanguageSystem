@@ -322,6 +322,11 @@
   - 低频真实链路验收脚本：`tests/e2e/real-gemini.spec.js`
     - 文本输入真实 Gemini 生成
     - `TRAIN regenerate` 更新校验
+    - `synonym_boundary` 真实 Knowledge Job 启动 / 执行 / 落库 / 详情读取
+- 已完成真实 Knowledge 验收：
+  - 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge synonym_boundary"`
+  - 结果：`1 passed`
+  - 实测任务：`jobId=26`，`status=success`，`llmSuccessCount=1`，`jsonParseRate=1`
 - 当前全量 E2E 结果：
   - `npm run test:e2e`
   - 结果：`11 passed, 1 skipped`

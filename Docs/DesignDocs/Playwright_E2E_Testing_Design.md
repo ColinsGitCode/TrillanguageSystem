@@ -103,6 +103,8 @@
 - 当前已覆盖：
   - 文本输入生成真实 Gemini 卡片
   - `TRAIN regenerate` 完成并更新 `updatedAt`
+  - `synonym_boundary` 真实 Knowledge Job 启动、执行、落库与详情读取
+  - 该用例默认使用 `PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash` 以控制时延与配额消耗
 
 新增后端清洗回归：
 
@@ -126,6 +128,9 @@ npm run test:e2e:gemini-sanitize
 - `2026-03-10`
 - 命令：`npm run test:e2e:gemini-sanitize`
 - 结果：`2 passed`
+- `2026-03-10`
+- 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge synonym_boundary"`
+- 结果：`1 passed`
 
 ## 5. 运行方式
 
