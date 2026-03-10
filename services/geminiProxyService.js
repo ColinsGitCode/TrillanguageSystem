@@ -70,11 +70,13 @@ function getResponseTextCandidates(response) {
 
 function sanitizeMcpDiagnosticText(text) {
   if (typeof text !== 'string') return '';
+  const inlinePrefix = /^\s*MCP issues detected\b[\s\S]*?Run\s+\/mcp\s+list\s+for\s+status\.?\s*/i;
   const patterns = [
     /^\s*MCP issues detected\b.*$/i,
     /^\s*Run\s+\/mcp\s+list\s+for\s+status\b.*$/i
   ];
   return String(text)
+    .replace(inlinePrefix, '')
     .split(/\r?\n/)
     .filter((line) => !patterns.some((pattern) => pattern.test(line)))
     .join('\n')
