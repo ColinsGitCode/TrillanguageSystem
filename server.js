@@ -332,6 +332,30 @@ function validateGeneratedContent(content, options = {}) {
     return errors;
 }
 
+function extractGeminiMarkdownResponse(response) {
+    if (!response || typeof response !== 'object') return '';
+    return String(response.markdown || response.rawOutput || '').trim();
+}
+
+function validateSanitizedGeminiCardResponse(response, cardType = 'trilingual') {
+    const markdown = extractGeminiMarkdownResponse(response);
+    if (!markdown) return false;
+    if (/MCP issues detected|Run\s+\/mcp\s+list\s+for\s+status|\/mcp list/i.test(markdown)) {
+        return false;
+    }
+
+    const requiredSections = cardType === 'grammar_ja'
+        ? ['## 1. 语法概述', '## 2. 日本語', '## 3. 常见误用']
+        : ['## 1. 英文', '## 2. 日本語', '## 3. 中文'];
+    if (!requiredSections.every((section) => markdown.includes(section))) {
+        return false;
+    }
+
+    const audioTasks = buildAudioTasksFromMarkdown(markdown);
+    const minAudioTasks = cardType === 'grammar_ja' ? 3 : 4;
+    return audioTasks.length >= minAudioTasks;
+}
+
 function sanitizeGeminiModelName(modelName) {
     const model = String(modelName || '').trim();
     if (!model) return '';
@@ -992,7 +1016,11 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
           model: resolvedGeminiCliModel
       });
   } else if (useGeminiProxy) {
-      response = await runGeminiProxy(prompt, { baseName, model: resolvedGeminiCliModel });
+      response = await runGeminiProxy(prompt, {
+          baseName,
+          model: resolvedGeminiCliModel,
+          validateSanitizedResponse: (sanitizedResponse) => validateSanitizedGeminiCardResponse(sanitizedResponse, cardType)
+      });
   } else {
       // Expecting { content, usage } structure
       response = await llmService.generateContent(prompt);

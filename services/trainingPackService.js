@@ -646,6 +646,24 @@ function getResponseText(resp) {
   return JSON.stringify(resp, null, 2);
 }
 
+function buildSanitizedTrainingResponseValidator(context = {}) {
+  return (response) => {
+    try {
+      const rawText = getResponseText(response);
+      if (!rawText) return false;
+      const parsed = parseJsonFromText(rawText);
+      const validated = validateTrainingPack(parsed, {
+        phrase: context.phrase,
+        cardType: context.cardType,
+        strictMin: true
+      });
+      return validated.ok;
+    } catch (err) {
+      return false;
+    }
+  };
+}
+
 async function callTeacherModel(prompt, options = {}) {
   const model = toStr(options.model || TRAINING_MODEL_DEFAULT, TRAINING_MODEL_DEFAULT);
   const baseName = toStr(options.baseName, 'training_pack');
@@ -660,7 +678,8 @@ async function callTeacherModel(prompt, options = {}) {
     breakerRetryDelayMs: toNumberOr(options.breakerRetryDelayMs, 6000),
     resetOnTimeout: options.resetOnTimeout,
     retryOnTimeout: options.retryOnTimeout,
-    retryOnBreakerOpen: options.retryOnBreakerOpen
+    retryOnBreakerOpen: options.retryOnBreakerOpen,
+    validateSanitizedResponse: options.validateSanitizedResponse
   });
   const rawText = getResponseText(response);
   return {
@@ -693,7 +712,11 @@ async function repairTrainingPack(input = {}) {
     executionTimeoutMs: input.executionTimeoutMs,
     retries: input.retries,
     retryDelayMs: input.retryDelayMs,
-    resetOnTimeout: input.resetOnTimeout
+    breakerRetryDelayMs: input.breakerRetryDelayMs,
+    resetOnTimeout: input.resetOnTimeout,
+    retryOnTimeout: input.retryOnTimeout,
+    retryOnBreakerOpen: input.retryOnBreakerOpen,
+    validateSanitizedResponse: buildSanitizedTrainingResponseValidator({ phrase, cardType })
   });
   const latencyMs = Date.now() - start;
   let parsed;
@@ -760,7 +783,8 @@ async function generateTrainingPack(input = {}) {
       breakerRetryDelayMs: runtime.breakerRetryDelayMs,
       resetOnTimeout: runtime.resetOnTimeout,
       retryOnTimeout: runtime.retryOnTimeout,
-      retryOnBreakerOpen: runtime.retryOnBreakerOpen
+      retryOnBreakerOpen: runtime.retryOnBreakerOpen,
+      validateSanitizedResponse: buildSanitizedTrainingResponseValidator({ phrase, cardType })
     });
     const llmLatency = Date.now() - llmStart;
     attempts.push({ stage: 'llm', model: llm.model, latencyMs: llmLatency });

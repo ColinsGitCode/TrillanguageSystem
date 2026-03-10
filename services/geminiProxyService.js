@@ -34,9 +34,15 @@ function isTimeoutLikeError(message) {
   return /timeout|timed out|aborterror|etimedout|gemini cli timeout/i.test(String(message || ''));
 }
 
+function isMcpDiagnosticError(message) {
+  return /mcp diagnostic detected|mcp issues detected|run\s+\/mcp\s+list\s+for\s+status/i.test(String(message || ''));
+}
+
 function isRetriableError(message) {
   const text = String(message || '');
-  return isTimeoutLikeError(text) || /Gemini proxy error \(5\d\d\)|fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(text);
+  return isTimeoutLikeError(text)
+    || isMcpDiagnosticError(text)
+    || /Gemini proxy error \(5\d\d\)|fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(text);
 }
 
 function isBreakerOpenError(message) {
@@ -46,6 +52,65 @@ function isBreakerOpenError(message) {
 function maybeTrim(value) {
   const text = String(value ?? '').trim();
   return text || '';
+}
+
+function getResponseTextCandidates(response) {
+  if (!response || typeof response !== 'object') return [];
+  const values = [
+    response.markdown,
+    response.rawOutput,
+    response.output,
+    response.text
+  ];
+  return values
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function sanitizeMcpDiagnosticText(text) {
+  if (typeof text !== 'string') return '';
+  const patterns = [
+    /^\s*MCP issues detected\b.*$/i,
+    /^\s*Run\s+\/mcp\s+list\s+for\s+status\b.*$/i
+  ];
+  return String(text)
+    .split(/\r?\n/)
+    .filter((line) => !patterns.some((pattern) => pattern.test(line)))
+    .join('\n')
+    .trim();
+}
+
+function sanitizeMcpDiagnosticsInResponse(response) {
+  if (!response || typeof response !== 'object') {
+    return { response, modified: false };
+  }
+
+  let modified = false;
+  const next = Array.isArray(response) ? [...response] : { ...response };
+  ['markdown', 'rawOutput', 'output', 'text'].forEach((field) => {
+    if (typeof next[field] !== 'string') return;
+    const cleaned = sanitizeMcpDiagnosticText(next[field]);
+    if (cleaned !== next[field].trim()) {
+      next[field] = cleaned;
+      modified = true;
+    }
+  });
+
+  return { response: next, modified };
+}
+
+function assertNoMcpDiagnosticInResponse(response) {
+  const patterns = [
+    /MCP issues detected/i,
+    /Run\s+\/mcp\s+list\s+for\s+status/i,
+    /\/mcp list\b/i
+  ];
+  const hit = getResponseTextCandidates(response).find((text) => patterns.some((pattern) => pattern.test(text)));
+  if (!hit) return;
+
+  const preview = hit.replace(/\s+/g, ' ').slice(0, 160);
+  throw new Error(`Gemini proxy MCP diagnostic detected in output: ${preview}`);
 }
 
 function looksLikeGateway18888(url) {
@@ -128,7 +193,7 @@ async function triggerReset(resetUrl) {
   }
 }
 
-async function runOnce(url, payload, timeoutMs, headers) {
+async function runOnce(url, payload, timeoutMs, headers, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -144,7 +209,19 @@ async function runOnce(url, payload, timeoutMs, headers) {
       const detail = String(text || '').trim();
       throw new Error(`Gemini proxy error (${res.status})${detail ? `: ${detail}` : ''}`);
     }
-    return res.json();
+    const json = await res.json();
+    const { response: sanitized, modified } = sanitizeMcpDiagnosticsInResponse(json);
+    if (modified) {
+      const validator = typeof options.validateSanitizedResponse === 'function'
+        ? options.validateSanitizedResponse
+        : null;
+      if (validator && validator(sanitized)) {
+        return sanitized;
+      }
+      assertNoMcpDiagnosticInResponse(json);
+    }
+    assertNoMcpDiagnosticInResponse(sanitized);
+    return sanitized;
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new Error(`Gemini proxy request timeout (${timeoutMs}ms)`);
@@ -202,7 +279,9 @@ async function runGeminiProxy(prompt, options = {}) {
       const candidateUrl = urlCandidates[i];
       const hasFallback = i < urlCandidates.length - 1;
       try {
-        return await runOnce(candidateUrl, payload, timeoutMs, headers);
+        return await runOnce(candidateUrl, payload, timeoutMs, headers, {
+          validateSanitizedResponse: options.validateSanitizedResponse
+        });
       } catch (error) {
         lastError = error;
         const isNetworkError = /fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(String(error?.message || ''));
