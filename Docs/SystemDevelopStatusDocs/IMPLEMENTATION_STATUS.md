@@ -1,8 +1,8 @@
 # 实现状态报告
 
-**日期**: 2026-03-09
-**版本**: v3.8.0
-**状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入）
+**日期**: 2026-03-10
+**版本**: v3.8.1
+**状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入；Gemini MCP 污染已加固）
 
 ## 1. 当前阶段结论
 
@@ -238,6 +238,27 @@
   - 当前低分候选数：`0`
 - 已对 3 条代表样本做人工导向二次修正：
   - `409 / fiddling with`
+
+### 2.19 Gemini MCP 诊断文本清洗与知识分析链路加固（v3.8.1）
+
+- `services/geminiProxyService.js`
+  - 新增 MCP 诊断文本清洗逻辑
+  - 支持行级污染与同一行前缀污染
+  - 清洗后仅在通过调用方校验时继续返回，否则转入重试
+- `server.js`
+  - 主卡片 Gemini Proxy 结果新增“清洗后结构校验”
+  - 三语卡 / 语法卡都要求 section 结构与最小 audio task 数成立
+- `services/trainingPackService.js`
+  - TRAIN Teacher 调用新增“清洗后 JSON + schema 校验”
+  - 清洗后可直接通过的结果不再误判为 MCP 污染失败
+- `services/knowledgeAnalysisEngine.js`
+  - `synonym_boundary` LLM 路径默认传输切到 `proxy`
+  - 新增 synonym JSON 校验器
+  - 清洗后通过校验的响应将正常记为 `parseStatus=ok`
+- 已完成真实 smoke：
+  - 文本生成 `generationId=603`
+  - `training.status=ready`
+  - `observability.metadata.rawOutput` 不再残留 MCP 诊断文本
   - `391 / 细枝末节`
   - `503 / 差不多`
 - 已完成浏览器端 TRAIN UI 一致性抽查，验证前端展示与数据库/sidecar 数据一致

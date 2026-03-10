@@ -104,6 +104,18 @@
   - 文本输入生成真实 Gemini 卡片
   - `TRAIN regenerate` 完成并更新 `updatedAt`
 
+新增后端清洗回归：
+
+- `tests/e2e/gemini-sanitize.spec.js`
+- 覆盖 2 条回归断言：
+  1. `geminiProxyService` 可清洗 MCP 诊断前缀，并保留有效 markdown
+  2. `knowledgeAnalysisEngine` 的 `synonym_boundary` 链路可清洗 MCP 诊断前缀，并解析有效 JSON
+- 对应脚本：
+
+```bash
+npm run test:e2e:gemini-sanitize
+```
+
 已验证：
 
 - `2026-03-09`
@@ -111,6 +123,9 @@
 - 结果：`6 passed`
 - 命令：`npm run test:e2e`
 - 结果：`11 passed, 1 skipped`
+- `2026-03-10`
+- 命令：`npm run test:e2e:gemini-sanitize`
+- 结果：`2 passed`
 
 ## 5. 运行方式
 

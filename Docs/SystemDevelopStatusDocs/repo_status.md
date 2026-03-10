@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-03-09
-**版本**: 3.8.0
+**最后更新**: 2026-03-10
+**版本**: 3.8.1
 
 ## 1. 项目定位
 
@@ -218,6 +218,30 @@
   - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 
 ### 3.20 TRAIN 低分样本精修与 UI 一致性验证（v3.7.3）
+
+- 已完成 13 条 `qualityScore <= 95` 低分样本精修，当前低分池清零。
+- 已完成 `TRAIN` UI 一致性抽查，`fiddling with / 细枝末节 / 差不多` 与数据库/sidecar 一致。
+- `TRAIN` 页现已支持：
+  - 选区生成三语卡
+  - 选区生成语法卡
+  - 选区标红并持久化恢复
+
+### 3.21 Gemini CLI Proxy MCP 诊断清洗与知识分析链路加固（v3.8.1）
+
+- `geminiProxyService` 新增 MCP 诊断文本清洗：
+  - 识别 `MCP issues detected`
+  - 识别 `Run /mcp list for status`
+  - 支持“独立行”与“同一行前缀”两种污染形式
+- 主卡片生成链路新增“清洗后结构校验”：
+  - 三语卡/语法卡仅在清洗后仍满足 section + audio task 最小结构时才继续
+  - 清洗后仍无效则进入重试，不再把诊断文本直接写入卡片
+- `TRAIN` Teacher JSON 链路新增“清洗后 schema 校验”：
+  - 清洗后 JSON 合法且通过 `training_pack_v1` 校验时才继续
+  - 否则进入重试/repair/fallback
+- `knowledgeAnalysisEngine` 的 `synonym_boundary` LLM 分析链路已同步加固：
+  - 默认传输改为 `proxy`
+  - 支持 MCP 诊断文本清洗
+  - 清洗后需通过 synonym-boundary JSON 校验才会落为 `parseStatus=ok`
 
 - 已对 `qualityScore <= 95` 的 `13` 条样本完成逐条精修，结果：
   - 提升 `13`

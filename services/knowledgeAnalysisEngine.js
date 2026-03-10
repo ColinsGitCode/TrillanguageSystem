@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { runGeminiCli } = require('./geminiCliService');
+const { runGeminiProxy } = require('./geminiProxyService');
 
 function stripHtml(text) {
   return String(text || '').replace(/<[^>]*>/g, '');
@@ -271,18 +272,51 @@ function percentile(values, p = 0.95) {
   return Number(sorted[pos] || 0);
 }
 
+function sanitizeMcpDiagnosticText(text) {
+  if (typeof text !== 'string') return '';
+  const inlinePrefix = /^\s*MCP issues detected\b[\s\S]*?Run\s+\/mcp\s+list\s+for\s+status\.?\s*/i;
+  const patterns = [
+    /^\s*MCP issues detected\b.*$/i,
+    /^\s*Run\s+\/mcp\s+list\s+for\s+status\b.*$/i
+  ];
+  return String(text)
+    .replace(inlinePrefix, '')
+    .split(/\r?\n/)
+    .filter((line) => !patterns.some((pattern) => pattern.test(line)))
+    .join('\n')
+    .trim();
+}
+
+function getLlmResponseText(response) {
+  if (!response || typeof response !== 'object') return sanitizeMcpDiagnosticText(String(response || ''));
+  const text = response.markdown || response.rawOutput || response.output || response.text || '';
+  return sanitizeMcpDiagnosticText(String(text || ''));
+}
+
 function normalizeSynonymBoundaryOptions(options = {}) {
   const llmEnvEnabled = ['1', 'true', 'yes'].includes(String(process.env.KNOWLEDGE_SYNONYM_LLM_ENABLED || '').toLowerCase());
   const llmEnabled = options.llmEnabled == null ? llmEnvEnabled : Boolean(options.llmEnabled);
+  const llmTransport = String(options.llmTransport || process.env.KNOWLEDGE_SYNONYM_LLM_TRANSPORT || 'proxy').trim().toLowerCase() === 'cli'
+    ? 'cli'
+    : 'proxy';
   return {
     minCandidateScore: Number(options.minCandidateScore == null ? 0.62 : options.minCandidateScore),
     maxPairs: Math.max(1, Number(options.maxPairs == null ? 120 : options.maxPairs)),
     maxLlmPairs: Math.max(0, Number(options.maxLlmPairs == null ? 24 : options.maxLlmPairs)),
-    model: options.model || process.env.KNOWLEDGE_SYNONYM_MODEL || process.env.GEMINI_CLI_MODEL || '',
+    model: options.model || process.env.KNOWLEDGE_SYNONYM_MODEL || process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || '',
     schemaVersion: String(options.schemaVersion || '1.0.0'),
     promptVersion: String(options.promptVersion || 'syn-v1'),
     llmEnabled,
-    llmTimeoutMs: Math.max(5000, Number(options.llmTimeoutMs || process.env.KNOWLEDGE_SYNONYM_LLM_TIMEOUT_MS || 120000))
+    llmTimeoutMs: Math.max(5000, Number(options.llmTimeoutMs || process.env.KNOWLEDGE_SYNONYM_LLM_TIMEOUT_MS || 120000)),
+    llmTransport,
+    llmGatewayUrl: options.llmGatewayUrl || process.env.KNOWLEDGE_SYNONYM_PROXY_URL || process.env.GEMINI_PROXY_URL || '',
+    llmRetries: Math.max(0, Number(options.llmRetries == null ? (process.env.KNOWLEDGE_SYNONYM_LLM_RETRIES || 1) : options.llmRetries)),
+    llmRetryDelayMs: Math.max(0, Number(options.llmRetryDelayMs == null ? (process.env.KNOWLEDGE_SYNONYM_LLM_RETRY_DELAY_MS || 1200) : options.llmRetryDelayMs)),
+    llmBreakerRetryDelayMs: Math.max(0, Number(options.llmBreakerRetryDelayMs == null ? (process.env.KNOWLEDGE_SYNONYM_LLM_BREAKER_RETRY_DELAY_MS || 6000) : options.llmBreakerRetryDelayMs)),
+    proxyAuthMode: options.proxyAuthMode || process.env.KNOWLEDGE_SYNONYM_PROXY_AUTH_MODE || process.env.GEMINI_PROXY_AUTH_MODE,
+    proxyApiKey: options.proxyApiKey || process.env.KNOWLEDGE_SYNONYM_PROXY_API_KEY || process.env.GEMINI_PROXY_API_KEY,
+    proxyBearerToken: options.proxyBearerToken || process.env.KNOWLEDGE_SYNONYM_PROXY_BEARER_TOKEN || process.env.GEMINI_PROXY_BEARER_TOKEN,
+    enforceGateway: options.enforceGateway
   };
 }
 
@@ -511,6 +545,33 @@ function extractFirstJsonBlock(text) {
   return '';
 }
 
+function validateSynonymBoundaryPayload(payload, candidate) {
+  if (!payload || typeof payload !== 'object') return false;
+  if (!Array.isArray(payload.contextSplit) || payload.contextSplit.length === 0) return false;
+  if (!Array.isArray(payload.misuseRisks) || payload.misuseRisks.length === 0) return false;
+  if (!payload.jpNuance || typeof payload.jpNuance !== 'object') return false;
+  if (!payload.boundaryTags || typeof payload.boundaryTags !== 'object') return false;
+  if (!Array.isArray(payload.boundaryTags.a) || !Array.isArray(payload.boundaryTags.b)) return false;
+  if (!payload.pair || typeof payload.pair !== 'object') return false;
+
+  const terms = [normalizeText(payload.pair.termA), normalizeText(payload.pair.termB)].sort();
+  const candidateTerms = [normalizeText(candidate.termA), normalizeText(candidate.termB)].sort();
+  return terms[0] === candidateTerms[0] && terms[1] === candidateTerms[1];
+}
+
+function buildSynonymBoundaryResponseValidator(candidate) {
+  return (response) => {
+    try {
+      const jsonText = extractFirstJsonBlock(getLlmResponseText(response));
+      if (!jsonText) return false;
+      const parsed = JSON.parse(jsonText);
+      return validateSynonymBoundaryPayload(parsed, candidate);
+    } catch (err) {
+      return false;
+    }
+  };
+}
+
 function normalizeLlmSynonymResult(payload, fallback) {
   if (!payload || typeof payload !== 'object') return fallback;
   const pair = payload.pair && typeof payload.pair === 'object'
@@ -602,15 +663,34 @@ async function runSynonymBoundary(cards = [], taskOptions = {}) {
           fallbackResult: localResult,
           config
         });
-        const llmResp = await runGeminiCli(prompt, {
-          model: config.model,
-          timeoutMs: config.llmTimeoutMs,
-          baseName: `synonym_${candidate.termA}_${candidate.termB}`
-        });
+        const baseName = `synonym_${candidate.termA}_${candidate.termB}`;
+        const llmResp = config.llmTransport === 'cli'
+          ? await runGeminiCli(prompt, {
+              model: config.model,
+              timeoutMs: config.llmTimeoutMs,
+              baseName
+            })
+          : await runGeminiProxy(prompt, {
+              model: config.model,
+              timeoutMs: config.llmTimeoutMs,
+              baseName,
+              url: config.llmGatewayUrl || undefined,
+              retries: config.llmRetries,
+              retryDelayMs: config.llmRetryDelayMs,
+              breakerRetryDelayMs: config.llmBreakerRetryDelayMs,
+              authMode: config.proxyAuthMode,
+              apiKey: config.proxyApiKey,
+              bearerToken: config.proxyBearerToken,
+              enforceGateway: config.enforceGateway,
+              validateSanitizedResponse: buildSynonymBoundaryResponseValidator(candidate)
+            });
         llmLatencyMs = Math.max(0, Date.now() - started);
         llmLatencies.push(llmLatencyMs);
-        const jsonText = extractFirstJsonBlock(llmResp?.markdown || llmResp?.rawOutput || '');
+        const jsonText = extractFirstJsonBlock(getLlmResponseText(llmResp));
         const parsed = JSON.parse(jsonText);
+        if (!validateSynonymBoundaryPayload(parsed, candidate)) {
+          throw new Error('synonym boundary payload validation failed');
+        }
         finalResult = normalizeLlmSynonymResult(parsed, localResult);
         parseStatus = 'ok';
         llmSuccess += 1;
@@ -697,6 +777,7 @@ async function runSynonymBoundary(cards = [], taskOptions = {}) {
     },
     meta: {
       model: config.model || null,
+      llmTransport: config.llmTransport,
       promptVersion: config.promptVersion,
       schemaVersion: config.schemaVersion,
       minCandidateScore: config.minCandidateScore,

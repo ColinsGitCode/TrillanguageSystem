@@ -12,6 +12,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.js",
     "test:e2e:pages": "playwright test tests/e2e/pages.spec.js",
+    "test:e2e:gemini-sanitize": "playwright test tests/e2e/gemini-sanitize.spec.js",
     "test:e2e:real": "RUN_REAL_GEMINI_E2E=1 playwright test tests/e2e/real-gemini.spec.js",
     "training:backfill": "node scripts/backfillTrainingAssets.js",
     "cards:migrate-style": "node scripts/updateLegacyCardStyle.js --apply",
