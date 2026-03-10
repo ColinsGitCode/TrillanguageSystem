@@ -680,6 +680,7 @@ function renderKnowledgeHub(overview, synonymData) {
                     class="knowledge-hub-item ${isActive ? 'active' : ''}"
                     data-entity-type="${entityType}"
                     data-key="${escapeHtml(key)}"
+                    data-testid="knowledge-hub-item-${entityType}"
                     ${extraDataset(item)}
                 >
                     <div class="name">${escapeHtml(renderName(item))}</div>
@@ -799,14 +800,14 @@ async function renderKnowledgeRelationInspector() {
             const tagsB = Array.isArray(relation.boundaryTagsB) ? relation.boundaryTagsB : [];
             const pairLabel = `${relation.termA || '?'} ↔ ${relation.termB || '?'}`;
             container.innerHTML = `
-                <div class="knowledge-inline-tags">
+                <div class="knowledge-inline-tags" data-testid="knowledge-synonym-detail-tags">
                     <span class="tag">${escapeHtml(title)}</span>
                     <span class="tag">${escapeHtml(pairLabel)}</span>
                     <span class="tag">risk ${escapeHtml(relation.riskLevel || relation.misuseRisk || '-')}</span>
                     <span class="tag">conf ${formatNumber(relation.confidence, 2)}</span>
                     <span class="tag">parse ${escapeHtml(relation.parseStatus || 'ok')}</span>
                 </div>
-                <div class="knowledge-rel-grid">
+                <div class="knowledge-rel-grid" data-testid="knowledge-synonym-detail-grid">
                     ${renderRelSection('Actionable Hint', [{ value: relation.actionableHint || relation.recommendation || '-' }], (item) => `${escapeHtml(item.value)}`)}
                     ${renderRelSection('Context Split', contextSplit, (item) => `<strong>${escapeHtml(item.dimension || '-')}</strong> · A:${escapeHtml(item.a || '-')} · B:${escapeHtml(item.b || '-')}<br/><span class="mono">${escapeHtml(item.why || '')}</span>`)}
                     ${renderRelSection('Misuse Risks', misuseRisks, (item) => `<strong>${escapeHtml(item.severity || '-')}</strong> · ${escapeHtml(item.scenario || '-')}<br/><span class="mono">${escapeHtml(item.risk || '-')}</span>`)}

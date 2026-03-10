@@ -245,6 +245,7 @@
 - 已补真实低频验收：
   - `synonym_boundary` Knowledge Job 可通过真实 Gemini Proxy 跑通
   - 实测 `jobId=26`，`status=success`，`llmSuccessCount=1`，`jsonParseRate=1`
+  - `Knowledge Hub` 页面可直接展示真实 synonym 列表，并在点击后加载 Relation Inspector 详情
 
 - 已对 `qualityScore <= 95` 的 `13` 条样本完成逐条精修，结果：
   - 提升 `13`

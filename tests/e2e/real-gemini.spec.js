@@ -11,10 +11,7 @@ async function waitForQueueIdle(page, timeout = 180000) {
 test.describe('Real Gemini acceptance', () => {
   test.skip(!runReal, '设置 RUN_REAL_GEMINI_E2E=1 后才执行真实 Gemini 验收');
 
-  test('Knowledge synonym_boundary 真实 Gemini Proxy 验收', async ({ request }) => {
-    test.slow();
-    const model = String(process.env.PLAYWRIGHT_REAL_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
-
+  async function startRealSynonymJob(request, model) {
     const startRes = await request.post(`${realBaseUrl}/api/knowledge/jobs/start`, {
       data: {
         jobType: 'synonym_boundary',
@@ -50,7 +47,14 @@ test.describe('Real Gemini acceptance', () => {
     const detailRes = await request.get(`${realBaseUrl}/api/knowledge/jobs/${jobId}`);
     expect(detailRes.ok()).toBeTruthy();
     const detailJson = await detailRes.json();
-    const job = detailJson.job;
+    return detailJson.job;
+  }
+
+  test('Knowledge synonym_boundary 真实 Gemini Proxy 验收', async ({ request }) => {
+    test.slow();
+    const model = String(process.env.PLAYWRIGHT_REAL_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
+    const job = await startRealSynonymJob(request, model);
+    const jobId = job.id;
 
     expect(job.synonymMeta.llmEnabled).toBe(true);
     expect(job.synonymMeta.llmEnabled).toBeTruthy();
@@ -70,6 +74,35 @@ test.describe('Real Gemini acceptance', () => {
     expect(synonymDetailRes.ok()).toBeTruthy();
     const synonymDetailJson = await synonymDetailRes.json();
     expect(synonymDetailJson.detail.parseStatus).toBe('ok');
+  });
+
+  test('Knowledge Hub 页面可展示真实 synonym 列表并打开详情', async ({ page, request }) => {
+    test.slow();
+    const model = String(process.env.PLAYWRIGHT_REAL_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
+    const job = await startRealSynonymJob(request, model);
+    const jobId = job.id;
+
+    const listRes = await request.get(`${realBaseUrl}/api/knowledge/synonyms/list?jobId=${jobId}&pageSize=5`);
+    expect(listRes.ok()).toBeTruthy();
+    const listJson = await listRes.json();
+    expect(Array.isArray(listJson.items)).toBeTruthy();
+    expect(listJson.items.length).toBeGreaterThan(0);
+
+    const item = listJson.items[0];
+    const pairLabel = `${item.termA} ↔ ${item.termB}`;
+
+    await page.goto(`${realBaseUrl}/knowledge-hub.html`);
+    const synonymCard = page.getByTestId('knowledge-hub-synonyms');
+    await expect(synonymCard).toBeVisible();
+
+    const synonymItem = page.getByTestId('knowledge-hub-item-synonym').filter({ hasText: pairLabel }).first();
+    await expect(synonymItem).toBeVisible({ timeout: 30000 });
+    await synonymItem.click();
+
+    const inspector = page.getByTestId('knowledge-relation-inspector');
+    await expect(inspector).toContainText(pairLabel, { timeout: 15000 });
+    await expect(page.getByTestId('knowledge-synonym-detail-tags')).toContainText('parse ok');
+    await expect(page.getByTestId('knowledge-synonym-detail-grid')).toContainText(item.actionableHint || item.recommendation);
   });
 
   test('文本输入生成真实 Gemini 卡片', async ({ page, request }) => {
