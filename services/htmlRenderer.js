@@ -1,5 +1,6 @@
 const { marked } = require('marked');
 const { toRuby } = require('./japaneseFurigana');
+const KATAKANA_READING_REGEX = /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FE]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
 
 function stripMarkup(text) {
   if (!text) return '';
@@ -11,6 +12,16 @@ function stripMarkup(text) {
     .replace(/[`*_]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function stripKatakanaReadings(text) {
+  let cleaned = String(text || '');
+  let previous = '';
+  while (cleaned !== previous) {
+    previous = cleaned;
+    cleaned = cleaned.replace(KATAKANA_READING_REGEX, '$1');
+  }
+  return cleaned;
 }
 
 function buildAudioTasksFromMarkdown(markdown) {
@@ -92,7 +103,7 @@ async function normalizeJapaneseRuby(markdown) {
     }
     if (inlineMatch) {
       const prefix = inlineMatch[1];
-      const content = inlineMatch[2];
+      const content = stripKatakanaReadings(inlineMatch[2]);
       const withRuby = content.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
       if (withRuby !== content) {
         output.push(`${prefix}${withRuby}`);
@@ -103,12 +114,13 @@ async function normalizeJapaneseRuby(markdown) {
       continue;
     }
 
-    const replaced = line.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
-    if (replaced !== line) {
+    const sanitizedLine = stripKatakanaReadings(line);
+    const replaced = sanitizedLine.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
+    if (replaced !== sanitizedLine) {
       output.push(replaced);
       continue;
     }
-    const converted = await toRuby(line);
+    const converted = await toRuby(sanitizedLine);
     output.push(converted);
   }
   return output.join('\n');

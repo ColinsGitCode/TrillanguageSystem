@@ -1,6 +1,7 @@
 const KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]/g;
 const KANA_PAREN_REGEX = /[（(][\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\u30FC\s]+[）)]/g;
 const LOANWORD_PAREN_REGEX = /([\u30A0-\u30FF\u30FC]+)\(([A-Za-z0-9][A-Za-z0-9\s._-]*)\)/g;
+const KATAKANA_READING_REGEX = /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FE]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
 const LOANWORD_LABEL = '外来语标注';
 const LEGACY_LOANWORD_LINE_REGEX = /^(\s*)-\s*外来语标注[:：]\s*(.*)$/i;
 const INLINE_LOANWORD_SPLIT_REGEX = /^(.*?)\s+[-—–]\s*外来语标注[:：]\s*(.+)$/i;
@@ -60,6 +61,47 @@ function cleanJapaneseTranslations(markdown) {
     }
 
     output.push(line);
+  }
+
+  return output.join('\n');
+}
+
+function stripKatakanaReadings(text) {
+  let cleaned = String(text || '');
+  let previous = '';
+  while (cleaned !== previous) {
+    previous = cleaned;
+    cleaned = cleaned.replace(KATAKANA_READING_REGEX, '$1');
+  }
+  return cleaned;
+}
+
+function stripLoanwordReadingsInJapanese(markdown) {
+  if (!markdown) return markdown;
+  const lines = String(markdown).split(/\r?\n/);
+  const output = [];
+  let inJapanese = false;
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^\s*##\s*(\d+)\.\s*(.+)$/);
+    if (headerMatch) {
+      const headerText = headerMatch[2];
+      inJapanese = /日本語|日语/.test(headerText);
+      output.push(line);
+      continue;
+    }
+
+    if (!inJapanese) {
+      output.push(line);
+      continue;
+    }
+
+    if (line.includes('loanword-block') || line.includes(LOANWORD_LABEL)) {
+      output.push(line);
+      continue;
+    }
+
+    output.push(stripKatakanaReadings(line));
   }
 
   return output.join('\n');
@@ -245,6 +287,7 @@ function sanitizeAudioTasks(tasks = []) {
     }
     if (normalized.lang === 'ja') {
       text = text
+        .replace(KATAKANA_READING_REGEX, '$1')
         .replace(KANA_PAREN_REGEX, '')
         .replace(/\([A-Za-z0-9][A-Za-z0-9\s._-]*\)/g, '')
         .replace(/\s+/g, ' ')
@@ -284,6 +327,7 @@ function postProcessGeneratedContent(content) {
   if (!content || typeof content !== 'object') return content;
   let markdown = content.markdown_content || '';
   markdown = relocateLoanwordAnnotations(markdown);
+  markdown = stripLoanwordReadingsInJapanese(markdown);
   markdown = cleanJapaneseTranslations(markdown);
   markdown = dedupeTechSection(markdown);
   markdown = markExplanationLines(markdown);
