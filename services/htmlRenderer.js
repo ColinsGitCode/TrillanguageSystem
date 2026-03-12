@@ -25,6 +25,13 @@ function stripKatakanaReadings(text) {
   return cleaned;
 }
 
+function applyExplicitRuby(text) {
+  return String(text || '').replace(
+    /([\u3400-\u9FFF々〆ヵヶ]+)\s*[（(]([\u3041-\u3096\u30A1-\u30FA\u30FC]+)[）)](?=[\u3041-\u3096\u30A1-\u30FA\u30FC々〆ヵヶ」』“”"'’、。！？，；：\s<]|$)/g,
+    '<ruby>$1<rt>$2</rt></ruby>'
+  );
+}
+
 function buildAudioTasksFromMarkdown(markdown) {
   const tasks = [];
   if (!markdown) return tasks;
@@ -58,9 +65,9 @@ function buildAudioTasksFromMarkdown(markdown) {
 
 async function normalizeJapaneseRuby(markdown) {
   if (!markdown) return '';
-  const lines = String(markdown).split(/\r?\n/);
+  const explicitRubyNormalized = applyExplicitRuby(markdown);
+  const lines = String(explicitRubyNormalized).split(/\r?\n/);
   let inJapanese = false;
-  const rubyPattern = /([\u3400-\u9FFF々〆ヵヶ]+)\s*[（(]([\u3041-\u3096\u30A1-\u30FA\u30FC]+)[）)]/g;
   const output = [];
   for (const line of lines) {
     const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
@@ -105,22 +112,12 @@ async function normalizeJapaneseRuby(markdown) {
     if (inlineMatch) {
       const prefix = inlineMatch[1];
       const content = stripKatakanaReadings(inlineMatch[2]);
-      const withRuby = content.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
-      if (withRuby !== content) {
-        output.push(`${prefix}${withRuby}`);
-        continue;
-      }
       const converted = await toRuby(content);
       output.push(`${prefix}${converted}`);
       continue;
     }
 
     const sanitizedLine = stripKatakanaReadings(line);
-    const replaced = sanitizedLine.replace(rubyPattern, '<ruby>$1<rt>$2</rt></ruby>');
-    if (replaced !== sanitizedLine) {
-      output.push(replaced);
-      continue;
-    }
     const converted = await toRuby(sanitizedLine);
     output.push(converted);
   }
