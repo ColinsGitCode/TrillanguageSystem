@@ -1,6 +1,7 @@
 const { marked } = require('marked');
 const { toRuby } = require('./japaneseFurigana');
-const KATAKANA_READING_REGEX = /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FE]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
+const LOANWORD_READING_REGEX =
+  /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FEA-Za-zＡ-Ｚａ-ｚ0-9０-９._/-]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
 
 function stripMarkup(text) {
   if (!text) return '';
@@ -19,7 +20,7 @@ function stripKatakanaReadings(text) {
   let previous = '';
   while (cleaned !== previous) {
     previous = cleaned;
-    cleaned = cleaned.replace(KATAKANA_READING_REGEX, '$1');
+    cleaned = cleaned.replace(LOANWORD_READING_REGEX, '$1');
   }
   return cleaned;
 }

@@ -1,7 +1,8 @@
 const KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]/g;
 const KANA_PAREN_REGEX = /[（(][\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\u30FC\s]+[）)]/g;
 const LOANWORD_PAREN_REGEX = /([\u30A0-\u30FF\u30FC]+)\(([A-Za-z0-9][A-Za-z0-9\s._-]*)\)/g;
-const KATAKANA_READING_REGEX = /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FE]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
+const LOANWORD_READING_REGEX =
+  /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FEA-Za-zＡ-Ｚａ-ｚ0-9０-９._/-]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
 const LOANWORD_LABEL = '外来语标注';
 const LEGACY_LOANWORD_LINE_REGEX = /^(\s*)-\s*外来语标注[:：]\s*(.*)$/i;
 const INLINE_LOANWORD_SPLIT_REGEX = /^(.*?)\s+[-—–]\s*外来语标注[:：]\s*(.+)$/i;
@@ -71,7 +72,7 @@ function stripKatakanaReadings(text) {
   let previous = '';
   while (cleaned !== previous) {
     previous = cleaned;
-    cleaned = cleaned.replace(KATAKANA_READING_REGEX, '$1');
+    cleaned = cleaned.replace(LOANWORD_READING_REGEX, '$1');
   }
   return cleaned;
 }
@@ -287,7 +288,7 @@ function sanitizeAudioTasks(tasks = []) {
     }
     if (normalized.lang === 'ja') {
       text = text
-        .replace(KATAKANA_READING_REGEX, '$1')
+        .replace(LOANWORD_READING_REGEX, '$1')
         .replace(KANA_PAREN_REGEX, '')
         .replace(/\([A-Za-z0-9][A-Za-z0-9\s._-]*\)/g, '')
         .replace(/\s+/g, ' ')
