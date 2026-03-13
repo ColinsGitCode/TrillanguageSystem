@@ -44,6 +44,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 点击主输入区 `Generate` 后任务入后台队列，可继续输入并连续点击生成
 - 支持卡片类型切换：`三语卡片` / `日语语法卡片`
 - 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
+- 页面刷新 / 前端重载后，会从 `localStorage` 快照恢复未完成队列；原 `running` 任务会自动转回 `queued` 重新执行
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - Phrase List 按同日卡片生成时间倒序显示（最新优先）
@@ -197,6 +198,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
 - 顶部 Header 常驻任务队列缩略状态条：运行中/等待中/空闲（Task Queue Idle）一目了然
   - 运行中新增实时计时器（`mm:ss`），显示当前任务已执行时长
+  - 未完成队列会写入 `generation_queue_snapshot_v1`，用于页面重载后的恢复
 - 学习卡片弹窗整体下调，避免遮挡顶部任务队列状态条
 - 字体体系（2026-03-03）：
   - `styles.css` 与 `modern-card.css` 统一字体变量：`--font-ui / --font-ja / --font-display / --font-mono`

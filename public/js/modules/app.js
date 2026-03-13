@@ -95,6 +95,8 @@ const generationQueueState = {
     retryFailedBtn: null
 };
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
+const QUEUE_SNAPSHOT_VERSION = 2;
+const QUEUE_RESTORABLE_STATUSES = new Set(['queued', 'running', 'failed']);
 const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
 const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
 const HIGHLIGHT_SCOPE_CONTENT = 'content';
@@ -1844,8 +1846,9 @@ function initGenerationQueuePanel() {
         };
     }
 
-    updateHeroTaskQueueStatus();
-    persistGenerationQueueSnapshot();
+    restoreGenerationQueueSnapshot();
+    renderGenerationQueuePanel();
+    processGenerationQueue();
 }
 
 function showGenerationQueueToast(message) {
@@ -2047,8 +2050,31 @@ function renderGenerationQueuePanel() {
     persistGenerationQueueSnapshot();
 }
 
+function serializeQueueTask(task) {
+    return {
+        id: task.id,
+        seq: task.seq,
+        phrase: task.phraseNormalized,
+        phraseRaw: task.phraseRaw || task.phraseNormalized,
+        status: task.status,
+        attempts: task.attempts || 0,
+        provider: task.provider || '',
+        cardType: normalizeCardType(task.cardType || 'trilingual'),
+        sourceMode: task.sourceMode || '',
+        targetFolder: task.targetFolder || '',
+        enableCompare: Boolean(task.enableCompare),
+        llmModel: task.llmModel || '',
+        error: task.error || '',
+        createdAt: task.createdAt || 0,
+        startedAt: task.startedAt || 0,
+        finishedAt: task.finishedAt || 0,
+        retryAfter: task.retryAfter || 0
+    };
+}
+
 function persistGenerationQueueSnapshot() {
     const tasks = generationQueueState.tasks || [];
+    const recoverableTasks = tasks.filter((task) => QUEUE_RESTORABLE_STATUSES.has(task.status));
     const summary = {
         total: tasks.length,
         queued: tasks.filter((task) => task.status === 'queued').length,
@@ -2060,40 +2086,13 @@ function persistGenerationQueueSnapshot() {
 
     const activeTask = tasks.find((task) => task.status === 'running') || null;
     const snapshot = {
-        version: 1,
+        version: QUEUE_SNAPSHOT_VERSION,
         updatedAt: Date.now(),
         running: Boolean(generationQueueState.running),
         summary,
-        activeTask: activeTask ? {
-            id: activeTask.id,
-            seq: activeTask.seq,
-            phrase: activeTask.phraseNormalized,
-            status: activeTask.status,
-            attempts: activeTask.attempts || 0,
-            startedAt: activeTask.startedAt || 0,
-            provider: activeTask.provider || '',
-            cardType: normalizeCardType(activeTask.cardType || 'trilingual'),
-            sourceMode: activeTask.sourceMode || '',
-            targetFolder: activeTask.targetFolder || '',
-            enableCompare: Boolean(activeTask.enableCompare)
-        } : null,
-        recentTasks: tasks.slice(-20).map((task) => ({
-            id: task.id,
-            seq: task.seq,
-            phrase: task.phraseNormalized,
-            status: task.status,
-            attempts: task.attempts || 0,
-            provider: task.provider || '',
-            cardType: normalizeCardType(task.cardType || 'trilingual'),
-            sourceMode: task.sourceMode || '',
-            targetFolder: task.targetFolder || '',
-            enableCompare: Boolean(task.enableCompare),
-            error: task.error || '',
-            createdAt: task.createdAt || 0,
-            startedAt: task.startedAt || 0,
-            finishedAt: task.finishedAt || 0,
-            retryAfter: task.retryAfter || 0
-        }))
+        activeTask: activeTask ? serializeQueueTask(activeTask) : null,
+        recoverableTasks: recoverableTasks.map((task) => serializeQueueTask(task)),
+        recentTasks: tasks.slice(-20).map((task) => serializeQueueTask(task))
     };
 
     try {
@@ -2101,6 +2100,99 @@ function persistGenerationQueueSnapshot() {
     } catch (err) {
         console.warn('[Queue] persist snapshot failed:', err.message);
     }
+}
+
+function restoreGenerationQueueSnapshot() {
+    let snapshot = null;
+
+    try {
+        snapshot = JSON.parse(localStorage.getItem(QUEUE_SNAPSHOT_STORAGE_KEY) || 'null');
+    } catch (err) {
+        console.warn('[Queue] invalid snapshot:', err.message);
+        localStorage.removeItem(QUEUE_SNAPSHOT_STORAGE_KEY);
+        return;
+    }
+
+    if (!snapshot || typeof snapshot !== 'object') {
+        return;
+    }
+
+    const rawTasks = Array.isArray(snapshot.recoverableTasks)
+        ? snapshot.recoverableTasks
+        : Array.isArray(snapshot.recentTasks)
+            ? snapshot.recentTasks.filter((task) => QUEUE_RESTORABLE_STATUSES.has(String(task?.status || '').toLowerCase()))
+            : [];
+
+    if (!rawTasks.length) {
+        updateHeroTaskQueueStatus();
+        persistGenerationQueueSnapshot();
+        return;
+    }
+
+    const restoredTasks = [];
+    let restoredRunningCount = 0;
+    let maxSeq = generationQueueState.nextSeq - 1;
+
+    rawTasks.forEach((rawTask, index) => {
+        if (!rawTask || typeof rawTask !== 'object') return;
+
+        const rawPhrase = String(rawTask.phraseRaw || rawTask.phrase || '').trim();
+        const phraseNormalized = String(rawTask.phrase || rawTask.phraseNormalized || '').trim();
+        if (!phraseNormalized) return;
+
+        const rawStatus = String(rawTask.status || 'queued').toLowerCase();
+        if (!QUEUE_RESTORABLE_STATUSES.has(rawStatus)) return;
+
+        const seq = Number(rawTask.seq || 0) > 0 ? Number(rawTask.seq) : generationQueueState.nextSeq + index;
+        maxSeq = Math.max(maxSeq, seq);
+
+        const restoredStatus = rawStatus === 'running' ? 'queued' : rawStatus;
+        if (rawStatus === 'running') {
+            restoredRunningCount += 1;
+        }
+
+        const existingError = String(rawTask.error || '').trim();
+        const restoredError = rawStatus === 'running'
+            ? '页面重载后恢复：上次执行状态未知，已重新排队。'
+            : existingError;
+
+        restoredTasks.push({
+            id: String(rawTask.id || `queue_restore_${Date.now()}_${seq}`),
+            seq,
+            phraseRaw: rawPhrase || phraseNormalized,
+            phraseNormalized,
+            source: null,
+            provider: String(rawTask.provider || 'gemini').trim() || 'gemini',
+            enableCompare: Boolean(rawTask.enableCompare),
+            cardType: normalizeCardType(rawTask.cardType || 'trilingual'),
+            sourceMode: String(rawTask.sourceMode || '').trim().toLowerCase() || null,
+            targetFolder: String(rawTask.targetFolder || '').trim(),
+            llmModel: String(rawTask.llmModel || '').trim() || null,
+            status: restoredStatus,
+            attempts: Math.max(0, Number(rawTask.attempts || 0)),
+            error: restoredError,
+            retryAfter: restoredStatus === 'queued' ? Number(rawTask.retryAfter || 0) : 0,
+            createdAt: Number(rawTask.createdAt || Date.now()),
+            startedAt: restoredStatus === 'queued' ? 0 : Number(rawTask.startedAt || 0),
+            finishedAt: Number(rawTask.finishedAt || 0),
+            restoredAt: Date.now()
+        });
+    });
+
+    if (!restoredTasks.length) {
+        updateHeroTaskQueueStatus();
+        persistGenerationQueueSnapshot();
+        return;
+    }
+
+    generationQueueState.tasks = restoredTasks;
+    generationQueueState.running = false;
+    generationQueueState.nextSeq = maxSeq + 1;
+
+    const message = restoredRunningCount > 0
+        ? `已恢复 ${restoredTasks.length} 个未完成任务，其中 ${restoredRunningCount} 个执行中任务已重新排队`
+        : `已恢复 ${restoredTasks.length} 个未完成任务`;
+    showGenerationQueueToast(message);
 }
 
 function hasActiveDuplicateTask(phraseNormalized, cardType = 'trilingual') {
