@@ -328,29 +328,29 @@ function renderTaskQueueDetails(snapshot) {
 
     container.innerHTML = `
         <div class="queue-metrics-grid">
-            <div class="queue-metric-chip"><span class="k">Total</span><span class="v">${total}</span></div>
-            <div class="queue-metric-chip"><span class="k">Queued</span><span class="v">${queued}</span></div>
-            <div class="queue-metric-chip"><span class="k">Running</span><span class="v">${running}</span></div>
-            <div class="queue-metric-chip"><span class="k">Success</span><span class="v">${success}</span></div>
-            <div class="queue-metric-chip"><span class="k">Failed</span><span class="v">${failed}</span></div>
-            <div class="queue-metric-chip"><span class="k">Cancelled</span><span class="v">${cancelled}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-total"><span class="k">Total</span><span class="v">${total}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-queued"><span class="k">Queued</span><span class="v">${queued}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-running"><span class="k">Running</span><span class="v">${running}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-success"><span class="k">Success</span><span class="v">${success}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-failed"><span class="k">Failed</span><span class="v">${failed}</span></div>
+            <div class="queue-metric-chip" data-testid="mission-queue-cancelled"><span class="k">Cancelled</span><span class="v">${cancelled}</span></div>
         </div>
-        <div class="queue-active-line">
+        <div class="queue-active-line" data-testid="mission-queue-active-line">
             <span class="label">Active Task</span>
-            <span class="value">${activeText}</span>
+            <span class="value" data-testid="mission-queue-active-task">${activeText}</span>
             <span class="stamp">Updated ${updatedAtText}</span>
         </div>
-        <div class="queue-recent-list">
+        <div class="queue-recent-list" data-testid="mission-queue-recent-list">
             ${recentTasks.length ? recentTasks.map((task) => `
-                <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}">
+                <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}" data-testid="mission-queue-recent-item">
                     <div class="queue-recent-head">
                         <span class="qid">#${Number(task.seq || 0)}</span>
-                        <span class="qstatus">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
+                        <span class="qstatus" data-testid="mission-queue-recent-status">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
                         <span class="qtype">${cardTypeText(task.cardType)}</span>
                         <span class="qattempt">try ${Number(task.attempts || 0)}</span>
                         <span class="qtime">${formatQueueTime(task.finishedAt || task.createdAt)}</span>
                     </div>
-                    <div class="qphrase">${escapeHtml(task.phrase || '-')}</div>
+                    <div class="qphrase" data-testid="mission-queue-recent-phrase">${escapeHtml(task.phrase || '-')}</div>
                 </div>
             `).join('') : '<div class="empty-hint">No queue task records</div>'}
         </div>

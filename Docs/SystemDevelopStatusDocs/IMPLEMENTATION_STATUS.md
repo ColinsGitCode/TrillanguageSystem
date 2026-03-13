@@ -340,6 +340,8 @@
   - TRAIN 标红恢复
   - TRAIN 选区生成三语卡/语法卡
   - 删除卡片
+  - 页面重载后回源共享队列并继续执行
+  - 失败任务重试后成功
 - 已完成首轮回归验证：
   - `npm run test:e2e:smoke`
   - 结果：`6 passed`
@@ -347,6 +349,7 @@
   - 页面级 smoke：`Mission Control / Knowledge OPS / Knowledge Hub`
   - `Knowledge OPS` 任务启动 / 取消
   - OCR fixture 上传、清洗与输入框回填
+  - `Mission Control` 共享队列失败/重试状态同步
   - 低频真实链路验收脚本：`tests/e2e/real-gemini.spec.js`
     - 文本输入真实 Gemini 生成
     - `TRAIN regenerate` 更新校验

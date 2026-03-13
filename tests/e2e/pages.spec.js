@@ -54,4 +54,51 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('ocr-preview-raw')).toContainText('Queue   state ◆');
     await expect(page.getByTestId('phrase-input')).toHaveValue('Queue state キューに追加する persistent highlight');
   });
+
+  test('06 Mission Control 可展示共享队列失败与重试结果', async ({ page, request }) => {
+    const phrase = `__E2E_FAIL_ONCE__ PW mission retry ${Date.now()}`;
+    const enqueueRes = await request.post('/api/generation-jobs', {
+      data: {
+        phrase,
+        llm_provider: 'gemini',
+        enable_compare: false,
+        card_type: 'trilingual',
+        source_mode: 'input'
+      }
+    });
+    expect(enqueueRes.ok()).toBeTruthy();
+    const enqueueJson = await enqueueRes.json();
+    const jobId = Number(enqueueJson?.job?.id || 0);
+    expect(jobId).toBeGreaterThan(0);
+
+    await page.goto('/dashboard.html');
+    await expect(page.getByTestId('mission-task-queue')).toBeVisible();
+    await expect(page.getByTestId('mission-queue-failed')).toContainText('1', { timeout: 15_000 });
+    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase);
+    await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('FAILED');
+
+    const retryRes = await request.post(`/api/generation-jobs/${jobId}/retry`);
+    expect(retryRes.ok()).toBeTruthy();
+
+    await expect(page.getByTestId('mission-queue-success')).toContainText('1', { timeout: 15_000 });
+    await expect(page.getByTestId('mission-queue-failed')).toContainText('0', { timeout: 15_000 });
+    await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('SUCCESS');
+
+    const jobsRes = await request.get('/api/generation-jobs?limit=10');
+    expect(jobsRes.ok()).toBeTruthy();
+    const jobsJson = await jobsRes.json();
+    const latestJob = Array.isArray(jobsJson?.jobs)
+      ? jobsJson.jobs.find((job) => Number(job.id) === jobId)
+      : null;
+    const resultFolder = String(latestJob?.resultFolder || '').trim();
+    const resultBase = String(latestJob?.resultBaseFilename || '').trim();
+    expect(resultFolder).not.toBe('');
+    expect(resultBase).not.toBe('');
+
+    const deleteRes = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(resultFolder)}&base=${encodeURIComponent(resultBase)}`);
+    expect(deleteRes.ok()).toBeTruthy();
+
+    const clearRes = await request.post('/api/generation-jobs/clear-done');
+    expect(clearRes.ok()).toBeTruthy();
+  });
 });

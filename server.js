@@ -45,6 +45,7 @@ const e2eKnowledgeJobs = {
     jobs: [],
     timers: new Map()
 };
+const e2eGenerationAttempts = new Map();
 
 app.use(express.static('public'));
 app.use('/data', express.static(RECORDS_PATH));
@@ -448,6 +449,23 @@ function buildE2ETrainingResult({ phrase, cardType }) {
 }
 
 function buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMode }) {
+  const safePhrase = String(phrase || '').trim();
+  if (safePhrase.includes('__E2E_ALWAYS_FAIL__')) {
+    const error = new Error('e2e_fixture_forced_failure');
+    error.status = 503;
+    throw error;
+  }
+  if (safePhrase.includes('__E2E_FAIL_ONCE__')) {
+    const key = `fail_once:${safePhrase}`;
+    const attempt = Number(e2eGenerationAttempts.get(key) || 0) + 1;
+    e2eGenerationAttempts.set(key, attempt);
+    if (attempt === 1) {
+      const error = new Error('e2e_fixture_forced_retryable_failure');
+      error.status = 503;
+      throw error;
+    }
+  }
+
   const content = buildFixtureContent({ phrase, cardType });
   const observability = buildFixtureObservability({
     provider: requestedProvider,

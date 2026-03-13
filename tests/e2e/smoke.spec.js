@@ -3,6 +3,7 @@ const { test, expect } = require('@playwright/test');
 let basePhrase = `PW smoke base ${Date.now()}`;
 let restoredPhraseA = `PW restore A ${Date.now()}`;
 let restoredPhraseB = `PW restore B ${Date.now()}`;
+let retryPhrase = `__E2E_FAIL_ONCE__ PW retry ${Date.now()}`;
 let baseFolder = '';
 const derivedCards = [];
 
@@ -184,5 +185,21 @@ test.describe.serial('Playwright smoke', () => {
 
     await deleteByFile(request, baseFolder, restoredPhraseA);
     await deleteByFile(request, baseFolder, restoredPhraseB);
+  });
+
+  test('08 失败任务可重试并最终成功', async ({ page, request }) => {
+    await page.goto('/');
+    await page.getByTestId('phrase-input').fill(retryPhrase);
+    await page.getByTestId('generate-btn').click();
+
+    await expect(page.getByTestId('hero-queue-chip-f')).toContainText('失败 1', { timeout: 15_000 });
+    await expect(page.getByTestId('hero-queue-retry')).toBeVisible();
+
+    await page.getByTestId('hero-queue-retry').click();
+    await waitForQueueIdle(page);
+
+    await openTodayFolder(page);
+    await expect(page.getByTestId('file-list').locator('button').filter({ hasText: retryPhrase })).toBeVisible();
+    await deleteByFile(request, baseFolder, retryPhrase);
   });
 });

@@ -342,6 +342,9 @@
   - 页面级 smoke：`Mission Control / Knowledge OPS / Knowledge Hub`
   - `Knowledge OPS` 任务启动 / 取消
   - OCR fixture 上传、清洗与输入框回填
+  - 共享队列页面重载回源
+  - 失败任务重试后成功
+  - `Mission Control` 共享队列失败/重试状态同步
   - 低频真实 Gemini 验收脚本（默认 skip）
     - 文本输入真实生成
     - `TRAIN regenerate` 验收
