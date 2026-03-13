@@ -195,6 +195,8 @@ test.describe.serial('Playwright smoke', () => {
     await expect(page.getByTestId('hero-queue-chip-f')).toContainText('失败 1', { timeout: 15_000 });
     await expect(page.getByTestId('hero-queue-retry')).toBeVisible();
     await page.getByTestId('hero-queue-state').click();
+    await page.getByTestId('queue-task-item').first().click();
+    await expect(page.getByTestId('queue-audit-focus')).toContainText('__E2E_FAIL_ONCE__ PW');
     await expect(page.getByTestId('queue-audit-timeline')).toContainText('FAILED');
 
     await page.getByTestId('hero-queue-retry').click();

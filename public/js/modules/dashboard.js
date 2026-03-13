@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const state = {
     days: 30,
     queueTimerId: null,
+    selectedQueueJobId: null,
     knowledgeTimerId: null,
     selectedKnowledgeJobId: null,
     knowledgeJobs: [],
@@ -292,7 +293,8 @@ function buildQueueSnapshotFromServer(summary = {}, jobs = []) {
 }
 
 function resolveQueueFocusTask(summary = {}, jobs = []) {
-    return summary.activeJob
+    return jobs.find((job) => Number(job.id) === Number(state.selectedQueueJobId))
+        || summary.activeJob
         || jobs.find((job) => String(job.status || '').toLowerCase() === 'running')
         || jobs.find((job) => String(job.status || '').toLowerCase() === 'failed')
         || jobs[0]
@@ -330,6 +332,7 @@ async function refreshQueueTelemetry() {
         api.listGenerationJobs(20)
     ]);
     const focusJob = resolveQueueFocusTask(summaryRes.summary || {}, jobsRes.jobs || []);
+    state.selectedQueueJobId = focusJob?.id ? Number(focusJob.id) : null;
     const eventsRes = focusJob?.id
         ? await api.getGenerationJobEvents(focusJob.id, 12).catch(() => ({ events: [] }))
         : { events: [] };
@@ -391,7 +394,7 @@ function renderTaskQueueDetails(snapshot) {
         </div>
         <div class="queue-recent-list" data-testid="mission-queue-recent-list">
             ${recentTasks.length ? recentTasks.map((task) => `
-                <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}" data-testid="mission-queue-recent-item">
+                <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}${Number(task.id || 0) === Number(state.selectedQueueJobId) ? ' is-selected' : ''}" data-job-id="${Number(task.id || 0)}" data-testid="mission-queue-recent-item">
                     <div class="queue-recent-head">
                         <span class="qid">#${Number(task.seq || 0)}</span>
                         <span class="qstatus" data-testid="mission-queue-recent-status">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
@@ -406,7 +409,7 @@ function renderTaskQueueDetails(snapshot) {
         <div class="queue-audit" data-testid="mission-queue-audit">
             <div class="queue-audit-head">
                 <span class="queue-audit-title">Audit Timeline</span>
-                <span class="queue-audit-focus">${auditFocusJob ? `#${Number(auditFocusJob.seq || auditFocusJob.id || 0)} · ${escapeHtml(auditFocusJob.phrase || '-')}` : 'No Focus Job'}</span>
+                <span class="queue-audit-focus" data-testid="mission-queue-audit-focus">${auditFocusJob ? `#${Number(auditFocusJob.seq || auditFocusJob.id || 0)} · ${escapeHtml(auditFocusJob.phrase || '-')}` : 'No Focus Job'}</span>
             </div>
             <div class="queue-audit-list">
                 ${auditEvents.length ? auditEvents.map((event) => `
@@ -421,6 +424,17 @@ function renderTaskQueueDetails(snapshot) {
             </div>
         </div>
     `;
+
+    container.onclick = async (event) => {
+        const item = event.target.closest('[data-testid="mission-queue-recent-item"]');
+        if (!item) return;
+        const jobId = Number(item.dataset.jobId || 0);
+        if (!jobId) return;
+        state.selectedQueueJobId = jobId;
+        await refreshQueueTelemetry().catch((err) => {
+            console.warn('[Dashboard] queue focus switch failed:', err.message);
+        });
+    };
 }
 
 function formatQueueTime(value) {

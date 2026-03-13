@@ -1841,7 +1841,8 @@ function applyServerQueueState(summary = {}, jobs = []) {
 }
 
 function resolveQueueTimelineTask(tasks = []) {
-    return tasks.find((task) => task.status === 'running')
+    return tasks.find((task) => String(task.id) === String(generationQueueState.timelineJobId))
+        || tasks.find((task) => task.status === 'running')
         || tasks.find((task) => task.status === 'failed')
         || tasks[0]
         || null;
@@ -1853,7 +1854,8 @@ async function syncGenerationQueueFromServer() {
         api.listGenerationJobs(40)
     ]);
     const tasks = Array.isArray(jobsRes.jobs) ? jobsRes.jobs.map((job) => mapGenerationJobToQueueTask(job)) : [];
-    const focusTask = resolveQueueTimelineTask(tasks);
+    const preferredTask = tasks.find((task) => String(task.id) === String(generationQueueState.timelineJobId)) || null;
+    const focusTask = preferredTask || resolveQueueTimelineTask(tasks);
     const eventsRes = focusTask?.id
         ? await api.getGenerationJobEvents(focusTask.id, 12).catch(() => ({ events: [] }))
         : { events: [] };
@@ -1950,6 +1952,17 @@ function initGenerationQueuePanel() {
         generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
     };
 
+    generationQueueState.listEl.addEventListener('click', async (event) => {
+        const item = event.target.closest('.gen-queue-item');
+        if (!item) return;
+        const jobId = String(item.dataset.jobId || '').trim();
+        if (!jobId) return;
+        generationQueueState.timelineJobId = jobId;
+        await syncGenerationQueueFromServer().catch((err) => {
+            console.warn('[Queue] timeline switch failed:', err.message);
+        });
+    });
+
     if (els.heroTaskQueueStatus) {
         els.heroTaskQueueStatus.onclick = () => {
             panel.classList.remove('hidden');
@@ -2020,7 +2033,7 @@ function renderQueueAuditTimeline() {
     container.innerHTML = `
       <div class="gen-queue-events-head">
         <span class="gen-queue-events-title">审计时间线</span>
-        <span class="gen-queue-events-focus">#${focusTask.seq} ${escapeHtml(truncateQueuePhrase(focusTask.phraseNormalized, 22))}</span>
+        <span class="gen-queue-events-focus" data-testid="queue-audit-focus">#${focusTask.seq} ${escapeHtml(truncateQueuePhrase(focusTask.phraseNormalized, 22))}</span>
       </div>
       <div class="gen-queue-events-list">
         ${events.map((event) => `
@@ -2190,11 +2203,12 @@ function renderGenerationQueuePanel() {
             }[task.status] || task.status.toUpperCase();
             const cardType = normalizeCardType(task.cardType || 'trilingual');
             const cardTypeLabel = cardType === 'grammar_ja' ? '语法' : '三语';
+            const selected = String(task.id) === String(generationQueueState.timelineJobId) ? ' is-selected' : '';
 
             const cls = `status-${task.status}`;
             const errorText = task.error ? `<div class="gen-queue-item-error">${escapeHtml(task.error)}</div>` : '';
             return `
-              <div class="gen-queue-item ${cls}">
+              <div class="gen-queue-item ${cls}${selected}" data-job-id="${escapeHtml(String(task.id))}" data-testid="queue-task-item">
                 <div class="gen-queue-item-head">
                   <span class="gen-queue-item-id">#${task.seq}</span>
                   <span class="gen-queue-item-status">${statusLabel}</span>

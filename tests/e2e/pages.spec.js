@@ -57,6 +57,7 @@ test.describe('Playwright page smoke', () => {
 
   test('06 Mission Control 可展示共享队列失败与重试结果', async ({ page, request }) => {
     const phrase = `__E2E_FAIL_ONCE__ PW mission retry ${Date.now()}`;
+    const phrase2 = `PW mission second ${Date.now()}`;
     const enqueueRes = await request.post('/api/generation-jobs', {
       data: {
         phrase,
@@ -86,19 +87,40 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('SUCCESS');
     await expect(page.getByTestId('mission-queue-audit')).toContainText('SUCCESS');
 
+    const secondRes = await request.post('/api/generation-jobs', {
+      data: {
+        phrase: phrase2,
+        llm_provider: 'gemini',
+        enable_compare: false,
+        card_type: 'trilingual',
+        source_mode: 'input'
+      }
+    });
+    expect(secondRes.ok()).toBeTruthy();
+
+    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase2, { timeout: 15_000 });
+    const firstItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: phrase }).first();
+    const secondItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: phrase2 }).first();
+
+    await firstItem.click();
+    await expect(page.getByTestId('mission-queue-audit-focus')).toContainText(phrase);
+
+    await secondItem.click();
+    await expect(page.getByTestId('mission-queue-audit-focus')).toContainText(phrase2);
+
     const jobsRes = await request.get('/api/generation-jobs?limit=10');
     expect(jobsRes.ok()).toBeTruthy();
     const jobsJson = await jobsRes.json();
-    const latestJob = Array.isArray(jobsJson?.jobs)
-      ? jobsJson.jobs.find((job) => Number(job.id) === jobId)
-      : null;
-    const resultFolder = String(latestJob?.resultFolder || '').trim();
-    const resultBase = String(latestJob?.resultBaseFilename || '').trim();
-    expect(resultFolder).not.toBe('');
-    expect(resultBase).not.toBe('');
-
-    const deleteRes = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(resultFolder)}&base=${encodeURIComponent(resultBase)}`);
-    expect(deleteRes.ok()).toBeTruthy();
+    const jobs = Array.isArray(jobsJson?.jobs) ? jobsJson.jobs : [];
+    for (const currentPhrase of [phrase, phrase2]) {
+      const job = jobs.find((item) => String(item.phraseNormalized || '').trim() === currentPhrase);
+      const resultFolder = String(job?.resultFolder || '').trim();
+      const resultBase = String(job?.resultBaseFilename || '').trim();
+      expect(resultFolder).not.toBe('');
+      expect(resultBase).not.toBe('');
+      const deleteRes = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(resultFolder)}&base=${encodeURIComponent(resultBase)}`);
+      expect(deleteRes.ok()).toBeTruthy();
+    }
 
     const clearRes = await request.post('/api/generation-jobs/clear-done');
     expect(clearRes.ok()).toBeTruthy();

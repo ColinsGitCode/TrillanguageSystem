@@ -81,6 +81,7 @@
 - `viewer` 启动时会将残留 `running` 任务恢复为 `queued`，由内置 worker 串行继续执行
 - `localStorage:generation_queue_snapshot_v1` 现在仅保留最近任务镜像，不再是事实来源，也不再承担本地恢复
 - 主页面队列面板与 Mission Control 已展示 `generation_job_events` 审计时间线，可直接定位任务创建、领取、失败、重试、成功节点
+- 支持点击队列任务切换审计焦点，便于对单任务做逐步排障
 
 ### 3.7 文本选取静默队列生成（v3.5）
 
