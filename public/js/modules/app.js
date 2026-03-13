@@ -1772,7 +1772,14 @@ async function loadCardTrainingPanel({ container, markdown, title, cardType, gen
 function parseQueueTimestamp(value) {
     if (!value) return 0;
     if (typeof value === 'number') return value;
-    const parsed = Date.parse(value);
+    const text = String(value).trim();
+    if (!text) return 0;
+
+    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(text)
+        ? `${text.replace(' ', 'T')}Z`
+        : text;
+
+    const parsed = Date.parse(normalized);
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
