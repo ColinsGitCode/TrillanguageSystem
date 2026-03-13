@@ -2957,6 +2957,48 @@ h1 {
   margin-bottom: 8px;
 }
 
+.queue-job-modal-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.queue-job-modal-section-title,
+.queue-job-modal-error-title {
+  margin-bottom: 0;
+}
+
+.queue-job-modal-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-job-modal-copy-btn {
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-ink-dim);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 5px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.queue-job-modal-copy-btn:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  color: var(--color-accent);
+}
+
+.queue-job-modal-copy-btn.is-copied {
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #047857;
+  background: rgba(236, 253, 245, 0.96);
+}
+
 .queue-job-modal-error-text {
   font-size: 12px;
   line-height: 1.55;
@@ -3031,6 +3073,13 @@ h1 {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 6px;
+}
+
+.queue-job-modal-event-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .queue-job-modal-event-type {

@@ -74,6 +74,7 @@
 - 主页面队列面板与 Mission Control 已接入 `generation_job_events` 审计时间线，可直接查看 `created/picked/failed/retry/succeeded` 流转
 - 点击任一共享队列任务项，可切换当前时间线焦点到该任务
 - 主页面与 Mission Control 已支持单任务详情弹层，可查看完整 payload、错误详情、结果摘要与事件 payload
+- 详情弹层已补复制能力，便于直接复制 request / error / result / events JSON 做排障与汇报
 
 ### 2.2.3 文本选取即时生成（v3.5 新增）
 

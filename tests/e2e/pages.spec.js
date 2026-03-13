@@ -83,6 +83,8 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('queue-job-detail-request')).toContainText(phrase);
     await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
     await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('FAILED');
+    await expect(page.getByTestId('queue-job-copy-request')).toBeVisible();
+    await expect(page.getByTestId('queue-job-copy-error')).toBeVisible();
     await page.getByTestId('queue-job-detail-close').click();
     await expect(page.getByTestId('queue-job-detail-modal')).toBeHidden();
 
@@ -118,6 +120,8 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
     await expect(page.getByTestId('queue-job-detail-result')).toContainText('generationId');
     await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('SUCCESS');
+    await expect(page.getByTestId('queue-job-copy-result')).toBeVisible();
+    await expect(page.getByTestId('queue-job-copy-events')).toBeVisible();
     await page.getByTestId('queue-job-detail-close').click();
 
     const jobsRes = await request.get('/api/generation-jobs?limit=10');

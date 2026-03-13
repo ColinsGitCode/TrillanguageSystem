@@ -202,6 +202,9 @@ test.describe.serial('Playwright smoke', () => {
     await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
     await expect(page.getByTestId('queue-job-detail-request')).toContainText(retryPhrase);
     await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
+    await expect(page.getByTestId('queue-job-copy-request')).toBeVisible();
+    await expect(page.getByTestId('queue-job-copy-error')).toBeVisible();
+    await expect(page.getByTestId('queue-job-copy-events')).toBeVisible();
     await page.getByTestId('queue-job-detail-close').click();
 
     await page.getByTestId('hero-queue-retry').click();

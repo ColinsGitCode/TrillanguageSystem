@@ -5,6 +5,7 @@ let cardEl = null;
 let closeBtnEl = null;
 let bodyEl = null;
 let escapeBound = false;
+let currentDetail = { job: null, events: [] };
 
 function parseQueueTimestamp(value) {
     if (!value) return 0;
@@ -66,13 +67,76 @@ function renderMetaItem(label, value) {
     `;
 }
 
-function renderSection(title, bodyHtml, testId = '') {
+function renderCopyButton(action, key, label, testId = '') {
+    return `
+        <button
+            type="button"
+            class="queue-job-modal-copy-btn"
+            data-action="${escapeHtml(action)}"
+            data-copy-key="${escapeHtml(key)}"
+            ${testId ? `data-testid="${escapeHtml(testId)}"` : ''}
+        >${escapeHtml(label)}</button>
+    `;
+}
+
+function renderSection(title, bodyHtml, testId = '', extraActionsHtml = '') {
     return `
         <section class="queue-job-modal-section"${testId ? ` data-testid="${escapeHtml(testId)}"` : ''}>
-            <div class="queue-job-modal-section-title">${escapeHtml(title)}</div>
+            <div class="queue-job-modal-section-head">
+                <div class="queue-job-modal-section-title">${escapeHtml(title)}</div>
+                <div class="queue-job-modal-section-actions">${extraActionsHtml}</div>
+            </div>
             ${bodyHtml}
         </section>
     `;
+}
+
+async function copyText(text) {
+    const normalized = String(text || '');
+    if (!normalized) return false;
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(normalized);
+        return true;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = normalized;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+}
+
+function markCopied(button) {
+    if (!button) return;
+    const original = button.dataset.copyLabel || button.textContent || '复制';
+    button.dataset.copyLabel = original;
+    button.textContent = '已复制';
+    button.classList.add('is-copied');
+    clearTimeout(button.__copyTimerId);
+    button.__copyTimerId = setTimeout(() => {
+        button.textContent = original;
+        button.classList.remove('is-copied');
+    }, 1200);
+}
+
+function resolveCopyPayload(button) {
+    const key = String(button?.dataset.copyKey || '').trim();
+    if (!key) return '';
+    if (key === 'error') return String(currentDetail.job?.errorMessage || '');
+    if (key === 'request') return stringifyJson(currentDetail.job?.requestPayload || {});
+    if (key === 'sourceContext') return stringifyJson(currentDetail.job?.sourceContext || {});
+    if (key === 'result') return stringifyJson(currentDetail.job?.resultSummary || {});
+    if (key === 'events') return stringifyJson(currentDetail.events || []);
+    if (key.startsWith('event:')) {
+        const eventId = Number(key.slice('event:'.length));
+        const event = (currentDetail.events || []).find((item) => Number(item.id || 0) === eventId);
+        return stringifyJson(event?.payload || {});
+    }
+    return '';
 }
 
 function ensureModal() {
@@ -103,6 +167,19 @@ function ensureModal() {
     overlayEl.addEventListener('click', (event) => {
         if (event.target === overlayEl) closeGenerationJobDetailModal();
     });
+    cardEl.addEventListener('click', async (event) => {
+        const copyBtn = event.target.closest('[data-action="copy-json"]');
+        if (!copyBtn) return;
+        event.preventDefault();
+        const payload = resolveCopyPayload(copyBtn);
+        if (!payload) return;
+        try {
+            const copied = await copyText(payload);
+            if (copied) markCopied(copyBtn);
+        } catch (_) {
+            // noop
+        }
+    });
     if (!escapeBound) {
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && overlayEl && !overlayEl.classList.contains('hidden')) {
@@ -116,12 +193,18 @@ function ensureModal() {
 function renderGenerationJobDetail(data = {}) {
     const job = data.job || {};
     const events = Array.isArray(data.events) ? data.events : [];
+    currentDetail = { job, events };
     const cardTypeLabel = String(job.jobType || '').toLowerCase() === 'grammar_ja' ? '语法卡' : '三语卡';
     const statusText = String(job.status || '-').toUpperCase();
     const errorHtml = job.errorMessage
         ? `
             <div class="queue-job-modal-error" data-testid="queue-job-detail-error">
-                <div class="queue-job-modal-error-title">错误详情</div>
+                <div class="queue-job-modal-section-head">
+                    <div class="queue-job-modal-error-title">错误详情</div>
+                    <div class="queue-job-modal-section-actions">
+                        ${renderCopyButton('copy-json', 'error', '复制错误', 'queue-job-copy-error')}
+                    </div>
+                </div>
                 <div class="queue-job-modal-error-text">${escapeHtml(job.errorMessage)}</div>
             </div>
         `
@@ -155,8 +238,11 @@ function renderGenerationJobDetail(data = {}) {
                 ${events.map((event) => `
                     <div class="queue-job-modal-event">
                         <div class="queue-job-modal-event-head">
-                            <span class="queue-job-modal-event-type">${escapeHtml(getQueueEventLabel(event.eventType))}</span>
-                            <span class="queue-job-modal-event-time">${escapeHtml(formatQueueDate(event.createdAt))}</span>
+                            <div class="queue-job-modal-event-head-main">
+                                <span class="queue-job-modal-event-type">${escapeHtml(getQueueEventLabel(event.eventType))}</span>
+                                <span class="queue-job-modal-event-time">${escapeHtml(formatQueueDate(event.createdAt))}</span>
+                            </div>
+                            ${renderCopyButton('copy-json', `event:${Number(event.id || 0)}`, '复制事件JSON')}
                         </div>
                         <div class="queue-job-modal-event-note">${escapeHtml(buildQueueEventNote(event) || '-')}</div>
                         <pre class="queue-job-modal-pre is-compact">${escapeHtml(stringifyJson(event.payload || {}))}</pre>
@@ -173,10 +259,10 @@ function renderGenerationJobDetail(data = {}) {
         </div>
         ${errorHtml}
         ${renderSection('任务元信息', metaHtml, 'queue-job-detail-meta')}
-        ${renderSection('请求 Payload', requestPayloadHtml, 'queue-job-detail-request')}
-        ${renderSection('Source Context', sourceContextHtml, 'queue-job-detail-source-context')}
-        ${renderSection('结果摘要', resultSummaryHtml, 'queue-job-detail-result')}
-        ${renderSection('审计事件', eventsHtml, 'queue-job-detail-event-section')}
+        ${renderSection('请求 Payload', requestPayloadHtml, 'queue-job-detail-request', renderCopyButton('copy-json', 'request', '复制 Payload', 'queue-job-copy-request'))}
+        ${renderSection('Source Context', sourceContextHtml, 'queue-job-detail-source-context', renderCopyButton('copy-json', 'sourceContext', '复制 Context', 'queue-job-copy-source-context'))}
+        ${renderSection('结果摘要', resultSummaryHtml, 'queue-job-detail-result', renderCopyButton('copy-json', 'result', '复制结果', 'queue-job-copy-result'))}
+        ${renderSection('审计事件', eventsHtml, 'queue-job-detail-event-section', renderCopyButton('copy-json', 'events', '复制全部事件', 'queue-job-copy-events'))}
     `;
 }
 
