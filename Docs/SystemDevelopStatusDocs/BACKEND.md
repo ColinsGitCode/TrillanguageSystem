@@ -62,6 +62,8 @@ scripts/
 3. 构建 baseline prompt +（可选）few-shot 注入
 4. 调用 `local` 或 `gemini`（含自动 fallback）
 5. 后处理与校验（结构、注音、markdown/html）
+   - 全局将 `漢字(かな)` 显式写法转换为 `<ruby>`
+   - 纯片假名外来词 / 外来语缩写不注音
 6. 生成音频任务并调用 TTS
 7. 保存文件（md/html/meta/audio）
 8. 写入数据库：

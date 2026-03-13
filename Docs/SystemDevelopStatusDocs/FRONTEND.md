@@ -87,6 +87,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 输入区新增卡片类型选择器（`🧩 三语卡片` / `📘 日语语法`）
 - 语法卡弹窗头部标识为 `JA GRAMMAR`
 - 内容页显示 `CARD TYPE · 语法卡片`
+- 中文说明区中的日语词形说明（如 `飛(と)ぶ`）会显示为 `<ruby>` 注音
 - 与三语卡共享：删除、INTEL、REVIEW、队列、历史与可观测能力
 
 ### 3.1.1 外来语标注展示（v3.4 新增）
@@ -95,6 +96,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 标签与内容分行：
   - 第一行：`外来语标注`
   - 第二行：`English → カタカナ` tag 列表
+- 日语正文中的纯片假名外来词与外来语缩写不再显示注音
 - 兼容旧卡片：
   - 弹窗渲染路径会在前端运行时规范化旧格式（`normalizeLoanwordAnnotations`）
   - 历史文件可通过迁移脚本离线回填为新格式
