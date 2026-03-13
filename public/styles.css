@@ -1270,6 +1270,21 @@ h1 {
   margin-bottom: 0.35rem;
 }
 
+.ocr-preview-meta {
+  margin-bottom: 0.35rem;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.ocr-preview-meta.is-changed {
+  color: #1d4ed8;
+}
+
+.ocr-preview-meta.is-warning {
+  color: #b45309;
+}
+
 .ocr-preview-title {
   font-size: 11px;
   color: var(--muted);

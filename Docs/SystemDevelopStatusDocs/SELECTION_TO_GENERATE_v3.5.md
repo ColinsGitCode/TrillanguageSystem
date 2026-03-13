@@ -1,4 +1,4 @@
-# 文本选取与主输入即时生成（静默队列版）
+# 文本选取与主输入即时生成（共享队列版）
 
 **版本**: v3.6
 **日期**: 2026-03-02
@@ -13,7 +13,7 @@
 
 并将首页主输入 `Generate` 入口升级为**静默入队**：
 
-- 点击后任务直接进入后台生成队列
+- 点击后任务直接写入服务端共享队列 `generation_jobs`
 - 不关闭当前卡片弹窗
 - 不跳转页面、不打断阅读
 
@@ -34,7 +34,7 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
         ↓
 输入文本直接加入同一后台任务队列（queued）
         ↓
-队列串行执行（running -> success/failed）
+viewer 内置 worker 串行执行（running -> success/failed）
         ↓
 列表静默刷新（保持当前目录与当前卡片阅读上下文）
 ```
@@ -52,9 +52,9 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
 | `buildSelectionCandidateFromContainer(container)` | `public/js/modules/app.js` | 从选区构建可入队文本（含 Ruby-aware 处理） |
 | `collectVisibleSelectionText(node, pieces)` | `public/js/modules/app.js` | 遍历 DOM 片段，过滤 UI 噪音节点与注音节点 |
 | `normalizeSelectionPhrase(text)` | `public/js/modules/app.js` | 归一化短语（空白/标点/前缀清洗） |
-| `enqueueBackgroundGenerationTask(...)` | `public/js/modules/app.js` | 入队（去重、队列上限；选区与主输入共用） |
-| `processGenerationQueue()` | `public/js/modules/app.js` | 串行调度执行器（并发=1） |
-| `runGenerationTaskFromQueue(task)` | `public/js/modules/app.js` | 调用 `api.generate()` 完成单任务生成 |
+| `enqueueBackgroundGenerationTask(...)` | `public/js/modules/app.js` | 调用 `POST /api/generation-jobs` 写入共享队列 |
+| `syncGenerationQueueFromServer()` | `public/js/modules/app.js` | 轮询共享队列摘要与任务列表 |
+| `services/generationJobService.js` | `services/generationJobService.js` | viewer 内置单 worker，串行执行共享队列 |
 
 ### 2.5 类型化任务（v3.6）
 
@@ -77,6 +77,10 @@ Ruby-aware 选区归一化（剔除 <rt>/<rp> 注音）
 - 任务状态：`queued / running / success / failed`
 - 默认重试：2 次（指数退避）
 - 支持手动“重试失败任务”与“清理已完成任务”
+- 浏览器仅负责入队与展示；事实来源是 SQLite：
+  - `generation_jobs`
+  - `generation_job_events`
+- `localStorage:generation_queue_snapshot_v1` 仅保留最近任务镜像，供 UI 快速回显，不再承担恢复职责
 
 ### 2.4 非打断式保证
 
@@ -108,27 +112,31 @@ renderCardModal()
         └── click(FAB)
               -> buildSelectionCandidateFromContainer()
               -> enqueueBackgroundGenerationTask()
-              -> processGenerationQueue()
-                    -> runGenerationTaskFromQueue()
-                         -> api.generate(...)
-                    -> scheduleQueueFolderRefresh()
+                    -> POST /api/generation-jobs
+viewer worker
+  └── pick queued job
+        -> api.generate(...)
+        -> scheduleQueueFolderRefresh()
 ```
 
 ## 5. 修改文件清单
 
 | 文件 | 改动类型 |
 |------|----------|
-| `public/js/modules/app.js` | 选区入队逻辑、Ruby-aware 提取、静默队列执行器、队列面板渲染 |
-| `public/js/modules/api.js` | `generate()` 支持扩展参数（`target_folder` 等） |
+| `public/js/modules/app.js` | 选区入队逻辑、Ruby-aware 提取、共享队列轮询、队列面板渲染 |
+| `public/js/modules/api.js` | `createGenerationJob()/listGenerationJobs()/getGenerationJobSummary()` 等共享队列接口 |
+| `services/generationJobService.js` | 共享队列 worker 与任务状态流转 |
+| `database/schema.sql` | `generation_jobs / generation_job_events` |
 | `public/styles.css` | 新增任务队列面板样式与状态样式 |
 
 ## 6. 验收要点
 
-1. 连续点击 `✦ Generate Card` 多次后，任务按顺序串行执行。
+1. 连续点击 `✦ Generate Card` 多次后，所有浏览器看到同一份队列状态。
 2. 首页主输入可连续输入并连续点击 `Generate`，任务按顺序执行。
 3. 执行期间当前卡片不关闭、不跳转。
 4. 日语含注音选区生成任务短语不包含注音文本（`rt`）。
 5. 失败任务可重试，成功任务会出现在对应日期目录下。
+6. 页面刷新后会重新拉取共享队列，任务不会因浏览器重载丢失。
 
 ---
 

@@ -28,6 +28,7 @@ const els = {
     ocrPreview: document.getElementById('ocrPreview'),
     ocrPreviewRaw: document.getElementById('ocrPreviewRaw'),
     ocrPreviewClean: document.getElementById('ocrPreviewClean'),
+    ocrPreviewMeta: document.getElementById('ocrPreviewMeta'),
     ocrPreviewTabRaw: document.getElementById('ocrPreviewTabRaw'),
     ocrPreviewTabClean: document.getElementById('ocrPreviewTabClean'),
     
@@ -97,8 +98,7 @@ const generationQueueState = {
     retryFailedBtn: null
 };
 const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
-const QUEUE_SNAPSHOT_VERSION = 2;
-const QUEUE_RESTORABLE_STATUSES = new Set(['queued', 'running', 'failed']);
+const QUEUE_SNAPSHOT_VERSION = 3;
 const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
 const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
 const HIGHLIGHT_SCOPE_CONTENT = 'content';
@@ -1031,7 +1031,7 @@ function initImageHandlers() {
             const fallbackLine = String(data.text || '').replace(/[\r\n]+/g, ' ').trim();
             const cleanedText = normalized.cleaned || fallbackLine;
             els.phraseInput.value = cleanedText;
-            showOcrPreview(String(data.text || ''), cleanedText);
+            showOcrPreview(String(data.text || ''), { ...normalized, cleaned: cleanedText });
             if (normalized.changed) {
                 showGenerationQueueToast('OCR 结果已清洗为单行，可确认后生成');
             }
@@ -1086,10 +1086,16 @@ function setOcrPreviewView(view = 'clean') {
     if (els.ocrPreviewClean) els.ocrPreviewClean.classList.toggle('active', !isRaw);
 }
 
-function showOcrPreview(rawText, cleanedText) {
+function showOcrPreview(rawText, normalized = {}) {
     if (!els.ocrPreview || !els.ocrPreviewRaw || !els.ocrPreviewClean) return;
+    const cleanedText = normalized.cleaned || '';
     els.ocrPreviewRaw.textContent = rawText || '';
     els.ocrPreviewClean.textContent = cleanedText || '';
+    if (els.ocrPreviewMeta) {
+        els.ocrPreviewMeta.textContent = normalized.summary || '已保留原文结构';
+        els.ocrPreviewMeta.classList.toggle('is-changed', Boolean(normalized.changed));
+        els.ocrPreviewMeta.classList.toggle('is-warning', Boolean(normalized.warning));
+    }
     els.ocrPreview.classList.remove('hidden');
     setOcrPreviewView('clean');
 }
@@ -1098,6 +1104,10 @@ function resetOcrPreview() {
     if (!els.ocrPreview || !els.ocrPreviewRaw || !els.ocrPreviewClean) return;
     els.ocrPreviewRaw.textContent = '';
     els.ocrPreviewClean.textContent = '';
+    if (els.ocrPreviewMeta) {
+        els.ocrPreviewMeta.textContent = '';
+        els.ocrPreviewMeta.classList.remove('is-changed', 'is-warning');
+    }
     els.ocrPreview.classList.add('hidden');
     setOcrPreviewView('clean');
 }
@@ -2155,7 +2165,6 @@ function serializeQueueTask(task) {
 
 function persistGenerationQueueSnapshot() {
     const tasks = generationQueueState.tasks || [];
-    const recoverableTasks = tasks.filter((task) => QUEUE_RESTORABLE_STATUSES.has(task.status));
     const summary = {
         total: tasks.length,
         queued: tasks.filter((task) => task.status === 'queued').length,
@@ -2169,10 +2178,8 @@ function persistGenerationQueueSnapshot() {
     const snapshot = {
         version: QUEUE_SNAPSHOT_VERSION,
         updatedAt: Date.now(),
-        running: Boolean(generationQueueState.running),
         summary,
         activeTask: activeTask ? serializeQueueTask(activeTask) : null,
-        recoverableTasks: recoverableTasks.map((task) => serializeQueueTask(task)),
         recentTasks: tasks.slice(-20).map((task) => serializeQueueTask(task))
     };
 
@@ -2181,100 +2188,6 @@ function persistGenerationQueueSnapshot() {
     } catch (err) {
         console.warn('[Queue] persist snapshot failed:', err.message);
     }
-}
-
-function restoreGenerationQueueSnapshot() {
-    // Deprecated: 共享队列启用后不再从浏览器本地快照恢复。
-    let snapshot = null;
-
-    try {
-        snapshot = JSON.parse(localStorage.getItem(QUEUE_SNAPSHOT_STORAGE_KEY) || 'null');
-    } catch (err) {
-        console.warn('[Queue] invalid snapshot:', err.message);
-        localStorage.removeItem(QUEUE_SNAPSHOT_STORAGE_KEY);
-        return;
-    }
-
-    if (!snapshot || typeof snapshot !== 'object') {
-        return;
-    }
-
-    const rawTasks = Array.isArray(snapshot.recoverableTasks)
-        ? snapshot.recoverableTasks
-        : Array.isArray(snapshot.recentTasks)
-            ? snapshot.recentTasks.filter((task) => QUEUE_RESTORABLE_STATUSES.has(String(task?.status || '').toLowerCase()))
-            : [];
-
-    if (!rawTasks.length) {
-        updateHeroTaskQueueStatus();
-        persistGenerationQueueSnapshot();
-        return;
-    }
-
-    const restoredTasks = [];
-    let restoredRunningCount = 0;
-    let maxSeq = generationQueueState.nextSeq - 1;
-
-    rawTasks.forEach((rawTask, index) => {
-        if (!rawTask || typeof rawTask !== 'object') return;
-
-        const rawPhrase = String(rawTask.phraseRaw || rawTask.phrase || '').trim();
-        const phraseNormalized = String(rawTask.phrase || rawTask.phraseNormalized || '').trim();
-        if (!phraseNormalized) return;
-
-        const rawStatus = String(rawTask.status || 'queued').toLowerCase();
-        if (!QUEUE_RESTORABLE_STATUSES.has(rawStatus)) return;
-
-        const seq = Number(rawTask.seq || 0) > 0 ? Number(rawTask.seq) : generationQueueState.nextSeq + index;
-        maxSeq = Math.max(maxSeq, seq);
-
-        const restoredStatus = rawStatus === 'running' ? 'queued' : rawStatus;
-        if (rawStatus === 'running') {
-            restoredRunningCount += 1;
-        }
-
-        const existingError = String(rawTask.error || '').trim();
-        const restoredError = rawStatus === 'running'
-            ? '页面重载后恢复：上次执行状态未知，已重新排队。'
-            : existingError;
-
-        restoredTasks.push({
-            id: String(rawTask.id || `queue_restore_${Date.now()}_${seq}`),
-            seq,
-            phraseRaw: rawPhrase || phraseNormalized,
-            phraseNormalized,
-            source: null,
-            provider: String(rawTask.provider || 'gemini').trim() || 'gemini',
-            enableCompare: Boolean(rawTask.enableCompare),
-            cardType: normalizeCardType(rawTask.cardType || 'trilingual'),
-            sourceMode: String(rawTask.sourceMode || '').trim().toLowerCase() || null,
-            targetFolder: String(rawTask.targetFolder || '').trim(),
-            llmModel: String(rawTask.llmModel || '').trim() || null,
-            status: restoredStatus,
-            attempts: Math.max(0, Number(rawTask.attempts || 0)),
-            error: restoredError,
-            retryAfter: restoredStatus === 'queued' ? Number(rawTask.retryAfter || 0) : 0,
-            createdAt: Number(rawTask.createdAt || Date.now()),
-            startedAt: restoredStatus === 'queued' ? 0 : Number(rawTask.startedAt || 0),
-            finishedAt: Number(rawTask.finishedAt || 0),
-            restoredAt: Date.now()
-        });
-    });
-
-    if (!restoredTasks.length) {
-        updateHeroTaskQueueStatus();
-        persistGenerationQueueSnapshot();
-        return;
-    }
-
-    generationQueueState.tasks = restoredTasks;
-    generationQueueState.running = false;
-    generationQueueState.nextSeq = maxSeq + 1;
-
-    const message = restoredRunningCount > 0
-        ? `已恢复 ${restoredTasks.length} 个未完成任务，其中 ${restoredRunningCount} 个执行中任务已重新排队`
-        : `已恢复 ${restoredTasks.length} 个未完成任务`;
-    showGenerationQueueToast(message);
 }
 
 function hasActiveDuplicateTask(phraseNormalized, cardType = 'trilingual') {
@@ -2380,12 +2293,6 @@ function scheduleQueueFolderRefresh() {
     }, 900);
 }
 
-function processGenerationQueue() {
-    syncGenerationQueueFromServer().catch((err) => {
-        console.warn('[Queue] manual sync failed:', err.message);
-    });
-}
-
 // ==========================================
 // 文本选取 → 入后台任务队列
 // ==========================================
@@ -2422,22 +2329,95 @@ function normalizeTrainingSelectionPhrase(text) {
     return cleaned;
 }
 
+const OCR_NOISE_LINE_RE = /^[\s|¦•◆◇■□●○★☆※_=~\-—–·・]+$/u;
+const OCR_EDGE_NOISE_RE = /^[\s|¦•◆◇■□●○★☆※_=~]+|[\s|¦•◆◇■□●○★☆※_=~]+$/gu;
+const OCR_KANA_CLASS = '\u3040-\u30FFー';
+const OCR_HAN_CLASS = '\u3400-\u9FFF々〆ヵヶ';
+
+function normalizeOcrLine(line) {
+    let cleaned = String(line || '')
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+        .replace(OCR_EDGE_NOISE_RE, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    cleaned = cleaned
+        .replace(/([（(「『【])\s+/g, '$1')
+        .replace(/\s+([）)」』】、。！？：；，．,.!?])/g, '$1')
+        .replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, '$1-$2')
+        .replace(/([:：]){2,}/g, '$1')
+        .replace(/([,，.．。!！?？;；])\1+/g, '$1');
+
+    cleaned = cleaned
+        .replace(new RegExp(`([${OCR_KANA_CLASS}])\\s+(?=[${OCR_KANA_CLASS}])`, 'g'), '$1')
+        .replace(new RegExp(`([${OCR_HAN_CLASS}])\\s+(?=[${OCR_HAN_CLASS}])`, 'g'), '$1')
+        .replace(new RegExp(`([${OCR_HAN_CLASS}])\\s+(?=[${OCR_KANA_CLASS}])`, 'g'), '$1')
+        .replace(new RegExp(`([${OCR_KANA_CLASS}])\\s+(?=[${OCR_HAN_CLASS}])`, 'g'), '$1');
+
+    return cleaned.trim();
+}
+
+function buildOcrCleanSummary(flags = {}) {
+    const notes = [];
+    if (flags.normalizedUnicode) notes.push('字符归一化');
+    if (flags.flattenedLines) notes.push('单行化');
+    if (flags.removedInvisible) notes.push('移除不可见字符');
+    if (flags.removedNoise) notes.push('清理噪声符号');
+    if (flags.compactedSpaces) notes.push('压缩空格');
+
+    if (!notes.length) {
+        return '未检测到明显 OCR 噪声，已保留原文结构';
+    }
+
+    return `已清洗：${notes.join(' / ')}`;
+}
+
 function normalizeOcrTextForInput(text) {
     const raw = String(text || '');
-    if (!raw.trim()) return { cleaned: '', changed: false };
+    if (!raw.trim()) {
+        return { cleaned: '', changed: false, summary: '未识别到可用文字', warning: false };
+    }
 
-    let cleaned = raw
-        .replace(/[\r\n]+/g, ' ')
-        .replace(/[\u200B-\u200D\uFEFF]/g, ' ')
-        .replace(/[|¦•◆◇■□●○★☆※]/g, ' ')
-        .replace(/[^\p{L}\p{N}\p{M}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Latin}\p{P}\p{Zs}]/gu, ' ');
+    const unicodeNormalized = raw.normalize('NFKC');
+    const flags = {
+        normalizedUnicode: unicodeNormalized !== raw,
+        flattenedLines: /[\r\n]/.test(raw),
+        removedInvisible: /[\u200B-\u200D\uFEFF\u2060]/.test(unicodeNormalized),
+        removedNoise: /[|¦•◆◇■□●○★☆※_=~]/u.test(unicodeNormalized),
+        compactedSpaces: /[ \t]{2,}/.test(unicodeNormalized)
+            || new RegExp(`([${OCR_HAN_CLASS}${OCR_KANA_CLASS}])\\s+([${OCR_HAN_CLASS}${OCR_KANA_CLASS}])`, 'u').test(unicodeNormalized)
+    };
 
+    let cleaned = unicodeNormalized
+        .replace(/\r\n?/g, '\n')
+        .replace(/[\u200B-\u200D\uFEFF\u2060]/g, '')
+        .replace(/[^\S\n]+/g, ' ');
+
+    const lines = cleaned
+        .split('\n')
+        .map((line) => normalizeOcrLine(line))
+        .filter((line) => line && !OCR_NOISE_LINE_RE.test(line));
+
+    cleaned = lines.join(' ');
+    cleaned = cleaned
+        .replace(/[|¦•◆◇■□●○★☆※_=~]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
     cleaned = normalizeSelectionPhrase(cleaned);
-    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+    cleaned = cleaned
+        .replace(new RegExp(`([${OCR_KANA_CLASS}])\\s+(?=[${OCR_KANA_CLASS}])`, 'g'), '$1')
+        .replace(new RegExp(`([${OCR_HAN_CLASS}])\\s+(?=[${OCR_HAN_CLASS}])`, 'g'), '$1')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    const warning = lines.length >= 4 || cleaned.length >= 120;
+    const summary = buildOcrCleanSummary(flags) + (warning ? '；识别结果较长，建议生成前人工确认。' : '');
 
     return {
         cleaned,
-        changed: cleaned !== raw.trim()
+        changed: cleaned !== raw.trim(),
+        summary,
+        warning
     };
 }
 

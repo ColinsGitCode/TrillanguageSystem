@@ -55,6 +55,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 生成区进一步紧凑化：模型选择与卡片类型并排显示，输入区高度收缩，为 Date 区让出可视面积
 - 日期目录展示改为习惯格式：`YYYY.MM.DD`（显示层），内部目录键仍保留 `YYYYMMDD`
 - OCR 结果支持“原文/清洗后”双视图预览，默认展示清洗后单行文本用于生成前确认
+  - 清洗规则包含：NFKC 归一化、零宽字符移除、多行转单行、OCR 噪声符号清理、中日文断裂空格收紧
 
 ## 3. 卡片弹窗（Viewer Modal）
 
@@ -198,7 +199,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
 - 顶部 Header 常驻任务队列缩略状态条：运行中/等待中/空闲（Task Queue Idle）一目了然
   - 运行中新增实时计时器（`mm:ss`），显示当前任务已执行时长
-  - `generation_queue_snapshot_v1` 现在仅作为 UI 镜像缓存；事实来源已切到服务端 `generation_jobs`
+  - `generation_queue_snapshot_v1` 现在仅保留最近任务镜像；事实来源已切到服务端 `generation_jobs`，不再承担本地恢复
 - 学习卡片弹窗整体下调，避免遮挡顶部任务队列状态条
 - 字体体系（2026-03-03）：
   - `styles.css` 与 `modern-card.css` 统一字体变量：`--font-ui / --font-ja / --font-display / --font-mono`

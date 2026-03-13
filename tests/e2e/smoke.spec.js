@@ -157,67 +157,23 @@ test.describe.serial('Playwright smoke', () => {
     }
   });
 
-  test('07 页面重载后恢复未完成队列并继续执行', async ({ page, request }) => {
+  test('07 页面重载后回源共享队列并继续执行', async ({ page, request }) => {
     await page.goto('/');
-    const restoreSnapshot = {
-      version: 2,
-      updatedAt: Date.now(),
-      running: false,
-      summary: {
-        total: 2,
-        queued: 1,
-        running: 1,
-        success: 0,
-        failed: 0,
-        cancelled: 0
-      },
-      activeTask: null,
-      recoverableTasks: [
-        {
-          id: 'restore-queued-1',
-          seq: 801,
-          phrase: restoredPhraseA,
-          phraseRaw: restoredPhraseA,
-          status: 'queued',
-          attempts: 0,
-          provider: 'gemini',
-          cardType: 'trilingual',
-          sourceMode: 'input',
-          targetFolder: '',
-          enableCompare: false,
-          llmModel: '',
-          error: '',
-          createdAt: Date.now(),
-          startedAt: 0,
-          finishedAt: 0,
-          retryAfter: 0
-        },
-        {
-          id: 'restore-running-2',
-          seq: 802,
-          phrase: restoredPhraseB,
-          phraseRaw: restoredPhraseB,
-          status: 'running',
-          attempts: 1,
-          provider: 'gemini',
-          cardType: 'grammar_ja',
-          sourceMode: 'selection',
-          targetFolder: '',
-          enableCompare: false,
-          llmModel: '',
-          error: '',
-          createdAt: Date.now(),
-          startedAt: Date.now(),
-          finishedAt: 0,
-          retryAfter: 0
+    const createJob = async (phrase, cardType, sourceMode) => {
+      const res = await request.post('/api/generation-jobs', {
+        data: {
+          phrase,
+          llm_provider: 'gemini',
+          enable_compare: false,
+          card_type: cardType,
+          source_mode: sourceMode
         }
-      ],
-      recentTasks: []
+      });
+      expect(res.ok()).toBeTruthy();
     };
 
-    await page.evaluate((snapshot) => {
-      localStorage.setItem('generation_queue_snapshot_v1', JSON.stringify(snapshot));
-    }, restoreSnapshot);
+    await createJob(restoredPhraseA, 'trilingual', 'input');
+    await createJob(restoredPhraseB, 'grammar_ja', 'selection');
 
     await page.reload();
     await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED/, { timeout: 10_000 });

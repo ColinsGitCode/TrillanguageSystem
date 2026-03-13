@@ -26,6 +26,8 @@
 
 - OCR 支持 `tesseract/local/auto`
 - `auto` 模式下可从 tesseract 回退到 local OCR
+- OCR 结果新增“原文/清洗后”双视图预览，默认使用清洗后的单行文本进入生成输入框
+- OCR 清洗规则覆盖：NFKC 归一化、零宽字符移除、多行转单行、OCR 噪声符号清理、中日文断裂空格收紧
 - 英语与日语例句可批量生成音频并随记录持久化
 
 ### 2.2.4 日语语法卡片（v3.6 新增）
@@ -68,6 +70,7 @@
   - 回收残留 `running` 任务为 `queued`
   - 内置单 worker 串行执行共享队列
 - 主页面与 Mission Control 已改为轮询服务端共享队列，不再依赖浏览器本地快照作为事实来源
+- `localStorage:generation_queue_snapshot_v1` 现在仅保留最近任务镜像，不再承担本地恢复职责
 
 ### 2.2.3 文本选取即时生成（v3.5 新增）
 

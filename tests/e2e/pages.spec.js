@@ -47,6 +47,7 @@ test.describe('Playwright page smoke', () => {
     await page.getByTestId('ocr-btn').click();
 
     await expect(page.getByTestId('ocr-preview')).toBeVisible();
+    await expect(page.getByTestId('ocr-preview-meta')).toContainText('已清洗');
     await expect(page.getByTestId('ocr-preview-clean')).toContainText('Queue state キューに追加する persistent highlight');
 
     await page.getByTestId('ocr-preview-tab-raw').click();
