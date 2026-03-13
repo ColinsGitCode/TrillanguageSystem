@@ -865,5 +865,59 @@ CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id
 CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
 
 -- ========================================
+-- 表 25: generation_jobs（服务端共享生成队列）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS generation_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_type TEXT NOT NULL DEFAULT 'trilingual',    -- trilingual | grammar_ja
+  phrase_raw TEXT,
+  phrase_normalized TEXT NOT NULL,
+  source_mode TEXT,
+  target_folder TEXT,
+  llm_provider TEXT NOT NULL DEFAULT 'gemini',
+  llm_model TEXT,
+  enable_compare INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'queued',          -- queued/running/success/failed/cancelled
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_retries INTEGER NOT NULL DEFAULT 2,
+  error_message TEXT,
+  source_context_json TEXT,
+  created_by_client TEXT,
+  result_generation_id INTEGER,
+  result_folder TEXT,
+  result_base_filename TEXT,
+  request_payload_json TEXT,
+  result_summary_json TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME,
+  finished_at DATETIME,
+  cleared_at DATETIME,
+
+  FOREIGN KEY (result_generation_id) REFERENCES generations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_gj_status_created ON generation_jobs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gj_active_queue ON generation_jobs(cleared_at, status, id ASC);
+CREATE INDEX IF NOT EXISTS idx_gj_result_generation ON generation_jobs(result_generation_id);
+
+-- ========================================
+-- 表 26: generation_job_events（生成队列审计事件）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS generation_job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL,
+  event_type TEXT NOT NULL,                      -- created/picked/retry_scheduled/succeeded/failed/cancelled/cleared/recovered
+  payload_json TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (job_id) REFERENCES generation_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_gje_job_created ON generation_job_events(job_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gje_type_created ON generation_job_events(event_type, created_at DESC);
+
+-- ========================================
 -- 完成初始化
 -- ========================================

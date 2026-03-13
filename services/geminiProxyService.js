@@ -263,6 +263,7 @@ async function runGeminiProxy(prompt, options = {}) {
   const retryOnTimeout = parseBoolean(options.retryOnTimeout ?? process.env.GEMINI_PROXY_RETRY_ON_TIMEOUT, true);
   const retryOnBreakerOpen = parseBoolean(options.retryOnBreakerOpen ?? process.env.GEMINI_PROXY_RETRY_ON_BREAKER_OPEN, true);
   const enforceGateway = parseBoolean(options.enforceGateway ?? process.env.GEMINI_PROXY_ENFORCE_GATEWAY, true);
+  const requireGatewayAuth = parseBoolean(options.requireGatewayAuth ?? process.env.GEMINI_PROXY_REQUIRE_AUTH, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);
   const headers = buildAuthHeaders(options);
 
@@ -270,7 +271,7 @@ async function runGeminiProxy(prompt, options = {}) {
     throw new Error(`Invalid GEMINI_PROXY_URL for unified mode: ${url}. Expected Gateway endpoint on :18888.`);
   }
 
-  if (looksLikeGateway18888(url) && !headers['X-API-Key'] && !headers.Authorization) {
+  if (requireGatewayAuth && looksLikeGateway18888(url) && !headers['X-API-Key'] && !headers.Authorization) {
     throw new Error('Gemini gateway on :18888 requires auth. Set GEMINI_PROXY_API_KEY or GEMINI_PROXY_BEARER_TOKEN');
   }
 

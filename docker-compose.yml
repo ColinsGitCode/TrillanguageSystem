@@ -4,6 +4,7 @@ services:
     build: .
     container_name: trilingual-viewer
     depends_on:
+      - gemini-proxy
       - ocr
       - tts-en
       - tts-ja
@@ -17,8 +18,8 @@ services:
       - OCR_LANGS=eng+jpn+chi_sim
       - OCR_TIMEOUT_MS=20000
       - GEMINI_MODE=host-proxy
-      - GEMINI_PROXY_URL=http://host.docker.internal:18888/api/gemini
-      - GEMINI_PROXY_AUTH_MODE=${GEMINI_PROXY_AUTH_MODE:-apikey}
+      - GEMINI_PROXY_URL=http://gemini-proxy:18888/api/gemini
+      - GEMINI_PROXY_AUTH_MODE=${GEMINI_PROXY_AUTH_MODE:-none}
       - GEMINI_PROXY_API_KEY=${GEMINI_PROXY_API_KEY:-}
       - GEMINI_PROXY_SOURCE_APP=${GEMINI_PROXY_SOURCE_APP:-tri-lang-learning-system}
       - GEMINI_PROXY_SOURCE_ENV=${GEMINI_PROXY_SOURCE_ENV:-prod}
@@ -28,6 +29,7 @@ services:
       - GEMINI_PROXY_EXECUTION_TIMEOUT_MS=${GEMINI_PROXY_EXECUTION_TIMEOUT_MS:-100000}
       - GEMINI_PROXY_PARAM_POLICY=${GEMINI_PROXY_PARAM_POLICY:-strict}
       - GEMINI_PROXY_ENFORCE_GATEWAY=${GEMINI_PROXY_ENFORCE_GATEWAY:-true}
+      - GEMINI_PROXY_REQUIRE_AUTH=${GEMINI_PROXY_REQUIRE_AUTH:-false}
       - TRAINING_PROXY_TIMEOUT_MS=${TRAINING_PROXY_TIMEOUT_MS:-120000}
       - TRAINING_PROXY_EXECUTION_TIMEOUT_MS=${TRAINING_PROXY_EXECUTION_TIMEOUT_MS:-100000}
       - TRAINING_PROXY_RETRIES=${TRAINING_PROXY_RETRIES:-1}
@@ -75,6 +77,19 @@ services:
       - trilingual_records:/data/trilingual_records
       - .:/app
       - /app/node_modules # prevent overwriting container node_modules with host ones
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  gemini-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.gemini-gateway
+    container_name: trilingual-gemini-proxy
+    environment:
+      - GEMINI_GATEWAY_PORT=18888
+      - GEMINI_EXECUTOR_BASE_URL=${GEMINI_EXECUTOR_BASE_URL:-http://host.docker.internal:3210}
+      - GEMINI_GATEWAY_TIMEOUT_MS=${GEMINI_GATEWAY_TIMEOUT_MS:-130000}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

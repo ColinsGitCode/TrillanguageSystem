@@ -1,0 +1,9 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY services/geminiGatewayServer.js /app/services/geminiGatewayServer.js
+
+EXPOSE 18888
+
+CMD ["node", "/app/services/geminiGatewayServer.js"]

@@ -1,8 +1,8 @@
 # 前端架构文档
 
 **项目**: Trilingual Records
-**版本**: 3.7.0
-**更新日期**: 2026-03-05
+**版本**: 3.8.2
+**更新日期**: 2026-03-13
 
 ## 1. 前端目录
 
@@ -41,10 +41,10 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 
 ### 2.1 关键交互
 
-- 点击主输入区 `Generate` 后任务入后台队列，可继续输入并连续点击生成
+- 点击主输入区 `Generate` 后任务写入服务端共享队列，可继续输入并连续点击生成
 - 支持卡片类型切换：`三语卡片` / `日语语法卡片`
 - 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
-- 页面刷新 / 前端重载后，会从 `localStorage` 快照恢复未完成队列；原 `running` 任务会自动转回 `queued` 重新执行
+- 页面刷新 / 前端重载后，会重新拉取服务端共享队列；不同浏览器看到的是同一份队列状态
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - Phrase List 按同日卡片生成时间倒序显示（最新优先）
@@ -76,7 +76,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 自动过滤音频按钮占位符 "▶"，选取超 200 字符时不弹出
 - Ruby-aware 文本提取：忽略 `<rt>/<rp>` 注音，仅保留日语正文入队
 - 仅在 CONTENT tab 内有效，INTEL / REVIEW tab 不触发
-- 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + `processGenerationQueue()` (app.js)
+- 实现：`initSelectionToGenerate()` + `buildSelectionCandidateFromContainer()` + `enqueueBackgroundGenerationTask()` + 服务端队列轮询同步 (app.js)
 - 标红实现（2026-03-03 修复）：弃用 `surroundContents/execCommand` 单路径，改为文本节点切片包裹 `mark`，兼容跨节点选区（含 ruby）
 - 标红持久化（2026-03-03 增强）：
   - 前端本地缓存（`localStorage`）+ 后端数据库双写
@@ -198,7 +198,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 静默任务队列面板：右下角显示待执行/执行中/成功/失败（支持重试失败与清理完成）
 - 顶部 Header 常驻任务队列缩略状态条：运行中/等待中/空闲（Task Queue Idle）一目了然
   - 运行中新增实时计时器（`mm:ss`），显示当前任务已执行时长
-  - 未完成队列会写入 `generation_queue_snapshot_v1`，用于页面重载后的恢复
+  - `generation_queue_snapshot_v1` 现在仅作为 UI 镜像缓存；事实来源已切到服务端 `generation_jobs`
 - 学习卡片弹窗整体下调，避免遮挡顶部任务队列状态条
 - 字体体系（2026-03-03）：
   - `styles.css` 与 `modern-card.css` 统一字体变量：`--font-ui / --font-ja / --font-display / --font-mono`

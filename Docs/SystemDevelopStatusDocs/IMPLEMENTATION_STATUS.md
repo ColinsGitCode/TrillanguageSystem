@@ -1,8 +1,8 @@
 # 实现状态报告
 
-**日期**: 2026-03-10
-**版本**: v3.8.1
-**状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入；Gemini MCP 污染已加固）
+**日期**: 2026-03-13
+**版本**: v3.8.2
+**状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入；Gemini MCP 污染已加固；服务端共享队列与项目内 Gemini Proxy 已进入第一阶段）
 
 ## 1. 当前阶段结论
 
@@ -11,6 +11,8 @@
 - 人工评分/评论与 review-gated 注入机制已落地
 - Knowledge Ops / Knowledge Hub 已从 Mission Control 拆分为独立页面，可同级访问
 - TRAIN 历史资产已全量补齐，当前主要问题已从“缺失/回退”转为“长期质量闭环与后续知识复用”
+- 生成任务队列已切到服务端共享模式，主页面与 Mission Control 读取同一份队列状态
+- Gemini Proxy 已切为“项目内容器 + 本工程宿主机 executor”结构，不再依赖外部共享 Gateway
 
 ## 2. 已完成能力
 
@@ -48,7 +50,26 @@
   - 幂等可重复执行，便于后续运维巡检
   - 2026-03-13 已完成 2026 年 3 月目录回填
 
-### 2.2.2 文本选取即时生成（v3.5 新增）
+### 2.2.2 服务端共享生成队列（v3.8.2 新增）
+
+- 新增数据库表：
+  - `generation_jobs`
+  - `generation_job_events`
+- 新增后端服务：
+  - `services/generationJobService.js`
+- 新增 API：
+  - `POST /api/generation-jobs`
+  - `GET /api/generation-jobs`
+  - `GET /api/generation-jobs/summary`
+  - `POST /api/generation-jobs/:id/retry`
+  - `POST /api/generation-jobs/:id/cancel`
+  - `POST /api/generation-jobs/clear-done`
+- `viewer` 启动后会：
+  - 回收残留 `running` 任务为 `queued`
+  - 内置单 worker 串行执行共享队列
+- 主页面与 Mission Control 已改为轮询服务端共享队列，不再依赖浏览器本地快照作为事实来源
+
+### 2.2.3 文本选取即时生成（v3.5 新增）
 
 - 卡片 CONTENT 区域支持拖选文字后弹出浮动按钮 “✦ Generate Card”
 - 点击按钮不再跳转；任务直接加入后台队列，继续停留在当前卡片页面
@@ -56,10 +77,10 @@
 - 自动过滤音频按钮占位符，限制选取长度 ≤200 字符
 - Ruby-aware 提取：忽略 `<rt>/<rp>` 注音，只将正文日语文本入队
 - 提供轻量队列面板：状态展示 + 失败重试 + 已完成清理
-- 页面刷新 / 前端重载后，未完成队列可从 `generation_queue_snapshot_v1` 快照恢复；原 `running` 任务自动回退为 `queued`
+- 页面刷新 / 前端重载后，未完成任务会重新从服务端队列拉取；浏览器关闭不再导致任务消失
 - 仅作用于 CONTENT tab，INTEL / REVIEW tab 不触发
 
-### 2.2.3 主输入 Generate 队列化（v3.5 增强）
+### 2.2.4 主输入 Generate 队列化（v3.5 增强）
 
 - 主输入区点击 `Generate` 改为“入后台任务队列”，不再占用前台生成状态
 - 支持连续输入与连续点击，任务按队列顺序串行执行

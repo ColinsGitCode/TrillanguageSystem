@@ -218,6 +218,50 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_cta_status ON card_training_assets(status, updated_at DESC);
     `);
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS generation_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_type TEXT NOT NULL DEFAULT 'trilingual',
+        phrase_raw TEXT,
+        phrase_normalized TEXT NOT NULL,
+        source_mode TEXT,
+        target_folder TEXT,
+        llm_provider TEXT NOT NULL DEFAULT 'gemini',
+        llm_model TEXT,
+        enable_compare INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_retries INTEGER NOT NULL DEFAULT 2,
+        error_message TEXT,
+        source_context_json TEXT,
+        created_by_client TEXT,
+        result_generation_id INTEGER,
+        result_folder TEXT,
+        result_base_filename TEXT,
+        request_payload_json TEXT,
+        result_summary_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME,
+        finished_at DATETIME,
+        cleared_at DATETIME,
+        FOREIGN KEY (result_generation_id) REFERENCES generations(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_gj_status_created ON generation_jobs(status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_gj_active_queue ON generation_jobs(cleared_at, status, id ASC);
+      CREATE INDEX IF NOT EXISTS idx_gj_result_generation ON generation_jobs(result_generation_id);
+
+      CREATE TABLE IF NOT EXISTS generation_job_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        payload_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (job_id) REFERENCES generation_jobs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_gje_job_created ON generation_job_events(job_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_gje_type_created ON generation_job_events(event_type, created_at DESC);
+    `);
+
     // knowledge analysis tables: 兼容旧库（schema 18+）
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge_jobs (
@@ -501,12 +545,32 @@ class DatabaseService {
       'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
     ]);
 
+    ensureTableColumns(this.db, 'generation_jobs', [
+      "job_type TEXT NOT NULL DEFAULT 'trilingual'",
+      'phrase_raw TEXT',
+      'source_mode TEXT',
+      'target_folder TEXT',
+      "llm_provider TEXT NOT NULL DEFAULT 'gemini'",
+      'llm_model TEXT',
+      'enable_compare INTEGER DEFAULT 0',
+      'max_retries INTEGER NOT NULL DEFAULT 2',
+      'source_context_json TEXT',
+      'created_by_client TEXT',
+      'result_generation_id INTEGER',
+      'result_folder TEXT',
+      'result_base_filename TEXT',
+      'request_payload_json TEXT',
+      'result_summary_json TEXT',
+      'cleared_at DATETIME'
+    ]);
+
     this.db.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_ksg_pair_schema_hash ON knowledge_synonym_groups(pair_key, schema_version, evidence_hash);
       CREATE INDEX IF NOT EXISTS idx_ksg_pair_active ON knowledge_synonym_groups(pair_key, is_active, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_ksc_job_score ON knowledge_synonym_candidates(job_id, candidate_score DESC);
       CREATE INDEX IF NOT EXISTS idx_ksc_status ON knowledge_synonym_candidates(status, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_ksjm_updated ON knowledge_synonym_jobs_meta(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_gj_phrase_status ON generation_jobs(phrase_normalized, status);
     `);
   }
 
@@ -1826,6 +1890,272 @@ class DatabaseService {
     `).all();
 
     return { byVariant, fallbackReasons, injectionRate, qualityTrend };
+  }
+
+  // ========== Generation jobs ==========
+
+  mapGenerationJobRow(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      jobType: row.job_type || 'trilingual',
+      phraseRaw: row.phrase_raw || row.phrase_normalized,
+      phraseNormalized: row.phrase_normalized,
+      sourceMode: row.source_mode || null,
+      targetFolder: row.target_folder || '',
+      provider: row.llm_provider || 'gemini',
+      llmModel: row.llm_model || '',
+      enableCompare: Number(row.enable_compare || 0) === 1,
+      status: row.status,
+      attempts: Number(row.attempts || 0),
+      maxRetries: Number(row.max_retries || 0),
+      errorMessage: row.error_message || '',
+      sourceContext: safeJsonParse(row.source_context_json, {}),
+      createdByClient: row.created_by_client || '',
+      resultGenerationId: row.result_generation_id ? Number(row.result_generation_id) : null,
+      resultFolder: row.result_folder || '',
+      resultBaseFilename: row.result_base_filename || '',
+      requestPayload: safeJsonParse(row.request_payload_json, {}),
+      resultSummary: safeJsonParse(row.result_summary_json, null),
+      createdAt: row.created_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      clearedAt: row.cleared_at
+    };
+  }
+
+  createGenerationJob(payload = {}) {
+    const stmt = this.db.prepare(`
+      INSERT INTO generation_jobs (
+        job_type, phrase_raw, phrase_normalized, source_mode, target_folder,
+        llm_provider, llm_model, enable_compare, status, attempts, max_retries,
+        source_context_json, created_by_client, request_payload_json
+      ) VALUES (
+        @jobType, @phraseRaw, @phraseNormalized, @sourceMode, @targetFolder,
+        @provider, @llmModel, @enableCompare, 'queued', 0, @maxRetries,
+        @sourceContextJson, @createdByClient, @requestPayloadJson
+      )
+    `);
+
+    const result = stmt.run({
+      jobType: String(payload.jobType || 'trilingual').trim() || 'trilingual',
+      phraseRaw: String(payload.phraseRaw || payload.phraseNormalized || '').trim(),
+      phraseNormalized: String(payload.phraseNormalized || '').trim(),
+      sourceMode: payload.sourceMode ? String(payload.sourceMode).trim() : null,
+      targetFolder: payload.targetFolder ? String(payload.targetFolder).trim() : null,
+      provider: String(payload.provider || 'gemini').trim() || 'gemini',
+      llmModel: payload.llmModel ? String(payload.llmModel).trim() : null,
+      enableCompare: payload.enableCompare ? 1 : 0,
+      maxRetries: Math.max(0, Number(payload.maxRetries == null ? 2 : payload.maxRetries)),
+      sourceContextJson: JSON.stringify(payload.sourceContext || {}),
+      createdByClient: payload.createdByClient ? String(payload.createdByClient) : null,
+      requestPayloadJson: JSON.stringify(payload.requestPayload || {})
+    });
+
+    return this.getGenerationJobById(result.lastInsertRowid);
+  }
+
+  appendGenerationJobEvent(jobId, eventType, payload = {}) {
+    const numericId = Number(jobId);
+    if (!numericId) return null;
+    this.db.prepare(`
+      INSERT INTO generation_job_events (job_id, event_type, payload_json)
+      VALUES (@jobId, @eventType, @payloadJson)
+    `).run({
+      jobId: numericId,
+      eventType: String(eventType || 'unknown').trim() || 'unknown',
+      payloadJson: JSON.stringify(payload || {})
+    });
+    return true;
+  }
+
+  getGenerationJobById(jobId) {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM generation_jobs
+      WHERE id = ?
+      LIMIT 1
+    `).get(Number(jobId || 0));
+    return this.mapGenerationJobRow(row);
+  }
+
+  listGenerationJobs(limit = 30) {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(Math.max(1, Number(limit || 30)));
+    return rows.map((row) => this.mapGenerationJobRow(row));
+  }
+
+  getGenerationJobSummary() {
+    const counts = this.db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
+        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+    `).get();
+    const activeRow = this.db.prepare(`
+      SELECT *
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+        AND status = 'running'
+      ORDER BY started_at DESC, id DESC
+      LIMIT 1
+    `).get();
+    return {
+      total: Number(counts.total || 0),
+      queued: Number(counts.queued || 0),
+      running: Number(counts.running || 0),
+      success: Number(counts.success || 0),
+      failed: Number(counts.failed || 0),
+      cancelled: Number(counts.cancelled || 0),
+      activeJob: this.mapGenerationJobRow(activeRow)
+    };
+  }
+
+  hasActiveDuplicateGenerationJob(phraseNormalized, jobType = 'trilingual') {
+    const row = this.db.prepare(`
+      SELECT id
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+        AND status IN ('queued', 'running', 'failed')
+        AND phrase_normalized = ?
+        AND job_type = ?
+      LIMIT 1
+    `).get(String(phraseNormalized || '').trim(), String(jobType || 'trilingual').trim());
+    return Boolean(row);
+  }
+
+  updateGenerationJob(jobId, patch = {}) {
+    const fields = [];
+    const params = { jobId: Number(jobId || 0) };
+
+    const fieldMap = [
+      ['status', 'status'],
+      ['attempts', 'attempts'],
+      ['maxRetries', 'max_retries'],
+      ['errorMessage', 'error_message'],
+      ['llmModel', 'llm_model'],
+      ['sourceMode', 'source_mode'],
+      ['targetFolder', 'target_folder'],
+      ['resultGenerationId', 'result_generation_id'],
+      ['resultFolder', 'result_folder'],
+      ['resultBaseFilename', 'result_base_filename'],
+      ['createdByClient', 'created_by_client'],
+      ['startedAt', 'started_at'],
+      ['finishedAt', 'finished_at'],
+      ['clearedAt', 'cleared_at']
+    ];
+
+    fieldMap.forEach(([inputKey, column]) => {
+      if (patch[inputKey] === undefined) return;
+      fields.push(`${column} = @${inputKey}`);
+      params[inputKey] = patch[inputKey];
+    });
+
+    if (patch.sourceContext !== undefined) {
+      fields.push('source_context_json = @sourceContextJson');
+      params.sourceContextJson = JSON.stringify(patch.sourceContext || {});
+    }
+    if (patch.requestPayload !== undefined) {
+      fields.push('request_payload_json = @requestPayloadJson');
+      params.requestPayloadJson = JSON.stringify(patch.requestPayload || {});
+    }
+    if (patch.resultSummary !== undefined) {
+      fields.push('result_summary_json = @resultSummaryJson');
+      params.resultSummaryJson = JSON.stringify(patch.resultSummary || {});
+    }
+
+    if (!fields.length) return this.getGenerationJobById(jobId);
+
+    this.db.prepare(`UPDATE generation_jobs SET ${fields.join(', ')} WHERE id = @jobId`).run(params);
+    return this.getGenerationJobById(jobId);
+  }
+
+  recoverStaleRunningGenerationJobs() {
+    const affected = this.db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'queued',
+          error_message = '服务重启后恢复：原执行中任务已重新排队。',
+          started_at = NULL,
+          finished_at = NULL
+      WHERE cleared_at IS NULL
+        AND status = 'running'
+    `).run();
+    return Number(affected.changes || 0);
+  }
+
+  takeNextQueuedGenerationJob() {
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare(`
+        SELECT *
+        FROM generation_jobs
+        WHERE cleared_at IS NULL
+          AND status = 'queued'
+        ORDER BY id ASC
+        LIMIT 1
+      `).get();
+      if (!row) return null;
+
+      const nextAttempts = Number(row.attempts || 0) + 1;
+      this.db.prepare(`
+        UPDATE generation_jobs
+        SET status = 'running',
+            attempts = ?,
+            started_at = CURRENT_TIMESTAMP,
+            finished_at = NULL,
+            error_message = NULL
+        WHERE id = ?
+      `).run(nextAttempts, row.id);
+
+      return this.db.prepare(`SELECT * FROM generation_jobs WHERE id = ? LIMIT 1`).get(row.id);
+    });
+
+    return this.mapGenerationJobRow(tx());
+  }
+
+  retryGenerationJob(jobId) {
+    const result = this.db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'queued',
+          error_message = NULL,
+          started_at = NULL,
+          finished_at = NULL,
+          cleared_at = NULL
+      WHERE id = ?
+        AND status = 'failed'
+    `).run(Number(jobId || 0));
+    return result.changes > 0 ? this.getGenerationJobById(jobId) : null;
+  }
+
+  clearCompletedGenerationJobs() {
+    const result = this.db.prepare(`
+      UPDATE generation_jobs
+      SET cleared_at = CURRENT_TIMESTAMP
+      WHERE cleared_at IS NULL
+        AND status IN ('success', 'cancelled')
+    `).run();
+    return Number(result.changes || 0);
+  }
+
+  cancelGenerationJob(jobId) {
+    const result = this.db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'cancelled',
+          finished_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND cleared_at IS NULL
+        AND status = 'queued'
+    `).run(Number(jobId || 0));
+    return result.changes > 0 ? this.getGenerationJobById(jobId) : null;
   }
 
   // ========== Knowledge analysis jobs ==========

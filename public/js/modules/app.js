@@ -86,6 +86,8 @@ const generationQueueState = {
     maxTasks: 100,
     refreshScheduled: false,
     retryTimerId: null,
+    pollTimerId: null,
+    lastSuccessCount: 0,
     panelEl: null,
     summaryEl: null,
     listEl: null,
@@ -651,7 +653,7 @@ function initGenerator() {
         }
         const cardType = normalizeCardType(store.get('cardType'));
 
-        const accepted = enqueueBackgroundGenerationTask(phrase, phrase, {
+        const accepted = await enqueueBackgroundGenerationTask(phrase, phrase, {
             folder: store.get('selectedFolder') || '',
             baseName: '',
             generationId: null,
@@ -1767,6 +1769,80 @@ async function loadCardTrainingPanel({ container, markdown, title, cardType, gen
 // 后台生成队列（静默串行，不打断浏览）
 // ==========================================
 
+function parseQueueTimestamp(value) {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mapGenerationJobToQueueTask(job = {}) {
+    const jobType = normalizeCardType(job.jobType || job.cardType || 'trilingual');
+    return {
+        id: String(job.id || ''),
+        seq: Number(job.id || 0),
+        phraseRaw: String(job.phraseRaw || job.phraseNormalized || '').trim(),
+        phraseNormalized: String(job.phraseNormalized || '').trim(),
+        source: job.sourceContext || null,
+        provider: String(job.provider || 'gemini').trim() || 'gemini',
+        enableCompare: Boolean(job.enableCompare),
+        cardType: jobType,
+        sourceMode: String(job.sourceMode || '').trim().toLowerCase() || null,
+        targetFolder: String(job.targetFolder || '').trim(),
+        llmModel: String(job.llmModel || '').trim() || null,
+        status: String(job.status || 'queued').trim().toLowerCase() || 'queued',
+        attempts: Math.max(0, Number(job.attempts || 0)),
+        error: String(job.errorMessage || '').trim(),
+        retryAfter: 0,
+        createdAt: parseQueueTimestamp(job.createdAt),
+        startedAt: parseQueueTimestamp(job.startedAt),
+        finishedAt: parseQueueTimestamp(job.finishedAt),
+        resultGenerationId: Number(job.resultGenerationId || 0) || null,
+        resultFolder: String(job.resultFolder || '').trim(),
+        resultBaseFilename: String(job.resultBaseFilename || '').trim()
+    };
+}
+
+function applyServerQueueState(summary = {}, jobs = []) {
+    const nextTasks = Array.isArray(jobs) ? jobs.map((job) => mapGenerationJobToQueueTask(job)) : [];
+    const previousSuccess = generationQueueState.lastSuccessCount;
+    const nextSuccess = Number(summary.success || 0);
+
+    generationQueueState.tasks = nextTasks;
+    generationQueueState.running = Number(summary.running || 0) > 0;
+    generationQueueState.nextSeq = nextTasks.reduce((max, task) => Math.max(max, Number(task.seq || 0)), 0) + 1;
+    generationQueueState.lastSuccessCount = nextSuccess;
+
+    renderGenerationQueuePanel();
+
+    if (nextSuccess > previousSuccess) {
+        scheduleQueueFolderRefresh();
+    }
+}
+
+async function syncGenerationQueueFromServer() {
+    const [summaryRes, jobsRes] = await Promise.all([
+        api.getGenerationJobSummary(),
+        api.listGenerationJobs(40)
+    ]);
+    applyServerQueueState(summaryRes.summary || {}, jobsRes.jobs || []);
+}
+
+function startGenerationQueuePolling() {
+    syncGenerationQueueFromServer().catch((err) => {
+        console.warn('[Queue] initial sync failed:', err.message);
+    });
+
+    if (generationQueueState.pollTimerId) {
+        clearInterval(generationQueueState.pollTimerId);
+    }
+    generationQueueState.pollTimerId = setInterval(() => {
+        syncGenerationQueueFromServer().catch((err) => {
+            console.warn('[Queue] poll failed:', err.message);
+        });
+    }, 1800);
+}
+
 function initGenerationQueuePanel() {
     const panel = document.createElement('div');
     panel.id = 'generationQueuePanel';
@@ -1794,42 +1870,41 @@ function initGenerationQueuePanel() {
     generationQueueState.clearDoneBtn = panel.querySelector('[data-action="clear-done"]');
     generationQueueState.collapseBtn = panel.querySelector('[data-action="toggle"]');
 
-    const retryFailedTasks = () => {
+    const retryFailedTasks = async () => {
+        const failedTasks = generationQueueState.tasks.filter((task) => task.status === 'failed');
+        if (!failedTasks.length) return;
         let retried = 0;
-        generationQueueState.tasks.forEach((task) => {
-            if (task.status === 'failed') {
-                task.status = 'queued';
-                task.error = '';
-                task.retryAfter = 0;
-                retried += 1;
+        for (const task of failedTasks) {
+            try {
+                const result = await api.retryGenerationJob(task.id);
+                if (result?.job) retried += 1;
+            } catch (err) {
+                console.warn('[Queue] retry failed:', task.id, err.message);
             }
-        });
+        }
         if (retried) {
             showGenerationQueueToast(`已重试 ${retried} 个失败任务`);
-            renderGenerationQueuePanel();
-            processGenerationQueue();
+            await syncGenerationQueueFromServer().catch(() => {});
         }
     };
     generationQueueState.retryFailedBtn.onclick = retryFailedTasks;
     if (els.heroTaskQueueRetryBtn) {
-        els.heroTaskQueueRetryBtn.onclick = (e) => {
+        els.heroTaskQueueRetryBtn.onclick = async (e) => {
             e.stopPropagation();
-            retryFailedTasks();
+            await retryFailedTasks();
         };
     }
 
-    generationQueueState.clearDoneBtn.onclick = () => {
-        const before = generationQueueState.tasks.length;
-        generationQueueState.tasks = generationQueueState.tasks.filter(
-            (task) => task.status !== 'success' && task.status !== 'cancelled'
-        );
-        const removed = before - generationQueueState.tasks.length;
-        if (removed > 0) {
-            showGenerationQueueToast(`已清理 ${removed} 个已完成任务`);
-            renderGenerationQueuePanel();
-        }
-        if (!generationQueueState.tasks.length) {
-            panel.classList.add('hidden');
+    generationQueueState.clearDoneBtn.onclick = async () => {
+        try {
+            const result = await api.clearCompletedGenerationJobs();
+            const removed = Number(result.cleared || 0);
+            if (removed > 0) {
+                showGenerationQueueToast(`已清理 ${removed} 个已完成任务`);
+            }
+            await syncGenerationQueueFromServer().catch(() => {});
+        } catch (err) {
+            showGenerationQueueToast(`清理失败：${err.message}`);
         }
     };
 
@@ -1846,9 +1921,8 @@ function initGenerationQueuePanel() {
         };
     }
 
-    restoreGenerationQueueSnapshot();
-    renderGenerationQueuePanel();
-    processGenerationQueue();
+    updateHeroTaskQueueStatus();
+    startGenerationQueuePolling();
 }
 
 function showGenerationQueueToast(message) {
@@ -2103,6 +2177,7 @@ function persistGenerationQueueSnapshot() {
 }
 
 function restoreGenerationQueueSnapshot() {
+    // Deprecated: 共享队列启用后不再从浏览器本地快照恢复。
     let snapshot = null;
 
     try {
@@ -2205,7 +2280,7 @@ function hasActiveDuplicateTask(phraseNormalized, cardType = 'trilingual') {
     );
 }
 
-function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {}) {
+async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {}) {
     if (!phraseNormalized) return false;
 
     if (generationQueueState.tasks.length >= generationQueueState.maxTasks) {
@@ -2241,36 +2316,30 @@ function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {
         explicitTargetFolder ||
         (TODAY_FOLDER_TASK_ENTRIES.has(sourceEntry) ? '' : selectedFolder);
 
-    const task = {
-        id: `queue_${Date.now()}_${generationQueueState.nextSeq}`,
-        seq: generationQueueState.nextSeq++,
-        phraseRaw,
-        phraseNormalized,
-        source,
-        provider,
-        enableCompare,
-        cardType: taskCardType,
-        sourceMode: inferredSourceMode || null,
-        targetFolder: taskTargetFolder,
-        llmModel: null,
-        status: 'queued',
-        attempts: 0,
-        error: '',
-        retryAfter: 0,
-        createdAt: Date.now(),
-        startedAt: 0,
-        finishedAt: 0
-    };
-
-    generationQueueState.tasks.push(task);
-    if (generationQueueState.retryTimerId) {
-        clearTimeout(generationQueueState.retryTimerId);
-        generationQueueState.retryTimerId = null;
+    try {
+        const response = await api.createGenerationJob({
+            phrase: phraseNormalized,
+            llm_provider: provider,
+            enable_compare: enableCompare,
+            card_type: taskCardType,
+            source_mode: inferredSourceMode || null,
+            target_folder: taskTargetFolder,
+            llm_model: null,
+            source_context: source || {}
+        });
+        const job = response.job || null;
+        await syncGenerationQueueFromServer().catch(() => {});
+        if (job) {
+            showGenerationQueueToast(`已加入队列 #${job.id}`);
+        } else {
+            showGenerationQueueToast('已加入服务端队列');
+        }
+        return true;
+    } catch (err) {
+        const message = err?.status === 409 ? '该短语已在共享队列中' : `入队失败：${err.message}`;
+        showGenerationQueueToast(message);
+        return false;
     }
-    renderGenerationQueuePanel();
-    processGenerationQueue();
-    showGenerationQueueToast(`已加入队列 #${task.seq}`);
-    return true;
 }
 
 async function runGenerationTaskFromQueue(task) {
@@ -2305,71 +2374,9 @@ function scheduleQueueFolderRefresh() {
 }
 
 function processGenerationQueue() {
-    if (generationQueueState.running) return;
-    const now = Date.now();
-    const nextTask = generationQueueState.tasks.find(
-        (task) => task.status === 'queued' && (!task.retryAfter || task.retryAfter <= now)
-    );
-    if (!nextTask) {
-        const nextRetryAt = generationQueueState.tasks
-            .filter((task) => task.status === 'queued' && task.retryAfter > now)
-            .reduce((min, task) => Math.min(min, task.retryAfter), Number.POSITIVE_INFINITY);
-
-        if (Number.isFinite(nextRetryAt) && !generationQueueState.retryTimerId) {
-            const waitMs = Math.max(80, nextRetryAt - now);
-            generationQueueState.retryTimerId = setTimeout(() => {
-                generationQueueState.retryTimerId = null;
-                processGenerationQueue();
-            }, waitMs);
-        }
-        return;
-    }
-
-    if (generationQueueState.retryTimerId) {
-        clearTimeout(generationQueueState.retryTimerId);
-        generationQueueState.retryTimerId = null;
-    }
-
-    generationQueueState.running = true;
-    nextTask.status = 'running';
-    nextTask.error = '';
-    nextTask.retryAfter = 0;
-    nextTask.attempts += 1;
-    nextTask.startedAt = Date.now();
-    nextTask.finishedAt = 0;
-    renderGenerationQueuePanel();
-
-    runGenerationTaskFromQueue(nextTask)
-        .then(() => {
-            nextTask.status = 'success';
-            nextTask.finishedAt = Date.now();
-            scheduleQueueFolderRefresh();
-            showGenerationQueueToast(`任务 #${nextTask.seq} 已完成`);
-        })
-        .catch((err) => {
-            const message = String(err?.message || 'generation failed');
-            const retryAfterMs = Number(err?.retryAfterMs || 0);
-            const isRateLimited = Number(err?.status) === 429 || /rate limit/i.test(message);
-            if (nextTask.attempts <= generationQueueState.maxRetries) {
-                const baseDelay = Math.min(10000, 800 * Math.pow(2, nextTask.attempts - 1));
-                const delay = isRateLimited && retryAfterMs > 0
-                    ? Math.min(20000, Math.max(baseDelay, retryAfterMs + 250))
-                    : baseDelay;
-                nextTask.status = 'queued';
-                nextTask.retryAfter = Date.now() + delay;
-                nextTask.error = `重试中 (${nextTask.attempts}/${generationQueueState.maxRetries + 1}, ${Math.ceil(delay / 1000)}s 后): ${message}`;
-            } else {
-                nextTask.status = 'failed';
-                nextTask.error = message;
-                nextTask.finishedAt = Date.now();
-                showGenerationQueueToast(`任务 #${nextTask.seq} 失败`);
-            }
-        })
-        .finally(() => {
-            generationQueueState.running = false;
-            renderGenerationQueuePanel();
-            setTimeout(processGenerationQueue, 120);
-        });
+    syncGenerationQueueFromServer().catch((err) => {
+        console.warn('[Queue] manual sync failed:', err.message);
+    });
 }
 
 // ==========================================
@@ -2568,7 +2575,7 @@ function initSelectionToGenerate(container, options = {}) {
         e.preventDefault(); // 防止点击 FAB 时选区被清除
     });
 
-    generateBtn.addEventListener('click', (e) => {
+    generateBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container, {
             maxLength: SELECTION_GENERATE_MAX_CHARS,
@@ -2579,8 +2586,7 @@ function initSelectionToGenerate(container, options = {}) {
             showGenerationQueueToast('选区超长或无效：生成任务最多支持 200 字');
             return;
         }
-
-        enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
+        await enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
             folder: activeCardContext?.folder || store.get('selectedFolder') || '',
             baseName: activeCardContext?.baseName || '',
             generationId: activeCardContext?.generationId || null,
@@ -2588,13 +2594,15 @@ function initSelectionToGenerate(container, options = {}) {
             cardType: 'trilingual',
             sourceMode: 'selection',
             selectionOriginTab
+        }).catch((err) => {
+            console.warn('[Queue] selection enqueue failed:', err.message);
         });
 
         hideDock();
         if (window.getSelection()) window.getSelection().removeAllRanges();
     });
 
-    generateGrammarBtn.addEventListener('click', (e) => {
+    generateGrammarBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const candidate = buildSelectionCandidateFromContainer(container, {
             maxLength: SELECTION_GENERATE_MAX_CHARS,
@@ -2605,8 +2613,7 @@ function initSelectionToGenerate(container, options = {}) {
             showGenerationQueueToast('选区超长或无效：生成任务最多支持 200 字');
             return;
         }
-
-        enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
+        await enqueueBackgroundGenerationTask(candidate.rawText, candidate.normalized, {
             folder: activeCardContext?.folder || store.get('selectedFolder') || '',
             baseName: activeCardContext?.baseName || '',
             generationId: activeCardContext?.generationId || null,
@@ -2614,6 +2621,8 @@ function initSelectionToGenerate(container, options = {}) {
             cardType: 'grammar_ja',
             sourceMode: 'selection',
             selectionOriginTab
+        }).catch((err) => {
+            console.warn('[Queue] selection grammar enqueue failed:', err.message);
         });
 
         hideDock();

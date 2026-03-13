@@ -20,6 +20,7 @@ const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
 const exampleReviewService = require('./services/exampleReviewService');
 const knowledgeJobService = require('./services/knowledgeJobService');
+const generationJobService = require('./services/generationJobService');
 const trainingPackService = require('./services/trainingPackService');
 const { buildFixtureContent, buildFixtureObservability, buildTrainingPayload } = require('./services/e2eFixtureService');
 const crypto = require('crypto');
@@ -383,12 +384,43 @@ function normalizeCardType(cardType) {
 }
 
 function normalizeSourceMode(sourceMode) {
-    const normalized = String(sourceMode || '').trim().toLowerCase();
-    if (!normalized) return null;
-    if (normalized === 'selection') return 'selection';
-    if (normalized === 'input') return 'input';
-    if (normalized === 'ocr') return 'ocr';
-    return normalized;
+  const normalized = String(sourceMode || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'selection') return 'selection';
+  if (normalized === 'input') return 'input';
+  if (normalized === 'ocr') return 'ocr';
+  return normalized;
+}
+
+async function executeGenerationJobViaHttp(job) {
+  const payload = {
+    phrase: job.phraseNormalized,
+    llm_provider: normalizeLlmProvider(job.provider),
+    enable_compare: Boolean(job.enableCompare),
+    card_type: normalizeCardType(job.jobType),
+    source_mode: normalizeSourceMode(job.sourceMode),
+    target_folder: job.targetFolder || '',
+    llm_model: job.llmModel || undefined
+  };
+
+  const response = await fetch(`http://127.0.0.1:${PORT}/api/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Generation-Job-Worker': '1'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data?.error || `generation job http ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+  return data;
 }
 
 function buildE2ETrainingResult({ phrase, cardType }) {
@@ -1424,10 +1456,110 @@ async function handleComparisonMode(phrase, options = {}) {
 
 // API Endpoints
 
+app.post('/api/generation-jobs', async (req, res) => {
+  try {
+    const phrase = String(req.body?.phrase || '').trim();
+    if (!phrase) {
+      return res.status(400).json({ error: 'Phrase required' });
+    }
+
+    const jobType = normalizeCardType(req.body?.card_type || req.body?.job_type || 'trilingual');
+    const sourceMode = normalizeSourceMode(req.body?.source_mode);
+    const provider = normalizeLlmProvider(req.body?.llm_provider);
+    const llmModel = sanitizeGeminiModelName(req.body?.llm_model || '');
+    const enableCompare = Boolean(req.body?.enable_compare);
+    const targetFolder = String(req.body?.target_folder || '').trim();
+    const sourceContext = req.body?.source_context && typeof req.body.source_context === 'object'
+      ? req.body.source_context
+      : {};
+
+    const job = generationJobService.enqueue({
+      jobType,
+      phraseRaw: phrase,
+      phraseNormalized: phrase,
+      sourceMode,
+      targetFolder,
+      provider,
+      llmModel,
+      enableCompare,
+      sourceContext,
+      createdByClient: req.get('user-agent') || 'browser',
+      requestPayload: {
+        phrase,
+        llm_provider: provider,
+        enable_compare: enableCompare,
+        card_type: jobType,
+        source_mode: sourceMode,
+        target_folder: targetFolder,
+        llm_model: llmModel || null,
+        source_context: sourceContext
+      }
+    });
+
+    return res.json({ success: true, job, summary: generationJobService.getSummary() });
+  } catch (err) {
+    const message = String(err?.message || 'enqueue generation job failed');
+    const status = message === 'duplicate_active_generation_job' ? 409 : 500;
+    return res.status(status).json({ error: message });
+  }
+});
+
+app.get('/api/generation-jobs', (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 30);
+    const jobs = generationJobService.listJobs(limit);
+    return res.json({ success: true, jobs });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/generation-jobs/summary', (req, res) => {
+  try {
+    return res.json({ success: true, summary: generationJobService.getSummary() });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/generation-jobs/clear-done', (req, res) => {
+  try {
+    const result = generationJobService.clearCompleted();
+    return res.json({ success: true, ...result, summary: generationJobService.getSummary() });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/generation-jobs/:id/retry', (req, res) => {
+  try {
+    const job = generationJobService.retryJob(Number(req.params.id));
+    if (!job) {
+      return res.status(404).json({ error: 'job not retryable' });
+    }
+    return res.json({ success: true, job, summary: generationJobService.getSummary() });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/generation-jobs/:id/cancel', (req, res) => {
+  try {
+    const job = generationJobService.cancelJob(Number(req.params.id));
+    if (!job) {
+      return res.status(404).json({ error: 'job not cancellable' });
+    }
+    return res.json({ success: true, job, summary: generationJobService.getSummary() });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/generate', async (req, res) => {
   const perf = new PerformanceMonitor().start();
   try {
-    const throttle = checkGenerateThrottle(req);
+    const skipThrottle = req.get('X-Generation-Job-Worker') === '1';
+    const throttle = skipThrottle ? { allowed: true, retryAfterMs: 0 } : checkGenerateThrottle(req);
     if (!throttle.allowed) {
       return res.status(429).json({
         error: 'Rate limit exceeded',
@@ -2825,7 +2957,11 @@ app.delete('/api/records/:id', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+const serverInstance = app.listen(PORT, () => {
+    generationJobService.configureExecutor(executeGenerationJobViaHttp);
+    generationJobService.bootstrap();
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Mission Control available at http://localhost:${PORT}/dashboard.html`);
 });
+
+module.exports = { app, serverInstance };

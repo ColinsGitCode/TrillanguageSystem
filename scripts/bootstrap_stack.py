@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -14,9 +15,25 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LOG_DIR = os.path.join(ROOT, "logs")
 PROXY_LOG = os.path.join(LOG_DIR, "gemini-proxy.log")
 PID_FILE = os.path.join(LOG_DIR, "gemini-proxy.pid")
+GEMINI_RUNTIME_DIR = os.path.join(ROOT, ".runtime", "gemini")
 PROXY_PORT = int(os.environ.get("GEMINI_PROXY_PORT", "3210"))
 PROXY_URL = os.environ.get("GEMINI_PROXY_URL", f"http://localhost:{PROXY_PORT}/health")
-PROXY_CMD = ["node", os.path.join(ROOT, "scripts", "gemini-host-proxy.js")]
+
+
+def resolve_node_bin():
+    candidates = [
+        os.environ.get("NODE_BIN"),
+        shutil.which("node"),
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return "node"
+
+
+PROXY_CMD = [resolve_node_bin(), os.path.join(ROOT, "scripts", "gemini-host-proxy.js")]
 
 
 def log(msg):
@@ -69,6 +86,7 @@ def pid_alive(pid):
 
 def start_proxy():
     os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(GEMINI_RUNTIME_DIR, exist_ok=True)
     log(f"[proxy] starting: {' '.join(PROXY_CMD)}")
     with open(PROXY_LOG, "a", encoding="utf-8") as logf:
         proc = subprocess.Popen(
@@ -76,7 +94,12 @@ def start_proxy():
             cwd=ROOT,
             stdout=logf,
             stderr=logf,
-            start_new_session=True
+            start_new_session=True,
+            env={
+                **os.environ,
+                "GEMINI_PROXY_HOME": GEMINI_RUNTIME_DIR,
+                "GEMINI_SETTINGS_PATH": os.path.join(GEMINI_RUNTIME_DIR, "settings.json")
+            }
         )
     with open(PID_FILE, "w", encoding="utf-8") as f:
         f.write(str(proc.pid))

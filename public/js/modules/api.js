@@ -81,6 +81,42 @@ class ApiService {
         });
     }
 
+    async createGenerationJob(payload = {}) {
+        return this.fetchJson('/api/generation-jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async listGenerationJobs(limit = 30) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/generation-jobs?${params.toString()}`);
+    }
+
+    async getGenerationJobSummary() {
+        return this.fetchJson('/api/generation-jobs/summary');
+    }
+
+    async retryGenerationJob(id) {
+        return this.fetchJson(`/api/generation-jobs/${encodeURIComponent(id)}/retry`, {
+            method: 'POST'
+        });
+    }
+
+    async clearCompletedGenerationJobs() {
+        return this.fetchJson('/api/generation-jobs/clear-done', {
+            method: 'POST'
+        });
+    }
+
+    async cancelGenerationJob(id) {
+        return this.fetchJson(`/api/generation-jobs/${encodeURIComponent(id)}/cancel`, {
+            method: 'POST'
+        });
+    }
+
     async ocr(image) {
         // 支持 Base64 上传（保持兼容性）
         return this.fetchJson('/api/ocr', {

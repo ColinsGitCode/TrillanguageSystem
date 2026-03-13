@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-03-10
-**版本**: 3.8.1
+**最后更新**: 2026-03-13
+**版本**: 3.8.2
 
 ## 1. 项目定位
 
@@ -22,7 +22,7 @@
 - 存储层：
   - 文件：按日期目录 `YYYYMMDD`
   - SQLite：28+ 张表（业务 + 观测 + 实验 + 评审 + TRAIN + 知识任务/知识物化）
-- 部署：Docker Compose（viewer + ocr + tts-en + tts-ja）+ 宿主机 Gemini Gateway/Executor
+- 部署：Docker Compose（viewer + gemini-proxy + ocr + tts-en + tts-ja）+ 本工程宿主机 `gemini-host-proxy.js`
 
 ## 3. 当前功能清单
 
@@ -69,22 +69,34 @@
   - 支持幂等重跑（用于运维补偿）
   - 2026-03-13 已对 2026 年 3 月目录执行回填，修复语法卡中文说明区 ruby 显示
 
-### 3.6 文本选取静默队列生成（v3.5）
+### 3.6 服务端共享任务队列（v3.8.2）
+
+- 卡片生成队列已从前端本地内存/`localStorage` 迁移到 SQLite：
+  - `generation_jobs`
+  - `generation_job_events`
+- 主页面与 Mission Control 统一轮询：
+  - `GET /api/generation-jobs`
+  - `GET /api/generation-jobs/summary`
+- 多浏览器访问时看到的是同一份队列状态，不再各自持有一份本地队列
+- `viewer` 启动时会将残留 `running` 任务恢复为 `queued`，由内置 worker 串行继续执行
+- `localStorage:generation_queue_snapshot_v1` 现在仅作为 UI 镜像缓存，不再是事实来源
+
+### 3.7 文本选取静默队列生成（v3.5）
 
 - 卡片 CONTENT 区域选中文本后可直接入后台任务队列
 - 点击 `✦ Generate Card` 不跳转、不关闭卡片弹窗
 - 队列串行执行（并发=1）并按顺序完成
 - 日语选区采用 Ruby-aware 提取（忽略 `<rt>/<rp>` 注音）
 - 提供队列状态面板（queued/running/success/failed）与失败重试
-- 页面刷新 / 前端重载后，未完成任务会从 `generation_queue_snapshot_v1` 恢复；原执行中任务自动重新排队
+- 页面刷新 / 前端重载后会重新拉取服务端共享队列，未完成任务不会因浏览器刷新丢失
 
-### 3.7 主输入 Generate 队列化（v3.5）
+### 3.8 主输入 Generate 队列化（v3.5）
 
 - 首页文本输入点击 `Generate` 同样改为任务入队
 - 支持用户持续输入并批量排队，不阻塞前台交互
 - 执行完成后静默刷新文件列表，不改变当前浏览上下文
 
-### 3.8 日语语法卡片（v3.6）
+### 3.9 日语语法卡片（v3.6）
 
 - 新增主输入卡片类型切换：
   - `🧩 三语卡片`
@@ -95,7 +107,19 @@
 - Mission Control 任务队列新增卡片类型标识（`三语/语法`）
 - 中文说明区中的日语词形说明（如 `飛(と)ぶ` / `読(よ)んで`）会在渲染时转为 `<ruby>`
 
-### 3.9 字体与可读性优化（v3.6.1）
+### 3.10 项目内 Gemini Proxy（v3.8.2）
+
+- `viewer` 不再直接依赖外部共享 `18888 Gateway`
+- 新增项目内 `gemini-proxy` 容器，负责：
+  - `/api/gemini`
+  - `/health`
+  - `/admin/reset`
+- `gemini-proxy` 再转发到本工程宿主机 `gemini-host-proxy.js`
+- 宿主机 Gemini 运行目录已切到项目专属：
+  - `/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/gemini`
+- 宿主机脚本执行环境改为白名单变量，降低共享宿主机环境导致的 MCP 污染与配置漂移
+
+### 3.11 字体与可读性优化（v3.6.1）
 
 - 主页面与弹窗统一字体变量体系：`--font-ui / --font-ja / --font-display / --font-mono`
 - 中/日/英混排优化：日语内容与 ruby 注音使用更适配的日文字体栈

@@ -4,7 +4,12 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = Number(process.env.GEMINI_PROXY_PORT || 3210);
-const GEMINI_BIN = process.env.GEMINI_PROXY_BIN || 'gemini';
+const GEMINI_BIN_CANDIDATES = [
+  process.env.GEMINI_PROXY_BIN || '',
+  'gemini',
+  '/opt/homebrew/bin/gemini',
+  '/usr/local/bin/gemini'
+].filter(Boolean);
 const TIMEOUT_MS = Number(process.env.GEMINI_PROXY_TIMEOUT_MS || 90000);
 const OUTPUT_DIR = process.env.GEMINI_PROXY_OUTPUT_DIR || '';
 const DEFAULT_MODEL = process.env.GEMINI_PROXY_MODEL || '';
@@ -12,10 +17,53 @@ const MODEL_ARG = process.env.GEMINI_PROXY_MODEL_ARG || '--model';
 const PROMPT_ARG = process.env.GEMINI_PROXY_PROMPT_ARG || '-p';
 const ACTIVE_PROCS = new Set();
 const PROCESS_FORCE_KILL_MS = Number(process.env.GEMINI_PROXY_FORCE_KILL_MS || 1000);
+const PROJECT_ROOT = path.join(__dirname, '..');
+const PROJECT_GEMINI_HOME = process.env.GEMINI_PROXY_HOME || path.join(PROJECT_ROOT, '.runtime/gemini');
+const PROJECT_GEMINI_SETTINGS = process.env.GEMINI_SETTINGS_PATH || path.join(PROJECT_GEMINI_HOME, 'settings.json');
 
 function ensureDir(dir) {
   if (!dir) return;
   fs.mkdirSync(dir, { recursive: true });
+}
+
+function resolveExecutable(candidates = []) {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate.includes(path.sep)) {
+      if (fs.existsSync(candidate)) return candidate;
+      continue;
+    }
+    const pathDirs = String(process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    for (const dir of pathDirs) {
+      const fullPath = path.join(dir, candidate);
+      if (fs.existsSync(fullPath)) return fullPath;
+    }
+  }
+  return candidates[0] || '';
+}
+
+const GEMINI_BIN = resolveExecutable(GEMINI_BIN_CANDIDATES);
+
+function buildGeminiEnv() {
+  ensureDir(PROJECT_GEMINI_HOME);
+  const env = {
+    PATH: process.env.PATH || '',
+    HOME: PROJECT_GEMINI_HOME,
+    GEMINI_SETTINGS_PATH: PROJECT_GEMINI_SETTINGS,
+    NO_COLOR: '1',
+    TERM: process.env.TERM || 'xterm'
+  };
+
+  [
+    'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+    'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+    'SSL_CERT_FILE', 'SSL_CERT_DIR',
+    'LANG', 'LC_ALL'
+  ].forEach((key) => {
+    if (process.env[key]) env[key] = process.env[key];
+  });
+
+  return env;
 }
 
 function stripFence(text) {
@@ -71,7 +119,7 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
     const proc = spawn(GEMINI_BIN, args, {
       shell: false,
       detached: process.platform !== 'win32',
-      env: { ...process.env, NO_COLOR: '1' }
+      env: buildGeminiEnv()
     });
     ACTIVE_PROCS.add(proc);
 
@@ -158,8 +206,10 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, {
       status: 'ok',
       timeoutMs: TIMEOUT_MS,
+      geminiBin: GEMINI_BIN,
       defaultModel: DEFAULT_MODEL || null,
-      activeProcesses: ACTIVE_PROCS.size
+      activeProcesses: ACTIVE_PROCS.size,
+      settingsPath: PROJECT_GEMINI_SETTINGS
     });
   }
 

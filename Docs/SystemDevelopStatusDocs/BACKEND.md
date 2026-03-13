@@ -1,8 +1,8 @@
 # 后端架构文档
 
 **项目**: Trilingual Records  
-**版本**: 3.7.0
-**更新日期**: 2026-03-05
+**版本**: 3.8.2
+**更新日期**: 2026-03-13
 
 ## 1. 核心目录
 
@@ -20,6 +20,8 @@ services/
   fewShotMetricsService.js
   knowledgeAnalysisEngine.js
   knowledgeJobService.js
+  generationJobService.js
+  geminiGatewayServer.js
   observabilityService.js
   statisticsService.js
   tesseractOcrService.js
@@ -40,6 +42,7 @@ scripts/
   export_round_trend_dataset.js
   generate_round_kpi_report.js
   gemini-host-proxy.js
+  bootstrap_stack.py
   updateLegacyCardStyle.js
 ```
 
@@ -49,7 +52,7 @@ scripts/
 - SQLite (better-sqlite3)：业务、观测、实验、评审数据
 - 文件系统：按日期目录存储 md/html/meta/audio
 - 本地 LLM：OpenAI 兼容接口（默认主链路）
-- Gemini：host-proxy（宿主机 Gateway 18888）
+- Gemini：项目内 `gemini-proxy` 容器 -> 本工程宿主机 `gemini-host-proxy.js`
 - OCR：Tesseract 容器（默认）+ local OCR 兜底
 - TTS：Kokoro（EN）+ VOICEVOX（JA）
 
@@ -126,17 +129,28 @@ scripts/
 - finalize → finalized（默认要求 100% 评审完成；`allowPartial=true` 启用采样模式）
 - rollback → active（重置 eligibility，保留 example_reviews 原始数据；v3.3 新增）
 
-## 6. Gemini host-proxy 集成（当前默认）
+## 6. Gemini proxy 集成（v3.8.2 第一阶段）
 
-- 容器调用：`http://host.docker.internal:18888/api/gemini`
-- 请求透传字段：`prompt/baseName/model`
-- 鉴权：由 Gateway（18888）侧执行 API Key/Bearer 校验
-- 稳定性策略：
-  - 超时/5xx 重试
-  - timeout 后可触发 `/admin/reset` 清理执行器挂起
-  - 支持 IPv4 fallback 策略
+- `viewer` 容器调用：`http://gemini-proxy:18888/api/gemini`
+- `gemini-proxy` 容器再转发到：`http://host.docker.internal:3210`
+- 宿主机实际执行器：`scripts/gemini-host-proxy.js`
+- 请求透传字段：`prompt/baseName/model/timeoutMs`
+- 容器内部仍不安装 Gemini CLI；真实 CLI 继续由宿主机执行
+- 宿主机 Gemini 运行目录已切到项目专属：
+  - `/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/gemini`
+- `gemini-host-proxy.js` 现采用白名单环境变量执行，减少共享宿主机配置导致的 MCP 污染
+- 当前第一阶段仍未把 Gemini auth 流程整体迁移到项目内 gateway；该部分保留为后续收口项
 
-> 说明：容器内部不要求安装 Gemini CLI；真实 CLI 由宿主机 Host Executor 执行。
+### 6.1 服务端共享生成队列（v3.8.2 第一阶段）
+
+- 新增表：
+  - `generation_jobs`
+  - `generation_job_events`
+- 新增服务：`services/generationJobService.js`
+- worker 先内置在 `viewer` 进程中，按 `id ASC` 串行取 `queued` 任务
+- `/api/generate` 继续复用现有生成编排；worker 通过内部 HTTP 回调执行，不重复拆主链路
+- `viewer` 启动时会将残留 `running` 任务恢复为 `queued`
+- Mission Control 与主页面统一通过共享队列 API 读取状态，不再依赖浏览器本地快照
 
 ### 6.1 知识同义边界 key 归一修复（v3.6.10）
 

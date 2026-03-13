@@ -8,13 +8,39 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROXY_SCRIPT="$SCRIPT_DIR/gemini-host-proxy.js"
 PID_FILE="/tmp/gemini-proxy.pid"
 LOG_FILE="/tmp/gemini-proxy.log"
+RUNTIME_DIR="$PROJECT_ROOT/.runtime/gemini"
+NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || true)}"
+GEMINI_BIN_DEFAULT="${GEMINI_PROXY_BIN:-$(command -v gemini 2>/dev/null || true)}"
+
+if [ -z "$NODE_BIN" ] && [ -x /opt/homebrew/bin/node ]; then
+  NODE_BIN="/opt/homebrew/bin/node"
+fi
+if [ -z "$NODE_BIN" ] && [ -x /usr/local/bin/node ]; then
+  NODE_BIN="/usr/local/bin/node"
+fi
+
+if [ -z "$GEMINI_BIN_DEFAULT" ] && [ -x /opt/homebrew/bin/gemini ]; then
+  GEMINI_BIN_DEFAULT="/opt/homebrew/bin/gemini"
+fi
+if [ -z "$GEMINI_BIN_DEFAULT" ] && [ -x /usr/local/bin/gemini ]; then
+  GEMINI_BIN_DEFAULT="/usr/local/bin/gemini"
+fi
 
 # 配置
 export GEMINI_PROXY_PORT=3210
-export GEMINI_PROXY_BIN="gemini"
+export GEMINI_PROXY_BIN="${GEMINI_BIN_DEFAULT:-gemini}"
 export GEMINI_PROXY_TIMEOUT_MS=150000
 export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-pro-preview}"
+export GEMINI_PROXY_HOME="${GEMINI_PROXY_HOME:-$RUNTIME_DIR}"
+export GEMINI_SETTINGS_PATH="${GEMINI_SETTINGS_PATH:-$RUNTIME_DIR/settings.json}"
 # export GEMINI_PROXY_OUTPUT_DIR="/tmp/gemini-outputs"  # 可选：保存输出
+
+mkdir -p "$RUNTIME_DIR"
+
+if [ -z "$NODE_BIN" ]; then
+  echo "❌ 未找到 node 可执行文件，请设置 NODE_BIN 或安装 Node.js"
+  exit 1
+fi
 
 case "$1" in
   start)
@@ -24,7 +50,7 @@ case "$1" in
     fi
 
     echo "🚀 启动 Gemini Host Proxy..."
-    nohup node "$PROXY_SCRIPT" > "$LOG_FILE" 2>&1 &
+    nohup "$NODE_BIN" "$PROXY_SCRIPT" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
 
     sleep 1

@@ -1,20 +1,26 @@
 # API 接口文档
 
 **项目**: Trilingual Records  
-**API 版本**: v1.3  
-**更新日期**: 2026-03-05
+**API 版本**: v1.4  
+**更新日期**: 2026-03-13
 
 ## 1. 总览
 
 - Base URL: `http://localhost:3010/api`
 - 协议: HTTP + JSON
-- 认证: 本地部署默认无鉴权（Gemini host-proxy 的鉴权在上游 Gateway 18888）
+- 认证: 本地部署默认无鉴权（当前项目内 `gemini-proxy` 第一阶段默认走内网转发）
 
 ### 1.1 端点列表
 
 | 类别 | 方法 | 路径 | 说明 |
 |---|---|---|---|
 | 生成 | POST | `/generate` | 生成学习卡片（单模型/对比） |
+| 队列 | POST | `/generation-jobs` | 创建共享生成任务 |
+| 队列 | GET | `/generation-jobs` | 获取共享生成任务列表 |
+| 队列 | GET | `/generation-jobs/summary` | 获取共享生成任务摘要 |
+| 队列 | POST | `/generation-jobs/:id/retry` | 重试失败任务 |
+| 队列 | POST | `/generation-jobs/:id/cancel` | 取消排队任务 |
+| 队列 | POST | `/generation-jobs/clear-done` | 清理 success/cancelled 任务 |
 | OCR | POST | `/ocr` | OCR 识别（tesseract/local/auto） |
 | 健康 | GET | `/health` | 服务健康检查 |
 | Gemini CLI auth | GET/POST | `/gemini/auth/*` | 仅 `GEMINI_MODE=cli` 有效 |
@@ -106,8 +112,54 @@
   - `grammar_ja`: 日语语法卡片（中文讲解 + 日语例句）
 - `source_mode`: `input` / `selection` / `ocr`（用于链路追踪）
 - `target_folder`: 指定日期目录；未传则按当前日期
-- `llm_model`: 覆盖模型名（gemini 会透传到 host-proxy）
+- `llm_model`: 覆盖模型名（gemini 会透传到项目内 `gemini-proxy`，再转发到宿主机 executor）
 - `fewshot_options.reviewGated/reviewOnly/reviewMinOverall`: 控制人工评审门控注入
+
+### 2.2 `POST /api/generation-jobs`
+
+用于共享队列入队，不直接在当前浏览器内执行。
+
+请求示例：
+
+```json
+{
+  "phrase": "冷热数据分离",
+  "llm_provider": "gemini",
+  "card_type": "trilingual",
+  "source_mode": "input",
+  "target_folder": "",
+  "llm_model": "gemini-3-pro-preview",
+  "enable_compare": false,
+  "source_context": {
+    "entry": "main-input"
+  }
+}
+```
+
+响应关键字段：
+
+```json
+{
+  "success": true,
+  "job": {
+    "id": 12,
+    "jobType": "trilingual",
+    "status": "queued",
+    "attempts": 0
+  },
+  "summary": {
+    "total": 3,
+    "queued": 2,
+    "running": 1,
+    "success": 8,
+    "failed": 0,
+    "cancelled": 0
+  }
+}
+```
+
+- 同短语 + 同卡片类型在 `queued/running/failed` 期间会返回 `409`
+- `source_context` 仅作审计与 UI 上下文记录，不参与实际生成语义
 
 #### 单模型成功响应（关键字段）
 

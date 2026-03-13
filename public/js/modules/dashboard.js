@@ -22,7 +22,6 @@ const state = {
     knowledgeSynonymBoundaries: null,
     knowledgeHubSelection: null
 };
-const QUEUE_SNAPSHOT_STORAGE_KEY = 'generation_queue_snapshot_v1';
 const QUEUE_POLL_INTERVAL_MS = 1500;
 const KNOWLEDGE_POLL_INTERVAL_MS = 3000;
 const DASHBOARD_PAGE_MISSION = 'mission-control';
@@ -51,17 +50,17 @@ function initDashboard() {
 }
 
 function initQueueTelemetry() {
-    renderTaskQueueDetails(readQueueSnapshot());
+    refreshQueueTelemetry().catch((err) => {
+        console.warn('[Dashboard] queue telemetry init failed:', err.message);
+        renderTaskQueueDetails(null);
+    });
 
     if (state.queueTimerId) clearInterval(state.queueTimerId);
     state.queueTimerId = setInterval(() => {
-        renderTaskQueueDetails(readQueueSnapshot());
+        refreshQueueTelemetry().catch((err) => {
+            console.warn('[Dashboard] queue telemetry poll failed:', err.message);
+        });
     }, QUEUE_POLL_INTERVAL_MS);
-
-    window.addEventListener('storage', (event) => {
-        if (event.key !== QUEUE_SNAPSHOT_STORAGE_KEY) return;
-        renderTaskQueueDetails(parseQueueSnapshot(event.newValue));
-    });
 }
 
 function updateTimestamp() {
@@ -236,19 +235,61 @@ function getDateRange(days) {
     return { dateFrom, dateTo };
 }
 
-function readQueueSnapshot() {
-    const raw = localStorage.getItem(QUEUE_SNAPSHOT_STORAGE_KEY);
-    return parseQueueSnapshot(raw);
+function parseQueueTimestamp(value) {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function parseQueueSnapshot(raw) {
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw);
-    } catch (err) {
-        console.warn('[Dashboard] invalid queue snapshot:', err.message);
-        return null;
-    }
+function buildQueueSnapshotFromServer(summary = {}, jobs = []) {
+    const recentTasks = Array.isArray(jobs)
+        ? jobs.map((job) => ({
+            id: Number(job.id || 0),
+            seq: Number(job.id || 0),
+            phrase: String(job.phraseNormalized || '').trim(),
+            status: String(job.status || 'queued').trim().toLowerCase(),
+            cardType: String(job.jobType || job.cardType || 'trilingual').trim().toLowerCase(),
+            attempts: Number(job.attempts || 0),
+            createdAt: parseQueueTimestamp(job.createdAt),
+            startedAt: parseQueueTimestamp(job.startedAt),
+            finishedAt: parseQueueTimestamp(job.finishedAt)
+        }))
+        : [];
+    const activeSource = summary.activeJob || jobs.find((job) => String(job.status || '').toLowerCase() === 'running') || null;
+    const activeTask = activeSource ? {
+        id: Number(activeSource.id || 0),
+        seq: Number(activeSource.id || 0),
+        phrase: String(activeSource.phraseNormalized || '').trim(),
+        status: String(activeSource.status || 'running').trim().toLowerCase(),
+        cardType: String(activeSource.jobType || activeSource.cardType || 'trilingual').trim().toLowerCase(),
+        attempts: Number(activeSource.attempts || 0),
+        createdAt: parseQueueTimestamp(activeSource.createdAt),
+        startedAt: parseQueueTimestamp(activeSource.startedAt),
+        finishedAt: parseQueueTimestamp(activeSource.finishedAt)
+    } : null;
+
+    return {
+        updatedAt: Date.now(),
+        summary: {
+            total: Number(summary.total || 0),
+            queued: Number(summary.queued || 0),
+            running: Number(summary.running || 0),
+            success: Number(summary.success || 0),
+            failed: Number(summary.failed || 0),
+            cancelled: Number(summary.cancelled || 0)
+        },
+        activeTask,
+        recentTasks
+    };
+}
+
+async function refreshQueueTelemetry() {
+    const [summaryRes, jobsRes] = await Promise.all([
+        api.getGenerationJobSummary(),
+        api.listGenerationJobs(20)
+    ]);
+    renderTaskQueueDetails(buildQueueSnapshotFromServer(summaryRes.summary || {}, jobsRes.jobs || []));
 }
 
 function renderTaskQueueDetails(snapshot) {
