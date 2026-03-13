@@ -99,6 +99,13 @@ class ApiService {
         return this.fetchJson('/api/generation-jobs/summary');
     }
 
+    async getGenerationJobEvents(jobId, limit = 20) {
+        const params = new URLSearchParams();
+        if (jobId) params.set('jobId', String(jobId));
+        params.set('limit', String(limit));
+        return this.fetchJson(`/api/generation-jobs/events?${params.toString()}`);
+    }
+
     async retryGenerationJob(id) {
         return this.fetchJson(`/api/generation-jobs/${encodeURIComponent(id)}/retry`, {
             method: 'POST'

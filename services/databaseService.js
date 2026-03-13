@@ -1924,6 +1924,17 @@ class DatabaseService {
     };
   }
 
+  mapGenerationJobEventRow(row) {
+    if (!row) return null;
+    return {
+      id: Number(row.id || 0),
+      jobId: Number(row.job_id || 0),
+      eventType: String(row.event_type || '').trim() || 'unknown',
+      payload: safeJsonParse(row.payload_json, {}),
+      createdAt: row.created_at || ''
+    };
+  }
+
   createGenerationJob(payload = {}) {
     const stmt = this.db.prepare(`
       INSERT INTO generation_jobs (
@@ -1967,6 +1978,26 @@ class DatabaseService {
       payloadJson: JSON.stringify(payload || {})
     });
     return true;
+  }
+
+  listGenerationJobEvents({ jobId = 0, limit = 20 } = {}) {
+    const safeLimit = Math.max(1, Math.min(100, Number(limit || 20)));
+    const numericJobId = Number(jobId || 0);
+    const rows = numericJobId > 0
+      ? this.db.prepare(`
+          SELECT *
+          FROM generation_job_events
+          WHERE job_id = ?
+          ORDER BY id ASC
+          LIMIT ?
+        `).all(numericJobId, safeLimit)
+      : this.db.prepare(`
+          SELECT *
+          FROM generation_job_events
+          ORDER BY id DESC
+          LIMIT ?
+        `).all(safeLimit).reverse();
+    return rows.map((row) => this.mapGenerationJobEventRow(row));
   }
 
   getGenerationJobById(jobId) {

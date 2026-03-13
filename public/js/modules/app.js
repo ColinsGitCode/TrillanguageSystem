@@ -81,6 +81,8 @@ let activeCardContext = null;
 
 const generationQueueState = {
     tasks: [],
+    events: [],
+    timelineJobId: null,
     running: false,
     nextSeq: 1,
     maxRetries: 2,
@@ -92,6 +94,7 @@ const generationQueueState = {
     panelEl: null,
     summaryEl: null,
     listEl: null,
+    eventsEl: null,
     toastEl: null,
     collapseBtn: null,
     clearDoneBtn: null,
@@ -1837,11 +1840,26 @@ function applyServerQueueState(summary = {}, jobs = []) {
     }
 }
 
+function resolveQueueTimelineTask(tasks = []) {
+    return tasks.find((task) => task.status === 'running')
+        || tasks.find((task) => task.status === 'failed')
+        || tasks[0]
+        || null;
+}
+
 async function syncGenerationQueueFromServer() {
     const [summaryRes, jobsRes] = await Promise.all([
         api.getGenerationJobSummary(),
         api.listGenerationJobs(40)
     ]);
+    const tasks = Array.isArray(jobsRes.jobs) ? jobsRes.jobs.map((job) => mapGenerationJobToQueueTask(job)) : [];
+    const focusTask = resolveQueueTimelineTask(tasks);
+    const eventsRes = focusTask?.id
+        ? await api.getGenerationJobEvents(focusTask.id, 12).catch(() => ({ events: [] }))
+        : { events: [] };
+
+    generationQueueState.events = Array.isArray(eventsRes.events) ? eventsRes.events : [];
+    generationQueueState.timelineJobId = focusTask?.id || null;
     applyServerQueueState(summaryRes.summary || {}, jobsRes.jobs || []);
 }
 
@@ -1875,6 +1893,7 @@ function initGenerationQueuePanel() {
       </div>
       <div class="gen-queue-summary">空闲</div>
       <div class="gen-queue-list"></div>
+      <div class="gen-queue-events" data-testid="queue-audit-timeline"></div>
       <div class="gen-queue-toast hidden"></div>
     `;
     document.body.appendChild(panel);
@@ -1882,6 +1901,7 @@ function initGenerationQueuePanel() {
     generationQueueState.panelEl = panel;
     generationQueueState.summaryEl = panel.querySelector('.gen-queue-summary');
     generationQueueState.listEl = panel.querySelector('.gen-queue-list');
+    generationQueueState.eventsEl = panel.querySelector('.gen-queue-events');
     generationQueueState.toastEl = panel.querySelector('.gen-queue-toast');
     generationQueueState.retryFailedBtn = panel.querySelector('[data-action="retry-failed"]');
     generationQueueState.clearDoneBtn = panel.querySelector('[data-action="clear-done"]');
@@ -1957,6 +1977,63 @@ function truncateQueuePhrase(text, maxLength = 36) {
     const normalized = String(text || '').trim();
     if (normalized.length <= maxLength) return normalized;
     return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function getQueueEventLabel(eventType) {
+    return {
+        created: 'CREATED',
+        picked: 'PICKED',
+        retry_scheduled: 'RETRY',
+        failed: 'FAILED',
+        succeeded: 'SUCCESS',
+        cancelled: 'CANCELLED',
+        reset_to_queued_after_restart: 'RECOVERED'
+    }[String(eventType || '').trim().toLowerCase()] || String(eventType || 'UNKNOWN').trim().toUpperCase();
+}
+
+function buildQueueEventNote(event = {}) {
+    const payload = event && typeof event.payload === 'object' && event.payload ? event.payload : {};
+    if (payload.error) return String(payload.error).trim();
+    if (payload.generationId) return `generation #${payload.generationId}`;
+    if (payload.folder && payload.baseName) return `${payload.folder}/${payload.baseName}`;
+    if (payload.phrase) return String(payload.phrase).trim();
+    if (payload.providerUsed || payload.modelUsed) {
+        return [payload.providerUsed, payload.modelUsed].filter(Boolean).join(' · ');
+    }
+    if (payload.attempts) return `attempt ${payload.attempts}`;
+    return '';
+}
+
+function renderQueueAuditTimeline() {
+    const container = generationQueueState.eventsEl;
+    if (!container) return;
+
+    const focusTask = generationQueueState.tasks.find((task) => String(task.id) === String(generationQueueState.timelineJobId))
+        || resolveQueueTimelineTask(generationQueueState.tasks);
+    const events = Array.isArray(generationQueueState.events) ? generationQueueState.events : [];
+
+    if (!focusTask || !events.length) {
+        container.innerHTML = '<div class="gen-queue-events-empty">暂无审计事件</div>';
+        return;
+    }
+
+    container.innerHTML = `
+      <div class="gen-queue-events-head">
+        <span class="gen-queue-events-title">审计时间线</span>
+        <span class="gen-queue-events-focus">#${focusTask.seq} ${escapeHtml(truncateQueuePhrase(focusTask.phraseNormalized, 22))}</span>
+      </div>
+      <div class="gen-queue-events-list">
+        ${events.map((event) => `
+          <div class="gen-queue-event-item" data-testid="queue-audit-item">
+            <div class="gen-queue-event-top">
+              <span class="gen-queue-event-type" data-testid="queue-audit-type">${escapeHtml(getQueueEventLabel(event.eventType))}</span>
+              <span class="gen-queue-event-time">${escapeHtml(formatDate(parseQueueTimestamp(event.createdAt) || event.createdAt))}</span>
+            </div>
+            <div class="gen-queue-event-note">${escapeHtml(buildQueueEventNote(event) || '-')}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
 }
 
 function stopHeroTaskQueueElapsedTimer() {
@@ -2138,6 +2215,7 @@ function renderGenerationQueuePanel() {
     }
 
     updateHeroTaskQueueStatus();
+    renderQueueAuditTimeline();
     persistGenerationQueueSnapshot();
 }
 

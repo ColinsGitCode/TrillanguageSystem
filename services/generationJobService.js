@@ -53,6 +53,10 @@ class GenerationJobService {
     return dbService.getGenerationJobSummary();
   }
 
+  listEvents({ jobId = 0, limit = 20 } = {}) {
+    return dbService.listGenerationJobEvents({ jobId, limit });
+  }
+
   retryJob(jobId) {
     const job = dbService.retryGenerationJob(Number(jobId || 0));
     if (job) {

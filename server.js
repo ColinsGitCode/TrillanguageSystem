@@ -1540,6 +1540,17 @@ app.get('/api/generation-jobs/summary', (req, res) => {
   }
 });
 
+app.get('/api/generation-jobs/events', (req, res) => {
+  try {
+    const jobId = Number(req.query.jobId || 0);
+    const limit = Number(req.query.limit || 20);
+    const events = generationJobService.listEvents({ jobId, limit });
+    return res.json({ success: true, events });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/generation-jobs/clear-done', (req, res) => {
   try {
     const result = generationJobService.clearCompleted();

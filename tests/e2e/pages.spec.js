@@ -76,6 +76,7 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('mission-queue-failed')).toContainText('1', { timeout: 15_000 });
     await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase);
     await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('FAILED');
+    await expect(page.getByTestId('mission-queue-audit')).toContainText('FAILED');
 
     const retryRes = await request.post(`/api/generation-jobs/${jobId}/retry`);
     expect(retryRes.ok()).toBeTruthy();
@@ -83,6 +84,7 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('mission-queue-success')).toContainText('1', { timeout: 15_000 });
     await expect(page.getByTestId('mission-queue-failed')).toContainText('0', { timeout: 15_000 });
     await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('SUCCESS');
+    await expect(page.getByTestId('mission-queue-audit')).toContainText('SUCCESS');
 
     const jobsRes = await request.get('/api/generation-jobs?limit=10');
     expect(jobsRes.ok()).toBeTruthy();

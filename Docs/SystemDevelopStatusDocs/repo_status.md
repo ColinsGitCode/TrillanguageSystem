@@ -80,6 +80,7 @@
 - 多浏览器访问时看到的是同一份队列状态，不再各自持有一份本地队列
 - `viewer` 启动时会将残留 `running` 任务恢复为 `queued`，由内置 worker 串行继续执行
 - `localStorage:generation_queue_snapshot_v1` 现在仅保留最近任务镜像，不再是事实来源，也不再承担本地恢复
+- 主页面队列面板与 Mission Control 已展示 `generation_job_events` 审计时间线，可直接定位任务创建、领取、失败、重试、成功节点
 
 ### 3.7 文本选取静默队列生成（v3.5）
 
@@ -345,6 +346,7 @@
   - 共享队列页面重载回源
   - 失败任务重试后成功
   - `Mission Control` 共享队列失败/重试状态同步
+  - 共享队列审计时间线显示与断言
   - 低频真实 Gemini 验收脚本（默认 skip）
     - 文本输入真实生成
     - `TRAIN regenerate` 验收

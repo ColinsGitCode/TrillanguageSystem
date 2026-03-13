@@ -291,12 +291,59 @@ function buildQueueSnapshotFromServer(summary = {}, jobs = []) {
     };
 }
 
+function resolveQueueFocusTask(summary = {}, jobs = []) {
+    return summary.activeJob
+        || jobs.find((job) => String(job.status || '').toLowerCase() === 'running')
+        || jobs.find((job) => String(job.status || '').toLowerCase() === 'failed')
+        || jobs[0]
+        || null;
+}
+
+function getQueueEventLabel(eventType) {
+    return {
+        created: 'CREATED',
+        picked: 'PICKED',
+        retry_scheduled: 'RETRY',
+        failed: 'FAILED',
+        succeeded: 'SUCCESS',
+        cancelled: 'CANCELLED',
+        reset_to_queued_after_restart: 'RECOVERED'
+    }[String(eventType || '').trim().toLowerCase()] || String(eventType || 'UNKNOWN').trim().toUpperCase();
+}
+
+function buildQueueEventNote(event = {}) {
+    const payload = event && typeof event.payload === 'object' && event.payload ? event.payload : {};
+    if (payload.error) return String(payload.error).trim();
+    if (payload.generationId) return `generation #${payload.generationId}`;
+    if (payload.folder && payload.baseName) return `${payload.folder}/${payload.baseName}`;
+    if (payload.phrase) return String(payload.phrase).trim();
+    if (payload.providerUsed || payload.modelUsed) {
+        return [payload.providerUsed, payload.modelUsed].filter(Boolean).join(' · ');
+    }
+    if (payload.attempts) return `attempt ${payload.attempts}`;
+    return '-';
+}
+
 async function refreshQueueTelemetry() {
     const [summaryRes, jobsRes] = await Promise.all([
         api.getGenerationJobSummary(),
         api.listGenerationJobs(20)
     ]);
-    renderTaskQueueDetails(buildQueueSnapshotFromServer(summaryRes.summary || {}, jobsRes.jobs || []));
+    const focusJob = resolveQueueFocusTask(summaryRes.summary || {}, jobsRes.jobs || []);
+    const eventsRes = focusJob?.id
+        ? await api.getGenerationJobEvents(focusJob.id, 12).catch(() => ({ events: [] }))
+        : { events: [] };
+    const snapshot = buildQueueSnapshotFromServer(summaryRes.summary || {}, jobsRes.jobs || []);
+    snapshot.auditEvents = Array.isArray(eventsRes.events) ? eventsRes.events : [];
+    snapshot.auditFocusJob = focusJob
+        ? {
+            id: Number(focusJob.id || 0),
+            seq: Number(focusJob.id || 0),
+            phrase: String(focusJob.phraseNormalized || '').trim(),
+            cardType: String(focusJob.jobType || focusJob.cardType || 'trilingual').trim().toLowerCase()
+        }
+        : null;
+    renderTaskQueueDetails(snapshot);
 }
 
 function renderTaskQueueDetails(snapshot) {
@@ -319,6 +366,8 @@ function renderTaskQueueDetails(snapshot) {
     const recentTasks = Array.isArray(snapshot.recentTasks)
         ? snapshot.recentTasks.slice().reverse()
         : [];
+    const auditEvents = Array.isArray(snapshot.auditEvents) ? snapshot.auditEvents : [];
+    const auditFocusJob = snapshot.auditFocusJob || active || recentTasks[0] || null;
     const cardTypeText = (rawType) => String(rawType || '').toLowerCase() === 'grammar_ja' ? '语法' : '三语';
 
     const activeText = active
@@ -353,6 +402,23 @@ function renderTaskQueueDetails(snapshot) {
                     <div class="qphrase" data-testid="mission-queue-recent-phrase">${escapeHtml(task.phrase || '-')}</div>
                 </div>
             `).join('') : '<div class="empty-hint">No queue task records</div>'}
+        </div>
+        <div class="queue-audit" data-testid="mission-queue-audit">
+            <div class="queue-audit-head">
+                <span class="queue-audit-title">Audit Timeline</span>
+                <span class="queue-audit-focus">${auditFocusJob ? `#${Number(auditFocusJob.seq || auditFocusJob.id || 0)} · ${escapeHtml(auditFocusJob.phrase || '-')}` : 'No Focus Job'}</span>
+            </div>
+            <div class="queue-audit-list">
+                ${auditEvents.length ? auditEvents.map((event) => `
+                    <div class="queue-audit-item" data-testid="mission-queue-audit-item">
+                        <div class="queue-audit-top">
+                            <span class="queue-audit-type" data-testid="mission-queue-audit-type">${escapeHtml(getQueueEventLabel(event.eventType))}</span>
+                            <span class="queue-audit-time">${formatQueueTime(parseQueueTimestamp(event.createdAt))}</span>
+                        </div>
+                        <div class="queue-audit-note">${escapeHtml(buildQueueEventNote(event))}</div>
+                    </div>
+                `).join('') : '<div class="empty-hint">No queue audit events</div>'}
+            </div>
         </div>
     `;
 }

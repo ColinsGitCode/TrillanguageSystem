@@ -71,6 +71,7 @@
   - 内置单 worker 串行执行共享队列
 - 主页面与 Mission Control 已改为轮询服务端共享队列，不再依赖浏览器本地快照作为事实来源
 - `localStorage:generation_queue_snapshot_v1` 现在仅保留最近任务镜像，不再承担本地恢复职责
+- 主页面队列面板与 Mission Control 已接入 `generation_job_events` 审计时间线，可直接查看 `created/picked/failed/retry/succeeded` 流转
 
 ### 2.2.3 文本选取即时生成（v3.5 新增）
 
@@ -350,6 +351,7 @@
   - `Knowledge OPS` 任务启动 / 取消
   - OCR fixture 上传、清洗与输入框回填
   - `Mission Control` 共享队列失败/重试状态同步
+  - 共享队列审计时间线显示与失败/重试链路断言
   - 低频真实链路验收脚本：`tests/e2e/real-gemini.spec.js`
     - 文本输入真实 Gemini 生成
     - `TRAIN regenerate` 更新校验

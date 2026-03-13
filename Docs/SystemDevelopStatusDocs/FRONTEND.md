@@ -45,6 +45,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 支持卡片类型切换：`三语卡片` / `日语语法卡片`
 - 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
 - 页面刷新 / 前端重载后，会重新拉取服务端共享队列；不同浏览器看到的是同一份队列状态
+- 主页面队列面板与 Mission Control 现在都会展示 `generation_job_events` 审计时间线，便于排查 created/picked/failed/retry/success 流转
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - Phrase List 按同日卡片生成时间倒序显示（最新优先）

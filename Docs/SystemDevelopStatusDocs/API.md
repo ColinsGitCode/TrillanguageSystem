@@ -18,6 +18,7 @@
 | 队列 | POST | `/generation-jobs` | 创建共享生成任务 |
 | 队列 | GET | `/generation-jobs` | 获取共享生成任务列表 |
 | 队列 | GET | `/generation-jobs/summary` | 获取共享生成任务摘要 |
+| 队列 | GET | `/generation-jobs/events` | 获取共享生成任务审计时间线 |
 | 队列 | POST | `/generation-jobs/:id/retry` | 重试失败任务 |
 | 队列 | POST | `/generation-jobs/:id/cancel` | 取消排队任务 |
 | 队列 | POST | `/generation-jobs/clear-done` | 清理 success/cancelled 任务 |
@@ -160,6 +161,42 @@
 
 - 同短语 + 同卡片类型在 `queued/running/failed` 期间会返回 `409`
 - `source_context` 仅作审计与 UI 上下文记录，不参与实际生成语义
+
+### 2.3 `GET /api/generation-jobs/events`
+
+用于读取共享队列某个任务的审计时间线，供主页面队列面板与 Mission Control 展示。
+
+请求示例：
+
+```text
+GET /api/generation-jobs/events?jobId=12&limit=12
+```
+
+响应关键字段：
+
+```json
+{
+  "success": true,
+  "events": [
+    {
+      "id": 101,
+      "jobId": 12,
+      "eventType": "created",
+      "payload": {
+        "phrase": "冷热数据分离",
+        "jobType": "trilingual"
+      },
+      "createdAt": "2026-03-13 12:30:00"
+    }
+  ]
+}
+```
+
+- `jobId` 可选；未传时返回最近事件
+- 当前 UI 默认优先展示：
+  - `running` 任务的时间线
+  - 否则展示最近一个 `failed`
+  - 再否则展示最近一个任务
 
 #### 单模型成功响应（关键字段）
 
