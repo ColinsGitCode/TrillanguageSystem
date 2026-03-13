@@ -78,6 +78,13 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase);
     await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('FAILED');
     await expect(page.getByTestId('mission-queue-audit')).toContainText('FAILED');
+    await page.getByTestId('mission-queue-detail-btn').first().click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
+    await expect(page.getByTestId('queue-job-detail-request')).toContainText(phrase);
+    await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
+    await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('FAILED');
+    await page.getByTestId('queue-job-detail-close').click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeHidden();
 
     const retryRes = await request.post(`/api/generation-jobs/${jobId}/retry`);
     expect(retryRes.ok()).toBeTruthy();
@@ -107,6 +114,11 @@ test.describe('Playwright page smoke', () => {
 
     await secondItem.click();
     await expect(page.getByTestId('mission-queue-audit-focus')).toContainText(phrase2);
+    await secondItem.getByTestId('mission-queue-detail-btn').click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
+    await expect(page.getByTestId('queue-job-detail-result')).toContainText('generationId');
+    await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('SUCCESS');
+    await page.getByTestId('queue-job-detail-close').click();
 
     const jobsRes = await request.get('/api/generation-jobs?limit=10');
     expect(jobsRes.ok()).toBeTruthy();

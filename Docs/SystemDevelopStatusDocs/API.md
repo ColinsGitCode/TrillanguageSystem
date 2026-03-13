@@ -19,6 +19,7 @@
 | 队列 | GET | `/generation-jobs` | 获取共享生成任务列表 |
 | 队列 | GET | `/generation-jobs/summary` | 获取共享生成任务摘要 |
 | 队列 | GET | `/generation-jobs/events` | 获取共享生成任务审计时间线 |
+| 队列 | GET | `/generation-jobs/:id` | 获取单任务详情（完整 payload / 错误详情 / 审计事件） |
 | 队列 | POST | `/generation-jobs/:id/retry` | 重试失败任务 |
 | 队列 | POST | `/generation-jobs/:id/cancel` | 取消排队任务 |
 | 队列 | POST | `/generation-jobs/clear-done` | 清理 success/cancelled 任务 |

@@ -95,6 +95,18 @@ class ApiService {
         return this.fetchJson(`/api/generation-jobs?${params.toString()}`);
     }
 
+    async getGenerationJob(id, options = {}) {
+        const params = new URLSearchParams();
+        if (options.includeEvents !== undefined) {
+            params.set('includeEvents', options.includeEvents ? '1' : '0');
+        }
+        if (options.eventLimit !== undefined) {
+            params.set('eventLimit', String(options.eventLimit));
+        }
+        const query = params.toString();
+        return this.fetchJson(`/api/generation-jobs/${encodeURIComponent(id)}${query ? `?${query}` : ''}`);
+    }
+
     async getGenerationJobSummary() {
         return this.fetchJson('/api/generation-jobs/summary');
     }

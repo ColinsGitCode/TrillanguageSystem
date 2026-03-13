@@ -5,6 +5,7 @@
 import { formatDate } from './utils.js';
 import { initInfoModal, bindInfoButtons } from './info-modal.js';
 import { api } from './api.js';
+import { openGenerationJobDetailModal } from './generation-job-detail.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
@@ -401,6 +402,7 @@ function renderTaskQueueDetails(snapshot) {
                         <span class="qtype">${cardTypeText(task.cardType)}</span>
                         <span class="qattempt">try ${Number(task.attempts || 0)}</span>
                         <span class="qtime">${formatQueueTime(task.finishedAt || task.createdAt)}</span>
+                        <button type="button" class="queue-recent-detail-btn" data-action="job-detail" data-testid="mission-queue-detail-btn">详情</button>
                     </div>
                     <div class="qphrase" data-testid="mission-queue-recent-phrase">${escapeHtml(task.phrase || '-')}</div>
                 </div>
@@ -426,6 +428,19 @@ function renderTaskQueueDetails(snapshot) {
     `;
 
     container.onclick = async (event) => {
+        const detailBtn = event.target.closest('[data-action="job-detail"]');
+        if (detailBtn) {
+            event.stopPropagation();
+            const item = detailBtn.closest('[data-testid="mission-queue-recent-item"]');
+            const jobId = Number(item?.dataset.jobId || 0);
+            if (!jobId) return;
+            state.selectedQueueJobId = jobId;
+            await refreshQueueTelemetry().catch((err) => {
+                console.warn('[Dashboard] queue focus switch failed:', err.message);
+            });
+            openGenerationJobDetailModal({ api, jobId });
+            return;
+        }
         const item = event.target.closest('[data-testid="mission-queue-recent-item"]');
         if (!item) return;
         const jobId = Number(item.dataset.jobId || 0);

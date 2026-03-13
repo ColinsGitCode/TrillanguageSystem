@@ -6,6 +6,7 @@ import { store } from './store.js';
 import { player } from './audio-player.js';
 import { escapeHtml, sanitizeHtml, formatTime, formatDate, debounce } from './utils.js';
 import { initInfoModal, createInfoBtn, bindInfoButtons } from './info-modal.js';
+import { openGenerationJobDetailModal } from './generation-job-detail.js';
 
 // DOM Elements
 const els = {
@@ -1953,6 +1954,19 @@ function initGenerationQueuePanel() {
     };
 
     generationQueueState.listEl.addEventListener('click', async (event) => {
+        const detailBtn = event.target.closest('[data-action="job-detail"]');
+        if (detailBtn) {
+            event.stopPropagation();
+            const item = detailBtn.closest('.gen-queue-item');
+            const jobId = String(item?.dataset.jobId || '').trim();
+            if (!jobId) return;
+            generationQueueState.timelineJobId = jobId;
+            await syncGenerationQueueFromServer().catch((err) => {
+                console.warn('[Queue] timeline switch failed:', err.message);
+            });
+            openGenerationJobDetailModal({ api, jobId });
+            return;
+        }
         const item = event.target.closest('.gen-queue-item');
         if (!item) return;
         const jobId = String(item.dataset.jobId || '').trim();
@@ -2213,6 +2227,7 @@ function renderGenerationQueuePanel() {
                   <span class="gen-queue-item-id">#${task.seq}</span>
                   <span class="gen-queue-item-status">${statusLabel}</span>
                   <span class="gen-queue-item-type">${cardTypeLabel}</span>
+                  <button type="button" class="gen-queue-item-detail" data-action="job-detail" data-testid="queue-task-detail-btn">详情</button>
                 </div>
                 <div class="gen-queue-item-text">${escapeHtml(task.phraseNormalized)}</div>
                 ${errorText}

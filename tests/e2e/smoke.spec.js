@@ -198,6 +198,11 @@ test.describe.serial('Playwright smoke', () => {
     await page.getByTestId('queue-task-item').first().click();
     await expect(page.getByTestId('queue-audit-focus')).toContainText('__E2E_FAIL_ONCE__ PW');
     await expect(page.getByTestId('queue-audit-timeline')).toContainText('FAILED');
+    await page.getByTestId('queue-task-detail-btn').first().click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
+    await expect(page.getByTestId('queue-job-detail-request')).toContainText(retryPhrase);
+    await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
+    await page.getByTestId('queue-job-detail-close').click();
 
     await page.getByTestId('hero-queue-retry').click();
     await waitForQueueIdle(page);

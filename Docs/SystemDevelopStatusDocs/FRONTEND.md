@@ -47,6 +47,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 页面刷新 / 前端重载后，会重新拉取服务端共享队列；不同浏览器看到的是同一份队列状态
 - 主页面队列面板与 Mission Control 现在都会展示 `generation_job_events` 审计时间线，便于排查 created/picked/failed/retry/success 流转
 - 点击任一队列任务卡片，可切换审计时间线焦点到该任务
+- 点击任务项上的“详情”按钮，会弹出单任务详情层，展示完整请求 payload、错误详情、结果摘要与完整审计事件 payload
 - 页面常驻操作时保持当前选中目录
 - 页面刷新时默认显示最近日期目录
 - Phrase List 按同日卡片生成时间倒序显示（最新优先）

@@ -151,6 +151,7 @@ scripts/
 - `/api/generate` 继续复用现有生成编排；worker 通过内部 HTTP 回调执行，不重复拆主链路
 - `viewer` 启动时会将残留 `running` 任务恢复为 `queued`
 - Mission Control 与主页面统一通过共享队列 API 读取状态，不再依赖浏览器本地快照
+- 新增 `GET /api/generation-jobs/:id`，返回单任务完整详情：基础元信息、`request_payload_json`、`source_context_json`、`result_summary_json` 与完整 `generation_job_events`
 - 新增 `/api/generation-jobs/events`，直接暴露 `generation_job_events` 审计流，供主页面队列面板与 Mission Control 展示时间线
 
 ### 6.1 知识同义边界 key 归一修复（v3.6.10）

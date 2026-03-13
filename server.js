@@ -1551,6 +1551,24 @@ app.get('/api/generation-jobs/events', (req, res) => {
   }
 });
 
+app.get('/api/generation-jobs/:id(\\d+)', (req, res) => {
+  try {
+    const jobId = Number(req.params.id || 0);
+    const includeEvents = req.query.includeEvents !== '0';
+    const eventLimit = Number(req.query.eventLimit || 80);
+    const job = generationJobService.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'job not found' });
+    }
+    const events = includeEvents
+      ? generationJobService.listEvents({ jobId, limit: eventLimit })
+      : [];
+    return res.json({ success: true, job, events });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/generation-jobs/clear-done', (req, res) => {
   try {
     const result = generationJobService.clearCompleted();

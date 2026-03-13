@@ -73,6 +73,7 @@
 - `localStorage:generation_queue_snapshot_v1` 现在仅保留最近任务镜像，不再承担本地恢复职责
 - 主页面队列面板与 Mission Control 已接入 `generation_job_events` 审计时间线，可直接查看 `created/picked/failed/retry/succeeded` 流转
 - 点击任一共享队列任务项，可切换当前时间线焦点到该任务
+- 主页面与 Mission Control 已支持单任务详情弹层，可查看完整 payload、错误详情、结果摘要与事件 payload
 
 ### 2.2.3 文本选取即时生成（v3.5 新增）
 
