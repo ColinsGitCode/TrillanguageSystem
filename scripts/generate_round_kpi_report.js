@@ -123,9 +123,9 @@ function main() {
     '',
     '## 数据文件',
     '',
-    `- Docs/TestDocs/data/round_trend_${experimentId}.json`,
-    `- Docs/TestDocs/data/round_metrics_${experimentId}.csv`,
-    `- Docs/TestDocs/data/round_kpi_summary_${experimentId}.json`
+    `- Docs/TestReports/data/round_trend_${experimentId}.json`,
+    `- Docs/TestReports/data/round_metrics_${experimentId}.csv`,
+    `- Docs/TestReports/data/round_kpi_summary_${experimentId}.json`
   ].join('\n');
 
   fs.writeFileSync(outputPath, report, 'utf8');

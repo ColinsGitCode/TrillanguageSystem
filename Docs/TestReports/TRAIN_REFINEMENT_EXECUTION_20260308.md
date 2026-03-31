@@ -170,15 +170,15 @@
 
 ### 基线备份
 
-- `Docs/TestDocs/artifacts/train_refinement_candidates_baseline_20260308.json`
+- `Docs/TestReports/artifacts/train_refinement_candidates_baseline_20260308.json`
 
 ### 本轮结果
 
-- `Docs/TestDocs/artifacts/train_refinement_run_20260308.json`
+- `Docs/TestReports/artifacts/train_refinement_run_20260308.json`
 
 ### 精修后抽查数据
 
-- `Docs/TestDocs/artifacts/train_refinement_postcheck_20260308.json`
+- `Docs/TestReports/artifacts/train_refinement_postcheck_20260308.json`
 
 ## 7. 二次人工导向精修结果
 

@@ -178,7 +178,7 @@
 - 对应 API 已接通并在 2026-03-05 完成全量执行：
   - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster` 全部 success
   - 全量结果：266 cards / 266 index / 156 issues / 4 grammar patterns / 4 clusters
-- UI 验证报告：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+- UI 验证报告：`Docs/TestReports/UI_Validation_MissionControl_20260305.md`
 
 ### 3.15 Knowledge 同义边界与删除交互修复（v3.6.10）
 
@@ -267,7 +267,7 @@
   - grammar / technical / OCR / repaired 样本均具备实际学习价值
   - 当前主风险已从“回退数据残留”切换为“少量低分样本的二次精修”和“极少数长尾时延”
 - 已整理 `qualityScore <= 95` 的精修候选清单：
-  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+  - `Docs/TestReports/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 
 ### 3.20 TRAIN 低分样本精修与 UI 一致性验证（v3.7.3）
 
@@ -317,8 +317,8 @@
   - `差不多`
   三个样本的 UI 展示与数据库/sidecar 数据一致，未发现旧缓存残留
 - 对应报告：
-  - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
-  - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+  - `Docs/TestReports/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+  - `Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
 
 ### 3.21 TRAIN 页选区交互增强（v3.7.4）
 
@@ -336,7 +336,7 @@
   - 无需新增数据库表
 - `TRAIN` 页恢复高亮后，`重新生成训练包` / `显示答案` 等交互仍可正常绑定
 - 已完成 UI 验证并清理测试产物：
-  - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
+  - `Docs/TestReports/UI_Validation_TRAIN_Selection_20260309.md`
 
 ### 3.22 Playwright E2E 引入（v3.8.0）
 
@@ -385,7 +385,7 @@
   - 首页输入、队列状态、文件/文件夹容器
   - 卡片弹窗、tab、TRAIN 面板、选区工具条
 - 设计文档：
-  - `Docs/DesignDocs/Playwright_E2E_Testing_Design.md`
+  - `Docs/Architecture/Testing/Playwright_E2E_Testing_Design.md`
 
 ## 4. 主线技术策略
 
@@ -403,15 +403,15 @@
 
 ## 6. 关键文档入口
 
-- `Docs/SystemDevelopStatusDocs/API.md`
-- `Docs/SystemDevelopStatusDocs/BACKEND.md`
-- `Docs/SystemDevelopStatusDocs/FRONTEND.md`
-- `Docs/SystemDevelopStatusDocs/IMPLEMENTATION_STATUS.md`
-- `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
-- `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
-- `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
-- `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
-- `Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
+- `Docs/Status/API.md`
+- `Docs/Status/BACKEND.md`
+- `Docs/Status/FRONTEND.md`
+- `Docs/Status/IMPLEMENTATION_STATUS.md`
+- `Docs/TestReports/UI_Validation_MissionControl_20260305.md`
+- `Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+- `Docs/TestReports/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+- `Docs/TestReports/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+- `Docs/Experiments/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - `Docs/SLIDES_OUTLINES.md`
 
 ---

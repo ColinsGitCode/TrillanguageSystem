@@ -353,7 +353,7 @@ docker compose restart viewer
 - 新增 `scripts/export_round_trend_dataset.js`
 - 新增 `d3/render_round_trend_charts.mjs`
 - 输出 SVG：质量折线、teacher gap 折线、质量-token 双轴趋势
-- 验收：`Docs/TestDocs/charts/` 生成可用 SVG
+- 验收：`Docs/TestReports/charts/` 生成可用 SVG
 
 6. **测试与回归**
 - 迁移测试：`node scripts/migrate_fewshot_tables.js`
@@ -371,7 +371,7 @@ node scripts/migrate_fewshot_tables.js
 node scripts/run_fewshot_rounds.js phrases.txt exp_round_demo
 
 # 3) 导出趋势数据
-node scripts/export_round_trend_dataset.js exp_round_demo Docs/TestDocs/data
+node scripts/export_round_trend_dataset.js exp_round_demo Docs/TestReports/data
 
 # 4) 渲染 D3 图
 node d3/render_round_trend_charts.mjs

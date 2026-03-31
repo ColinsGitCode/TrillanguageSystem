@@ -216,7 +216,7 @@
   - `summary/index/issues_audit/synonym_boundary/grammar_link/cluster`
   - 总卡片：266；index 条目：266；issues：156；grammar patterns：4；clusters：4
 - UI 验证报告已落地：
-  - `Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
+  - `Docs/TestReports/UI_Validation_MissionControl_20260305.md`
 
 ### 2.15 知识页面拆分与多页初始化（v3.6.9）
 
@@ -299,9 +299,9 @@
   - `503 / 差不多`
 - 已完成浏览器端 TRAIN UI 一致性抽查，验证前端展示与数据库/sidecar 数据一致
 - 验收与执行报告：
-  - `Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
-  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
-  - `Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+  - `Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+  - `Docs/TestReports/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+  - `Docs/TestReports/TRAIN_REFINEMENT_EXECUTION_20260308.md`
 
 ### 2.19 TRAIN 页选区生成与标红恢复（v3.7.4）
 
@@ -327,7 +327,7 @@
   - 标红刷新后可恢复
   - 高亮恢复后 `重新生成训练包 / 显示答案` 按钮仍可用
 - 测试报告：
-  - `Docs/TestDocs/UI_Validation_TRAIN_Selection_20260309.md`
+  - `Docs/TestReports/UI_Validation_TRAIN_Selection_20260309.md`
 
 ### 2.20 Playwright Smoke 回归（v3.8.0）
 
@@ -384,7 +384,7 @@
 - 新增稳定测试选择器：
   - `data-testid` 已覆盖首页关键控件与卡片弹窗关键区域
 - 设计文档：
-  - `Docs/DesignDocs/Playwright_E2E_Testing_Design.md`
+  - `Docs/Architecture/Testing/Playwright_E2E_Testing_Design.md`
 
 ### 2.18 TRAIN 高质量化（v3.7.0）
 
@@ -437,7 +437,7 @@
   - 内容不只是“结构满足 schema”，而是具备可直接用于学习训练的搭配、语块和题目
   - 现阶段主要优化点已转为低分样本精修与长尾时延治理
 - 已输出低分样本精修清单：
-  - `Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+  - `Docs/TestReports/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
 
 ### 2.5 Gemini host-proxy 稳定化
 
@@ -472,19 +472,19 @@
 
 ## 5. 关键文档索引
 
-- API：`Docs/SystemDevelopStatusDocs/API.md`
-- 后端：`Docs/SystemDevelopStatusDocs/BACKEND.md`
-- 前端：`Docs/SystemDevelopStatusDocs/FRONTEND.md`
-- 最新仓库状态：`Docs/SystemDevelopStatusDocs/repo_status.md`
-- Mission Control UI 验证：`Docs/TestDocs/UI_Validation_MissionControl_20260305.md`
-- TRAIN 验收报告：`Docs/TestDocs/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
-- TRAIN 精修清单：`Docs/TestDocs/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
-- TRAIN 精修执行报告：`Docs/TestDocs/TRAIN_REFINEMENT_EXECUTION_20260308.md`
-- 评分机制设计：`Docs/DesignDocs/CodeAsPrompt/review_scoring_and_injection_gate.md`
+- API：`Docs/Status/API.md`
+- 后端：`Docs/Status/BACKEND.md`
+- 前端：`Docs/Status/FRONTEND.md`
+- 最新仓库状态：`Docs/Status/repo_status.md`
+- Mission Control UI 验证：`Docs/TestReports/UI_Validation_MissionControl_20260305.md`
+- TRAIN 验收报告：`Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
+- TRAIN 精修清单：`Docs/TestReports/TRAIN_REFINEMENT_CANDIDATES_20260308.md`
+- TRAIN 精修执行报告：`Docs/TestReports/TRAIN_REFINEMENT_EXECUTION_20260308.md`
+- 评分机制设计：`Docs/Experiments/CodeAsPrompt/review_scoring_and_injection_gate.md`
 - AI Agent 可观测 slides：`Docs/SLIDES_OUTLINES.md`
-- 卡片 UI 优化 v3.4：`Docs/SystemDevelopStatusDocs/CARD_UI_OPTIMIZATION_v3.4.md`
-- 文本选取即时生成 v3.5：`Docs/SystemDevelopStatusDocs/SELECTION_TO_GENERATE_v3.5.md`
-- 日语语法卡与类型化队列 v3.6：`Docs/SystemDevelopStatusDocs/FRONTEND.md` / `Docs/SystemDevelopStatusDocs/API.md`
+- 卡片 UI 优化 v3.4：`Docs/Archive/Milestones/CARD_UI_OPTIMIZATION_v3.4.md`
+- 文本选取即时生成 v3.5：`Docs/Archive/Milestones/SELECTION_TO_GENERATE_v3.5.md`
+- 日语语法卡与类型化队列 v3.6：`Docs/Status/FRONTEND.md` / `Docs/Status/API.md`
 
 ---
 

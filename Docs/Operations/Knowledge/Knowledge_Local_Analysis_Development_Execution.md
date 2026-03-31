@@ -114,7 +114,7 @@
 
 验收：
 - [ ] 全库回填完成
-- [ ] 产出报告落到 `Docs/TestDocs/`
+- [ ] 产出报告落到 `Docs/TestReports/`
 
 ---
 
@@ -128,8 +128,8 @@
 6. `public/js/modules/dashboard.js`
 7. `public/js/modules/app.js`（卡片详情 API 消费）
 8. `scripts/knowledge_backfill.js`（新）
-9. `Docs/SystemDevelopStatusDocs/API.md`
-10. `Docs/SystemDevelopStatusDocs/BACKEND.md`
+9. `Docs/Status/API.md`
+10. `Docs/Status/BACKEND.md`
 
 ---
 

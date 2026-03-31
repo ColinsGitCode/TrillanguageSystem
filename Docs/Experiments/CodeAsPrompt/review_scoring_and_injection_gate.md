@@ -219,7 +219,7 @@ overall = 0.45 * sentence + 0.45 * translation + 0.1 * tts
 ## 11. 图表生成说明（D3）
 
 - 渲染脚本：`/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/d3/render_review_scoring_docs_charts.mjs`
-- 图表输出目录：`/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/Docs/TestDocs/charts/review_scoring/`
+- 图表输出目录：`/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/Docs/TestReports/charts/review_scoring/`
 - 生成命令：
 
 ```bash

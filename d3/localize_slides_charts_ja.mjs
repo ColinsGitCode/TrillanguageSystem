@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import * as d3 from 'd3';
 
 const OUTPUT_DIR = 'Docs/assets/slides_charts/ja';
-const DATA_DIR = 'Docs/TestDocs/data';
+const DATA_DIR = 'Docs/TestReports/data';
 const BENCHMARK_ID = 'exp_benchmark_50_20260209_140431';
 
 const summaryPath = path.join(DATA_DIR, `round_kpi_summary_${BENCHMARK_ID}.json`);

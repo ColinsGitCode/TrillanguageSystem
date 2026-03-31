@@ -145,7 +145,7 @@
    - 规则：质量不降、SLO不劣化、成本涨幅不超阈值
    - 文件：
      - `scripts/`（回归脚本）
-     - `Docs/TestDocs/`（基线报告）
+     - `Docs/TestReports/`（基线报告）
 
 4. 自愈机制
    - 动作：检测 stuck -> reset -> 降级 -> 事件留痕
