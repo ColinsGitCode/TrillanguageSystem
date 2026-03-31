@@ -259,6 +259,7 @@ function buildQueueSnapshotFromServer(summary = {}, jobs = []) {
             status: String(job.status || 'queued').trim().toLowerCase(),
             cardType: String(job.jobType || job.cardType || 'trilingual').trim().toLowerCase(),
             attempts: Number(job.attempts || 0),
+            retryAfter: Number(job.retryAfterTs || job.retryAfter || 0) || 0,
             createdAt: parseQueueTimestamp(job.createdAt),
             startedAt: parseQueueTimestamp(job.startedAt),
             finishedAt: parseQueueTimestamp(job.finishedAt)
@@ -292,6 +293,12 @@ function buildQueueSnapshotFromServer(summary = {}, jobs = []) {
     };
 }
 
+function getRetryWaitSeconds(task = {}) {
+    const retryAfter = Number(task.retryAfter || 0);
+    if (!retryAfter) return 0;
+    return Math.max(1, Math.ceil((retryAfter - Date.now()) / 1000));
+}
+
 function resolveQueueFocusTask(summary = {}, jobs = []) {
     return jobs.find((job) => Number(job.id) === Number(state.selectedQueueJobId))
         || summary.activeJob
@@ -315,6 +322,20 @@ function getQueueEventLabel(eventType) {
 
 function buildQueueEventNote(event = {}) {
     const payload = event && typeof event.payload === 'object' && event.payload ? event.payload : {};
+    if (payload.retryDelayMs || payload.retryAfterTs) {
+        const parts = [];
+        if (payload.code === 'MODEL_CAPACITY_EXHAUSTED') {
+            parts.push('容量不足');
+        } else if (payload.code) {
+            parts.push(String(payload.code).trim());
+        }
+        if (payload.retryDelayMs) {
+            const seconds = Math.max(1, Math.round(Number(payload.retryDelayMs) / 1000));
+            parts.push(`${seconds}s 后重试`);
+        }
+        if (payload.error) parts.push(String(payload.error).trim());
+        return parts.filter(Boolean).join(' · ');
+    }
     if (payload.error) return String(payload.error).trim();
     if (payload.generationId) return `generation #${payload.generationId}`;
     if (payload.folder && payload.baseName) return `${payload.folder}/${payload.baseName}`;
@@ -397,7 +418,7 @@ function renderTaskQueueDetails(snapshot) {
                 <div class="queue-recent-item status-${escapeHtml(task.status || 'queued')}${Number(task.id || 0) === Number(state.selectedQueueJobId) ? ' is-selected' : ''}" data-job-id="${Number(task.id || 0)}" data-testid="mission-queue-recent-item">
                     <div class="queue-recent-head">
                         <span class="qid">#${Number(task.seq || 0)}</span>
-                        <span class="qstatus" data-testid="mission-queue-recent-status">${escapeHtml(String(task.status || 'queued').toUpperCase())}</span>
+                        <span class="qstatus" data-testid="mission-queue-recent-status">${escapeHtml(getRetryWaitSeconds(task) > 0 ? `BACKOFF ${getRetryWaitSeconds(task)}s` : String(task.status || 'queued').toUpperCase())}</span>
                         <span class="qtype">${cardTypeText(task.cardType)}</span>
                         <span class="qattempt">try ${Number(task.attempts || 0)}</span>
                         <span class="qtime">${formatQueueTime(task.finishedAt || task.createdAt)}</span>

@@ -882,6 +882,7 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
   attempts INTEGER NOT NULL DEFAULT 0,
   max_retries INTEGER NOT NULL DEFAULT 2,
   error_message TEXT,
+  retry_after_ts INTEGER,
   source_context_json TEXT,
   created_by_client TEXT,
   result_generation_id INTEGER,

@@ -152,6 +152,12 @@ scripts/
 - Mission Control 与主页面统一通过共享队列 API 读取状态，不再依赖浏览器本地快照
 - 新增 `GET /api/generation-jobs/:id`，返回单任务完整详情：基础元信息、`request_payload_json`、`source_context_json`、`result_summary_json` 与完整 `generation_job_events`
 - 新增 `/api/generation-jobs/events`，直接暴露 `generation_job_events` 审计流，供主页面队列面板与 Mission Control 展示时间线
+- 对 transient Gemini 错误已新增自动 backoff：
+  - 识别 `429 / MODEL_CAPACITY_EXHAUSTED / Gemini CLI rate limited`
+  - 不立刻标记最终失败，而是写入 `retry_after_ts`
+  - 追加 `retry_scheduled` 审计事件
+  - 到期后由 worker 自动再次取队执行
+- 仅在超过 `max_retries` 后，才进入最终 `failed`
 
 ### 6.1 知识同义边界 key 归一修复（v3.6.10）
 

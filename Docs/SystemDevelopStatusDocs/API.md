@@ -67,6 +67,13 @@
 | Knowledge | GET | `/knowledge/clusters` | 主题聚类查询 |
 | Knowledge | GET | `/knowledge/issues` | 质量问题清单查询 |
 
+补充说明：
+- `GET /generation-jobs` 返回的任务对象现包含 `retryAfterTs`
+- 当任务因 `429 / MODEL_CAPACITY_EXHAUSTED` 进入自动 backoff 时：
+  - `status` 保持为 `queued`
+  - `retryAfterTs` 表示允许再次执行的时间点
+  - `/generation-jobs/events` 会出现 `retry_scheduled`
+
 ---
 
 ## 2. 生成接口

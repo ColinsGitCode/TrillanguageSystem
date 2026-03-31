@@ -83,6 +83,10 @@
 - 主页面与 Mission Control 已支持单任务详情弹层，显示完整请求 payload、错误详情、结果摘要与事件 payload
 - 详情弹层支持复制 request / error / result / events JSON，方便任务排障与审计留档
 - 支持点击队列任务切换审计焦点，便于对单任务做逐步排障
+- 对 `429 / MODEL_CAPACITY_EXHAUSTED` 已新增自动 backoff 回队：
+  - 任务不会立即最终失败
+  - 共享队列会写入 `retry_after_ts`
+  - UI 明确显示 `BACKOFF xxs` 与 `容量不足 · xxs 后重试`
 
 ### 3.7 文本选取静默队列生成（v3.5）
 

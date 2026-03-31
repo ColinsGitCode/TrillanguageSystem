@@ -1520,7 +1520,7 @@ function mapGenerationJobToQueueTask(job = {}) {
         status: String(job.status || 'queued').trim().toLowerCase() || 'queued',
         attempts: Math.max(0, Number(job.attempts || 0)),
         error: String(job.errorMessage || '').trim(),
-        retryAfter: 0,
+        retryAfter: Number(job.retryAfterTs || job.retryAfter || 0) || 0,
         createdAt: parseQueueTimestamp(job.createdAt),
         startedAt: parseQueueTimestamp(job.startedAt),
         finishedAt: parseQueueTimestamp(job.finishedAt),
@@ -1528,6 +1528,12 @@ function mapGenerationJobToQueueTask(job = {}) {
         resultFolder: String(job.resultFolder || '').trim(),
         resultBaseFilename: String(job.resultBaseFilename || '').trim()
     };
+}
+
+function getRetryWaitSeconds(task = {}) {
+    const retryAfter = Number(task.retryAfter || 0);
+    if (!retryAfter) return 0;
+    return Math.max(1, Math.ceil((retryAfter - Date.now()) / 1000));
 }
 
 function applyServerQueueState(summary = {}, jobs = []) {
@@ -1726,6 +1732,20 @@ function getQueueEventLabel(eventType) {
 
 function buildQueueEventNote(event = {}) {
     const payload = event && typeof event.payload === 'object' && event.payload ? event.payload : {};
+    if (payload.retryDelayMs || payload.retryAfterTs) {
+        const parts = [];
+        if (payload.code === 'MODEL_CAPACITY_EXHAUSTED') {
+            parts.push('容量不足');
+        } else if (payload.code) {
+            parts.push(String(payload.code).trim());
+        }
+        if (payload.retryDelayMs) {
+            const seconds = Math.max(1, Math.round(Number(payload.retryDelayMs) / 1000));
+            parts.push(`${seconds}s 后重试`);
+        }
+        if (payload.error) parts.push(String(payload.error).trim());
+        return parts.filter(Boolean).join(' · ');
+    }
     if (payload.error) return String(payload.error).trim();
     if (payload.generationId) return `generation #${payload.generationId}`;
     if (payload.folder && payload.baseName) return `${payload.folder}/${payload.baseName}`;
@@ -1879,8 +1899,11 @@ function updateHeroTaskQueueStatus() {
         const hasOnlyFailed = queued === 0 && failed > 0;
         statusEl.className = hasOnlyFailed ? 'hero-queue-status is-failed' : 'hero-queue-status is-waiting';
         stateEl.textContent = hasOnlyFailed ? 'FAILED' : 'QUEUED';
+        const retryWaitSeconds = nextTask ? getRetryWaitSeconds(nextTask) : 0;
         taskEl.textContent = nextTask
-            ? `下一条 #${nextTask.seq} ${truncateQueuePhrase(nextTask.phraseNormalized, 26)}`
+            ? retryWaitSeconds > 0
+                ? `#${nextTask.seq} 容量不足，${retryWaitSeconds}s 后重试`
+                : `下一条 #${nextTask.seq} ${truncateQueuePhrase(nextTask.phraseNormalized, 26)}`
             : '等待处理失败任务';
         statusEl.title = hasOnlyFailed ? '当前仅存在失败任务' : '任务队列待执行中';
         return;
@@ -1914,13 +1937,14 @@ function renderGenerationQueuePanel() {
     const preview = tasks.slice(-8).reverse();
     generationQueueState.listEl.innerHTML = preview.length
         ? preview.map((task) => {
-            const statusLabel = {
+            const retryWaitSeconds = task.status === 'queued' ? getRetryWaitSeconds(task) : 0;
+            const statusLabel = retryWaitSeconds > 0 ? `BACKOFF ${retryWaitSeconds}s` : ({
                 queued: 'QUEUED',
                 running: 'RUNNING',
                 success: 'DONE',
                 failed: 'FAILED',
                 cancelled: 'CANCELLED'
-            }[task.status] || task.status.toUpperCase();
+            }[task.status] || task.status.toUpperCase());
             const cardType = normalizeCardType(task.cardType || 'trilingual');
             const cardTypeLabel = cardType === 'grammar_ja' ? '语法' : '三语';
             const selected = String(task.id) === String(generationQueueState.timelineJobId) ? ' is-selected' : '';

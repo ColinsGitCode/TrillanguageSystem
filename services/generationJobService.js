@@ -5,6 +5,7 @@ class GenerationJobService {
     this.running = false;
     this.executor = null;
     this.bootstrapDone = false;
+    this.retryTimer = null;
   }
 
   configureExecutor(fn) {
@@ -62,7 +63,8 @@ class GenerationJobService {
     if (job) {
       dbService.appendGenerationJobEvent(job.id, 'retry_scheduled', {
         attempts: job.attempts,
-        maxRetries: job.maxRetries
+        maxRetries: job.maxRetries,
+        manual: true
       });
       this.processQueue();
     }
@@ -84,10 +86,84 @@ class GenerationJobService {
     return job;
   }
 
+  clearRetryTimer() {
+    if (!this.retryTimer) return;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  scheduleRetryWakeup() {
+    this.clearRetryTimer();
+    const nextRetryTs = dbService.getNextQueuedGenerationRetryTs();
+    if (!nextRetryTs) return;
+    const delayMs = Math.max(0, nextRetryTs - Date.now());
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.processQueue();
+    }, delayMs);
+  }
+
+  isTransientCapacityError(err) {
+    const status = Number(err?.status || err?.payload?.status || 0) || 0;
+    const payloadText = (() => {
+      if (!err?.payload) return '';
+      if (typeof err.payload === 'string') return err.payload;
+      try {
+        return JSON.stringify(err.payload);
+      } catch {
+        return '';
+      }
+    })();
+    const haystack = `${String(err?.message || '')}\n${payloadText}`;
+    const patterns = [
+      /MODEL_CAPACITY_EXHAUSTED/i,
+      /No capacity available for model/i,
+      /Gemini CLI rate limited/i,
+      /Gemini proxy error\s*\(429\)/i,
+      /\brate limited\b/i
+    ];
+    return status === 429 || patterns.some((pattern) => pattern.test(haystack));
+  }
+
+  classifyTransientError(err) {
+    const status = Number(err?.status || err?.payload?.status || 0) || null;
+    const payloadText = (() => {
+      if (!err?.payload) return '';
+      if (typeof err.payload === 'string') return err.payload;
+      try {
+        return JSON.stringify(err.payload);
+      } catch {
+        return '';
+      }
+    })();
+    const haystack = `${String(err?.message || '')}\n${payloadText}`;
+    if (this.isTransientCapacityError(err)) {
+      return {
+        retryable: true,
+        code: /MODEL_CAPACITY_EXHAUSTED|No capacity available for model/i.test(haystack)
+          ? 'MODEL_CAPACITY_EXHAUSTED'
+          : 'RATE_LIMITED',
+        status
+      };
+    }
+    return { retryable: false, code: '', status };
+  }
+
+  getRetryDelayMs(job) {
+    const baseMs = Math.max(250, Number(process.env.GENERATION_JOB_TRANSIENT_RETRY_BASE_MS || 60_000));
+    const maxMs = Math.max(baseMs, Number(process.env.GENERATION_JOB_TRANSIENT_RETRY_MAX_MS || 5 * 60_000));
+    const exponent = Math.max(0, Number(job?.attempts || 1) - 1);
+    return Math.min(maxMs, baseMs * (2 ** exponent));
+  }
+
   async processQueue() {
     if (this.running || !this.executor) return;
+    this.clearRetryTimer();
     const nextJob = dbService.takeNextQueuedGenerationJob();
-    if (!nextJob) return;
+    if (!nextJob) {
+      this.scheduleRetryWakeup();
+      return;
+    }
 
     this.running = true;
     dbService.appendGenerationJobEvent(nextJob.id, 'picked', {
@@ -120,19 +196,55 @@ class GenerationJobService {
       dbService.appendGenerationJobEvent(nextJob.id, 'succeeded', resultSummary);
     } catch (err) {
       const message = String(err?.message || 'generation job failed');
-      dbService.updateGenerationJob(nextJob.id, {
-        status: 'failed',
-        errorMessage: message,
-        finishedAt: new Date().toISOString(),
-        resultSummary: {
-          success: false,
-          status: Number(err?.status || 0) || null
-        }
-      });
-      dbService.appendGenerationJobEvent(nextJob.id, 'failed', {
-        error: message,
-        status: Number(err?.status || 0) || null
-      });
+      const transient = this.classifyTransientError(err);
+      const canRetry = transient.retryable && Number(nextJob.attempts || 0) < Number(nextJob.maxRetries || 0);
+
+      if (canRetry) {
+        const retryDelayMs = this.getRetryDelayMs(nextJob);
+        const retryAfterTs = Date.now() + retryDelayMs;
+        dbService.updateGenerationJob(nextJob.id, {
+          status: 'queued',
+          errorMessage: message,
+          retryAfterTs,
+          startedAt: null,
+          finishedAt: null,
+          resultSummary: {
+            success: false,
+            transient: true,
+            status: transient.status,
+            code: transient.code,
+            retryDelayMs,
+            retryAfterTs
+          }
+        });
+        dbService.appendGenerationJobEvent(nextJob.id, 'retry_scheduled', {
+          error: message,
+          status: transient.status,
+          code: transient.code,
+          retryDelayMs,
+          retryAfterTs,
+          attempts: nextJob.attempts,
+          maxRetries: nextJob.maxRetries,
+          manual: false
+        });
+      } else {
+        dbService.updateGenerationJob(nextJob.id, {
+          status: 'failed',
+          errorMessage: message,
+          retryAfterTs: null,
+          finishedAt: new Date().toISOString(),
+          resultSummary: {
+            success: false,
+            status: transient.status,
+            code: transient.code || null
+          }
+        });
+        dbService.appendGenerationJobEvent(nextJob.id, 'failed', {
+          error: message,
+          status: transient.status,
+          code: transient.code || null
+        });
+      }
     } finally {
       this.running = false;
       setTimeout(() => this.processQueue(), 0);

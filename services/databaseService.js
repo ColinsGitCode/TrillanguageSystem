@@ -555,6 +555,7 @@ class DatabaseService {
       'enable_compare INTEGER DEFAULT 0',
       'max_retries INTEGER NOT NULL DEFAULT 2',
       'source_context_json TEXT',
+      'retry_after_ts INTEGER',
       'created_by_client TEXT',
       'result_generation_id INTEGER',
       'result_folder TEXT',
@@ -1910,6 +1911,7 @@ class DatabaseService {
       attempts: Number(row.attempts || 0),
       maxRetries: Number(row.max_retries || 0),
       errorMessage: row.error_message || '',
+      retryAfterTs: Number(row.retry_after_ts || 0) || null,
       sourceContext: safeJsonParse(row.source_context_json, {}),
       createdByClient: row.created_by_client || '',
       resultGenerationId: row.result_generation_id ? Number(row.result_generation_id) : null,
@@ -2074,6 +2076,7 @@ class DatabaseService {
       ['attempts', 'attempts'],
       ['maxRetries', 'max_retries'],
       ['errorMessage', 'error_message'],
+      ['retryAfterTs', 'retry_after_ts'],
       ['llmModel', 'llm_model'],
       ['sourceMode', 'source_mode'],
       ['targetFolder', 'target_folder'],
@@ -2116,6 +2119,7 @@ class DatabaseService {
       UPDATE generation_jobs
       SET status = 'queued',
           error_message = '服务重启后恢复：原执行中任务已重新排队。',
+          retry_after_ts = NULL,
           started_at = NULL,
           finished_at = NULL
       WHERE cleared_at IS NULL
@@ -2131,6 +2135,7 @@ class DatabaseService {
         FROM generation_jobs
         WHERE cleared_at IS NULL
           AND status = 'queued'
+          AND (retry_after_ts IS NULL OR retry_after_ts <= CAST(strftime('%s','now') AS INTEGER) * 1000)
         ORDER BY id ASC
         LIMIT 1
       `).get();
@@ -2141,6 +2146,7 @@ class DatabaseService {
         UPDATE generation_jobs
         SET status = 'running',
             attempts = ?,
+            retry_after_ts = NULL,
             started_at = CURRENT_TIMESTAMP,
             finished_at = NULL,
             error_message = NULL
@@ -2158,6 +2164,7 @@ class DatabaseService {
       UPDATE generation_jobs
       SET status = 'queued',
           error_message = NULL,
+          retry_after_ts = NULL,
           started_at = NULL,
           finished_at = NULL,
           cleared_at = NULL
@@ -2181,12 +2188,26 @@ class DatabaseService {
     const result = this.db.prepare(`
       UPDATE generation_jobs
       SET status = 'cancelled',
+          retry_after_ts = NULL,
           finished_at = CURRENT_TIMESTAMP
       WHERE id = ?
         AND cleared_at IS NULL
         AND status = 'queued'
     `).run(Number(jobId || 0));
     return result.changes > 0 ? this.getGenerationJobById(jobId) : null;
+  }
+
+  getNextQueuedGenerationRetryTs() {
+    const row = this.db.prepare(`
+      SELECT MIN(retry_after_ts) AS retry_after_ts
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+        AND status = 'queued'
+        AND retry_after_ts IS NOT NULL
+        AND retry_after_ts > CAST(strftime('%s','now') AS INTEGER) * 1000
+    `).get();
+    const ts = Number(row?.retry_after_ts || 0);
+    return Number.isFinite(ts) && ts > 0 ? ts : null;
   }
 
   // ========== Knowledge analysis jobs ==========

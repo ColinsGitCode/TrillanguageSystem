@@ -4,6 +4,7 @@ let basePhrase = `PW smoke base ${Date.now()}`;
 let restoredPhraseA = `PW restore A ${Date.now()}`;
 let restoredPhraseB = `PW restore B ${Date.now()}`;
 let retryPhrase = `__E2E_FAIL_ONCE__ PW retry ${Date.now()}`;
+let autoBackoffPhrase = `__E2E_AUTO_BACKOFF__ PW backoff ${Date.now()}`;
 let baseFolder = '';
 const derivedCards = [];
 
@@ -213,5 +214,26 @@ test.describe.serial('Playwright smoke', () => {
     await openTodayFolder(page);
     await expect(page.getByTestId('file-list').locator('button').filter({ hasText: retryPhrase })).toBeVisible();
     await deleteByFile(request, baseFolder, retryPhrase);
+  });
+
+  test('09 容量不足任务自动 backoff 后成功', async ({ page, request }) => {
+    await page.goto('/');
+    await page.getByTestId('phrase-input').fill(autoBackoffPhrase);
+    await page.getByTestId('generate-btn').click();
+
+    await expect(page.getByTestId('hero-queue-state')).toHaveText(/QUEUED|RUNNING/, { timeout: 15_000 });
+    await page.getByTestId('hero-queue-state').click();
+    const backoffItem = page.getByTestId('queue-task-item').filter({ hasText: autoBackoffPhrase }).first();
+    await expect(backoffItem).toBeVisible({ timeout: 15_000 });
+    await backoffItem.click();
+    await expect(page.getByTestId('queue-audit-timeline')).toContainText('RETRY', { timeout: 15_000 });
+    await expect(page.getByTestId('queue-audit-timeline')).toContainText('MODEL_CAPACITY_EXHAUSTED', { timeout: 15_000 });
+
+    await waitForQueueIdle(page);
+    await expect(page.getByTestId('queue-audit-timeline')).toContainText('SUCCESS');
+
+    await openTodayFolder(page);
+    await expect(page.getByTestId('file-list').locator('button').filter({ hasText: autoBackoffPhrase })).toBeVisible();
+    await deleteByFile(request, baseFolder, autoBackoffPhrase);
   });
 });

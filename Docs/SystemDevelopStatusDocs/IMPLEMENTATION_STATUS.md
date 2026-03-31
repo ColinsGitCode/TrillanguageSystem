@@ -75,6 +75,10 @@
 - 点击任一共享队列任务项，可切换当前时间线焦点到该任务
 - 主页面与 Mission Control 已支持单任务详情弹层，可查看完整 payload、错误详情、结果摘要与事件 payload
 - 详情弹层已补复制能力，便于直接复制 request / error / result / events JSON 做排障与汇报
+- 对 `429 / MODEL_CAPACITY_EXHAUSTED` 这类 transient Gemini 错误，队列已支持自动 backoff 回队：
+  - 数据库存储 `retry_after_ts`
+  - worker 到期自动重试
+  - UI 会显示 `BACKOFF xxs` 与 `容量不足 · xxs 后重试`
 
 ### 2.2.3 文本选取即时生成（v3.5 新增）
 

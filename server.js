@@ -446,6 +446,20 @@ function buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMod
     error.status = 503;
     throw error;
   }
+  if (safePhrase.includes('__E2E_AUTO_BACKOFF__')) {
+    const key = `auto_backoff:${safePhrase}`;
+    const attempt = Number(e2eGenerationAttempts.get(key) || 0) + 1;
+    e2eGenerationAttempts.set(key, attempt);
+    if (attempt === 1) {
+      const error = new Error('Gemini proxy error (429): {"error":"Gemini CLI rate limited","code":"MODEL_CAPACITY_EXHAUSTED"}');
+      error.status = 429;
+      error.payload = {
+        error: 'Gemini CLI rate limited',
+        code: 'MODEL_CAPACITY_EXHAUSTED'
+      };
+      throw error;
+    }
+  }
   if (safePhrase.includes('__E2E_FAIL_ONCE__')) {
     const key = `fail_once:${safePhrase}`;
     const attempt = Number(e2eGenerationAttempts.get(key) || 0) + 1;
