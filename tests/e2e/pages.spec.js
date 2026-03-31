@@ -41,7 +41,11 @@ test.describe('Playwright page smoke', () => {
   test('05 OCR fixture 上传、清洗与回填输入框', async ({ page }) => {
     await page.goto('/');
     const samplePath = path.resolve(__dirname, 'fixtures/ocr-sample.png');
-    await page.setInputFiles('[data-testid="image-file-input"]', samplePath);
+    await page.getByTestId('image-file-input').setInputFiles(samplePath);
+    await page.evaluate(() => {
+      const input = document.querySelector('[data-testid="image-file-input"]');
+      input?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
 
     await expect(page.getByTestId('ocr-btn')).toBeEnabled();
     await page.getByTestId('ocr-btn').click();

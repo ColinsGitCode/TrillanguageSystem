@@ -158,7 +158,7 @@ export const METRIC_DEFINITIONS = {
                 <li><strong>Active Task</strong>: 当前正在执行的任务短语与编号。</li>
                 <li><strong>Recent Tasks</strong>: 最近任务状态回放（含重试次数、审计事件与时间）。</li>
             </ul>
-            <p>该数据来自后端持久化表 `generation_jobs / generation_job_events`，不再依赖浏览器本地队列。</p>
+            <p>该数据来自后端持久化表 <code>generation_jobs / generation_job_events</code>，不再依赖浏览器本地队列。</p>
         `
     },
     "KNOWLEDGE_SUMMARY": {
