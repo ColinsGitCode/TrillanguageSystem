@@ -15,7 +15,7 @@
 
 系统将每次卡片生成结果中的例句拆解为可评审样本，经过人工评分和统一 finalize 后，转化为 few-shot 可注入样本。
 
-![端到端流程](../../TestDocs/charts/review_scoring/review_01_end_to_end_flow.svg)
+![端到端流程](../../TestReports/charts/review_scoring/review_01_end_to_end_flow.svg)
 
 核心结论：
 
@@ -51,7 +51,7 @@
 
 ## 4. API 设计与交互时序
 
-![API 时序](../../TestDocs/charts/review_scoring/review_02_api_sequence.svg)
+![API 时序](../../TestReports/charts/review_scoring/review_02_api_sequence.svg)
 
 ### 4.1 主要接口
 
@@ -71,7 +71,7 @@
 
 ## 5. 数据模型与表职责
 
-![数据模型](../../TestDocs/charts/review_scoring/review_03_data_model.svg)
+![数据模型](../../TestReports/charts/review_scoring/review_03_data_model.svg)
 
 核心表定义位于：
 
@@ -101,7 +101,7 @@
 
 ## 6. 评分模型与资格判定
 
-![评分与资格判定](../../TestDocs/charts/review_scoring/review_04_scoring_eligibility.svg)
+![评分与资格判定](../../TestReports/charts/review_scoring/review_04_scoring_eligibility.svg)
 
 评分与资格逻辑实现位于：
 
@@ -136,7 +136,7 @@ overall = 0.45 * sentence + 0.45 * translation + 0.1 * tts
 
 ## 7. 后台如何使用这些评分结果（few-shot 注入）
 
-![注入门控逻辑](../../TestDocs/charts/review_scoring/review_05_injection_gate.svg)
+![注入门控逻辑](../../TestReports/charts/review_scoring/review_05_injection_gate.svg)
 
 相关逻辑位于：
 

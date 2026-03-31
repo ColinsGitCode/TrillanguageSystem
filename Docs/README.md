@@ -65,7 +65,9 @@
 
 - `Docs/Archive/Milestones/`
 - `Docs/Archive/RetiredFeatures/`
-- `Docs/Archive/docs_cleanup_20260303_101931/`
-- `Docs/Archive/unreferenced_svg/`
+- `Docs/Archive/Milestones/`
+- `Docs/Archive/RetiredFeatures/`
+- `Docs/Archive/HistoricalTests/`
+- `Docs/Archive/Assets/`
 
-历史快照、旧版 Slides 与未引用 SVG 已保留在 `Docs/Archive/`。
+`Docs/Archive/` 已进一步拆成 4 层：里程碑、退役能力、历史测试与资源资产。
