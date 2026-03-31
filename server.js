@@ -39,6 +39,7 @@ const DEFAULT_LLM_PROVIDER = String(process.env.DEFAULT_LLM_PROVIDER || 'gemini'
     ? 'local'
     : 'gemini';
 const DEFAULT_GEMINI_MODEL = process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-3-pro-preview';
+const TRAINING_TEACHER_MODEL = process.env.TRAINING_TEACHER_MODEL || 'gemini-2.5-flash-lite';
 const E2E_TEST_MODE = /^(1|true|yes|on)$/i.test(String(process.env.E2E_TEST_MODE || '').trim());
 const e2eKnowledgeJobs = {
     nextId: 1,
@@ -246,7 +247,7 @@ function buildTrainingFallbackResult({ phrase, cardType, markdown, reason, laten
     validationErrors,
     fallbackReason: reason || 'heuristic_fallback',
     providerUsed: 'gemini',
-    modelUsed: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
+    modelUsed: TRAINING_TEACHER_MODEL,
     promptVersion: trainingPackService.TRAINING_PROMPT_VERSION,
     schemaVersion: trainingPackService.TRAINING_SCHEMA_VERSION,
     tokensInput: 0,
@@ -675,7 +676,7 @@ async function generateAndPersistTrainingAsset(context = {}) {
             cardType,
             markdown,
             providerHint: 'gemini',
-            model: process.env.TRAINING_TEACHER_MODEL || process.env.GEMINI_PROXY_MODEL || 'gemini-3-pro-preview',
+            model: TRAINING_TEACHER_MODEL,
             baseName: `${baseName}_train`,
             runtimeMode: context.runtimeMode || 'default'
         });

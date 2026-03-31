@@ -395,7 +395,7 @@
   - 同目录 sidecar：`<base>.training.v1.json`
 - 前端 TRAIN 页改为后端优先加载，并显示来源/状态/质量分，支持手动重算。
 
-### 2.19 TRAIN 历史回填稳态化（v3.7.1）
+### 2.19 TRAIN 历史回填稳态化（v3.7.3）
 
 - 新增历史回填接口：
   - `GET /api/training/backfill/summary`
@@ -407,7 +407,10 @@
 - 回填前读取 Gateway `18888 /health`：
   - 若 `breaker_state != closed`，直接快速落 `heuristic fallback`
   - 目标是保证批量回填“收敛优先”，不因单卡或单轮上游异常挂死
-- 当前高质量策略不变：历史大批量回填仍建议在 `gemini-3-pro-preview` 配额恢复后继续执行。
+- 当前策略已改为“主卡模型”和“TRAIN 教师模型”解耦：
+  - 主卡仍由 `GEMINI_PROXY_MODEL` 控制
+  - TRAIN 统一固定为 `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`
+- 原因：`gemini-3.x pro preview` 在当前环境下会出现 `MODEL_CAPACITY_EXHAUSTED`，但 `gemini-2.5-flash-lite` 可稳定完成 TRAIN 生成。
 
 ### 2.20 TRAIN 全量完成与抽样验收（v3.7.2）
 
@@ -437,20 +440,21 @@
 - 容器通过 Gateway `18888` 调用宿主机执行器
 - 支持 `model` 透传、重试、超时 reset、fallback
 - 当前默认模型链路为 `gemini-3-pro-preview`
+- TRAIN 教师模型固定为 `gemini-2.5-flash-lite`
 
 ## 3. 当前主要风险
 
 1. approved 样本池规模不足时，review-gated 提升有限
 2. few-shot 注入在部分场景仍会带来 token 膨胀
 3. Gemini 上游链路受宿主机执行器状态影响
-4. `gemini-3-pro-preview` 配额不足时，18888 Gateway 可能进入 `open/half_open`，导致 TRAIN 历史回填快速 fallback 而非高质量 ready
-4. ~~规则评分与人工质量感知仍存在偏差~~ → 已通过 TTS 独立下限缓解
-5. 并发场景下 rollback + finalize 的竞态尚未测试
-6. 少量历史异常卡片仍可能包含“非结构化调试文本”混入正文，需二次清洗规则
-7. 当前任务队列仍是前端执行器，不具备服务端持久任务能力；浏览器关闭期间无法继续执行，但页面刷新后可从快照恢复未完成任务
-8. 选中文本直接入语法队列时，若选区含中日混合整句，baseName 可能偏长（建议后续增加归一化截断）
-9. 当前字体方案为系统字体栈，跨终端一致性仍受操作系统字体安装情况影响（后续可选自托管 webfont）
-10. `cancel` 在极短任务场景会出现“已完成导致取消失败”的竞态（表现为 `cancelled=false`），需通过最小执行时间或更细粒度状态机优化体验
+4. 主卡若继续使用 `gemini-3-pro-preview`，仍可能遇到上游 `MODEL_CAPACITY_EXHAUSTED`
+5. TRAIN 已固定 `gemini-2.5-flash-lite`，但主卡与 TRAIN 的模型差异需要在观测面板中持续明确展示
+6. ~~规则评分与人工质量感知仍存在偏差~~ → 已通过 TTS 独立下限缓解
+7. 并发场景下 rollback + finalize 的竞态尚未测试
+8. 少量历史异常卡片仍可能包含“非结构化调试文本”混入正文，需二次清洗规则
+9. 选中文本直接入语法队列时，若选区含中日混合整句，baseName 可能偏长（建议后续增加归一化截断）
+10. 当前字体方案为系统字体栈，跨终端一致性仍受操作系统字体安装情况影响（后续可选自托管 webfont）
+11. `cancel` 在极短任务场景会出现“已完成导致取消失败”的竞态（表现为 `cancelled=false`），需通过最小执行时间或更细粒度状态机优化体验
 
 ## 4. 下一步重点
 

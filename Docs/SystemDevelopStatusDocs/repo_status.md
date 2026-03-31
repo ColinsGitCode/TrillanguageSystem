@@ -225,9 +225,22 @@
   - `breaker_state=closed`：继续 teacher LLM 高质量生成
   - `breaker_state=open|half_open`：直接快速写入 `heuristic fallback`
 - 当前策略重点是“批量任务可收敛”，不是在配额不足时强行降级 teacher 质量。
-- 当前现场状态：
-  - `gemini-gateway` 可能因 `gemini-3-pro-preview` 配额/容量紧张进入 `half_open`
-  - 因此历史 TRAIN 回填建议在配额恢复后继续执行，以保证 `ready/repaired` 比例
+- 当前现场状态已调整：
+  - TRAIN 教师模型固定为 `gemini-2.5-flash-lite`
+  - 主卡模型仍可单独使用 `GEMINI_PROXY_MODEL`
+  - 目的是避免 `gemini-3.x pro preview` 的 `MODEL_CAPACITY_EXHAUSTED` 直接把 TRAIN 打回 fallback
+
+### 3.20 TRAIN 教师模型固定（v3.7.4）
+
+- 变更：
+  - `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`
+  - `TRAIN`、`TRAIN regenerate`、`TRAIN backfill` 统一走该模型
+- 原因：
+  - 现场实测 `gemini-3-pro-preview` 在账号额度正常时仍会报 `429 / MODEL_CAPACITY_EXHAUSTED`
+  - 切换 `gemini-2.5-flash-lite` 后，主卡 `误操作` 成功，且 `generationId=653` 的 TRAIN 从 `fallback` 重生成为 `ready`
+- 当前结论：
+  - TRAIN 链路稳定性优先于 teacher 使用 pro preview
+  - 主卡与 TRAIN 模型已解耦，后续需在观测面板继续清晰展示
 
 ### 3.19 TRAIN 全量补齐与质量验收（v3.7.2）
 

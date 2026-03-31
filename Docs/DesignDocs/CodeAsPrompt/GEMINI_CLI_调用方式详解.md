@@ -195,9 +195,9 @@ curl -s -X POST http://localhost:18888/api/gemini \
 - 不应作为模型名：`gemini-cli`（不是有效模型 ID）
 
 实践建议：
-- 默认模型优先设置为 `gemini-3-pro-preview`
-- teacher 池建议优先 `gemini-3-pro-preview`
-- 若要降成本/提速，可切换 `gemini-3-flash-preview` 或 `gemini-2.5-flash`
+- 主卡默认模型优先设置为 `gemini-3-pro-preview`
+- TRAIN teacher 模型固定为 `gemini-2.5-flash-lite`
+- 若要降成本/提速，可切换主卡模型到 `gemini-3-flash-preview` 或 `gemini-2.5-flash`
 
 ---
 
@@ -221,11 +221,13 @@ curl -s -X POST http://localhost:18888/api/gemini \
 处理：
 - 改为当前可用模型（优先 `gemini-3-pro-preview`，次选 `gemini-2.5-pro`）。
 
-### 9.3 `Rate limit exceeded`（429）
+### 9.3 `Rate limit exceeded`（429）/ `MODEL_CAPACITY_EXHAUSTED`
 
 原因：`/api/generate` 内有节流（默认 4 秒）。
 
 处理：
+- 主卡若使用 `gemini-3-pro-preview`，可能在额度正常时仍遭遇上游容量不足
+- TRAIN 已固定 `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`，避免 teacher 链路受 pro preview 容量波动影响
 - 批处理时每次调用间隔 >= 4 秒
 - 或在脚本中实现 429 重试与退避
 
