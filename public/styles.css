@@ -1099,7 +1099,7 @@ h1 {
 
 .input-modes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.6rem;
 }
 
@@ -1851,7 +1851,7 @@ h1 {
 
 .intel-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
   padding: 16px;
   height: 100%;
@@ -1955,23 +1955,14 @@ h1 {
 }
 
 /* ========================================
-   模型对比功能样式
+   生成入口样式
    ======================================== */
 
-/* 模型选择器 */
 .selector-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 8px;
-}
-
-.model-selector {
-  margin-bottom: 0;
-  padding: 9px 10px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid var(--border);
-  border-radius: 10px;
 }
 
 .card-type-selector {
@@ -1987,6 +1978,23 @@ h1 {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.selector-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.selector-header-secondary {
+  margin-top: 4px;
+}
+
+.selector-fixed-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .selector-label {
@@ -2006,11 +2014,6 @@ h1 {
   transition: all 0.3s;
 }
 
-.selector-hint.mode-local {
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
 
 .selector-hint.mode-gemini {
   background: rgba(59, 130, 246, 0.1);
@@ -2018,11 +2021,6 @@ h1 {
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
-.selector-hint.mode-compare {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(59, 130, 246, 0.15));
-  color: #7c3aed;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-}
 
 .selector-hint.mode-grammar {
   background: rgba(59, 130, 246, 0.12);
@@ -2032,32 +2030,12 @@ h1 {
 
 .selector-buttons {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .selector-buttons-two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.model-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px 6px;
-  min-height: 50px;
-  background: white;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  line-height: 1.15;
 }
 
 .card-type-btn {
@@ -2101,202 +2079,8 @@ h1 {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
-.model-btn:hover {
-  border-color: var(--accent);
-  background: rgba(37, 99, 235, 0.03);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
-}
-
-.model-btn.active {
-  border-color: var(--accent);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.08));
-  color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.model-btn[data-mode="compare"].active {
-  border-color: #a855f7;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(59, 130, 246, 0.1));
-  color: #7c3aed;
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
-}
-
 .model-icon {
   font-size: 16px;
-}
-
-/* 对比模态框 */
-.compare-modal {
-  max-width: 98vw !important;
-  width: min(2016px, 98vw) !important;
-  height: 96vh;
-  max-height: 98vh;
-  overflow: hidden;
-  font-size: 0.9rem;
-}
-
-.compare-summary {
-  margin-bottom: 24px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.compare-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.metric-row {
-  background: white;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.metric-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.metric-values {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.metric-val {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 600;
-  flex: 1;
-  text-align: center;
-  padding: 8px;
-  background: #f9fafb;
-  border-radius: 6px;
-  transition: all 0.3s;
-}
-
-.metric-val.winner {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
-  transform: scale(1.05);
-}
-
-.vs-divider {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  opacity: 0.5;
-}
-
-/* 对比双列布局 */
-.compare-columns {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin-top: 24px;
-}
-
-.compare-column {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.compare-column-header {
-  padding: 16px 52px 16px 16px;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  letter-spacing: 0.1em;
-  position: relative;
-}
-
-.compare-body {
-  padding: 20px;
-  height: calc(96vh - 160px);
-  overflow: hidden;
-}
-
-.compare-pane {
-  height: 100%;
-}
-
-.compare-card-body {
-  padding: 16px 18px;
-  font-size: 0.85rem;
-  line-height: 1.55;
-  max-height: 68vh;
-  overflow-y: auto;
-}
-
-.compare-content-grid .compare-column {
-  background: #fff;
-}
-
-.compare-intel-grid .compare-column {
-  background: #fff;
-}
-
-.compare-intel-panel {
-  padding: 16px;
-  font-size: 0.88rem;
-}
-
-.compare-modal .mc-phrase {
-  font-size: 1.7rem;
-}
-
-.compare-modal .intel-hud-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px;
-  font-size: 0.85rem;
-}
-
-.compare-modal .hud-card-score {
-  grid-column: span 2;
-  min-height: 100px;
-  padding: 16px 18px;
-}
-
-.compare-modal .score-main {
-  font-size: 36px;
-}
-
-.compare-modal .score-rank {
-  font-size: 16px;
-}
-
-.compare-modal .hud-title {
-  font-size: 11px;
-}
-
-.compare-modal .hud-card {
-  padding: 12px;
-}
-
-.compare-modal .hud-card-wide {
-  grid-column: span 2;
-}
-
-.compare-section {
-  margin-bottom: 20px;
 }
 
 .compare-delete {

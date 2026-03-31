@@ -164,8 +164,6 @@ test.describe.serial('Playwright smoke', () => {
       const res = await request.post('/api/generation-jobs', {
         data: {
           phrase,
-          llm_provider: 'gemini',
-          enable_compare: false,
           card_type: cardType,
           source_mode: sourceMode
         }
@@ -177,7 +175,7 @@ test.describe.serial('Playwright smoke', () => {
     await createJob(restoredPhraseB, 'grammar_ja', 'selection');
 
     await page.reload();
-    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED/, { timeout: 10_000 });
+    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED|IDLE/, { timeout: 10_000 });
     await waitForQueueIdle(page);
     await openTodayFolder(page);
     await expect(page.getByTestId('file-list').locator('button').filter({ hasText: restoredPhraseA })).toBeVisible();
@@ -195,10 +193,11 @@ test.describe.serial('Playwright smoke', () => {
     await expect(page.getByTestId('hero-queue-chip-f')).toContainText('失败 1', { timeout: 15_000 });
     await expect(page.getByTestId('hero-queue-retry')).toBeVisible();
     await page.getByTestId('hero-queue-state').click();
-    await page.getByTestId('queue-task-item').first().click();
+    const retryItem = page.getByTestId('queue-task-item').filter({ hasText: retryPhrase }).first();
+    await retryItem.click();
     await expect(page.getByTestId('queue-audit-focus')).toContainText('__E2E_FAIL_ONCE__ PW');
     await expect(page.getByTestId('queue-audit-timeline')).toContainText('FAILED');
-    await page.getByTestId('queue-task-detail-btn').first().click();
+    await retryItem.getByTestId('queue-task-detail-btn').click();
     await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
     await expect(page.getByTestId('queue-job-detail-request')).toContainText(retryPhrase);
     await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');

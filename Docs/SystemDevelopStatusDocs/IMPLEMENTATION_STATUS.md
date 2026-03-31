@@ -1,7 +1,7 @@
 # 实现状态报告
 
-**日期**: 2026-03-13
-**版本**: v3.8.2
+**日期**: 2026-03-31
+**版本**: v3.8.4
 **状态**: 进行中（主链路稳定；TRAIN 已全量持久化；Playwright smoke 已接入；Gemini MCP 污染已加固；服务端共享队列与项目内 Gemini Proxy 已进入第一阶段）
 
 ## 1. 当前阶段结论
@@ -16,9 +16,9 @@
 
 ## 2. 已完成能力
 
-### 2.1 生成与对比
+### 2.1 生成与队列
 
-- `POST /api/generate` 支持单模型与 `enable_compare=true` 对比模式
+- `POST /api/generate` 已收口为单模型 teacher 生成链路
 - `provider_requested/provider_used/fallback` 可明确回退链路
 - 生成后自动保存 `md/html/meta/audio` 并写入数据库
 

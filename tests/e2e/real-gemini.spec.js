@@ -133,7 +133,6 @@ test.describe('Real Gemini acceptance', () => {
     let folder = '';
 
     await page.goto(realBaseUrl);
-    await page.getByTestId('model-gemini').click();
     await page.getByTestId('card-type-trilingual').click();
     await page.getByTestId('phrase-input').fill(phrase);
     await page.getByTestId('generate-btn').click();

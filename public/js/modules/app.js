@@ -47,7 +47,6 @@ const els = {
     historyList: document.getElementById('historyList'),
     historyCount: document.getElementById('historyCount'),
     historySearch: document.getElementById('historySearch'),
-    historyProviderFilter: document.getElementById('historyProviderFilter'),
     historyPrevBtn: document.getElementById('historyPrevBtn'),
     historyNextBtn: document.getElementById('historyNextBtn'),
     historyPageInfo: document.getElementById('historyPageInfo'),
@@ -123,7 +122,6 @@ let heroTaskQueueElapsedTaskId = null;
 function init() {
     initTabs();
     initImageHandlers();
-    initModelSelector();
     initCardTypeSelector();
     initGenerator();
     initModal();
@@ -561,56 +559,6 @@ async function selectFile(file, title, cardType = 'trilingual') {
     }
 }
 
-// ==========================================
-// 模型选择器
-// ==========================================
-
-function initModelSelector() {
-    const buttons = document.querySelectorAll('.model-btn');
-    const hint = document.getElementById('modelHint');
-
-    // 初始化选中状态
-    const currentMode = store.get('modelMode');
-    updateModelUI(currentMode);
-
-    buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const mode = btn.dataset.mode;
-            store.setState({ modelMode: mode });
-            updateModelUI(mode);
-        });
-    });
-
-    autoSwitchModelWhenLocalOffline();
-
-    function updateModelUI(mode) {
-        buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-
-        const hints = {
-            local: 'LOCAL LLM (Qwen)',
-            gemini: 'GEMINI CLI PROXY',
-            compare: '双模型对比 ⚡'
-        };
-        hint.textContent = hints[mode] || 'GEMINI CLI PROXY';
-        hint.className = 'selector-hint mode-' + mode;
-    }
-
-    async function autoSwitchModelWhenLocalOffline() {
-        if (store.get('modelMode') !== 'local') return;
-        try {
-            const health = await api.checkHealth();
-            const localService = (health.services || []).find((svc) => String(svc.name || '').includes('Local LLM'));
-            if (localService && localService.status !== 'online') {
-                store.setState({ modelMode: 'gemini' });
-                updateModelUI('gemini');
-                showGenerationQueueToast('检测到本地 LLM 离线，已自动切换到 GEMINI');
-            }
-        } catch (err) {
-            // health 探测失败时维持用户当前选择，避免误切模式
-        }
-    }
-}
-
 function normalizeCardType(cardType) {
     return String(cardType || 'trilingual').trim().toLowerCase() === 'grammar_ja'
         ? 'grammar_ja'
@@ -684,247 +632,6 @@ function updateGenUI(isGenerating) {
     els.ocrBtn.disabled = isGenerating || !store.get('imageBase64');
 }
 
-// ==========================================
-// 对比模式处理
-// ==========================================
-
-function handleCompareResult(data) {
-    console.log('[Compare] Result:', data);
-
-    const { phrase, gemini, local, comparison } = data;
-
-    // 构建对比弹窗
-    renderCompareModal(phrase, gemini, local, comparison);
-
-    // 清空输入
-    els.phraseInput.value = '';
-    clearImage();
-
-    // 对比模式也保存文件，刷新列表
-    const targetFolder = gemini?.result?.folder || local?.result?.folder;
-    if (targetFolder) {
-        loadFolders({ targetSelect: targetFolder, refreshFiles: true, noCache: true });
-    }
-}
-
-function renderCompareModal(phrase, geminiResult, localResult, comparison) {
-    const geminiOk = geminiResult?.success;
-    const localOk = localResult?.success;
-    const geminiFolder = geminiResult?.result?.folder || store.get('selectedFolder');
-    const localFolder = localResult?.result?.folder || store.get('selectedFolder');
-    const geminiBase = geminiResult?.result?.baseName;
-    const localBase = localResult?.result?.baseName;
-
-    const renderFallbackContent = (result) => {
-        const raw = result?.observability?.metadata?.rawOutput || '';
-        if (raw) {
-            return `<pre class="raw-fallback">${escapeHtml(raw)}</pre>`;
-        }
-        return `<div class="empty-hint">暂无内容</div>`;
-    };
-
-    let comparisonSection = '';
-    if (comparison) {
-        const winner = comparison.winner;
-        const metrics = comparison.metrics;
-
-        comparisonSection = `
-            <div class="compare-summary">
-                <h3 style="color: var(--neon-green); margin-bottom: 16px;">📊 对比分析</h3>
-                <div class="winner-badge" style="background: ${winner === 'gemini' ? 'var(--neon-blue)' : winner === 'local' ? 'var(--neon-purple)' : 'var(--neon-amber)'}; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 16px;">
-                    <div style="font-size: 14px; opacity: 0.9;">🏆 Winner</div>
-                    <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono';">${winner.toUpperCase()}</div>
-                    <div style="font-size: 12px; margin-top: 4px; opacity: 0.8;">${comparison.recommendation}</div>
-                </div>
-
-                <div class="compare-metrics-grid">
-                    ${renderCompareMetric('⚡ Speed', metrics.speed.gemini, metrics.speed.local, 'ms', true)}
-                    ${renderCompareMetric('✨ Quality', metrics.quality.gemini, metrics.quality.local, '', false)}
-                    ${renderCompareMetric('🔢 Tokens', metrics.tokens.gemini, metrics.tokens.local, '', false)}
-                    ${renderCompareMetric('💰 Cost', metrics.cost.gemini.toFixed(6), metrics.cost.local.toFixed(6), '$', true)}
-                </div>
-            </div>
-        `;
-    }
-
-    const geminiContent = geminiOk
-        ? (geminiResult.output?.markdown_content
-            ? renderMarkdownWithAudioButtons(geminiResult.output?.markdown_content || '', { folder: geminiFolder })
-            : renderFallbackContent(geminiResult))
-        : `<div class="error-box">${escapeHtml(geminiResult?.error || 'Generation failed')}</div>`;
-    const localContent = localOk
-        ? (localResult.output?.markdown_content
-            ? renderMarkdownWithAudioButtons(localResult.output?.markdown_content || '', { folder: localFolder })
-            : renderFallbackContent(localResult))
-        : `<div class="error-box">${escapeHtml(localResult?.error || 'Generation failed')}</div>`;
-
-    const geminiIntel = geminiOk
-        ? buildIntelHud(geminiResult.observability || {}, { idSuffix: 'gemini', providerLabel: 'GEMINI', modelLabel: geminiResult.observability?.metadata?.model })
-        : `<div class="error-box">${escapeHtml(geminiResult?.error || 'Intel unavailable')}</div>`;
-    const localIntel = localOk
-        ? buildIntelHud(localResult.observability || {}, { idSuffix: 'local', providerLabel: 'LOCAL', modelLabel: localResult.observability?.metadata?.model })
-        : `<div class="error-box">${escapeHtml(localResult?.error || 'Intel unavailable')}</div>`;
-
-    const html = `
-        <div class="modern-card glass-panel compare-modal">
-            <button class="mc-close" id="mcCloseBtn" data-testid="card-modal-close">×</button>
-
-            <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
-                <div style="flex:1;">
-                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);">${escapeHtml(phrase)}</h1>
-                    <div class="mc-meta font-mono" style="color: var(--neon-purple);">
-                        <span>MODEL COMPARISON</span>
-                        <span>::</span>
-                        <span>DUAL OUTPUT</span>
-                    </div>
-                </div>
-
-                <div class="panel-tabs sub-tabs compare-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
-                    <button class="tab-btn active" data-target="compareContent" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
-                    <button class="tab-btn" data-target="compareIntel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
-                </div>
-            </div>
-
-            <div class="mc-body compare-body">
-                ${comparisonSection}
-
-                <div id="compareContent" class="compare-pane" style="display:block;">
-                    <div class="compare-columns compare-content-grid">
-                        <div class="compare-column">
-                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
-                                <span class="model-icon">🤖</span>
-                                <span>GEMINI</span>
-                                ${geminiBase && geminiFolder ? `<button class="compare-delete" data-folder="${geminiFolder}" data-base="${geminiBase}" title="删除该学习卡片">🗑️</button>` : ''}
-                                ${!geminiOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
-                            </div>
-                            <div class="compare-card-body">
-                                ${geminiContent}
-                            </div>
-                        </div>
-                        <div class="compare-column">
-                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
-                                <span class="model-icon">🏠</span>
-                                <span>LOCAL LLM</span>
-                                ${localBase && localFolder ? `<button class="compare-delete" data-folder="${localFolder}" data-base="${localBase}" title="删除该学习卡片">🗑️</button>` : ''}
-                                ${!localOk ? '<span style="font-size:11px; opacity:0.8;">⚠ FAILED</span>' : ''}
-                            </div>
-                            <div class="compare-card-body">
-                                ${localContent}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="compareIntel" class="compare-pane" style="display:none;">
-                    <div class="compare-columns compare-intel-grid">
-                        <div class="compare-column">
-                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white;">
-                                <span class="model-icon">🤖</span>
-                                <span>GEMINI</span>
-                                ${geminiBase && geminiFolder ? `<button class="compare-delete" data-folder="${geminiFolder}" data-base="${geminiBase}" title="删除该学习卡片">🗑️</button>` : ''}
-                            </div>
-                            ${geminiIntel}
-                        </div>
-                        <div class="compare-column">
-                            <div class="compare-column-header" style="background: linear-gradient(135deg, var(--neon-amber), var(--neon-green)); color: white;">
-                                <span class="model-icon">🏠</span>
-                                <span>LOCAL LLM</span>
-                                ${localBase && localFolder ? `<button class="compare-delete" data-folder="${localFolder}" data-base="${localBase}" title="删除该学习卡片">🗑️</button>` : ''}
-                            </div>
-                            ${localIntel}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    els.modalContainer.innerHTML = html;
-    document.getElementById('mcCloseBtn').onclick = closeModal;
-
-    const tabs = els.modalContainer.querySelectorAll('.compare-tabs .tab-btn');
-    tabs.forEach(btn => {
-        btn.onclick = async () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            btn.classList.add('active');
-            const targetId = btn.dataset.target;
-            const contentPane = els.modalContainer.querySelector('#compareContent');
-            const intelPane = els.modalContainer.querySelector('#compareIntel');
-            if (targetId === 'compareIntel') {
-                contentPane.style.display = 'none';
-                intelPane.style.display = 'block';
-                requestAnimationFrame(() => {
-                    renderIntelCharts(geminiResult?.observability || {}, 'gemini');
-                    renderIntelCharts(localResult?.observability || {}, 'local');
-                });
-            } else {
-                intelPane.style.display = 'none';
-                contentPane.style.display = 'block';
-            }
-        };
-    });
-
-    bindAudioButtons(els.modalContainer);
-    const deleteButtons = els.modalContainer.querySelectorAll('.compare-delete');
-    deleteButtons.forEach(btn => {
-        btn.onclick = async (e) => {
-            e.stopPropagation();
-            const folder = btn.dataset.folder;
-            const base = btn.dataset.base;
-            if (!folder || !base) return;
-            if (!confirm('确定删除该学习卡片及其相关文件吗？此操作不可恢复。')) return;
-            btn.disabled = true;
-            try {
-                await api.deleteRecordByFile(folder, base);
-                btn.textContent = 'DELETED';
-                const column = btn.closest('.compare-column');
-                if (column) {
-                    const body = column.querySelector('.compare-card-body');
-                    if (body) body.innerHTML = '<div class="empty-hint">已删除</div>';
-                    const intel = column.querySelector('.compare-intel-panel');
-                    if (intel) intel.innerHTML = '<div class="empty-hint">已删除</div>';
-                }
-                loadFolders({ targetSelect: folder, refreshFiles: true, noCache: true });
-            } catch (err) {
-                alert('Delete failed: ' + err.message);
-                btn.disabled = false;
-            }
-        };
-    });
-
-    els.modalOverlay.classList.remove('hidden');
-    setTimeout(() => {
-        els.modalOverlay.classList.add('show');
-        bindInfoButtons(els.modalContainer);
-        bindIntelViewers(els.modalContainer);
-    }, 10);
-}
-
-function renderCompareMetric(label, geminiVal, localVal, unit, lowerIsBetter) {
-    const geminiNum = Number(geminiVal);
-    const localNum = Number(localVal);
-    const geminiWins = lowerIsBetter ? geminiNum < localNum : geminiNum > localNum;
-    const localWins = lowerIsBetter ? localNum < geminiNum : localNum > geminiNum;
-
-    return `
-        <div class="metric-row">
-            <div class="metric-label">${label}</div>
-            <div class="metric-values">
-                <div class="metric-val ${geminiWins ? 'winner' : ''}" style="color: var(--neon-blue);">
-                    ${geminiWins ? '🏆 ' : ''}${geminiVal}${unit}
-                </div>
-                <div class="vs-divider">vs</div>
-                <div class="metric-val ${localWins ? 'winner' : ''}" style="color: var(--neon-green);">
-                    ${localWins ? '🏆 ' : ''}${localVal}${unit}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderCompareContent() {
-    return '';
-}
 
 // ==========================================
 // 进度条与计时器
@@ -1806,7 +1513,6 @@ function mapGenerationJobToQueueTask(job = {}) {
         phraseNormalized: String(job.phraseNormalized || '').trim(),
         source: job.sourceContext || null,
         provider: String(job.provider || 'gemini').trim() || 'gemini',
-        enableCompare: Boolean(job.enableCompare),
         cardType: jobType,
         sourceMode: String(job.sourceMode || '').trim().toLowerCase() || null,
         targetFolder: String(job.targetFolder || '').trim(),
@@ -2260,7 +1966,6 @@ function serializeQueueTask(task) {
         cardType: normalizeCardType(task.cardType || 'trilingual'),
         sourceMode: task.sourceMode || '',
         targetFolder: task.targetFolder || '',
-        enableCompare: Boolean(task.enableCompare),
         llmModel: task.llmModel || '',
         error: task.error || '',
         createdAt: task.createdAt || 0,
@@ -2321,12 +2026,7 @@ async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, sour
         return false;
     }
 
-    const modelMode = store.get('modelMode');
-    let provider = 'gemini';
-    if (modelMode === 'local') {
-        provider = 'local';
-    }
-    const enableCompare = modelMode === 'compare';
+    const provider = 'gemini';
     const sourceEntry = String(source.entry || '').trim().toLowerCase();
     const inferredSourceMode = String(
         source.sourceMode ||
@@ -2347,7 +2047,6 @@ async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, sour
         const response = await api.createGenerationJob({
             phrase: phraseNormalized,
             llm_provider: provider,
-            enable_compare: enableCompare,
             card_type: taskCardType,
             source_mode: inferredSourceMode || null,
             target_folder: taskTargetFolder,
@@ -2367,24 +2066,6 @@ async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, sour
         showGenerationQueueToast(message);
         return false;
     }
-}
-
-async function runGenerationTaskFromQueue(task) {
-    const response = await api.generate(task.phraseNormalized, task.provider, task.enableCompare, {
-        targetFolder: task.targetFolder || '',
-        llmModel: task.llmModel || undefined,
-        cardType: normalizeCardType(task.cardType || 'trilingual'),
-        sourceMode: task.sourceMode || undefined
-    });
-
-    const folder = task.enableCompare
-        ? (response.gemini?.result?.folder || response.local?.result?.folder || response.input?.result?.folder || task.targetFolder || '')
-        : (response.result?.folder || task.targetFolder || '');
-
-    task.resultFolder = folder;
-    task.responseSummary = task.enableCompare
-        ? (response.comparison?.winner ? `winner=${response.comparison.winner}` : 'compare_done')
-        : 'single_done';
 }
 
 function scheduleQueueFolderRefresh() {
@@ -3530,7 +3211,7 @@ async function openRelationCardFromKnowledge(payload = {}) {
 
 function buildIntelHud(metrics, options = {}) {
     const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
-    const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'LOCAL').toUpperCase();
+    const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'TEACHER').toUpperCase();
     const modelLabel = options.modelLabel || metrics.metadata?.model || 'UNKNOWN';
     const templateCompliance = metrics.quality?.templateCompliance ?? metrics.quality?.checks?.templateCompliance ?? 0;
 
@@ -4476,17 +4157,6 @@ async function initHistory() {
 
     els.historySearch.oninput = doSearch;
     
-    els.historyProviderFilter.onchange = () => {
-        store.setState({ 
-            history: { 
-                ...store.get('history'), 
-                providerFilter: els.historyProviderFilter.value,
-                currentPage: 1 
-            }
-        });
-        loadHistory();
-    };
-
     // 分页
     els.historyPrevBtn.onclick = () => changePage(-1);
     els.historyNextBtn.onclick = () => changePage(1);
@@ -4510,8 +4180,7 @@ async function loadHistory(options = {}) {
         const data = await api.getHistory({
             page: hState.currentPage,
             limit: hState.pageSize,
-            search: hState.searchQuery,
-            provider: hState.providerFilter
+            search: hState.searchQuery
         }, noCache);
 
         const records = data.records || [];
@@ -4543,7 +4212,6 @@ function renderHistory(records) {
         <div class="history-item" data-id="${r.id}">
             <div class="history-item-phrase">${escapeHtml(r.phrase)}</div>
             <div class="history-item-meta">
-                <span>${r.llm_provider === 'gemini' ? '🤖' : '🏠'} ${r.llm_provider}</span>
                 <span>${normalizeCardType(r.card_type) === 'grammar_ja' ? '📘 语法' : '🧩 三语'}</span>
                 <span>${formatDate(r.created_at)}</span>
                 <span class="quality-badge q-${Math.floor(r.quality_score/10)}0">${r.quality_score}</span>

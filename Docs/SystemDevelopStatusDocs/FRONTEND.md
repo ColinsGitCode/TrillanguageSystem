@@ -151,12 +151,11 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
   - **回滚**（红色按钮，二次确认）：已完成批次重置为 active（v3.3 新增）
   - **已完成** 标签（蓝色 badge）：finalized 批次状态标识（v3.3 新增）
 
-## 4. 对比模式弹窗
+## 4. 生成入口与单模型展示
 
-- 左右双列并排显示 Gemini / Local 内容
-- 同时支持 CONTENT 与 INTEL 对照
-- 结果区含 winner 与 metrics 对比
-- 支持按模型侧删除对应生成记录
+- 模型选择按钮已移除
+- 生成入口固定使用 `Teacher Model · Gemini 2.5 Flash-Lite`
+- 仍保留卡片类型切换：三语卡片 / 日语语法卡片
 
 ## 5. Mission Control（dashboard）
 
@@ -170,7 +169,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - Review Pipeline（评审管线：eligibility 分布 + campaign 进度）
 - Few-shot Effectiveness（注入效果：baseline vs fewshot 对比）
 - Token 趋势 / 延迟趋势 / Quality Signal（模板合规分）
-- Live Feed（实时生成记录）/ Provider Split（供应商分布）
+- Live Feed（实时生成记录）
 - Task Queue 顶部模块显示任务卡片类型（`三语/语法`）
 
 ### 5.1 独立页面：Knowledge OPS / Knowledge Hub
@@ -183,7 +182,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 
 - 状态：`store.js`
   - `selectedFolder`、`selectedFile`
-  - `llmProvider`、`modelMode`、`compareMode`
+  - `llmProvider`
   - `cardType`
 - API：`api.js`
   - 生成/OCR/历史/统计
@@ -195,7 +194,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 ## 7. 视觉与可用性
 
 - 主页面：浅色、内容密度高、卡片化
-- 对比弹窗：宽视图对照优先
+- 单卡弹窗：CONTENT / TRAIN / INTEL / REVIEW 多标签页
 - Mission Control：仪表盘风格
 - Knowledge OPS / Knowledge Hub：同级页面，沿用仪表盘视觉与信息卡布局
 - 浏览器标签页图标：`favicon-lan.svg`（LAN）

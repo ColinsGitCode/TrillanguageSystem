@@ -35,11 +35,9 @@ const { prepareInsertData } = require('./services/databaseHelpers');
 const app = express();
 const PORT = process.env.PORT || 3010;
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
-const DEFAULT_LLM_PROVIDER = String(process.env.DEFAULT_LLM_PROVIDER || 'gemini').trim().toLowerCase() === 'local'
-    ? 'local'
-    : 'gemini';
-const DEFAULT_GEMINI_MODEL = process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-3-pro-preview';
+const DEFAULT_LLM_PROVIDER = 'gemini';
 const TRAINING_TEACHER_MODEL = process.env.TRAINING_TEACHER_MODEL || 'gemini-2.5-flash-lite';
+const DEFAULT_GEMINI_MODEL = TRAINING_TEACHER_MODEL;
 const E2E_TEST_MODE = /^(1|true|yes|on)$/i.test(String(process.env.E2E_TEST_MODE || '').trim());
 const e2eKnowledgeJobs = {
     nextId: 1,
@@ -77,19 +75,12 @@ function createExperimentId() {
     return `exp_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function normalizeLlmProvider(value) {
-    return String(value || DEFAULT_LLM_PROVIDER).trim().toLowerCase() === 'local'
-        ? 'local'
-        : 'gemini';
+function normalizeLlmProvider() {
+    return 'gemini';
 }
 
-function resolveTrackingModel(provider, modelOverride = '') {
-    const normalizedProvider = normalizeLlmProvider(provider);
-    const explicitModel = String(modelOverride || '').trim();
-    if (explicitModel) return explicitModel;
-    return normalizedProvider === 'local'
-        ? (process.env.LLM_MODEL || 'local-llm')
-        : DEFAULT_GEMINI_MODEL;
+function resolveTrackingModel() {
+    return DEFAULT_GEMINI_MODEL;
 }
 
 function resolveRecordMarkdownContent(record) {
@@ -397,12 +388,11 @@ function normalizeSourceMode(sourceMode) {
 async function executeGenerationJobViaHttp(job) {
   const payload = {
     phrase: job.phraseNormalized,
-    llm_provider: normalizeLlmProvider(job.provider),
-    enable_compare: Boolean(job.enableCompare),
+    llm_provider: 'gemini',
     card_type: normalizeCardType(job.jobType),
     source_mode: normalizeSourceMode(job.sourceMode),
     target_folder: job.targetFolder || '',
-    llm_model: job.llmModel || undefined
+    llm_model: DEFAULT_GEMINI_MODEL
   };
 
   const response = await fetch(`http://127.0.0.1:${PORT}/api/generate`, {
@@ -851,40 +841,7 @@ function isGeminiUnavailableError(error) {
 }
 
 async function generateWithAutoFallback(phrase, provider, perf, options = {}) {
-    try {
-        return await generateWithProvider(phrase, provider, perf, options);
-    } catch (error) {
-        const fallbackEnabled = typeof options.allowGeminiFallback === 'boolean'
-            ? options.allowGeminiFallback
-            : String(process.env.GEMINI_FALLBACK_TO_LOCAL || 'false').toLowerCase() === 'true';
-
-        if (provider !== 'gemini' || !fallbackEnabled || !isGeminiUnavailableError(error)) {
-            throw error;
-        }
-
-        console.warn('[Generate] Gemini unavailable, fallback to local:', error.message);
-        const fallbackPerf = new PerformanceMonitor().start();
-        const fallbackResult = await generateWithProvider(phrase, 'local', fallbackPerf, {
-            ...options,
-            modelOverride: null,
-            allowGeminiFallback: false
-        });
-
-        fallbackResult.fallback = {
-            from: 'gemini',
-            to: 'local',
-            reason: 'gemini_unavailable',
-            error: error.message
-        };
-        fallbackResult.observability.metadata = {
-            ...(fallbackResult.observability.metadata || {}),
-            requestedProvider: 'gemini',
-            fallbackFrom: 'gemini',
-            fallbackReason: 'gemini_unavailable',
-            fallbackError: error.message
-        };
-        return fallbackResult;
-    }
+    return generateWithProvider(phrase, provider, perf, options);
 }
 
 // ========== Core Logic ==========
@@ -1160,319 +1117,6 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   };
 }
 
-async function handleComparisonMode(phrase, options = {}) {
-  console.log('[Comparison] Starting parallel generation...');
-  const cardType = normalizeCardType(options.cardType);
-  const sourceMode = normalizeSourceMode(options.sourceMode);
-
-  const results = {
-    phrase,
-    gemini: { success: false },
-    local: { success: false },
-    comparison: null
-  };
-
-  const perfGemini = new PerformanceMonitor().start();
-  const perfLocal = new PerformanceMonitor().start();
-
-  const [geminiResult, localResult] = await Promise.allSettled([
-    generateWithProvider(phrase, 'gemini', perfGemini, {
-      ...(options.geminiOptions || {}),
-      experimentId: options.experimentId,
-      experimentRound: options.experimentRound,
-      targetFolder: options.targetFolder || '',
-      cardType,
-      sourceMode
-    }),
-    generateWithProvider(phrase, 'local', perfLocal, {
-      ...(options.localOptions || {}),
-      fewshotOptions: options.fewshotOptions || {},
-      experimentId: options.experimentId,
-      experimentRound: options.experimentRound,
-      targetFolder: options.targetFolder || '',
-      cardType,
-      sourceMode
-    })
-  ]);
-
-  const createInputCard = async (baseInfo) => {
-    if (!baseInfo) return null;
-    const inputBaseName = `${baseInfo.baseName}_input`;
-    const inputMarkdown = `# ${phrase}\n\n## 原始输入\n- ${phrase}\n\n> 模式: 双模型对比`;
-    const htmlContent = await renderHtmlFromMarkdown(inputMarkdown, { baseName: inputBaseName, audioTasks: [] });
-    const content = {
-      markdown_content: inputMarkdown,
-      html_content: htmlContent,
-      audio_tasks: []
-    };
-    try {
-      return saveGeneratedFiles(`【输入】${phrase}`, content, {
-        baseName: inputBaseName,
-        targetDir: baseInfo.targetDir,
-        folderName: baseInfo.folderName,
-        cardType,
-        sourceMode: sourceMode || 'input'
-      });
-    } catch (err) {
-      console.warn('[Comparison] Input card save failed:', err.message);
-      return null;
-    }
-  };
-
-  const finalizeSide = async (label, genValue, perf) => {
-    const {
-      output: content,
-      prompt,
-      observability,
-      baseName,
-      targetDir,
-      folderName,
-      cardType: sideCardType,
-      sourceMode: sideSourceMode
-    } = genValue;
-
-    postProcessGeneratedContent(content);
-    const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true });
-    if (validationErrors.length) {
-      throw new Error(`Validation failed: ${validationErrors.join('; ')}`);
-    }
-
-    const derivedAudioTasks = buildAudioTasksFromMarkdown(content.markdown_content);
-    if (!Array.isArray(content.audio_tasks) || !content.audio_tasks.length) {
-      content.audio_tasks = derivedAudioTasks;
-    }
-
-    const compareBaseName = `${baseName}_${label}`;
-    const preparedMarkdown = await prepareMarkdownForCard(content.markdown_content, { baseName: compareBaseName, audioTasks: content.audio_tasks });
-    content.markdown_content = preparedMarkdown;
-    content.html_content = await renderHtmlFromMarkdown(preparedMarkdown, { baseName: compareBaseName, audioTasks: content.audio_tasks });
-
-    perf.mark('fileSave');
-    let fileResult = null;
-    try {
-      fileResult = saveGeneratedFiles(phrase, content, {
-        baseName: compareBaseName,
-        targetDir,
-        folderName,
-        cardType: sideCardType || cardType,
-        sourceMode: sideSourceMode || sourceMode
-      });
-    } catch (e) {
-      console.error(`[Comparison] Save failed (${label}):`, e.message);
-    }
-
-    let audio = null;
-    const hasTtsEndpoint = process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT;
-    if (hasTtsEndpoint && content.audio_tasks.length && fileResult) {
-      const audioTasks = normalizeAudioTasks(content.audio_tasks, fileResult.baseName);
-      audio = await generateAudioBatch(audioTasks, { outputDir: fileResult.targetDir, baseName: fileResult.baseName, extension: 'wav' });
-    }
-
-    perf.mark('audioGenerate');
-    observability.performance = perf.end();
-    const outputStructured = observability.metadata?.outputMode === 'markdown'
-      ? JSON.stringify(content, null, 2)
-      : (observability.metadata?.outputStructured || JSON.stringify(content, null, 2));
-    observability.metadata = {
-      ...(observability.metadata || {}),
-      promptText: prompt,
-      outputStructured
-    };
-
-    let generationId = null;
-    let trainingSummary = null;
-    if (fileResult) {
-      try {
-        const dbData = prepareInsertData({
-          phrase,
-          provider: label,
-          model: observability.metadata?.model || label,
-          folderName,
-          baseName: fileResult.baseName,
-          filePaths: fileResult.absPaths,
-          content,
-          observability,
-          prompt,
-          audioTasks: content.audio_tasks,
-          cardType: sideCardType || cardType,
-          sourceMode: sideSourceMode || sourceMode
-        });
-        generationId = dbService.insertGeneration(dbData);
-        try {
-          exampleReviewService.ingestGeneration({
-            generationId,
-            phrase,
-            markdownContent: content.markdown_content,
-            folderName,
-            baseFilename: fileResult.baseName
-          });
-        } catch (reviewErr) {
-          console.warn('[Review] ingest generation failed:', reviewErr.message);
-        }
-        if (generationId) {
-          try {
-            const fewShot = genValue.fewShot || {};
-            const experimentId = options.experimentId || createExperimentId();
-            const variant = `${options.variantBase || 'compare'}_${label}`;
-            const runId = fewShotMetricsService.insertFewShotRun({
-              generationId,
-              experimentId,
-              variant,
-              fewshotEnabled: fewShot.enabled || false,
-              strategy: fewShot.strategy,
-              exampleCount: fewShot.countUsed || 0,
-              minScore: fewShot.minScore,
-              contextWindow: fewShot.contextWindow,
-              tokenBudgetRatio: fewShot.tokenBudgetRatio,
-              basePromptTokens: fewShot.basePromptTokens,
-              fewshotPromptTokens: fewShot.fewshotPromptTokens,
-              totalPromptTokensEst: fewShot.totalPromptTokensEst,
-              outputTokens: observability?.tokens?.output || 0,
-              outputChars: content?.markdown_content?.length || 0,
-              qualityScore: observability?.quality?.score || 0,
-              qualityDimensions: observability?.quality?.dimensions || {},
-              latencyTotalMs: observability?.performance?.totalTime || 0,
-              success: true,
-              fallbackReason: fewShot.fallbackReason,
-              promptText: prompt
-            });
-            if (runId && Array.isArray(fewShot.examples) && fewShot.examples.length) {
-              fewShotMetricsService.insertFewShotExamples(runId, fewShot.examples);
-            }
-
-            experimentTrackingService.recordExperimentSample({
-              generationId,
-              phrase,
-              provider: label,
-              experimentId,
-              roundNumber: options.experimentRound || 0,
-              roundName: options.roundName || null,
-              variant,
-              isTeacherReference: Boolean(options.isTeacherReference && label === 'gemini'),
-              observability,
-              fewShot,
-              promptText: prompt,
-              content
-            });
-          } catch (fsErr) {
-            console.warn('[FewShot] Compare run record failed:', fsErr.message);
-          }
-        }
-      } catch (dbErr) {
-        console.error('[Database] Compare insert failed:', dbErr.message);
-      }
-
-      if (generationId) {
-        try {
-          const trainingAsset = await generateAndPersistTrainingAsset({
-            generationId,
-            phrase,
-            cardType: sideCardType || cardType,
-            markdown: content.markdown_content,
-            folderName,
-            baseName: fileResult.baseName,
-            targetDir: fileResult.targetDir
-          });
-          trainingSummary = summarizeTrainingAsset(trainingAsset);
-        } catch (trainingErr) {
-          console.warn('[Training] Compare generation failed:', trainingErr.message);
-          trainingSummary = {
-            status: 'failed',
-            source: 'heuristic',
-            qualityScore: 0,
-            assetId: null
-          };
-        }
-      }
-    }
-
-    return {
-      output: content,
-      observability,
-      result: fileResult,
-      audio,
-      generationId: generationId || null,
-      training: trainingSummary
-    };
-  };
-
-  if (geminiResult.status === 'fulfilled') {
-    try {
-      const finalized = await finalizeSide('gemini', geminiResult.value, perfGemini);
-      results.gemini = { success: true, ...finalized };
-    } catch (err) {
-      results.gemini = { success: false, error: err.message };
-    }
-  } else {
-    results.gemini = { success: false, error: geminiResult.reason.message };
-  }
-
-  if (localResult.status === 'fulfilled') {
-    try {
-      const finalized = await finalizeSide('local', localResult.value, perfLocal);
-      results.local = { success: true, ...finalized };
-    } catch (err) {
-      results.local = { success: false, error: err.message };
-    }
-  } else {
-    results.local = { success: false, error: localResult.reason.message };
-  }
-
-  // Create an input card for comparison mode
-  try {
-    const baseInfo = geminiResult.status === 'fulfilled'
-      ? geminiResult.value
-      : (localResult.status === 'fulfilled' ? localResult.value : null);
-    if (baseInfo) {
-      const inputCard = await createInputCard(baseInfo);
-      if (inputCard) results.input = { success: true, result: inputCard };
-    }
-  } catch (err) {
-    console.warn('[Comparison] Input card generation failed:', err.message);
-  }
-
-  // Comparison Logic
-  if (results.gemini.success && results.local.success) {
-    const geminiObs = results.gemini.observability;
-    const localObs = results.local.observability;
-    
-    // Normalize score logic: Quality (0-100) vs Time (ms, lower is better)
-    const geminiScore = geminiObs.quality.score * 0.7 + (5000 / Math.max(geminiObs.performance.totalTime, 500)) * 30;
-    const localScore = localObs.quality.score * 0.7 + (5000 / Math.max(localObs.performance.totalTime, 500)) * 30;
-
-    let winner = 'tie';
-    if (geminiScore > localScore + 5) winner = 'gemini';
-    if (localScore > geminiScore + 5) winner = 'local';
-
-    // 提示词差异分析（简单的长度比较）
-    const geminiPromptLen = geminiObs.prompt?.text?.length || 0;
-    const localPromptLen = localObs.prompt?.text?.length || 0;
-    const promptSimilarity = Math.abs(geminiPromptLen - localPromptLen) < 100 ? 'identical' : 'different';
-
-    results.comparison = {
-      metrics: {
-        speed: { gemini: geminiObs.performance.totalTime, local: localObs.performance.totalTime },
-        quality: { gemini: geminiObs.quality.score, local: localObs.quality.score },
-        tokens: { gemini: geminiObs.tokens.total, local: localObs.tokens.total },
-        cost: {
-          gemini: typeof geminiObs.cost?.total === 'number' ? geminiObs.cost.total : 0,
-          local: typeof localObs.cost?.total === 'number' ? localObs.cost.total : 0
-        }
-      },
-      winner,
-      recommendation: winner === 'gemini' ? 'Gemini wins on speed/quality balance.' :
-                      winner === 'local' ? 'Local LLM wins on speed/quality balance.' : 'Tie.',
-      promptComparison: {
-        similarity: promptSimilarity,
-        geminiLength: geminiPromptLen,
-        localLength: localPromptLen
-      }
-    };
-  }
-
-  return results;
-}
-
 // API Endpoints
 
 app.post('/api/generation-jobs', async (req, res) => {
@@ -1484,9 +1128,8 @@ app.post('/api/generation-jobs', async (req, res) => {
 
     const jobType = normalizeCardType(req.body?.card_type || req.body?.job_type || 'trilingual');
     const sourceMode = normalizeSourceMode(req.body?.source_mode);
-    const provider = normalizeLlmProvider(req.body?.llm_provider);
-    const llmModel = sanitizeGeminiModelName(req.body?.llm_model || '');
-    const enableCompare = Boolean(req.body?.enable_compare);
+    const provider = 'gemini';
+    const llmModel = DEFAULT_GEMINI_MODEL;
     const targetFolder = String(req.body?.target_folder || '').trim();
     const sourceContext = req.body?.source_context && typeof req.body.source_context === 'object'
       ? req.body.source_context
@@ -1500,13 +1143,11 @@ app.post('/api/generation-jobs', async (req, res) => {
       targetFolder,
       provider,
       llmModel,
-      enableCompare,
       sourceContext,
       createdByClient: req.get('user-agent') || 'browser',
       requestPayload: {
         phrase,
         llm_provider: provider,
-        enable_compare: enableCompare,
         card_type: jobType,
         source_mode: sourceMode,
         target_folder: targetFolder,
@@ -1619,8 +1260,6 @@ app.post('/api/generate', async (req, res) => {
     // 默认走 Gemini CLI Proxy；仅在显式指定时才使用 local。
     const {
       phrase,
-      llm_provider = DEFAULT_LLM_PROVIDER,
-      enable_compare = false,
       card_type = 'trilingual',
       source_mode = null,
       target_folder = '',
@@ -1630,33 +1269,15 @@ app.post('/api/generate', async (req, res) => {
       round_name,
       is_teacher_reference = false,
       fewshot_options = {},
-      llm_model
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
-    const requestedProvider = normalizeLlmProvider(llm_provider);
+    const requestedProvider = 'gemini';
     const cardType = normalizeCardType(card_type);
     const sourceMode = normalizeSourceMode(source_mode);
 
     const roundNumber = Number.isFinite(Number(experiment_round))
       ? Math.max(0, Math.floor(Number(experiment_round)))
       : 0;
-
-    // Mode: Comparison
-    if (enable_compare) {
-        const expId = experiment_id || createExperimentId();
-        const result = await handleComparisonMode(phrase, {
-          experimentId: expId,
-          experimentRound: roundNumber,
-          roundName: round_name || null,
-          isTeacherReference: Boolean(is_teacher_reference),
-          variantBase: variant || 'compare',
-          fewshotOptions: fewshot_options,
-          targetFolder: target_folder || '',
-          cardType,
-          sourceMode
-        });
-        return res.json(result);
-    }
 
     // Mode: Single
     const genResult = E2E_TEST_MODE
@@ -1670,7 +1291,7 @@ app.post('/api/generate', async (req, res) => {
           fewshotOptions: fewshot_options,
           experimentId: experiment_id || '',
           experimentRound: roundNumber,
-          modelOverride: llm_model || null,
+          modelOverride: DEFAULT_GEMINI_MODEL,
           targetFolder: target_folder || '',
           cardType,
           sourceMode
@@ -1877,7 +1498,7 @@ app.post('/api/generate', async (req, res) => {
           is_teacher_reference = false,
           llm_model
         } = req.body || {};
-        const requestedProvider = normalizeLlmProvider(llm_provider);
+        const requestedProvider = 'gemini';
         if (experiment_id && req.body?.phrase) {
           experimentTrackingService.recordExperimentSample({
             generationId: null,

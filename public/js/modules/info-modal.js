@@ -137,10 +137,6 @@ export const METRIC_DEFINITIONS = {
         title: "实时动态 (Live Feed)",
         content: "<p>实时显示的最新生成记录流。包含短语名称、使用的模型、生成的质量评分以及时间戳。</p>"
     },
-    "PROVIDER_SPLIT": {
-        title: "供应商分布 (Provider Split)",
-        content: "<p>不同 AI 模型供应商 (如 Local, Gemini, OpenAI 等) 的调用比例分布图。</p>"
-    },
     "ERROR_MONITOR": {
         title: "错误监控 (Error Monitor)",
         content: "<p>生成失败的任务统计。包括 API 超时、JSON 解析错误、网络中断等异常情况。</p>"
@@ -156,13 +152,13 @@ export const METRIC_DEFINITIONS = {
     "TASK_QUEUE": {
         title: "任务队列 (Task Queue)",
         content: `
-            <p>展示前台学习卡片生成任务队列的实时快照，帮助确认批量任务执行状态。</p>
+            <p>展示服务端共享生成队列的实时状态，帮助确认多浏览器下的统一执行进度。</p>
             <ul>
                 <li><strong>Total/Queued/Running/Success/Failed</strong>: 队列总量与各状态计数。</li>
                 <li><strong>Active Task</strong>: 当前正在执行的任务短语与编号。</li>
-                <li><strong>Recent Tasks</strong>: 最近任务状态回放（含重试次数和时间）。</li>
+                <li><strong>Recent Tasks</strong>: 最近任务状态回放（含重试次数、审计事件与时间）。</li>
             </ul>
-            <p>该数据来自浏览器本地队列遥测，不依赖后端持久化。</p>
+            <p>该数据来自后端持久化表 `generation_jobs / generation_job_events`，不再依赖浏览器本地队列。</p>
         `
     },
     "KNOWLEDGE_SUMMARY": {

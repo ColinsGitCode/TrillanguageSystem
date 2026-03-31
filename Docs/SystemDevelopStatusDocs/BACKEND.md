@@ -51,7 +51,7 @@ scripts/
 - Node.js + Express：API 编排与路由
 - SQLite (better-sqlite3)：业务、观测、实验、评审数据
 - 文件系统：按日期目录存储 md/html/meta/audio
-- 本地 LLM：OpenAI 兼容接口（默认主链路）
+- 本地 LLM：OpenAI 兼容接口（当前仅保留 OCR 兜底）
 - Gemini：项目内 `gemini-proxy` 容器 -> 本工程宿主机 `gemini-host-proxy.js`
 - OCR：Tesseract 容器（默认）+ local OCR 兜底
 - TTS：Kokoro（EN）+ VOICEVOX（JA）
@@ -63,7 +63,7 @@ scripts/
    - `trilingual`：三语卡片模板
    - `grammar_ja`：日语语法卡片模板（中文讲解 + 日语例句）
 3. 构建 baseline prompt +（可选）few-shot 注入
-4. 调用 `local` 或 `gemini`（含自动 fallback）
+4. 固定调用项目内 `gemini-proxy`
 5. 后处理与校验（结构、注音、markdown/html）
    - 全局将 `漢字(かな)` 显式写法转换为 `<ruby>`
    - 纯片假名外来词 / 外来语缩写不注音
@@ -87,12 +87,11 @@ scripts/
 
 > 说明：`grammar_ja` 当前默认不启用 few-shot 注入，避免把三语样本注入到语法模板。
 
-## 4. 对比链路（enable_compare）
+## 4. 统一单模型生成链路
 
-- 并行执行 `gemini/local` 两路生成
-- 生成 `input` 输入卡片
-- 分别落库并追踪观测指标
-- 返回 `comparison.metrics`（speed/quality/tokens/cost）与 `winner`
+- 生成接口固定走项目内 `gemini-proxy`
+- 主卡生成与 TRAIN teacher 统一使用 `gemini-2.5-flash-lite`
+- 双模型对比与本地 LLM 生成分支已封存，不再对外暴露
 
 ## 5. few-shot 机制（当前实现）
 
@@ -273,7 +272,7 @@ GEMINI_MODE=host-proxy
 GEMINI_PROXY_URL=http://host.docker.internal:18888/api/gemini
 GEMINI_PROXY_AUTH_MODE=apikey
 GEMINI_PROXY_API_KEY=***
-GEMINI_PROXY_MODEL=gemini-3-pro-preview
+GEMINI_PROXY_MODEL=gemini-2.5-flash-lite
 TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite
 TRAINING_PROXY_TIMEOUT_MS=120000
 TRAINING_PROXY_EXECUTION_TIMEOUT_MS=100000
@@ -311,7 +310,7 @@ TTS_JA_ENDPOINT=http://tts-ja:50021
 ## 11. 当前状态结论
 
 - 主链路（文本/OCR -> 卡片 -> 音频 -> 落库）稳定可用
-- 双模型对比、实验追踪、观测指标链路已闭环
+- 单模型 teacher 生成、实验追踪、观测指标链路已闭环
 - 人工评分/评论与 review-gated few-shot 已落地
 - Knowledge Ops 后端已落地（本地任务队列 + 结果物化 + 只读查询 API）
 - TRAIN 历史回填链路已具备“快速收敛”能力，不会再因 Gateway timeout/breaker 长时间卡死

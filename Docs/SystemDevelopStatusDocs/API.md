@@ -14,7 +14,7 @@
 
 | 类别 | 方法 | 路径 | 说明 |
 |---|---|---|---|
-| 生成 | POST | `/generate` | 生成学习卡片（单模型/对比） |
+| 生成 | POST | `/generate` | 生成学习卡片（单模型 teacher 链路） |
 | 队列 | POST | `/generation-jobs` | 创建共享生成任务 |
 | 队列 | GET | `/generation-jobs` | 获取共享生成任务列表 |
 | 队列 | GET | `/generation-jobs/summary` | 获取共享生成任务摘要 |
@@ -78,12 +78,9 @@
 ```json
 {
   "phrase": "提示词工程",
-  "llm_provider": "local",
-  "enable_compare": false,
   "card_type": "trilingual",
   "source_mode": "input",
   "target_folder": "20260224",
-  "llm_model": "qwen2_5_vl",
   "experiment_id": "exp_round_xxx",
   "experiment_round": 1,
   "round_name": "fewshot_r1",
@@ -107,14 +104,12 @@
 
 #### 说明
 
-- `llm_provider`: `local` / `gemini`
-- `enable_compare=true`: 同时执行 Gemini + Local，并返回 `comparison`
 - `card_type`: `trilingual` / `grammar_ja`
   - `trilingual`: 现有中英日三语卡片
   - `grammar_ja`: 日语语法卡片（中文讲解 + 日语例句）
 - `source_mode`: `input` / `selection` / `ocr`（用于链路追踪）
 - `target_folder`: 指定日期目录；未传则按当前日期
-- `llm_model`: 覆盖模型名（gemini 会透传到项目内 `gemini-proxy`，再转发到宿主机 executor）
+- 生成链路固定走项目内 `gemini-proxy`，当前统一模型为 `gemini-2.5-flash-lite`
 - `fewshot_options.reviewGated/reviewOnly/reviewMinOverall`: 控制人工评审门控注入
 
 ### 2.2 `POST /api/generation-jobs`
@@ -126,12 +121,9 @@
 ```json
 {
   "phrase": "冷热数据分离",
-  "llm_provider": "gemini",
   "card_type": "trilingual",
   "source_mode": "input",
   "target_folder": "",
-  "llm_model": "gemini-3-pro-preview",
-  "enable_compare": false,
   "source_context": {
     "entry": "main-input"
   }
@@ -261,25 +253,11 @@ GET /api/generation-jobs/events?jobId=12&limit=12
 }
 ```
 
-#### 对比模式响应（关键字段）
+#### 当前模型策略
 
-```json
-{
-  "phrase": "提示词工程",
-  "gemini": { "success": true, "result": {}, "output": {}, "observability": {}, "audio": {} },
-  "local": { "success": true, "result": {}, "output": {}, "observability": {}, "audio": {} },
-  "input": { "success": true, "result": {} },
-  "comparison": {
-    "winner": "gemini",
-    "metrics": {
-      "speed": { "gemini": 1000, "local": 1200 },
-      "quality": { "gemini": 90, "local": 82 },
-      "tokens": { "gemini": 1300, "local": 900 },
-      "cost": { "gemini": 0, "local": 0 }
-    }
-  }
-}
-```
+- 主卡生成：`gemini-2.5-flash-lite`
+- TRAIN teacher：`gemini-2.5-flash-lite`
+- 不再暴露本地 LLM / 双模型对比参数
 
 ---
 

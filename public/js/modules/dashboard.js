@@ -175,7 +175,6 @@ async function loadDashboard(days) {
         const records = historyRes.records || [];
         const stats = statsRes.statistics || null;
 
-        renderProviderPie(stats?.providerDistribution, records);
         renderTokenTrend(stats?.tokenTrend, records, days);
         renderLatencyTrend(stats?.latencyTrend, records, days);
         renderQualityMini(stats?.qualityTrend, records, days);
@@ -1580,79 +1579,6 @@ function buildDailySeries(records, selector) {
         .sort((a, b) => a.dateObj - b.dateObj);
 }
 
-// ========== Provider Pie ==========
-
-function renderProviderPie(providerDistribution, records) {
-    const container = document.getElementById('providerDistribution');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'center';
-
-    const chartDiv = document.createElement('div');
-    container.appendChild(chartDiv);
-
-    const legendDiv = document.createElement('div');
-    legendDiv.className = 'legend-container';
-    legendDiv.style.display = 'flex';
-    legendDiv.style.gap = '12px';
-    legendDiv.style.marginTop = '12px';
-    legendDiv.style.fontSize = '12px';
-    container.appendChild(legendDiv);
-
-    const data = providerDistribution
-        ? Object.entries(providerDistribution).map(([label, value]) => ({ label, value }))
-        : aggregateProvider(records);
-
-    if (!data.length) {
-        container.innerHTML = '<div class="empty-hint">No data</div>';
-        return;
-    }
-
-    const width = 200;
-    const height = 200;
-    const radius = Math.min(width, height) / 2 - 10;
-
-    const svg = d3.select(chartDiv)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-        .attr('transform', `translate(${width / 2},${height / 2})`);
-
-    const color = d3.scaleOrdinal()
-        .domain(data.map(d => d.label))
-        .range(['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316']);
-
-    const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
-
-    svg.selectAll('path')
-        .data(pie(data))
-        .enter()
-        .append('path')
-        .attr('d', arc)
-        .attr('fill', d => color(d.data.label))
-        .attr('stroke', 'rgba(255,255,255,0.1)')
-        .attr('stroke-width', 1);
-
-    data.forEach(item => {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '4px';
-        row.innerHTML = `
-            <span style="width:8px; height:8px; border-radius:50%; background:${color(item.label)}"></span>
-            <span style="color:var(--text-secondary);">${item.label}</span>
-            <span style="font-weight:600;">${item.value}</span>
-        `;
-        legendDiv.appendChild(row);
-    });
-}
-
 // ========== Live Feed ==========
 
 function renderRecent(records) {
@@ -1684,7 +1610,6 @@ function renderRecent(records) {
                 <span style="font-size:10px; color:var(--text-secondary);">${formatDate(r.created_at)}</span>
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
-                <span class="badge" style="font-size:10px;">${escapeHtml(r.llm_provider)}</span>
                 <span style="font-family:'JetBrains Mono'; color:${color}; font-size:11px;">${formatNumber(score, 0)}</span>
             </div>
         `;
@@ -1764,15 +1689,6 @@ function renderLineChart(containerId, data, color) {
 }
 
 // ========== Utilities ==========
-
-function aggregateProvider(records = []) {
-    const map = new Map();
-    records.forEach(r => {
-        const key = r.llm_provider || 'unknown';
-        map.set(key, (map.get(key) || 0) + 1);
-    });
-    return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
-}
 
 function formatNumber(value, digits = 0) {
     if (value === null || value === undefined || Number.isNaN(value)) return '-';

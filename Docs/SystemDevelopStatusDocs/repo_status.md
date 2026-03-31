@@ -1,7 +1,7 @@
 # Repo 架构与功能状态（最新）
 
-**最后更新**: 2026-03-13
-**版本**: 3.8.2
+**最后更新**: 2026-03-31
+**版本**: 3.8.4
 
 ## 1. 项目定位
 
@@ -17,7 +17,7 @@
   - `public/dashboard.html`（Mission Control）
   - `public/knowledge-ops.html`（知识任务控制）
   - `public/knowledge-hub.html`（知识资产浏览）
-- 后端：`server.js`（生成编排、对比、评审、实验导出）
+- 后端：`server.js`（生成编排、评审、实验导出、共享队列）
 - 服务层：`services/*`（LLM、OCR、TTS、few-shot、评审、观测、DB）
 - 存储层：
   - 文件：按日期目录 `YYYYMMDD`
@@ -26,10 +26,9 @@
 
 ## 3. 当前功能清单
 
-### 3.1 生成与对比
+### 3.1 生成
 
-- 单模型生成（local/gemini）
-- 对比模式：同时产出 Gemini 与 Local 结果并给出对比指标
+- 单模型生成：`gemini-2.5-flash-lite`
 - 卡片类型：`trilingual` / `grammar_ja`
 - 来源模式：`input` / `selection` / `ocr`
 - 删除：支持按 `id` 或按 `folder/base` 删除并清理关联文件
@@ -226,13 +225,14 @@
   - `breaker_state=open|half_open`：直接快速写入 `heuristic fallback`
 - 当前策略重点是“批量任务可收敛”，不是在配额不足时强行降级 teacher 质量。
 - 当前现场状态已调整：
-  - TRAIN 教师模型固定为 `gemini-2.5-flash-lite`
-  - 主卡模型仍可单独使用 `GEMINI_PROXY_MODEL`
+  - 主卡与 TRAIN teacher 统一固定为 `gemini-2.5-flash-lite`
+  - 双模型 UI、比较指标与本地 LLM 生成入口已封存
   - 目的是避免 `gemini-3.x pro preview` 的 `MODEL_CAPACITY_EXHAUSTED` 直接把 TRAIN 打回 fallback
 
 ### 3.20 TRAIN 教师模型固定（v3.7.4）
 
 - 变更：
+  - 主卡生成统一走 `gemini-2.5-flash-lite`
   - `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`
   - `TRAIN`、`TRAIN regenerate`、`TRAIN backfill` 统一走该模型
 - 原因：

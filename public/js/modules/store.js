@@ -5,14 +5,9 @@
 
 class Store {
     constructor() {
-        const persistedProvider = localStorage.getItem('llm_provider');
-        const persistedModelMode = localStorage.getItem('model_mode');
-        const normalizedProvider = persistedProvider === 'local' || persistedProvider === 'gemini'
-            ? persistedProvider
-            : 'gemini';
-        const normalizedModelMode = ['local', 'gemini', 'compare'].includes(persistedModelMode)
-            ? persistedModelMode
-            : 'gemini';
+        localStorage.removeItem('model_mode');
+        localStorage.removeItem('compare_mode');
+        localStorage.setItem('llm_provider', 'gemini');
         this.state = {
             folders: [],
             files: [],
@@ -21,9 +16,7 @@ class Store {
             selectedFileTitle: null,
             imageBase64: null,
             isGenerating: false,
-            llmProvider: normalizedProvider,
-            compareMode: localStorage.getItem('compare_mode') === 'true' || false,
-            modelMode: normalizedModelMode, // 'local', 'gemini', 'compare'
+            llmProvider: 'gemini',
             cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja'
 
             // 历史记录相关
@@ -34,7 +27,6 @@ class Store {
                 totalPages: 1,
                 totalCount: 0,
                 searchQuery: '',
-                providerFilter: '',
                 loaded: false
             }
         };
@@ -65,9 +57,6 @@ class Store {
         });
 
         // 持久化关键状态到 localStorage
-        if ('modelMode' in partialState) {
-            localStorage.setItem('model_mode', partialState.modelMode);
-        }
         if ('llmProvider' in partialState) {
             localStorage.setItem('llm_provider', partialState.llmProvider);
         }

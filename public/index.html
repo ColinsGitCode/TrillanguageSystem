@@ -62,31 +62,16 @@
             <p class="label">New Card</p>
 
             <div class="selector-row">
-              <!-- 模型选择器 -->
-              <div class="model-selector">
-                <div class="selector-header">
-                  <span class="selector-label">模型选择</span>
-                  <span class="selector-hint mode-gemini" id="modelHint">GEMINI CLI PROXY</span>
-                </div>
-                <div class="selector-buttons">
-                  <button class="model-btn" data-mode="local" title="使用本地 LLM (Qwen)" data-testid="model-local">
-                    <span class="model-icon">🏠</span>
-                    <span>LOCAL</span>
-                  </button>
-                  <button class="model-btn" data-mode="gemini" title="使用 Gemini CLI Proxy" data-testid="model-gemini">
-                    <span class="model-icon">🤖</span>
-                    <span>GEMINI</span>
-                  </button>
-                  <button class="model-btn" data-mode="compare" title="双模型对比" data-testid="model-compare">
-                    <span class="model-icon">⚡</span>
-                    <span>COMPARE</span>
-                  </button>
-                </div>
-              </div>
-
               <div class="card-type-selector" id="cardTypeSelector">
                 <div class="selector-header">
                   <span class="selector-label">卡片类型</span>
+                  <div class="selector-header-right">
+                    <span class="selector-fixed-label">Teacher Model</span>
+                    <span class="selector-hint mode-gemini" id="teacherModelHint">Gemini 2.5 Flash-Lite</span>
+                  </div>
+                </div>
+                <div class="selector-header selector-header-secondary">
+                  <span class="selector-label">输出类型</span>
                   <span class="selector-hint mode-gemini" id="cardTypeHint">三语学习卡片</span>
                 </div>
                 <div class="selector-buttons selector-buttons-two">
@@ -233,11 +218,6 @@
             <!-- 搜索和过滤 -->
             <div class="history-filters">
               <input type="text" id="historySearch" placeholder="🔍 搜索短语或翻译..." class="search-input" />
-              <select id="historyProviderFilter" class="filter-select">
-                <option value="">所有提供商</option>
-                <option value="local">Local LLM</option>
-                <option value="gemini">Gemini</option>
-              </select>
             </div>
 
             <!-- 历史记录列表 -->

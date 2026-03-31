@@ -61,8 +61,6 @@ test.describe('Playwright page smoke', () => {
     const enqueueRes = await request.post('/api/generation-jobs', {
       data: {
         phrase,
-        llm_provider: 'gemini',
-        enable_compare: false,
         card_type: 'trilingual',
         source_mode: 'input'
       }
@@ -99,8 +97,6 @@ test.describe('Playwright page smoke', () => {
     const secondRes = await request.post('/api/generation-jobs', {
       data: {
         phrase: phrase2,
-        llm_provider: 'gemini',
-        enable_compare: false,
         card_type: 'trilingual',
         source_mode: 'input'
       }

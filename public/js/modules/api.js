@@ -46,32 +46,19 @@ class ApiService {
         return res.text(); // Return text (Markdown/HTML)
     }
 
-    async generate(phrase, provider = 'gemini', enableCompare = false, options = {}) {
-        let compareFlag = enableCompare;
-        let extra = options || {};
+    async generate(phrase, options = {}) {
+        const payload = { phrase };
 
-        if (typeof enableCompare === 'object' && enableCompare !== null) {
-            extra = enableCompare;
-            compareFlag = Boolean(enableCompare.enableCompare);
-        }
-
-        const payload = {
-            phrase,
-            llm_provider: provider || 'gemini',
-            enable_compare: Boolean(compareFlag)
-        };
-
-        if (extra.targetFolder) payload.target_folder = extra.targetFolder;
-        if (extra.llmModel) payload.llm_model = extra.llmModel;
-        if (extra.cardType) payload.card_type = extra.cardType;
-        if (extra.sourceMode) payload.source_mode = extra.sourceMode;
-        if (extra.experimentId) payload.experiment_id = extra.experimentId;
-        if (extra.experimentRound !== undefined) payload.experiment_round = extra.experimentRound;
-        if (extra.roundName) payload.round_name = extra.roundName;
-        if (extra.variant) payload.variant = extra.variant;
-        if (extra.isTeacherReference !== undefined) payload.is_teacher_reference = Boolean(extra.isTeacherReference);
-        if (extra.fewshotOptions && typeof extra.fewshotOptions === 'object') {
-            payload.fewshot_options = extra.fewshotOptions;
+        if (options.targetFolder) payload.target_folder = options.targetFolder;
+        if (options.cardType) payload.card_type = options.cardType;
+        if (options.sourceMode) payload.source_mode = options.sourceMode;
+        if (options.experimentId) payload.experiment_id = options.experimentId;
+        if (options.experimentRound !== undefined) payload.experiment_round = options.experimentRound;
+        if (options.roundName) payload.round_name = options.roundName;
+        if (options.variant) payload.variant = options.variant;
+        if (options.isTeacherReference !== undefined) payload.is_teacher_reference = Boolean(options.isTeacherReference);
+        if (options.fewshotOptions && typeof options.fewshotOptions === 'object') {
+            payload.fewshot_options = options.fewshotOptions;
         }
 
         return this.fetchJson('/api/generate', {
