@@ -90,7 +90,7 @@ scripts/
 ## 4. 统一单模型生成链路
 
 - 生成接口固定走项目内 `gemini-proxy`
-- 主卡生成与 TRAIN teacher 统一使用 `gemini-2.5-flash-lite`
+- 主卡生成与 TRAIN teacher 统一使用 `gemini-3-flash-preview`
 - 双模型对比与本地 LLM 生成分支已封存，不再对外暴露
 
 ## 5. few-shot 机制（当前实现）
@@ -230,11 +230,11 @@ scripts/
   - `breaker_state=closed`：继续使用 teacher LLM 生成高质量 TRAIN
   - `breaker_state=open|half_open`：直接写入 `heuristic fallback`，优先保证批任务收敛
 - 当单卡触发 timeout / breaker open 时，不再拖死整批任务；当前策略允许“快速失败 + 快速落盘”。
-- 当前策略已调整：TRAIN 教师模型固定为 `gemini-2.5-flash-lite`，不再跟随主卡默认模型。
-- 原因：`gemini-3-pro-preview / gemini-3.1-pro-preview` 在当前环境下会出现 `MODEL_CAPACITY_EXHAUSTED`，导致 TRAIN 生成回退为 fallback。
+- 当前策略已调整：TRAIN 教师模型固定为 `gemini-3-flash-preview`，并与单模型主链保持一致。
+- 原因：`gemini-3-pro-preview / gemini-3-flash-preview` 在当前环境下会出现 `MODEL_CAPACITY_EXHAUSTED`，导致 TRAIN 生成回退为 fallback。
 - 调整后：
   - 主卡生成仍可继续使用 `GEMINI_PROXY_MODEL`
-  - TRAIN / TRAIN regenerate / TRAIN backfill 统一使用 `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`
+  - TRAIN / TRAIN regenerate / TRAIN backfill 统一使用 `TRAINING_TEACHER_MODEL=gemini-3-flash-preview`
   - 目标是优先保证 TRAIN 链路稳定 ready，而不是受 pro preview 容量波动影响
 
 ## 9. 存储与部署
@@ -280,8 +280,8 @@ GEMINI_MODE=host-proxy
 GEMINI_PROXY_URL=http://host.docker.internal:18888/api/gemini
 GEMINI_PROXY_AUTH_MODE=apikey
 GEMINI_PROXY_API_KEY=***
-GEMINI_PROXY_MODEL=gemini-2.5-flash-lite
-TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite
+GEMINI_PROXY_MODEL=gemini-3-flash-preview
+TRAINING_TEACHER_MODEL=gemini-3-flash-preview
 TRAINING_PROXY_TIMEOUT_MS=120000
 TRAINING_PROXY_EXECUTION_TIMEOUT_MS=100000
 TRAINING_PROXY_RETRIES=1
@@ -322,7 +322,7 @@ TTS_JA_ENDPOINT=http://tts-ja:50021
 - 人工评分/评论与 review-gated few-shot 已落地
 - Knowledge Ops 后端已落地（本地任务队列 + 结果物化 + 只读查询 API）
 - TRAIN 历史回填链路已具备“快速收敛”能力，不会再因 Gateway timeout/breaker 长时间卡死
-- 当前 TRAIN 教师模型已固定为 `gemini-2.5-flash-lite`，TRAIN 链路不再依赖 `gemini-3-pro-preview` 容量恢复
+- 当前 TRAIN 教师模型已固定为 `gemini-3-flash-preview`
 - 主卡生成若仍使用 `gemini-3-pro-preview`，仍可能受上游容量不足影响
 - 主要优化方向：
   1. 将观测指标门禁化（SLO + 发布门禁）

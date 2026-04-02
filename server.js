@@ -24,6 +24,7 @@ const generationJobService = require('./services/generationJobService');
 const trainingPackService = require('./services/trainingPackService');
 const { buildFixtureContent, buildFixtureObservability, buildTrainingPayload } = require('./services/e2eFixtureService');
 const crypto = require('crypto');
+const { normalizeAudioExtension, stripKnownAudioExtension } = require('./services/audioFormat');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
 const { HealthCheckService } = require('./services/healthCheckService');
@@ -36,7 +37,7 @@ const app = express();
 const PORT = process.env.PORT || 3010;
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const DEFAULT_LLM_PROVIDER = 'gemini';
-const TRAINING_TEACHER_MODEL = process.env.TRAINING_TEACHER_MODEL || 'gemini-2.5-flash-lite';
+const TRAINING_TEACHER_MODEL = process.env.TRAINING_TEACHER_MODEL || 'gemini-3-flash-preview';
 const DEFAULT_GEMINI_MODEL = TRAINING_TEACHER_MODEL;
 const E2E_TEST_MODE = /^(1|true|yes|on)$/i.test(String(process.env.E2E_TEST_MODE || '').trim());
 const e2eKnowledgeJobs = {
@@ -301,11 +302,15 @@ function normalizeAudioTasks(tasks, baseName) {
     if (baseName && suffix.includes(baseName)) {
       suffix = suffix.replace(baseName, '');
     }
-    suffix = suffix.replace(/\.(wav|mp3|m4a)$/i, '');
+    suffix = stripKnownAudioExtension(suffix);
     if (!suffix.trim()) {
       suffix = `_${normalized.lang || 'en'}_${index + 1}`;
     }
     normalized.filename_suffix = suffix;
+    normalized.extension = normalizeAudioExtension(normalized.extension, normalized.lang);
+    if (normalized.lang === 'en' && !normalized.response_format) {
+      normalized.response_format = normalized.extension;
+    }
     return normalized;
   });
 }
@@ -1346,7 +1351,7 @@ app.post('/api/generate', async (req, res) => {
     const hasTtsEndpoint = !E2E_TEST_MODE && (process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT);
     if (hasTtsEndpoint && content.audio_tasks.length) {
         const audioTasks = normalizeAudioTasks(content.audio_tasks, result.baseName);
-        audio = await generateAudioBatch(audioTasks, { outputDir: result.targetDir, baseName: result.baseName, extension: 'wav' });
+        audio = await generateAudioBatch(audioTasks, { outputDir: result.targetDir, baseName: result.baseName });
     }
 
     perf.mark('audioGenerate');

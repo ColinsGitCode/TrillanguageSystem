@@ -7,7 +7,7 @@ const { TokenCounter } = require('./observabilityService');
 const TRAINING_SCHEMA_VERSION = 'training_pack_v1';
 const TRAINING_PROMPT_VERSION = 'training_pack_prompt_v1';
 const TRAINING_REPAIR_PROMPT_VERSION = 'training_pack_repair_prompt_v1';
-const TRAINING_MODEL_DEFAULT = process.env.TRAINING_TEACHER_MODEL || 'gemini-2.5-flash-lite';
+const TRAINING_MODEL_DEFAULT = process.env.TRAINING_TEACHER_MODEL || 'gemini-3-flash-preview';
 
 const PROMPT_TEMPLATE_PATH = path.join(__dirname, '..', 'prompts', 'card_training_pack_v1.md');
 const REPAIR_TEMPLATE_PATH = path.join(__dirname, '..', 'prompts', 'card_training_pack_repair_v1.md');

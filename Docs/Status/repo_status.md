@@ -28,7 +28,7 @@
 
 ### 3.1 生成
 
-- 单模型生成：`gemini-2.5-flash-lite`
+- 单模型生成：`gemini-3-flash-preview`
 - 卡片类型：`trilingual` / `grammar_ja`
 - 来源模式：`input` / `selection` / `ocr`
 - 删除：支持按 `id` 或按 `folder/base` 删除并清理关联文件
@@ -231,15 +231,15 @@
   - `breaker_state=open|half_open`：直接快速写入 `heuristic fallback`
 - 当前策略重点是“批量任务可收敛”，不是在配额不足时强行降级 teacher 质量。
 - 当前现场状态已调整：
-  - 主卡与 TRAIN teacher 统一固定为 `gemini-2.5-flash-lite`
+  - 主卡与 TRAIN teacher 统一固定为 `gemini-3-flash-preview`
   - 双模型 UI、比较指标与本地 LLM 生成入口已封存
   - 目的是避免 `gemini-3.x pro preview` 的 `MODEL_CAPACITY_EXHAUSTED` 直接把 TRAIN 打回 fallback
 
 ### 3.20 TRAIN 教师模型固定（v3.7.4）
 
 - 变更：
-  - 主卡生成统一走 `gemini-2.5-flash-lite`
-  - `TRAINING_TEACHER_MODEL=gemini-2.5-flash-lite`
+  - 主卡生成统一走 `gemini-3-flash-preview`
+  - `TRAINING_TEACHER_MODEL=gemini-3-flash-preview`
   - `TRAIN`、`TRAIN regenerate`、`TRAIN backfill` 统一走该模型
 - 原因：
   - 现场实测 `gemini-3-pro-preview` 在账号额度正常时仍会报 `429 / MODEL_CAPACITY_EXHAUSTED`

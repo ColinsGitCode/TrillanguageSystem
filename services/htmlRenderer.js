@@ -1,5 +1,6 @@
 const { marked } = require('marked');
 const { toRuby } = require('./japaneseFurigana');
+const { getPreferredAudioExtension, rewriteLegacyAudioTagExtensions } = require('./audioFormat');
 const LOANWORD_READING_REGEX =
   /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FEA-Za-zＡ-Ｚａ-ｚ0-9０-９._/-]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
 
@@ -130,7 +131,10 @@ function injectAudioTags(markdown, baseName, audioTasks) {
   (audioTasks || []).forEach((task) => {
     if (!task || !task.lang || !task.filename_suffix) return;
     const key = `${task.lang}:${task.filename_suffix.replace(/^_/, '')}`;
-    audioMap.set(key, task.filename_suffix);
+    audioMap.set(key, {
+      suffix: task.filename_suffix,
+      extension: task.extension || getPreferredAudioExtension(task.lang),
+    });
   });
 
   const lines = String(markdown).split(/\r?\n/);
@@ -150,8 +154,11 @@ function injectAudioTags(markdown, baseName, audioTasks) {
     if (exampleMatch && currentLang) {
       const index = exampleMatch[1];
       const suffixKey = `${currentLang}:${currentLang}_${index}`;
-      const suffix = audioMap.get(suffixKey) || `_${currentLang}_${index}`;
-      output.push(`${line} <audio src="${baseName}${suffix}.wav"></audio>`);
+      const audioMeta = audioMap.get(suffixKey) || {
+        suffix: `_${currentLang}_${index}`,
+        extension: getPreferredAudioExtension(currentLang),
+      };
+      output.push(`${line} <audio src="${baseName}${audioMeta.suffix}.${audioMeta.extension}"></audio>`);
     } else {
       output.push(line);
     }
@@ -162,7 +169,7 @@ function injectAudioTags(markdown, baseName, audioTasks) {
 
 async function prepareMarkdownForCard(markdown, options = {}) {
   const { baseName = 'phrase', audioTasks = [] } = options;
-  const normalized = await normalizeJapaneseRuby(markdown);
+  const normalized = rewriteLegacyAudioTagExtensions(await normalizeJapaneseRuby(markdown));
   const hasAudio =
     /<div\s+class=["']audio["']\s*>/i.test(normalized) || /<audio\b/i.test(normalized);
   if (hasAudio) return normalized;

@@ -158,7 +158,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 ## 4. 生成入口与单模型展示
 
 - 模型选择按钮已移除
-- 生成入口固定使用 `Teacher Model · Gemini 2.5 Flash-Lite`
+- 生成入口固定使用 `Teacher Model · Gemini 3 Flash Preview`
 - 仍保留卡片类型切换：三语卡片 / 日语语法卡片
 
 ## 5. Mission Control（dashboard）

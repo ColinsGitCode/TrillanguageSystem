@@ -116,7 +116,7 @@
   - `grammar_ja`: 日语语法卡片（中文讲解 + 日语例句）
 - `source_mode`: `input` / `selection` / `ocr`（用于链路追踪）
 - `target_folder`: 指定日期目录；未传则按当前日期
-- 生成链路固定走项目内 `gemini-proxy`，当前统一模型为 `gemini-2.5-flash-lite`
+- 生成链路固定走项目内 `gemini-proxy`，当前统一模型为 `gemini-3-flash-preview`
 - `fewshot_options.reviewGated/reviewOnly/reviewMinOverall`: 控制人工评审门控注入
 
 ### 2.2 `POST /api/generation-jobs`
@@ -262,8 +262,8 @@ GET /api/generation-jobs/events?jobId=12&limit=12
 
 #### 当前模型策略
 
-- 主卡生成：`gemini-2.5-flash-lite`
-- TRAIN teacher：`gemini-2.5-flash-lite`
+- 主卡生成：`gemini-3-flash-preview`
+- TRAIN teacher：`gemini-3-flash-preview`
 - 不再暴露本地 LLM / 双模型对比参数
 
 ---

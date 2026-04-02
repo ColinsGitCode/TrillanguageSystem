@@ -238,7 +238,7 @@ launchctl disable gui/$(id -u)/com.fintechsystem.gemini-proxy
 
 实践建议：
 - 主卡默认模型优先设置为 `gemini-3-pro-preview`
-- TRAIN teacher 模型固定为 `gemini-2.5-flash-lite`
+- TRAIN teacher 模型固定为 `gemini-3-flash-preview`
 - 若要降成本/提速，可切换主卡模型到 `gemini-3-flash-preview` 或 `gemini-2.5-flash`
 
 ---

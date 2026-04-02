@@ -5,6 +5,7 @@
 
 const crypto = require('crypto');
 const path = require('path');
+const { normalizeAudioExtension } = require('./audioFormat');
 
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const RESOLVED_RECORDS_PATH = path.resolve(RECORDS_PATH);
@@ -152,7 +153,11 @@ function prepareAudioFilesData({ audioTasks, baseName, folderName }) {
     language: task.lang,
     text: task.text,
     filenameSuffix: task.filename_suffix,
-    filePath: task.filePath || path.join(RESOLVED_RECORDS_PATH, folderName, `${baseName}${task.filename_suffix}.wav`),
+    filePath: task.filePath || path.join(
+      RESOLVED_RECORDS_PATH,
+      folderName,
+      `${baseName}${task.filename_suffix}.${normalizeAudioExtension(task.extension, task.lang)}`
+    ),
     ttsProvider: task.lang === 'en' ? 'kokoro' : 'voicevox',
     ttsModel: task.lang === 'en' ? process.env.TTS_EN_MODEL : null,
     status: task.status || 'pending'

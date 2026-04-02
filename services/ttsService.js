@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+const { normalizeAudioExtension } = require('./audioFormat');
 
 const EN_TTS_ENDPOINT = process.env.TTS_EN_ENDPOINT || process.env.TTS_API_ENDPOINT;
 const JA_TTS_ENDPOINT = process.env.TTS_JA_ENDPOINT || process.env.TTS_API_ENDPOINT;
@@ -67,11 +68,12 @@ async function requestPiperAudio(task) {
 
 async function requestOpenAiSpeechAudio(task) {
   const endpoint = resolveOpenAiSpeechEndpoint();
+  const responseFormat = normalizeAudioExtension(task.response_format || task.extension, 'en');
   const payload = {
     model: task.model || EN_TTS_MODEL,
     input: task.text,
     voice: task.voice || EN_DEFAULT_VOICE || 'af_bella',
-    response_format: task.response_format || 'wav',
+    response_format: responseFormat,
     speed: task.speed || EN_DEFAULT_SPEED,
   };
 
@@ -166,7 +168,8 @@ async function generateAudioBatch(tasks, options) {
       }
 
       const { buffer, contentType } = response;
-      const filename = resolveAudioFilename(baseName, task.filename_suffix, extension);
+      const resolvedExtension = normalizeAudioExtension(task.extension, task.lang) || extension;
+      const filename = resolveAudioFilename(baseName, task.filename_suffix, resolvedExtension);
       const filePath = path.join(outputDir, filename);
       fs.writeFileSync(filePath, buffer);
       results.push({
@@ -174,6 +177,7 @@ async function generateAudioBatch(tasks, options) {
         filename,
         filePath,
         contentType,
+        extension: resolvedExtension,
       });
     } catch (error) {
       errors.push({
