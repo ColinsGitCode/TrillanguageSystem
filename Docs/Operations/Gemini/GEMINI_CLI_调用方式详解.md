@@ -175,6 +175,47 @@ curl -s -X POST http://localhost:18888/api/gemini \
   -d '{"prompt":"请只回复 ok","model":"gemini-3-pro-preview","project":"three-lans"}'
 ```
 
+### 7.1 旧宿主机服务冲突清理（2026-04-02）
+
+为避免本工程链路误打到历史外部服务，宿主机上以下 launchd 服务应保持停用：
+
+- `com.gemini.executor`（历史外部 executor，占用 `3210`）
+- `com.fintechsystem.gemini-proxy`（历史外部 gateway，占用 `18888`）
+
+检查方式：
+
+```bash
+launchctl list | rg 'com\.gemini\.executor|com\.fintechsystem\.gemini-proxy'
+lsof -nP -iTCP:3210 -sTCP:LISTEN
+lsof -nP -iTCP:18888 -sTCP:LISTEN
+```
+
+若仍存在，执行：
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.gemini.executor.plist
+launchctl disable gui/$(id -u)/com.gemini.executor
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.fintechsystem.gemini-proxy.plist
+launchctl disable gui/$(id -u)/com.fintechsystem.gemini-proxy
+```
+
+---
+
+## 7.2 真实页面生成验证（2026-04-02）
+
+本工程链路已完成一次真实页面验证：
+
+- 浏览器页面文本输入 `代理修复验证`
+- 共享队列任务 `#9` 正常进入 `created -> picked -> succeeded`
+- 主卡生成成功：`generationId=655`，目录 `20260402`
+- 验证通过链路：`viewer -> gemini-proxy(container:18888) -> gemini-host-proxy(host:13210) -> 本地 Gemini CLI`
+
+该验证说明：
+
+- 页面 UI 主链路正常
+- 项目内 Gemini Proxy 链路正常
+- 旧外部 `3210/18888` 服务停用后，当前请求已不再误路由到历史服务
+
 ---
 
 ## 8. 当前模型可用性结论（本机实测，2026-02-10）
