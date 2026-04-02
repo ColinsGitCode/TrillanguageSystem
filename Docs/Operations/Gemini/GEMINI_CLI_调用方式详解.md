@@ -56,6 +56,7 @@
 - Gateway 对接地址：`GEMINI_PROXY_URL`（应指向 `:18888`）
 - CLI 直连客户端：`services/geminiCliService.js`
 - Host Proxy 服务端：`scripts/gemini-host-proxy.js`
+- 默认认证目录策略：优先使用宿主机 `~/.gemini`；仅在显式配置 `GEMINI_PROXY_HOME` 或项目内 `.runtime/.gemini` 已具备认证文件时才切换到隔离目录
 - Host Proxy 管理脚本：`scripts/start-gemini-proxy.sh`
 
 ---
@@ -90,7 +91,7 @@
 
 ## 4.2 代理进程（宿主机）
 
-- `GEMINI_PROXY_PORT`：默认 `3210`
+- `GEMINI_PROXY_PORT`：默认 `13210`
 - `GEMINI_PROXY_BIN`：默认 `gemini`
 - `GEMINI_PROXY_TIMEOUT_MS`：Gemini CLI 子进程超时（代码默认 `90000`，启动脚本默认导出 `150000`）
 - `GEMINI_PROXY_MODEL`：代理默认模型
@@ -140,7 +141,7 @@
 
 执行规范（严格）：
 - 业务容器调用 `Gateway:18888`
-- Gateway 转发到宿主机执行器 `Host Executor:3210`
+- Gateway 转发到宿主机执行器 `Host Executor:13210`
 
 宿主机执行器启动/停止/状态：
 
@@ -154,13 +155,13 @@ bash scripts/start-gemini-proxy.sh stop
 健康检查：
 
 ```bash
-curl -s http://localhost:3210/health
+curl -s http://localhost:13210/health
 ```
 
 代理直测：
 
 ```bash
-curl -s -X POST http://localhost:3210/api/gemini \
+curl -s -X POST http://localhost:13210/api/gemini \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"请只回复 ok","baseName":"probe","model":"gemini-3-pro-preview"}'
 ```
@@ -298,7 +299,7 @@ GEMINI_PROXY_API_KEY=local-dev-key-0123456789
 GEMINI_PROXY_MODEL=gemini-3-pro-preview
 
 # host executor
-GEMINI_PROXY_PORT=3210
+GEMINI_PROXY_PORT=13210
 GEMINI_PROXY_BIN=gemini
 GEMINI_PROXY_MODEL=gemini-3-pro-preview
 GEMINI_PROXY_TIMEOUT_MS=150000
@@ -309,7 +310,7 @@ GEMINI_PROXY_TIMEOUT_MS=150000
 ## 11. 结论
 
 当前系统中，Gemini CLI 的主调用方式是：
-- **容器内服务 -> Gateway(18888) -> 宿主机 Host Executor(3210) -> Gemini CLI -> 返回 markdown -> 本地渲染与落盘/落库**。
+- **容器内服务 -> Gateway(18888) -> 宿主机 Host Executor(13210) -> Gemini CLI -> 返回 markdown -> 本地渲染与落盘/落库**。
 
 在此架构下：
 - 模型可由 `llm_model` 每次请求透传
@@ -336,7 +337,7 @@ flowchart LR
   A["App Container A"] --> G["Gemini Gateway Container :18888"]
   B["App Container B"] --> G
   C["App Container C"] --> G
-  G --> H["Host Executor :3210 (localhost only)"]
+  G --> H["Host Executor :13210 (localhost only)"]
   H --> CLI["Gemini CLI (host)"]
   CLI --> API["Gemini Service"]
 ```
@@ -349,7 +350,7 @@ flowchart LR
 - `Gateway Container`（容器）：
   - 暴露统一 API
   - 处理认证、重试、限流、日志与观测
-  - 转发到 `http://host.docker.internal:3210`
+  - 转发到 `http://host.docker.internal:13210`
 - `业务容器`：
   - 仅访问 `http://gemini-gateway:18888`
 
@@ -373,7 +374,7 @@ docker network create ai-shared-net
 # 2) 启动宿主机执行层
 bash scripts/start-gemini-proxy.sh start
 
-# 3) 启动网关容器（加入 ai-shared-net，内部转发到 host.docker.internal:3210）
+# 3) 启动网关容器（加入 ai-shared-net，内部转发到 host.docker.internal:13210）
 # 4) 每个业务项目容器加入同一 external network: ai-shared-net
 ```
 

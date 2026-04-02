@@ -122,9 +122,9 @@
   - `/health`
   - `/admin/reset`
 - `gemini-proxy` 再转发到本工程宿主机 `gemini-host-proxy.js`
-- 宿主机 Gemini 运行目录已切到项目专属：
-  - `/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/gemini`
+- 宿主机执行器默认使用用户主目录 `~/.gemini`，项目内 `.runtime/.gemini` 仅作为可选隔离配置目录
 - 宿主机脚本执行环境改为白名单变量，降低共享宿主机环境导致的 MCP 污染与配置漂移
+- 项目内 Host Executor 默认端口：`13210`
 
 ### 3.11 字体与可读性优化（v3.6.1）
 

@@ -1,7 +1,7 @@
 const http = require('http');
 
 const PORT = Number(process.env.GEMINI_GATEWAY_PORT || 18888);
-const EXECUTOR_BASE_URL = String(process.env.GEMINI_EXECUTOR_BASE_URL || 'http://host.docker.internal:3210').replace(/\/$/, '');
+const EXECUTOR_BASE_URL = String(process.env.GEMINI_EXECUTOR_BASE_URL || 'http://host.docker.internal:13210').replace(/\/$/, '');
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_GATEWAY_TIMEOUT_MS || 130000);
 
 function sendJson(res, status, payload) {

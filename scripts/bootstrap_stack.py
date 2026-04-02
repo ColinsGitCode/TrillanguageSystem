@@ -15,8 +15,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LOG_DIR = os.path.join(ROOT, "logs")
 PROXY_LOG = os.path.join(LOG_DIR, "gemini-proxy.log")
 PID_FILE = os.path.join(LOG_DIR, "gemini-proxy.pid")
-GEMINI_RUNTIME_DIR = os.path.join(ROOT, ".runtime", "gemini")
-PROXY_PORT = int(os.environ.get("GEMINI_PROXY_PORT", "3210"))
+PROXY_PORT = int(os.environ.get("GEMINI_PROXY_PORT", "13210"))
 PROXY_URL = os.environ.get("GEMINI_PROXY_URL", f"http://localhost:{PROXY_PORT}/health")
 
 
@@ -86,8 +85,11 @@ def pid_alive(pid):
 
 def start_proxy():
     os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(GEMINI_RUNTIME_DIR, exist_ok=True)
     log(f"[proxy] starting: {' '.join(PROXY_CMD)}")
+    proxy_env = {**os.environ}
+    explicit_home = proxy_env.get("GEMINI_PROXY_HOME")
+    if explicit_home:
+        proxy_env.setdefault("GEMINI_SETTINGS_PATH", os.path.join(explicit_home, "settings.json"))
     with open(PROXY_LOG, "a", encoding="utf-8") as logf:
         proc = subprocess.Popen(
             PROXY_CMD,
@@ -95,11 +97,7 @@ def start_proxy():
             stdout=logf,
             stderr=logf,
             start_new_session=True,
-            env={
-                **os.environ,
-                "GEMINI_PROXY_HOME": GEMINI_RUNTIME_DIR,
-                "GEMINI_SETTINGS_PATH": os.path.join(GEMINI_RUNTIME_DIR, "settings.json")
-            }
+            env=proxy_env
         )
     with open(PID_FILE, "w", encoding="utf-8") as f:
         f.write(str(proc.pid))

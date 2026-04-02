@@ -12,7 +12,7 @@
 1. 前端请求（UI）
 2. 应用服务（3010）
 3. Gemini Gateway（18888）
-4. Host Executor（3210）
+4. Host Executor（13210）
 5. 数据库与实验数据（SQLite）
 
 ---
@@ -168,7 +168,7 @@
 
 依赖：
 
-1. `gemini_cli_proxy` 上游稳定（3210常驻 + 18888可达）。
+1. `gemini_cli_proxy` 上游稳定（13210常驻 + 18888可达）。
 2. 本地 LLM 服务健康。
 3. 数据库 schema 迁移窗口可执行。
 

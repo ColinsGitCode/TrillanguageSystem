@@ -10,7 +10,7 @@
 ## 设计原则
 
 - `viewer` 继续作为唯一业务入口。
-- `gemini` 调用链收回到本工程内部，不再依赖外部共享 `18888/3210` 服务。
+- `gemini` 调用链收回到本工程内部，不再依赖外部共享 `18888/13210` 服务。
 - 宿主机仍是真正执行 `gemini` CLI 的位置，不把 Gemini CLI 装进容器。
 - 队列事实来源从浏览器内存/`localStorage` 改为 SQLite。
 - 所有浏览器、Mission Control、审计日志都读取同一份队列状态。
@@ -21,7 +21,7 @@
 Browser
   -> viewer
   -> gemini-proxy (项目内容器)
-  -> gemini-host-proxy (本工程宿主机脚本, 监听 3210)
+  -> gemini-host-proxy (本工程宿主机脚本, 监听 13210)
   -> 本地 Gemini CLI
 ```
 
@@ -79,7 +79,7 @@ Browser
 
 项目专属运行目录：
 
-- `/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/gemini`
+- `/Users/xueguodong/.gemini（默认）或 /Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/.gemini（显式隔离）`
 
 宿主机脚本仅透传必要环境：
 

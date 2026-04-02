@@ -1,9 +1,10 @@
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const PORT = Number(process.env.GEMINI_PROXY_PORT || 3210);
+const PORT = Number(process.env.GEMINI_PROXY_PORT || 13210);
 const GEMINI_BIN_CANDIDATES = [
   process.env.GEMINI_PROXY_BIN || '',
   'gemini',
@@ -18,8 +19,53 @@ const PROMPT_ARG = process.env.GEMINI_PROXY_PROMPT_ARG || '-p';
 const ACTIVE_PROCS = new Set();
 const PROCESS_FORCE_KILL_MS = Number(process.env.GEMINI_PROXY_FORCE_KILL_MS || 1000);
 const PROJECT_ROOT = path.join(__dirname, '..');
-const PROJECT_GEMINI_HOME = process.env.GEMINI_PROXY_HOME || path.join(PROJECT_ROOT, '.runtime/gemini');
-const PROJECT_GEMINI_SETTINGS = process.env.GEMINI_SETTINGS_PATH || path.join(PROJECT_GEMINI_HOME, 'settings.json');
+const USER_HOME = os.homedir();
+const USER_GEMINI_DIR = path.join(USER_HOME, '.gemini');
+const PROJECT_RUNTIME_ROOT = path.join(PROJECT_ROOT, '.runtime');
+const PROJECT_GEMINI_DIR = path.join(PROJECT_RUNTIME_ROOT, '.gemini');
+
+function fileExists(target) {
+  try {
+    return fs.existsSync(target);
+  } catch (_) {
+    return false;
+  }
+}
+
+function dirHasAuthFiles(dir) {
+  if (!dir) return false;
+  return ['oauth_creds.json', 'settings.json'].every((name) => fileExists(path.join(dir, name)));
+}
+
+function resolveGeminiDir() {
+  const explicitDir = String(process.env.GEMINI_PROXY_HOME || '').trim();
+  if (explicitDir) {
+    return {
+      dir: explicitDir,
+      source: 'explicit',
+      authReady: dirHasAuthFiles(explicitDir)
+    };
+  }
+
+  if (dirHasAuthFiles(PROJECT_GEMINI_DIR)) {
+    return {
+      dir: PROJECT_GEMINI_DIR,
+      source: 'project-runtime',
+      authReady: true
+    };
+  }
+
+  return {
+    dir: USER_GEMINI_DIR,
+    source: 'host-home',
+    authReady: dirHasAuthFiles(USER_GEMINI_DIR)
+  };
+}
+
+const GEMINI_DIR_INFO = resolveGeminiDir();
+const GEMINI_CONFIG_DIR = GEMINI_DIR_INFO.dir;
+const GEMINI_HOME = path.dirname(GEMINI_CONFIG_DIR);
+const PROJECT_GEMINI_SETTINGS = process.env.GEMINI_SETTINGS_PATH || path.join(GEMINI_CONFIG_DIR, 'settings.json');
 
 function ensureDir(dir) {
   if (!dir) return;
@@ -45,10 +91,11 @@ function resolveExecutable(candidates = []) {
 const GEMINI_BIN = resolveExecutable(GEMINI_BIN_CANDIDATES);
 
 function buildGeminiEnv() {
-  ensureDir(PROJECT_GEMINI_HOME);
+  ensureDir(GEMINI_HOME);
+  ensureDir(GEMINI_CONFIG_DIR);
   const env = {
     PATH: process.env.PATH || '',
-    HOME: PROJECT_GEMINI_HOME,
+    HOME: GEMINI_HOME,
     GEMINI_SETTINGS_PATH: PROJECT_GEMINI_SETTINGS,
     NO_COLOR: '1',
     TERM: process.env.TERM || 'xterm'
@@ -209,7 +256,11 @@ const server = http.createServer(async (req, res) => {
       geminiBin: GEMINI_BIN,
       defaultModel: DEFAULT_MODEL || null,
       activeProcesses: ACTIVE_PROCS.size,
-      settingsPath: PROJECT_GEMINI_SETTINGS
+      geminiHome: GEMINI_HOME,
+      geminiConfigDir: GEMINI_CONFIG_DIR,
+      settingsPath: PROJECT_GEMINI_SETTINGS,
+      authReady: GEMINI_DIR_INFO.authReady,
+      authSource: GEMINI_DIR_INFO.source
     });
   }
 
@@ -241,8 +292,8 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Not found' });
 });
 
-server.listen(PORT, () => {
-  console.log(`[gemini-proxy] listening on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[gemini-proxy] listening on http://0.0.0.0:${PORT}`);
 });
 
 process.on('SIGTERM', () => server.close());

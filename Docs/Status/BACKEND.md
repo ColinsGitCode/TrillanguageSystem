@@ -131,13 +131,13 @@ scripts/
 ## 6. Gemini proxy 集成（v3.8.2 第一阶段）
 
 - `viewer` 容器调用：`http://gemini-proxy:18888/api/gemini`
-- `gemini-proxy` 容器再转发到：`http://host.docker.internal:3210`
+- `gemini-proxy` 容器再转发到：`http://host.docker.internal:13210`
 - 宿主机实际执行器：`scripts/gemini-host-proxy.js`
 - 请求透传字段：`prompt/baseName/model/timeoutMs`
 - 容器内部仍不安装 Gemini CLI；真实 CLI 继续由宿主机执行
-- 宿主机 Gemini 运行目录已切到项目专属：
-  - `/Users/xueguodong/WorkTechDir/Three_LANS_PJ_CodeX/.runtime/gemini`
+- 宿主机执行器默认优先使用用户主目录 `~/.gemini` 认证环境；仅在显式设置 `GEMINI_PROXY_HOME` 或项目内 `.runtime/.gemini` 已具备认证文件时才切换到项目隔离目录
 - `gemini-host-proxy.js` 现采用白名单环境变量执行，减少共享宿主机配置导致的 MCP 污染
+- Host Executor 默认端口已调整为 `13210`，避免与历史遗留的 `3210` 服务冲突
 - 当前第一阶段仍未把 Gemini auth 流程整体迁移到项目内 gateway；该部分保留为后续收口项
 
 ### 6.1 服务端共享生成队列（v3.8.2 第一阶段）
