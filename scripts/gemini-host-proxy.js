@@ -1,5 +1,5 @@
 const http = require('http');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -122,6 +122,65 @@ function stripFence(text) {
   return cleaned;
 }
 
+function parsePositiveNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
+function collectDescendantPids(rootPid, seen = new Set()) {
+  const pid = Number(rootPid);
+  if (!Number.isFinite(pid) || pid <= 0 || seen.has(pid)) {
+    return [];
+  }
+  seen.add(pid);
+  let stdout = '';
+  try {
+    const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' });
+    stdout = result.stdout || '';
+  } catch (_) {
+    return [];
+  }
+  const children = stdout
+    .split(/\s+/)
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0 && !seen.has(value));
+
+  const all = [...children];
+  for (const child of children) {
+    all.push(...collectDescendantPids(child, seen));
+  }
+  return all;
+}
+
+function signalProcessTree(proc, signal = 'SIGTERM') {
+  if (!proc || !proc.pid) return 0;
+  const targets = [
+    ...collectDescendantPids(proc.pid),
+    proc.pid
+  ];
+  const uniqueTargets = [...new Set(targets)].filter((pid) => Number.isFinite(pid) && pid > 0);
+  let signalled = 0;
+
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(-proc.pid, signal);
+      signalled += 1;
+    } catch (_) {
+      // Fall back to per-pid signalling below.
+    }
+  }
+
+  for (const pid of uniqueTargets) {
+    try {
+      process.kill(pid, signal);
+      signalled += 1;
+    } catch (_) {
+      // ignore stale pids
+    }
+  }
+  return signalled;
+}
+
 function resetRunningProcesses(reason = 'manual_reset') {
   let killed = 0;
   for (const proc of Array.from(ACTIVE_PROCS)) {
@@ -130,13 +189,7 @@ function resetRunningProcesses(reason = 'manual_reset') {
       continue;
     }
     try {
-      if (proc.pid) {
-        // Kill the whole process group first, then fallback to direct kill.
-        process.kill(-proc.pid, 'SIGKILL');
-      } else {
-        proc.kill('SIGKILL');
-      }
-      killed += 1;
+      killed += signalProcessTree(proc, 'SIGKILL');
     } catch (err) {
       try {
         proc.kill('SIGKILL');
@@ -156,7 +209,11 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
     let stdout = '';
     let stderr = '';
     const promptText = String(prompt || '');
-    const timeoutMs = Number(runtimeOptions.timeoutMs || TIMEOUT_MS);
+    const requestTimeoutMs = parsePositiveNumber(runtimeOptions.timeoutMs, TIMEOUT_MS);
+    const requestedExecutionTimeoutMs = parsePositiveNumber(runtimeOptions.executionTimeoutMs, 0);
+    const timeoutMs = requestedExecutionTimeoutMs > 0
+      ? Math.min(requestedExecutionTimeoutMs, requestTimeoutMs)
+      : Math.min(requestTimeoutMs, TIMEOUT_MS);
     const selectedModel = String(modelOverride || DEFAULT_MODEL || '').trim();
     const args = [];
     if (selectedModel) {
@@ -181,13 +238,12 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
       ACTIVE_PROCS.delete(proc);
     };
 
+    const terminate = (signal = 'SIGTERM') => signalProcessTree(proc, signal);
+
     const timer = setTimeout(() => {
       try {
-        if (proc.pid && process.platform !== 'win32') {
-          process.kill(-proc.pid, 'SIGKILL');
-        } else {
-          proc.kill('SIGKILL');
-        }
+        terminate('SIGTERM');
+        setTimeout(() => terminate('SIGKILL'), PROCESS_FORCE_KILL_MS).unref();
       } catch (err) {
         // ignore
       } finally {
@@ -281,7 +337,8 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Missing prompt' });
       }
       const result = await runGemini(prompt, data.baseName, data.model, {
-        timeoutMs: data.timeoutMs
+        timeoutMs: data.timeoutMs,
+        executionTimeoutMs: data.executionTimeoutMs
       });
       return sendJson(res, 200, result);
     } catch (err) {

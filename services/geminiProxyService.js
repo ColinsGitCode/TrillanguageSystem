@@ -249,6 +249,9 @@ async function runGeminiProxy(prompt, options = {}) {
   const timeoutMs = toNumberOr(options.timeoutMs ?? process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS, 120000);
   payload.timeoutMs = timeoutMs;
   const executionTimeoutMs = toNumberOr(options.executionTimeoutMs ?? process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS, 0);
+  if (executionTimeoutMs > 0) {
+    payload.executionTimeoutMs = executionTimeoutMs;
+  }
   const paramPolicy = maybeTrim(options.paramPolicy || process.env.GEMINI_PROXY_PARAM_POLICY || 'strict').toLowerCase();
   if (executionTimeoutMs > 0 || (paramPolicy && paramPolicy !== 'strict')) {
     payload.paramPolicy = paramPolicy || 'strict';

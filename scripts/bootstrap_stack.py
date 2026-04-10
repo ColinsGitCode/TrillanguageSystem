@@ -83,10 +83,23 @@ def pid_alive(pid):
         return False
 
 
+def cleanup_stale_pid():
+    pid = read_pid()
+    if pid and not pid_alive(pid):
+        try:
+            os.remove(PID_FILE)
+        except Exception:
+            pass
+        return None
+    return pid
+
+
 def start_proxy():
     os.makedirs(LOG_DIR, exist_ok=True)
+    cleanup_stale_pid()
     log(f"[proxy] starting: {' '.join(PROXY_CMD)}")
     proxy_env = {**os.environ}
+    proxy_env.setdefault("GEMINI_PROXY_TIMEOUT_MS", "260000")
     explicit_home = proxy_env.get("GEMINI_PROXY_HOME")
     if explicit_home:
         proxy_env.setdefault("GEMINI_SETTINGS_PATH", os.path.join(explicit_home, "settings.json"))
@@ -108,6 +121,17 @@ def start_proxy():
             log("[proxy] healthy")
             return True
         time.sleep(0.5)
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except Exception:
+        try:
+            os.kill(proc.pid, signal.SIGTERM)
+        except Exception:
+            pass
+    try:
+        os.remove(PID_FILE)
+    except Exception:
+        pass
     log("[proxy] failed to become healthy; check logs")
     return False
 
@@ -117,7 +141,7 @@ def ensure_proxy():
         log("[proxy] already healthy")
         return True
 
-    pid = read_pid()
+    pid = cleanup_stale_pid()
     if pid and pid_alive(pid):
         log(f"[proxy] pid {pid} running but unhealthy, restarting")
         try:
@@ -151,7 +175,7 @@ def docker_compose_ps():
     return result.returncode == 0, result.stdout.strip()
 
 def stop_proxy():
-    pid = read_pid()
+    pid = cleanup_stale_pid()
     if not pid:
         log("[proxy] no pid file, nothing to stop")
         return
@@ -179,7 +203,7 @@ def stop_proxy():
 
 def show_status():
     proxy_ok = is_proxy_healthy()
-    pid = read_pid()
+    pid = cleanup_stale_pid()
     pid_info = f"pid={pid}" if pid else "pid=none"
     log(f"[proxy] status={'ok' if proxy_ok else 'down'} {pid_info}")
     ok, ps_out = docker_compose_ps()
