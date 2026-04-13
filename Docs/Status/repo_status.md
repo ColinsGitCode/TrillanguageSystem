@@ -126,6 +126,9 @@
 - 宿主机脚本执行环境改为白名单变量，降低共享宿主机环境导致的 MCP 污染与配置漂移
 - 项目内 Host Executor 默认端口：`13210`
 - 宿主机历史外部 `3210/18888` LaunchAgent 已停用，避免请求误打到旧 executor/gateway
+- 宿主机执行器新增 `launchd` 守护安装脚本：`scripts/install_host_executor_launchd.sh`
+- `/api/health` 已将 `Gemini Gateway (Internal)` 与 `Gemini Host Executor` 作为关键服务返回；首页与 Mission Control 会显式提示其离线/降级状态
+- 当 Host Executor / Internal Gateway 离线时，首页会禁用新的生成任务入口与失败重试入口，避免继续堆积必败任务
 - 2026-04-02 已完成真实页面生成验证：`代理修复验证 -> generationId=655`
 
 ### 3.11 字体与可读性优化（v3.6.1）

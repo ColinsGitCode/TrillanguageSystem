@@ -65,6 +65,10 @@ const els = {
     heroTaskQueueChipF: document.getElementById('heroTaskQueueChipF'),
     heroTaskQueueElapsed: document.getElementById('heroTaskQueueElapsed'),
     heroTaskQueueRetryBtn: document.getElementById('heroTaskQueueRetryBtn'),
+    infraAlertBanner: document.getElementById('infraAlertBanner'),
+    infraAlertTitle: document.getElementById('infraAlertTitle'),
+    infraAlertText: document.getElementById('infraAlertText'),
+    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn'),
 
     // Setup
     setupOverlay: document.getElementById('setupOverlay'),
@@ -108,12 +112,18 @@ const HIGHLIGHT_SCOPE_CONTENT = 'content';
 const HIGHLIGHT_SCOPE_TRAIN = 'train';
 const SELECTION_GENERATE_MAX_CHARS = 200;
 const SELECTION_HIGHLIGHT_MAX_CHARS = 2000;
+const infrastructureState = {
+    health: null,
+    generationBlockedReason: ''
+};
+const INFRA_HEALTH_POLL_INTERVAL_MS = 15000;
 
 // Timer State
 let timerInterval = null;
 let timerStartTime = null;
 let heroTaskQueueElapsedTimerId = null;
 let heroTaskQueueElapsedTaskId = null;
+let infraHealthPollTimer = null;
 
 // ==========================================
 // 初始化与事件绑定
@@ -130,11 +140,149 @@ function init() {
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
     initGeminiSetup();
+    initInfrastructureHealthMonitor();
     // 加载初始数据
     loadFolders();
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
+}
+
+function initInfrastructureHealthMonitor() {
+    if (els.infraAlertRefreshBtn) {
+        els.infraAlertRefreshBtn.onclick = () => {
+            refreshInfrastructureHealth().catch((err) => {
+                console.warn('[Infra] refresh failed:', err.message);
+            });
+        };
+    }
+
+    refreshInfrastructureHealth().catch((err) => {
+        console.warn('[Infra] init failed:', err.message);
+    });
+
+    if (infraHealthPollTimer) clearInterval(infraHealthPollTimer);
+    infraHealthPollTimer = setInterval(() => {
+        refreshInfrastructureHealth().catch((err) => {
+            console.warn('[Infra] poll failed:', err.message);
+        });
+    }, INFRA_HEALTH_POLL_INTERVAL_MS);
+}
+
+function getInfrastructureService(services, name) {
+    return (services || []).find((service) => service.name === name) || null;
+}
+
+function buildGenerationBlockedReason(health) {
+    const services = Array.isArray(health?.services) ? health.services : [];
+    const executor = getInfrastructureService(services, 'Gemini Host Executor');
+    const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
+
+    if (executor && executor.status !== 'online') {
+        return executor.message || '宿主机执行器不可用，新的生成任务暂不可提交。';
+    }
+
+    if (gateway && gateway.status !== 'online') {
+        return gateway.message || '内部 Gateway 异常，新的生成任务暂不可提交。';
+    }
+
+    return '';
+}
+
+function buildInfrastructureAlertState(health) {
+    const services = Array.isArray(health?.services) ? health.services : [];
+    const executor = getInfrastructureService(services, 'Gemini Host Executor');
+    const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
+
+    if (executor && executor.status !== 'online') {
+        return {
+            visible: true,
+            title: 'Gemini Host Executor 离线',
+            text: executor.message || '宿主机执行器不可用，新的生成任务将失败。'
+        };
+    }
+
+    if (gateway && gateway.status !== 'online') {
+        return {
+            visible: true,
+            title: 'Gemini Gateway 降级',
+            text: gateway.message || '项目内 Gateway 无法稳定连接宿主机 Executor。'
+        };
+    }
+
+    return { visible: false, title: '', text: '' };
+}
+
+function renderInfrastructureAlert(alertState) {
+    if (!els.infraAlertBanner || !els.infraAlertTitle || !els.infraAlertText) return;
+
+    if (!alertState.visible) {
+        els.infraAlertBanner.classList.add('hidden');
+        return;
+    }
+
+    els.infraAlertTitle.textContent = alertState.title;
+    els.infraAlertText.textContent = alertState.text;
+    els.infraAlertBanner.classList.remove('hidden');
+}
+
+function applyInfrastructureGuardToInputs() {
+    const blockedReason = infrastructureState.generationBlockedReason;
+    const isGenerating = Boolean(store.get('isGenerating'));
+    const hasImage = Boolean(store.get('imageBase64'));
+    const failed = generationQueueState.tasks.filter((task) => task.status === 'failed').length;
+
+    if (els.genBtn) {
+        els.genBtn.disabled = isGenerating || Boolean(blockedReason);
+        els.genBtn.title = blockedReason || '';
+    }
+
+    if (els.ocrBtn) {
+        els.ocrBtn.disabled = isGenerating || !hasImage || Boolean(blockedReason);
+        els.ocrBtn.title = blockedReason || '';
+    }
+
+    if (generationQueueState.retryFailedBtn) {
+        generationQueueState.retryFailedBtn.disabled = failed === 0 || Boolean(blockedReason);
+        generationQueueState.retryFailedBtn.title = blockedReason || '';
+    }
+
+    if (els.heroTaskQueueRetryBtn) {
+        els.heroTaskQueueRetryBtn.disabled = failed === 0 || Boolean(blockedReason);
+        els.heroTaskQueueRetryBtn.title = blockedReason || '';
+    }
+
+    const selectionGenerateBtn = document.querySelector('[data-testid="selection-generate-btn"]');
+    const selectionGenerateGrammarBtn = document.querySelector('[data-testid="selection-generate-grammar-btn"]');
+    if (selectionGenerateBtn) {
+        selectionGenerateBtn.disabled = Boolean(blockedReason);
+        selectionGenerateBtn.title = blockedReason || '';
+    }
+    if (selectionGenerateGrammarBtn) {
+        selectionGenerateGrammarBtn.disabled = Boolean(blockedReason);
+        selectionGenerateGrammarBtn.title = blockedReason || '';
+    }
+}
+
+async function refreshInfrastructureHealth() {
+    try {
+        const health = await api.checkHealth();
+        infrastructureState.health = health;
+        infrastructureState.generationBlockedReason = buildGenerationBlockedReason(health);
+        renderInfrastructureAlert(buildInfrastructureAlertState(health));
+        applyInfrastructureGuardToInputs();
+        return health;
+    } catch (error) {
+        infrastructureState.health = null;
+        infrastructureState.generationBlockedReason = '无法获取系统健康状态，新的生成任务暂不可提交。';
+        renderInfrastructureAlert({
+            visible: true,
+            title: '基础设施状态未知',
+            text: '无法获取系统健康状态，请刷新后重试。'
+        });
+        applyInfrastructureGuardToInputs();
+        throw error;
+    }
 }
 
 // ==========================================
@@ -598,6 +746,10 @@ function initCardTypeSelector() {
 
 function initGenerator() {
     els.genBtn.addEventListener('click', async () => {
+        if (infrastructureState.generationBlockedReason) {
+            showGenerationQueueToast(infrastructureState.generationBlockedReason);
+            return;
+        }
         const phrase = els.phraseInput.value.trim();
         if (!phrase) {
             showGenerationQueueToast('请输入短语或句子');
@@ -624,12 +776,11 @@ function initGenerator() {
 }
 
 function updateGenUI(isGenerating) {
-    els.genBtn.disabled = isGenerating;
     const idleText = normalizeCardType(store.get('cardType')) === 'grammar_ja'
         ? 'Generate Grammar Card'
         : 'Generate';
     els.genBtn.textContent = isGenerating ? 'Generating...' : idleText;
-    els.ocrBtn.disabled = isGenerating || !store.get('imageBase64');
+    applyInfrastructureGuardToInputs();
 }
 
 
@@ -726,6 +877,10 @@ function initImageHandlers() {
 
     clearImageBtn.onclick = clearImage;
     ocrBtn.onclick = async () => {
+        if (infrastructureState.generationBlockedReason) {
+            showGenerationQueueToast(infrastructureState.generationBlockedReason);
+            return;
+        }
         const base64 = store.get('imageBase64');
         if (!base64) return;
 
@@ -773,7 +928,7 @@ function handleFile(file) {
         els.imagePreview.src = reader.result;
         els.imagePreview.classList.remove('hidden');
         els.imageDropZone.querySelector('.drop-hint').classList.add('hidden');
-        els.ocrBtn.disabled = false;
+        applyInfrastructureGuardToInputs();
         els.clearImageBtn.disabled = false;
     };
     reader.readAsDataURL(file);
@@ -784,7 +939,7 @@ function clearImage() {
     els.imagePreview.src = '';
     els.imagePreview.classList.add('hidden');
     els.imageDropZone.querySelector('.drop-hint').classList.remove('hidden');
-    els.ocrBtn.disabled = true;
+    applyInfrastructureGuardToInputs();
     els.clearImageBtn.disabled = true;
     resetOcrPreview();
 }
@@ -1869,7 +2024,11 @@ function updateHeroTaskQueueStatus() {
             ? `队列进度：${doneRate}%（${success + failed}/${total}）`
             : '队列进度：暂无任务';
     }
-    if (retryBtn) retryBtn.classList.toggle('hidden', failed === 0);
+    if (retryBtn) {
+        retryBtn.classList.toggle('hidden', failed === 0);
+        retryBtn.disabled = failed === 0 || Boolean(infrastructureState.generationBlockedReason);
+        retryBtn.title = infrastructureState.generationBlockedReason || '';
+    }
 
     if (activeTask) {
         const cardType = normalizeCardType(activeTask.cardType) === 'grammar_ja' ? '语法' : '三语';
@@ -1966,7 +2125,8 @@ function renderGenerationQueuePanel() {
         }).join('')
         : '<div class="gen-queue-empty">暂无任务</div>';
 
-    generationQueueState.retryFailedBtn.disabled = failed === 0;
+    generationQueueState.retryFailedBtn.disabled = failed === 0 || Boolean(infrastructureState.generationBlockedReason);
+    generationQueueState.retryFailedBtn.title = infrastructureState.generationBlockedReason || '';
     generationQueueState.clearDoneBtn.disabled = success === 0;
 
     if (tasks.length > 0 || generationQueueState.running) {
@@ -2038,6 +2198,10 @@ function hasActiveDuplicateTask(phraseNormalized, cardType = 'trilingual') {
 
 async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, source = {}) {
     if (!phraseNormalized) return false;
+    if (infrastructureState.generationBlockedReason) {
+        showGenerationQueueToast(infrastructureState.generationBlockedReason);
+        return false;
+    }
 
     if (generationQueueState.tasks.length >= generationQueueState.maxTasks) {
         showGenerationQueueToast(`队列已满（${generationQueueState.maxTasks}）`);
@@ -2376,6 +2540,11 @@ function initSelectionToGenerate(container, options = {}) {
 
     generateBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (infrastructureState.generationBlockedReason) {
+            hideDock();
+            showGenerationQueueToast(infrastructureState.generationBlockedReason);
+            return;
+        }
         const candidate = buildSelectionCandidateFromContainer(container, {
             maxLength: SELECTION_GENERATE_MAX_CHARS,
             normalizer
@@ -2403,6 +2572,11 @@ function initSelectionToGenerate(container, options = {}) {
 
     generateGrammarBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (infrastructureState.generationBlockedReason) {
+            hideDock();
+            showGenerationQueueToast(infrastructureState.generationBlockedReason);
+            return;
+        }
         const candidate = buildSelectionCandidateFromContainer(container, {
             maxLength: SELECTION_GENERATE_MAX_CHARS,
             normalizer
@@ -2449,6 +2623,13 @@ function initSelectionToGenerate(container, options = {}) {
             showGenerationQueueToast('选区无法标红，请缩小选区后重试');
         }
     });
+
+    if (infrastructureState.generationBlockedReason) {
+        generateBtn.disabled = true;
+        generateGrammarBtn.disabled = true;
+        generateBtn.title = infrastructureState.generationBlockedReason;
+        generateGrammarBtn.title = infrastructureState.generationBlockedReason;
+    }
 
     selectionFabCleanup = () => {
         container.removeEventListener('mouseup', onMouseUp);

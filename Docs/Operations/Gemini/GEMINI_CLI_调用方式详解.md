@@ -152,6 +152,22 @@ bash scripts/start-gemini-proxy.sh reset
 bash scripts/start-gemini-proxy.sh stop
 ```
 
+推荐改为使用 `launchd` 守护宿主机执行器：
+
+```bash
+bash scripts/install_host_executor_launchd.sh install
+bash scripts/install_host_executor_launchd.sh status
+bash scripts/install_host_executor_launchd.sh restart
+bash scripts/install_host_executor_launchd.sh uninstall
+```
+
+说明：
+- `com.three-lans.gemini-host-proxy` 会在用户登录后自动拉起
+- stdout/stderr 日志落到：
+  - `logs/launchd/gemini-host-proxy.stdout.log`
+  - `logs/launchd/gemini-host-proxy.stderr.log`
+- 默认继续使用宿主机 `~/.gemini` 认证环境；仅在显式设置 `GEMINI_PROXY_HOME` 时才切换
+
 健康检查：
 
 ```bash
@@ -189,6 +205,14 @@ launchctl list | rg 'com\.gemini\.executor|com\.fintechsystem\.gemini-proxy'
 lsof -nP -iTCP:3210 -sTCP:LISTEN
 lsof -nP -iTCP:18888 -sTCP:LISTEN
 ```
+
+### 7.2 健康检查与 UI 暴露（2026-04-13）
+
+- `/api/health` 现新增两项关键服务：
+  - `Gemini Gateway (Internal)`
+  - `Gemini Host Executor`
+- 首页会在 Host Executor / Gateway 异常时显示红色告警条
+- `Mission Control` 的 `Infrastructure` 与右上角系统状态也会基于关键服务状态切换为 `System Alert`
 
 若仍存在，执行：
 

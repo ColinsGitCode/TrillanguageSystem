@@ -2,6 +2,43 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 
 test.describe('Playwright page smoke', () => {
+  test('00 首页在 Gemini Host Executor 离线时显示告警', async ({ page }) => {
+    await page.route('**/api/health', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          services: [
+            {
+              name: 'Gemini Gateway (Internal)',
+              status: 'offline',
+              message: 'Gateway 异常 · executor=down · fetch failed',
+              critical: true
+            },
+            {
+              name: 'Gemini Host Executor',
+              status: 'offline',
+              message: 'Executor 请求失败',
+              critical: true
+            }
+          ],
+          system: {
+            overallStatus: 'degraded',
+            criticalOnline: false,
+            criticalServices: [
+              { name: 'Gemini Host Executor', status: 'offline', message: 'Executor 请求失败' }
+            ]
+          }
+        })
+      });
+    });
+
+    await page.goto('/');
+    await expect(page.getByTestId('infra-alert-banner')).toBeVisible();
+    await expect(page.getByTestId('infra-alert-banner')).toContainText('Gemini Host Executor 离线');
+    await expect(page.getByTestId('generate-btn')).toBeDisabled();
+  });
+
   test('01 Mission Control 页面可加载', async ({ page }) => {
     await page.goto('/dashboard.html');
     await expect(page.getByTestId('mission-control-page')).toBeVisible();

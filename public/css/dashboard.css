@@ -185,7 +185,19 @@ h1 {
     flex-direction: column;
     justify-content: space-between;
 }
-.svc-name { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; }
+.svc-name { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.svc-critical-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
 .svc-status { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.85rem; font-weight: bold; }
 .svc-dot { width: 6px; height: 6px; border-radius: 50%; }
 .svc-online { background: var(--color-success); }

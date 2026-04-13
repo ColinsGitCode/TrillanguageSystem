@@ -12,6 +12,29 @@ const fs = require('fs');
 const path = require('path');
 
 class HealthCheckService {
+  static buildGatewayHealthUrl() {
+    const apiUrl = String(process.env.GEMINI_PROXY_URL || '').trim();
+    if (!apiUrl) return '';
+    try {
+      const parsed = new URL(apiUrl);
+      parsed.pathname = '/health';
+      parsed.search = '';
+      return parsed.toString();
+    } catch (error) {
+      return '';
+    }
+  }
+
+  static buildExecutorHealthUrl() {
+    const baseUrl = String(
+      process.env.GEMINI_HOST_EXECUTOR_URL
+      || process.env.GEMINI_EXECUTOR_BASE_URL
+      || ''
+    ).trim();
+    if (!baseUrl) return '';
+    return `${baseUrl.replace(/\/$/, '')}/health`;
+  }
+
   /**
    * 检查所有服务健康状态
    * @returns {Promise<Object>} 包含 services 和 system 的健康状态对象
@@ -22,17 +45,25 @@ class HealthCheckService {
     // 并行检查所有服务（提高性能）
     const checks = [];
 
-    // 1. Gemini API
+    const geminiMode = String(process.env.GEMINI_MODE || '').trim().toLowerCase();
+
+    // 1. Internal Gemini bridge
+    if (geminiMode === 'host-proxy') {
+      checks.push(this.checkGeminiGateway());
+      checks.push(this.checkGeminiHostExecutor());
+    }
+
+    // 2. Gemini API
     if (process.env.GEMINI_API_KEY) {
       checks.push(this.checkGemini());
     }
 
-    // 2. Local LLM
+    // 3. Local LLM
     if (process.env.LLM_BASE_URL) {
       checks.push(this.checkLocalLLM());
     }
 
-    // 3. TTS Services
+    // 4. TTS Services
     if (process.env.TTS_EN_ENDPOINT) {
       checks.push(this.checkTTSEnglish());
     }
@@ -40,13 +71,13 @@ class HealthCheckService {
       checks.push(this.checkTTSJapanese());
     }
 
-    // 4. OCR Service
+    // 5. OCR Service
     const ocrProvider = (process.env.OCR_PROVIDER || '').toLowerCase();
     if (ocrProvider === 'tesseract' || process.env.OCR_TESSERACT_ENDPOINT) {
       checks.push(this.checkTesseractOCR());
     }
 
-    // 5. Storage
+    // 6. Storage
     checks.push(this.checkStorage());
 
     // 等待所有检查完成
@@ -57,14 +88,137 @@ class HealthCheckService {
       }
     });
 
+    const criticalServices = services.filter((service) => service.critical);
+    const degradedCriticalServices = criticalServices.filter((service) => service.status !== 'online');
+    const overallStatus = degradedCriticalServices.length ? 'degraded' : 'online';
+
     // 系统信息
     const system = {
       uptime: process.uptime() * 1000,
       version: process.env.npm_package_version || '1.0.0',
-      lastRestart: Date.now() - process.uptime() * 1000
+      lastRestart: Date.now() - process.uptime() * 1000,
+      overallStatus,
+      criticalOnline: degradedCriticalServices.length === 0,
+      criticalServices: criticalServices.map((service) => ({
+        name: service.name,
+        status: service.status,
+        message: service.message || ''
+      }))
     };
 
     return { services, system };
+  }
+
+  static async checkGeminiGateway() {
+    const service = {
+      name: 'Gemini Gateway (Internal)',
+      type: 'llm_bridge',
+      critical: true,
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        endpoint: this.buildGatewayHealthUrl()
+      }
+    };
+
+    const url = service.details.endpoint;
+    if (!url) {
+      service.status = 'offline';
+      service.message = '未配置内部 Gateway';
+      return service;
+    }
+
+    try {
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      service.latency = Date.now() - startTime;
+      const payload = await response.json().catch(() => ({}));
+      service.details.mode = payload.mode || '';
+      service.details.executorBaseUrl = payload.executorBaseUrl || '';
+      service.details.executor = payload.executor || null;
+
+      if (response.ok && payload.status === 'ok') {
+        service.status = service.latency > 2000 ? 'degraded' : 'online';
+        service.message = service.latency > 2000 ? 'Gateway 响应偏慢' : 'Gateway 正常';
+      } else {
+        service.status = 'offline';
+        const executorStatus = payload?.executor?.status || 'unknown';
+        const executorError = payload?.executor?.error || payload?.executor?.message || 'gateway unavailable';
+        service.message = `Gateway 异常 · executor=${executorStatus} · ${executorError}`;
+      }
+    } catch (error) {
+      service.status = 'offline';
+      service.message = error.name === 'AbortError' ? 'Gateway 请求超时' : error.message;
+    }
+
+    return service;
+  }
+
+  static async checkGeminiHostExecutor() {
+    const service = {
+      name: 'Gemini Host Executor',
+      type: 'llm_executor',
+      critical: true,
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        endpoint: this.buildExecutorHealthUrl()
+      }
+    };
+
+    const url = service.details.endpoint;
+    if (!url) {
+      service.status = 'offline';
+      service.message = '未配置宿主机 Executor';
+      return service;
+    }
+
+    try {
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      service.latency = Date.now() - startTime;
+      const payload = await response.json().catch(() => ({}));
+      service.details = {
+        ...service.details,
+        authReady: Boolean(payload.authReady),
+        authSource: payload.authSource || '',
+        geminiHome: payload.geminiHome || '',
+        geminiConfigDir: payload.geminiConfigDir || '',
+        activeProcesses: Number(payload.activeProcesses || 0)
+      };
+
+      if (response.ok && payload.status === 'ok') {
+        if (payload.authReady === false) {
+          service.status = 'offline';
+          service.message = `Executor 未认证 · ${payload.authSource || 'unknown'}`;
+        } else {
+          service.status = service.latency > 2000 ? 'degraded' : 'online';
+          service.message = service.latency > 2000 ? 'Executor 响应偏慢' : 'Executor 正常';
+        }
+      } else {
+        service.status = 'offline';
+        service.message = payload.error || payload.message || `Executor 异常: ${response.status}`;
+      }
+    } catch (error) {
+      service.status = 'offline';
+      service.message = error.name === 'AbortError' ? 'Executor 请求超时' : error.message;
+    }
+
+    return service;
   }
 
   /**
@@ -74,6 +228,7 @@ class HealthCheckService {
     const service = {
       name: 'Gemini API',
       type: 'llm',
+      critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
@@ -129,6 +284,7 @@ class HealthCheckService {
     const service = {
       name: 'Local LLM',
       type: 'llm',
+      critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
@@ -187,6 +343,7 @@ class HealthCheckService {
     const service = {
       name: 'TTS English (Kokoro)',
       type: 'tts',
+      critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
@@ -243,6 +400,7 @@ class HealthCheckService {
     const service = {
       name: 'TTS Japanese (VOICEVOX)',
       type: 'tts',
+      critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
@@ -296,6 +454,7 @@ class HealthCheckService {
     const service = {
       name: 'OCR (Tesseract)',
       type: 'ocr',
+      critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
@@ -343,6 +502,7 @@ class HealthCheckService {
     const service = {
       name: 'Storage',
       type: 'storage',
+      critical: true,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {}

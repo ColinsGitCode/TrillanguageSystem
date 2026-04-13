@@ -86,8 +86,24 @@ async function fetchInfrastructureStatus() {
         updateTimestamp();
         const statusDot = document.querySelector('.status-dot');
         const statusText = document.getElementById('systemStatusText');
-        if (statusDot) statusDot.style.backgroundColor = 'var(--color-success)';
-        if (statusText) statusText.textContent = 'System Operational';
+        const overallStatus = data?.system?.overallStatus || 'online';
+        const criticalServices = Array.isArray(data?.system?.criticalServices) ? data.system.criticalServices : [];
+        const criticalIssue = criticalServices.find((service) => service.status !== 'online');
+
+        if (overallStatus === 'online') {
+            if (statusDot) statusDot.style.backgroundColor = 'var(--color-success)';
+            if (statusText) statusText.textContent = 'System Operational';
+        } else {
+            if (statusDot) {
+                statusDot.style.backgroundColor = 'var(--color-error)';
+                statusDot.style.animation = 'none';
+            }
+            if (statusText) {
+                statusText.textContent = criticalIssue
+                    ? `${criticalIssue.name} Alert`
+                    : 'System Alert';
+            }
+        }
     } catch (err) {
         console.error('Infra fetch error:', err);
         const statusDot = document.querySelector('.status-dot');
@@ -117,16 +133,26 @@ function renderServiceMatrix(services) {
         const statusClass = svc.status === 'online' ? 'svc-online' :
             svc.status === 'degraded' ? 'svc-degraded' : 'svc-offline';
         const latency = svc.latency ? `${svc.latency}ms` : '-';
+        const statusText = svc.status === 'online' ? latency : (svc.message || 'OFF');
+        const criticalBadge = svc.critical ? '<span class="svc-critical-badge">critical</span>' : '';
 
         el.innerHTML = `
-            <div class="svc-name">${svc.name}</div>
+            <div class="svc-name">${svc.name}${criticalBadge}</div>
             <div class="svc-status">
                 <div class="svc-dot ${statusClass}"></div>
-                <span>${svc.status === 'online' ? latency : 'OFF'}</span>
+                <span title="${escapeHtmlAttr(svc.message || '')}">${statusText}</span>
             </div>
         `;
         container.appendChild(el);
     });
+}
+
+function escapeHtmlAttr(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
 
 function renderStorage(storage) {

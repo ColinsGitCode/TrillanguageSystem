@@ -138,9 +138,11 @@ scripts/
 - 宿主机执行器默认优先使用用户主目录 `~/.gemini` 认证环境；仅在显式设置 `GEMINI_PROXY_HOME` 或项目内 `.runtime/.gemini` 已具备认证文件时才切换到项目隔离目录
 - `gemini-host-proxy.js` 现采用白名单环境变量执行，减少共享宿主机配置导致的 MCP 污染
 - Host Executor 默认端口已调整为 `13210`，避免与历史遗留的 `3210` 服务冲突
+- 宿主机执行器现支持 `launchd` 守护，安装脚本：`scripts/install_host_executor_launchd.sh`
 - 当前第一阶段仍未把 Gemini auth 流程整体迁移到项目内 gateway；该部分保留为后续收口项
 - 宿主机历史外部服务 `com.gemini.executor(3210)` 与 `com.fintechsystem.gemini-proxy(18888)` 已停用，避免请求误打到旧链路
 - 2026-04-02 已完成一次真实页面生成验证：文本输入 `代理修复验证` 成功生成 `generationId=655`
+- `/api/health` 现把 `Gemini Gateway (Internal)` 与 `Gemini Host Executor` 作为 critical services 返回，供首页与 Mission Control 共用
 
 ### 6.1 服务端共享生成队列（v3.8.2 第一阶段）
 

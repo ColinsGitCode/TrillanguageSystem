@@ -45,6 +45,8 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - 支持卡片类型切换：`三语卡片` / `日语语法卡片`
 - 队列串行执行完成后静默刷新列表（保持当前目录与当前浏览上下文）
 - 页面刷新 / 前端重载后，会重新拉取服务端共享队列；不同浏览器看到的是同一份队列状态
+- 首页现在会轮询 `/api/health`；当 `Gemini Host Executor` 或 `Gemini Gateway (Internal)` 异常时，会在 Hero 下方显示红色基础设施告警条
+- 当上述关键链路离线时，首页会直接禁用新建生成入口（文本生成 / OCR 入队 / 选区生成 / 失败重试），避免继续向共享队列写入必败任务
 - 主页面队列面板与 Mission Control 现在都会展示 `generation_job_events` 审计时间线，便于排查 created/picked/failed/retry/success 流转
 - 点击任一队列任务卡片，可切换审计时间线焦点到该任务
 - 点击任务项上的“详情”按钮，会弹出单任务详情层，展示完整请求 payload、错误详情、结果摘要与完整审计事件 payload
@@ -58,6 +60,7 @@ Header (TRILINGUAL RECORDS + Task Queue 状态条 + 页面入口组)
 - Phrase List 按同日卡片生成时间倒序显示（最新优先）
 - 卡片列表支持多列自适应显示
 - 右上角入口并列：`Mission Control` / `Knowledge OPS` / `Knowledge Hub`
+- `Mission Control` 的 `Infrastructure` 模块与右上角 `SYSTEM` 指示灯现在基于 critical services 计算，不再仅仅以 `/api/health` 成功与否判定为正常
 - 语法卡片在列表中显示淡蓝背景与 `语法` 标签
 - 全站字体统一为中/日/英混排优化方案（方案A）：UI/JA/Mono/Display 四类字体变量
 - 生成区进一步紧凑化：模型选择与卡片类型并排显示，输入区高度收缩，为 Date 区让出可视面积

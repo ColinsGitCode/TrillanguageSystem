@@ -53,6 +53,13 @@
           </div>
         </div>
 <!--        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>-->
+        <div id="infraAlertBanner" class="infra-alert hidden" aria-live="polite" data-testid="infra-alert-banner">
+          <div class="infra-alert-main">
+            <span id="infraAlertTitle" class="infra-alert-title">Gemini 执行链路异常</span>
+            <span id="infraAlertText" class="infra-alert-text">Host Executor 离线，生成任务暂不可用。</span>
+          </div>
+          <button id="infraAlertRefreshBtn" type="button" class="infra-alert-action">刷新状态</button>
+        </div>
       </header>
 
       <section class="grid">
