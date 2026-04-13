@@ -13,7 +13,7 @@ STDERR_PATH="$LOG_DIR/gemini-host-proxy.stderr.log"
 GEMINI_PROXY_PORT="${GEMINI_PROXY_PORT:-13210}"
 GEMINI_PROXY_TIMEOUT_MS="${GEMINI_PROXY_TIMEOUT_MS:-260000}"
 GEMINI_PROXY_FORCE_KILL_MS="${GEMINI_PROXY_FORCE_KILL_MS:-1000}"
-GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-2.5-flash-lite}"
+GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-flash-preview}"
 
 if [ -z "$NODE_BIN" ] && [ -x /opt/homebrew/bin/node ]; then
   NODE_BIN="/opt/homebrew/bin/node"
@@ -120,9 +120,7 @@ case "${1:-install}" in
     status_cmd
     ;;
   restart)
-    if [ ! -f "$PLIST_PATH" ]; then
-      write_plist
-    fi
+    write_plist
     bootout_if_loaded
     launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
     launchctl kickstart -k "gui/$(id -u)/$LABEL"

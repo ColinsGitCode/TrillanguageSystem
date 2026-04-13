@@ -29,7 +29,7 @@ fi
 export GEMINI_PROXY_PORT="${GEMINI_PROXY_PORT:-13210}"
 export GEMINI_PROXY_BIN="${GEMINI_BIN_DEFAULT:-gemini}"
 export GEMINI_PROXY_TIMEOUT_MS=260000
-export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-pro-preview}"
+export GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-flash-preview}"
 # export GEMINI_PROXY_OUTPUT_DIR="/tmp/gemini-outputs"  # 可选：保存输出
 
 if [ -n "$GEMINI_PROXY_HOME" ] && [ -z "$GEMINI_SETTINGS_PATH" ]; then
