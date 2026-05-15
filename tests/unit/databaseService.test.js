@@ -292,3 +292,387 @@ test.describe('databaseService — card training assets', () => {
     } finally { db.close(); }
   });
 });
+
+// -- generation_jobs ---------------------------------------------------------
+
+function buildJobPayload(overrides = {}) {
+  return {
+    jobType: 'trilingual',
+    phraseRaw: 'hello',
+    phraseNormalized: 'hello',
+    sourceMode: 'input',
+    provider: 'gemini',
+    llmModel: 'gemini-test',
+    maxRetries: 2,
+    sourceContext: {},
+    requestPayload: { phrase: 'hello' },
+    ...overrides,
+  };
+}
+
+test.describe('databaseService — generation_jobs lifecycle', () => {
+  test.it('createGenerationJob returns the full job row with status=queued, attempts=0', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload());
+      assert.ok(job);
+      assert.equal(job.status, 'queued');
+      assert.equal(job.attempts, 0);
+      assert.equal(job.phraseNormalized, 'hello');
+      assert.deepEqual(job.sourceContext, {});
+    } finally { db.close(); }
+  });
+
+  test.it('getGenerationJobById returns null for an unknown id', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getGenerationJobById(99999), null);
+    } finally { db.close(); }
+  });
+
+  test.it('listGenerationJobs returns active jobs newest-first and hides cleared', () => {
+    const db = freshDb();
+    try {
+      const j1 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'a' }));
+      const j2 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'b' }));
+      const j3 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'c' }));
+      db.updateGenerationJob(j1.id, { status: 'success', clearedAt: new Date().toISOString() });
+      const listed = db.listGenerationJobs(10);
+      const ids = listed.map((j) => j.id);
+      assert.ok(!ids.includes(j1.id), 'cleared job should be hidden');
+      // Active jobs newest-first.
+      assert.equal(ids[0], j3.id);
+      assert.equal(ids[1], j2.id);
+    } finally { db.close(); }
+  });
+
+  test.it('getGenerationJobSummary counts by status', () => {
+    const db = freshDb();
+    try {
+      db.createGenerationJob(buildJobPayload({ phraseNormalized: 'a' }));
+      const j2 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'b' }));
+      db.updateGenerationJob(j2.id, { status: 'failed', errorMessage: 'boom' });
+      const summary = db.getGenerationJobSummary();
+      assert.equal(summary.total, 2);
+      assert.equal(summary.queued, 1);
+      assert.equal(summary.failed, 1);
+    } finally { db.close(); }
+  });
+
+  test.it('hasActiveDuplicateGenerationJob matches phrase + type, ignores cleared', () => {
+    const db = freshDb();
+    try {
+      db.createGenerationJob(buildJobPayload({ phraseNormalized: 'dup' }));
+      assert.equal(db.hasActiveDuplicateGenerationJob('dup', 'trilingual'), true);
+      assert.equal(db.hasActiveDuplicateGenerationJob('other', 'trilingual'), false);
+      assert.equal(db.hasActiveDuplicateGenerationJob('dup', 'grammar_ja'), false);
+    } finally { db.close(); }
+  });
+
+  test.it('updateGenerationJob patches the requested fields only', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload());
+      const updated = db.updateGenerationJob(job.id, { status: 'running', startedAt: '2026-05-15 10:00:00' });
+      assert.equal(updated.status, 'running');
+      // attempts wasn't touched by the patch.
+      assert.equal(updated.attempts, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('takeNextQueuedGenerationJob FIFO-pulls and flips status to running with attempts+1', () => {
+    const db = freshDb();
+    try {
+      const j1 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'first' }));
+      db.createGenerationJob(buildJobPayload({ phraseNormalized: 'second' }));
+      const taken = db.takeNextQueuedGenerationJob();
+      assert.equal(taken.id, j1.id);
+      assert.equal(taken.status, 'running');
+      assert.equal(taken.attempts, 1);
+    } finally { db.close(); }
+  });
+
+  test.it('retryGenerationJob only re-queues a failed job', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload());
+      // queued -> retry is a no-op (returns null)
+      assert.equal(db.retryGenerationJob(job.id), null);
+      // failed -> retry flips it back to queued
+      db.updateGenerationJob(job.id, { status: 'failed' });
+      const retried = db.retryGenerationJob(job.id);
+      assert.ok(retried);
+      assert.equal(retried.status, 'queued');
+    } finally { db.close(); }
+  });
+
+  test.it('cancelGenerationJob only cancels a queued job', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload());
+      const cancelled = db.cancelGenerationJob(job.id);
+      assert.equal(cancelled.status, 'cancelled');
+      // Cancelling a running job is a no-op.
+      const job2 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'b' }));
+      db.updateGenerationJob(job2.id, { status: 'running' });
+      assert.equal(db.cancelGenerationJob(job2.id), null);
+    } finally { db.close(); }
+  });
+
+  test.it('clearCompletedGenerationJobs hides success + cancelled jobs', () => {
+    const db = freshDb();
+    try {
+      const j1 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'a' }));
+      const j2 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'b' }));
+      const j3 = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'c' }));
+      db.updateGenerationJob(j1.id, { status: 'success' });
+      db.cancelGenerationJob(j2.id);
+      const cleared = db.clearCompletedGenerationJobs();
+      assert.ok(cleared >= 2);
+      const remaining = db.listGenerationJobs(20).map((j) => j.id);
+      assert.deepEqual(remaining, [j3.id]);
+    } finally { db.close(); }
+  });
+
+  test.it('appendGenerationJobEvent + listGenerationJobEvents round-trip in insertion order', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload());
+      db.appendGenerationJobEvent(job.id, 'queued', { note: 'a' });
+      db.appendGenerationJobEvent(job.id, 'running', { note: 'b' });
+      db.appendGenerationJobEvent(job.id, 'success', { note: 'c' });
+      const events = db.listGenerationJobEvents({ jobId: job.id, limit: 10 });
+      assert.equal(events.length, 3);
+      assert.deepEqual(events.map((e) => e.eventType), ['queued', 'running', 'success']);
+    } finally { db.close(); }
+  });
+});
+
+// -- knowledge_jobs lifecycle -----------------------------------------------
+
+test.describe('databaseService — knowledge_jobs lifecycle', () => {
+  test.it('createKnowledgeJob returns a queued job with the supplied scope', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({
+        jobType: 'index',
+        scope: { folders: ['20260101'] },
+        batchSize: 25,
+        engineVersion: 'local-v1',
+        triggeredBy: 'test',
+      });
+      assert.ok(job);
+      assert.equal(job.status, 'queued');
+      assert.equal(job.jobType, 'index');
+      assert.deepEqual(job.scope, { folders: ['20260101'] });
+      assert.equal(job.batchSize, 25);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeJobById returns null for an unknown id', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getKnowledgeJobById(99999), null);
+    } finally { db.close(); }
+  });
+
+  test.it('updateKnowledgeJobStatus patches only the supplied fields', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'index', scope: {} });
+      const updated = db.updateKnowledgeJobStatus(job.id, {
+        status: 'running',
+        totalBatches: 5,
+        doneBatches: 1,
+      });
+      assert.equal(updated.status, 'running');
+      assert.equal(updated.totalBatches, 5);
+      assert.equal(updated.doneBatches, 1);
+      // errorBatches not patched.
+      assert.equal(updated.errorBatches, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeJobs returns newest first', () => {
+    const db = freshDb();
+    try {
+      const j1 = db.createKnowledgeJob({ jobType: 'index', scope: {} });
+      const j2 = db.createKnowledgeJob({ jobType: 'cluster', scope: {} });
+      const j3 = db.createKnowledgeJob({ jobType: 'summary', scope: {} });
+      const ids = db.listKnowledgeJobs(10).map((j) => j.id);
+      assert.deepEqual(ids.slice(0, 3), [j3.id, j2.id, j1.id]);
+    } finally { db.close(); }
+  });
+
+  test.it('cancelKnowledgeJob only cancels queued/running jobs', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'index', scope: {} });
+      assert.equal(db.cancelKnowledgeJob(job.id), true);
+      // Cancelling again (now status='cancelled') should be a no-op.
+      assert.equal(db.cancelKnowledgeJob(job.id), false);
+    } finally { db.close(); }
+  });
+
+  test.it('upsertKnowledgeSynonymJobMeta + getKnowledgeSynonymJobMeta round-trip', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'synonym_boundary', scope: {} });
+      db.upsertKnowledgeSynonymJobMeta(job.id, {
+        model: 'gemini-test',
+        promptVersion: 'v1',
+        schemaVersion: 'v1',
+        llmEnabled: true,
+        candidateCount: 100,
+        successCount: 80,
+        failedCount: 20,
+        jsonParseRate: 0.95,
+        avgLatencyMs: 1500,
+        p95LatencyMs: 3000,
+        options: { foo: 'bar' },
+      });
+      const meta = db.getKnowledgeSynonymJobMeta(job.id);
+      assert.ok(meta);
+      assert.equal(meta.model, 'gemini-test');
+      assert.equal(meta.llmEnabled, true);
+      assert.equal(meta.candidateCount, 100);
+      assert.deepEqual(meta.options, { foo: 'bar' });
+    } finally { db.close(); }
+  });
+
+  test.it('synonym_boundary jobs surface synonymMeta on getKnowledgeJobById', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'synonym_boundary', scope: {} });
+      db.upsertKnowledgeSynonymJobMeta(job.id, { model: 'm', llmEnabled: false });
+      const got = db.getKnowledgeJobById(job.id);
+      assert.ok(got.synonymMeta);
+      assert.equal(got.synonymMeta.model, 'm');
+      // Non-synonym jobs should NOT have synonymMeta attached.
+      const other = db.createKnowledgeJob({ jobType: 'index', scope: {} });
+      const otherRow = db.getKnowledgeJobById(other.id);
+      assert.equal(otherRow.synonymMeta, null);
+    } finally { db.close(); }
+  });
+});
+
+// -- experiments / few-shot --------------------------------------------------
+
+test.describe('databaseService — experiments + few-shot', () => {
+  test.it('getFewShotRuns + getFewShotExamples return [] for unknown experiment', () => {
+    const db = freshDb();
+    try {
+      assert.deepEqual(db.getFewShotRuns('exp_missing'), []);
+      assert.deepEqual(db.getFewShotExamples([]), []);
+    } finally { db.close(); }
+  });
+
+  test.it('upsertExperimentRound inserts then updates on conflict (experiment_id, round_number)', () => {
+    const db = freshDb();
+    try {
+      db.upsertExperimentRound({
+        experimentId: 'exp_a',
+        roundNumber: 1,
+        roundName: 'first',
+        variant: 'A',
+        llmModel: 'gemini-test',
+        fewshotEnabled: true,
+        fewshotCount: 3,
+      });
+      // Re-upsert the same (experimentId, roundNumber) with a different name.
+      db.upsertExperimentRound({
+        experimentId: 'exp_a',
+        roundNumber: 1,
+        roundName: 'first-updated',
+        variant: 'A',
+        llmModel: 'gemini-test',
+        fewshotEnabled: true,
+        fewshotCount: 5,
+      });
+      const trend = db.getExperimentRoundTrend('exp_a');
+      assert.equal(trend.length, 1);
+      assert.equal(trend[0].roundName, 'first-updated');
+      assert.equal(trend[0].fewshotCount, 5);
+    } finally { db.close(); }
+  });
+
+  test.it('insertExperimentSample returns an id and getExperimentSamples roundtrips qualityDimensions JSON', () => {
+    const db = freshDb();
+    try {
+      db.upsertExperimentRound({ experimentId: 'exp_b', roundNumber: 0, roundName: 'baseline' });
+      const id = db.insertExperimentSample({
+        experimentId: 'exp_b',
+        roundNumber: 0,
+        phrase: 'hello',
+        provider: 'gemini',
+        variant: 'A',
+        qualityScore: 88,
+        qualityDimensions: { authenticity: 5, length: 4 },
+        tokensTotal: 1500,
+        latencyMs: 800,
+      });
+      assert.ok(id > 0);
+      const samples = db.getExperimentSamples('exp_b');
+      assert.equal(samples.length, 1);
+      assert.deepEqual(samples[0].qualityDimensions, { authenticity: 5, length: 4 });
+      assert.equal(samples[0].success, 1);
+    } finally { db.close(); }
+  });
+
+  test.it('upsertTeacherReference deduplicates on (experiment_id, round_number, phrase)', () => {
+    const db = freshDb();
+    try {
+      db.upsertExperimentRound({ experimentId: 'exp_c', roundNumber: 0 });
+      db.upsertTeacherReference({
+        experimentId: 'exp_c', roundNumber: 0, phrase: 'hello',
+        provider: 'gemini', qualityScore: 90, outputText: 'first',
+      });
+      db.upsertTeacherReference({
+        experimentId: 'exp_c', roundNumber: 0, phrase: 'hello',
+        provider: 'gemini', qualityScore: 95, outputText: 'second',
+      });
+      const refs = db.getTeacherReferences('exp_c');
+      assert.equal(refs.length, 1);
+      assert.equal(refs[0].qualityScore, 95);
+      assert.equal(refs[0].outputText, 'second');
+    } finally { db.close(); }
+  });
+
+  test.it('recomputeExperimentRoundStats rolls up sample averages onto the round row', () => {
+    const db = freshDb();
+    try {
+      db.upsertExperimentRound({ experimentId: 'exp_d', roundNumber: 0 });
+      db.insertExperimentSample({ experimentId: 'exp_d', roundNumber: 0, phrase: 'a', qualityScore: 80, tokensTotal: 1000, latencyMs: 500 });
+      db.insertExperimentSample({ experimentId: 'exp_d', roundNumber: 0, phrase: 'b', qualityScore: 90, tokensTotal: 2000, latencyMs: 700 });
+      db.recomputeExperimentRoundStats('exp_d', 0);
+      const trend = db.getExperimentRoundTrend('exp_d');
+      assert.equal(trend.length, 1);
+      assert.equal(trend[0].sampleCount, 2);
+      assert.equal(trend[0].avgQualityScore, 85);
+      assert.equal(trend[0].avgTokensTotal, 1500);
+    } finally { db.close(); }
+  });
+
+  test.it('getExperimentSamples / getTeacherReferences return [] for empty experiment id', () => {
+    const db = freshDb();
+    try {
+      assert.deepEqual(db.getExperimentSamples(''), []);
+      assert.deepEqual(db.getTeacherReferences(''), []);
+      assert.deepEqual(db.getExperimentRoundTrend(''), []);
+    } finally { db.close(); }
+  });
+
+  test.it('teacher samples (isTeacher=1) are excluded from round average', () => {
+    const db = freshDb();
+    try {
+      db.upsertExperimentRound({ experimentId: 'exp_e', roundNumber: 0 });
+      // Teacher-flagged sample should not contribute to avg_quality_score.
+      db.insertExperimentSample({ experimentId: 'exp_e', roundNumber: 0, phrase: 't', qualityScore: 100, isTeacher: true });
+      db.insertExperimentSample({ experimentId: 'exp_e', roundNumber: 0, phrase: 'a', qualityScore: 80 });
+      db.recomputeExperimentRoundStats('exp_e', 0);
+      const [round] = db.getExperimentRoundTrend('exp_e');
+      assert.equal(round.sampleCount, 1);
+      assert.equal(round.avgQualityScore, 80);
+    } finally { db.close(); }
+  });
+});
