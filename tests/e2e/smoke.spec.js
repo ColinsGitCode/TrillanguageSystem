@@ -35,6 +35,14 @@ async function closeModal(page) {
 }
 
 async function selectNodeText(page, selector, expectedText) {
+  // The TRAIN panel renders/hydrates asynchronously, so the target node may
+  // not exist the instant the tab is clicked — wait for it before selecting.
+  await page.waitForFunction(
+    ({ selector, expectedText }) => [...document.querySelectorAll(selector)]
+      .some((el) => (el.textContent || '').trim() === expectedText),
+    { selector, expectedText },
+    { timeout: 10_000 }
+  );
   const result = await page.evaluate(({ selector, expectedText }) => {
     const target = [...document.querySelectorAll(selector)].find((el) => (el.textContent || '').trim() === expectedText);
     if (!target) return { ok: false, reason: `target not found: ${expectedText}` };
