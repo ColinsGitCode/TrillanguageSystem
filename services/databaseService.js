@@ -12,6 +12,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const log = require('../lib/logger').child({ module: 'svc/database' });
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -98,7 +99,7 @@ function ensureTableColumns(db, tableName, columnDefs = []) {
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDef}`);
       existing.add(columnName.toLowerCase());
     } catch (err) {
-      console.warn(`[Database] Column migration skipped: ${tableName}.${columnName} ->`, err.message);
+      log.warn({ err, table: tableName, column: columnName }, 'column migration skipped');
     }
   });
 }
@@ -111,7 +112,9 @@ class DatabaseService {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    this.db = new Database(dbPath, { verbose: console.log });
+    // Route every SQL through the logger at debug level — silent by default,
+    // visible with LOG_LEVEL=debug. Stops schema init from flooding stdout.
+    this.db = new Database(dbPath, { verbose: (sql) => log.debug({ sql }, 'sqlite') });
 
     // 性能优化
     this.db.pragma('journal_mode = WAL');
@@ -119,7 +122,7 @@ class DatabaseService {
 
     this.initializeTables();
 
-    console.log('[Database] Initialized:', dbPath);
+    log.info({ dbPath }, 'database initialized');
   }
 
   /**
@@ -129,7 +132,7 @@ class DatabaseService {
     const schemaPath = path.join(__dirname, '../database/schema.sql');
 
     if (!fs.existsSync(schemaPath)) {
-      console.warn('[Database] Schema file not found:', schemaPath);
+      log.warn({ schemaPath }, 'schema file not found');
       return;
     }
 
@@ -137,7 +140,7 @@ class DatabaseService {
     this.db.exec(schema);
     this.ensureSchemaMigrations();
 
-    console.log('[Database] Tables initialized');
+    log.info('database tables initialized');
   }
 
   ensureSchemaMigrations() {
@@ -156,7 +159,7 @@ class DatabaseService {
       try {
         this.db.exec(sql);
       } catch (err) {
-        console.warn('[Database] Migration skipped:', sql, err.message);
+        log.warn({ err, sql }, 'migration skipped');
       }
     });
 
@@ -643,7 +646,7 @@ class DatabaseService {
 
         return generationId;
       } catch (error) {
-        console.error('[Database] Insert error:', error);
+        log.error({ err: error }, 'insert error');
         throw error;
       }
     });
@@ -1812,7 +1815,7 @@ class DatabaseService {
       throw new Error(`Generation with id ${id} not found`);
     }
 
-    console.log(`[Database] Deleted generation id=${id} (changes=${result.changes})`);
+    log.info({ id, changes: result.changes }, 'deleted generation');
     return result.changes;
   }
 
@@ -3864,7 +3867,7 @@ class DatabaseService {
    */
   close() {
     this.db.close();
-    console.log('[Database] Connection closed');
+    log.info('database connection closed');
   }
 }
 

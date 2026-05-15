@@ -1,5 +1,6 @@
 const dbService = require('./databaseService');
 const { runTask } = require('./knowledgeAnalysisEngine');
+const log = require('../lib/logger').child({ module: 'svc/knowledge-jobs' });
 
 const SUPPORTED_TASKS = new Set([
   'summary',
@@ -120,7 +121,7 @@ class KnowledgeJobService {
     try {
       await this.runJob(nextJobId);
     } catch (err) {
-      console.error('[KnowledgeJob] process error:', err.message);
+      log.error({ err }, 'knowledge job processing error');
     } finally {
       this.running = false;
       if (this.queue.length > 0) {

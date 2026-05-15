@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const log = require('../lib/logger').child({ module: 'svc/file-manager' });
 
 // Inherit the base path from server.js logic (or environment variable)
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
@@ -29,7 +30,7 @@ function getTodayFolderName() {
     } catch (err) {
         if (!timezoneWarningPrinted) {
             timezoneWarningPrinted = true;
-            console.warn(`[FileManager] Invalid RECORDS_TIMEZONE="${RECORDS_TIMEZONE}", fallback to system local date.`);
+            log.warn({ recordsTimezone: RECORDS_TIMEZONE }, 'invalid RECORDS_TIMEZONE, falling back to system local date');
         }
     }
 
@@ -206,7 +207,7 @@ function deleteRecordFiles(folderName, baseName) {
                 fs.unlinkSync(filePath);
                 deleted.push(filePath);
             } catch (err) {
-                console.warn(`[Delete] Failed to remove file: ${filePath}`, err.message);
+                log.warn({ err, filePath }, 'delete: failed to remove file');
             }
         }
     }

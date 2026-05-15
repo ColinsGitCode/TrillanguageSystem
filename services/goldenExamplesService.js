@@ -6,6 +6,7 @@
  */
 
 const dbService = require('./databaseService');
+const log = require('../lib/logger').child({ module: 'svc/golden-examples' });
 const exampleReviewService = require('./exampleReviewService');
 
 /**
@@ -115,7 +116,7 @@ async function extractGoldenExamples(strategy = 'HIGH_QUALITY_GEMINI', options =
       maxOutputChars: Number(options.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS)
     }));
   } catch (error) {
-    console.error('[GoldenExamples] Error extracting examples:', error);
+    log.error({ err: error }, 'error extracting examples');
     return [];
   }
 }
@@ -295,7 +296,7 @@ async function getRelevantExamples(currentPhrase, count = 3, options = {}) {
       maxOutputChars
     }));
   } catch (error) {
-    console.error('[GoldenExamples] Error getting relevant examples:', error);
+    log.error({ err: error }, 'error getting relevant examples');
     return [];
   }
 }
@@ -330,7 +331,7 @@ async function analyzeGoldenPatterns() {
       recommendations: generateRecommendations(stats)
     };
   } catch (error) {
-    console.error('[GoldenExamples] Error analyzing patterns:', error);
+    log.error({ err: error }, 'error analyzing patterns');
     return null;
   }
 }

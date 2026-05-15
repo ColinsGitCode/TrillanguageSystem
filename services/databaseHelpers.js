@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const { normalizeAudioExtension } = require('./audioFormat');
+const log = require('../lib/logger').child({ module: 'svc/db-helpers' });
 
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const RESOLVED_RECORDS_PATH = path.resolve(RECORDS_PATH);
@@ -53,7 +54,7 @@ function extractTranslation(markdownContent, language) {
       return translation;
     }
   } catch (error) {
-    console.warn(`[DB Helper] Failed to extract ${language} translation:`, error.message);
+    log.warn({ err: error, language }, 'failed to extract translation');
   }
 
   return null;
