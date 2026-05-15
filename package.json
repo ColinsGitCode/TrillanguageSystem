@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "gemini-proxy": "node scripts/gemini-host-proxy.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:unit": "node --test tests/unit/*.test.js",
     "e2e:server": "bash ./scripts/startE2EServer.sh",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
