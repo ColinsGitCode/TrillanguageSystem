@@ -230,7 +230,7 @@ function tokenizeZhMeaning(text) {
   const normalized = normalizeMeaningKey(text);
   if (!normalized) return [];
   return normalized
-    .split(/[,\|/]/g)
+    .split(/[,|/]/g)
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => item.replace(/\s+/g, ''));

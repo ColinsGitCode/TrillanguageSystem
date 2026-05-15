@@ -10,22 +10,19 @@ const { runGeminiCli } = require('./services/geminiCliService');
 const { runGeminiProxy } = require('./services/geminiProxyService');
 const localLlmService = require('./services/localLlmService');
 const tesseractOcrService = require('./services/tesseractOcrService');
-const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory, deleteRecordFiles } = require('./services/fileManager');
+const { saveGeneratedFiles, buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('./services/fileManager');
 const { generateAudioBatch } = require('./services/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./services/htmlRenderer');
 const { postProcessGeneratedContent } = require('./services/contentPostProcessor');
-const geminiAuthService = require('./services/geminiAuthService');
 const goldenExamplesService = require('./services/goldenExamplesService');
 const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
 const exampleReviewService = require('./services/exampleReviewService');
-const knowledgeJobService = require('./services/knowledgeJobService');
 const generationJobService = require('./services/generationJobService');
 const trainingPackService = require('./services/trainingPackService');
 const { normalizeAudioExtension, stripKnownAudioExtension } = require('./services/audioFormat');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
-const { HealthCheckService } = require('./services/healthCheckService');
 
 // 数据库服务
 const dbService = require('./services/databaseService');
@@ -45,17 +42,12 @@ const {
     resolveTrackingModel,
     normalizeCardType,
     normalizeSourceMode,
-    sanitizeGeminiModelName,
     resolveGeminiModel,
 } = require('./lib/serverConfig');
 const { checkGenerateThrottle } = require('./lib/throttle');
 const {
     buildE2ETrainingResult,
     buildE2EGenerateResult,
-    getE2EKnowledgeJob,
-    listE2EKnowledgeJobs,
-    createE2EKnowledgeJob,
-    cancelE2EKnowledgeJob,
 } = require('./lib/e2eFixtures');
 const { buildTrainingSidecarPath } = require('./lib/trainingSidecar');
 const log = require('./lib/logger').child({ module: 'http' });
@@ -336,7 +328,6 @@ async function generateAndPersistTrainingAsset(context = {}) {
     const markdown = String(context.markdown || '').trim();
     const folderName = String(context.folderName || '').trim();
     const baseName = String(context.baseName || '').trim();
-    const targetDir = String(context.targetDir || '').trim();
     if (!phrase || !markdown || !folderName || !baseName) {
         return {
             status: 'failed',
@@ -491,11 +482,6 @@ async function backfillTrainingAssets(options = {}) {
         results,
         summary
     };
-}
-
-function isGeminiUnavailableError(error) {
-    const message = String(error?.message || '');
-    return /ModelNotFoundError|Requested entity was not found|Gemini proxy error|Error when talking to Gemini API|API key|quota|permission|429|403|404/i.test(message);
 }
 
 async function generateWithAutoFallback(phrase, provider, perf, options = {}) {
@@ -1029,7 +1015,6 @@ app.post('/api/generate', async (req, res) => {
           experiment_round = 0,
           round_name,
           variant,
-          llm_provider = DEFAULT_LLM_PROVIDER,
           is_teacher_reference = false,
           llm_model
         } = req.body || {};
