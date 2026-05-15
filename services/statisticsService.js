@@ -240,6 +240,10 @@ function regIncBeta(a, b, x) {
   return front * (f - 1) / a;
 }
 
+// Lanczos / Stirling constants are textbook values that intentionally exceed
+// JS double precision — runtime truncation is part of how this approximation
+// is tuned. Suppressing no-loss-of-precision for this block only.
+/* eslint-disable no-loss-of-precision */
 /** Log-gamma (Stirling approximation) */
 function lgamma(x) {
   if (x <= 0) return 0;
@@ -252,6 +256,7 @@ function lgamma(x) {
   for (let j = 0; j < 6; j++) ser += c[j] / ++y;
   return -tmp + Math.log(2.5066282746310005 * ser / x);
 }
+/* eslint-enable no-loss-of-precision */
 
 module.exports = {
   pairedTTest,

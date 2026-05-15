@@ -57,6 +57,7 @@ const {
     createE2EKnowledgeJob,
     cancelE2EKnowledgeJob,
 } = require('./lib/e2eFixtures');
+const { buildTrainingSidecarPath } = require('./lib/trainingSidecar');
 
 app.use(express.static('public'));
 app.use('/data', express.static(RECORDS_PATH));
@@ -260,11 +261,6 @@ async function executeGenerationJobViaHttp(job) {
     throw error;
   }
   return data;
-}
-
-function buildTrainingSidecarPath(targetDir, baseName) {
-    if (!targetDir || !baseName) return '';
-    return path.join(targetDir, `${baseName}.training.v1.json`);
 }
 
 function buildTrainingSidecarPayload(trainingAsset, context = {}) {

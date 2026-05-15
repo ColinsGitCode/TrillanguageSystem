@@ -6,6 +6,7 @@ const fs = require('fs');
 const {
   deleteRecordFiles,
   dbService,
+  buildTrainingSidecarPath,
 } = require('./_shared');
 
 const router = express.Router();
