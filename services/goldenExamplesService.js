@@ -388,3 +388,9 @@ module.exports = {
   buildEnhancedPrompt,
   EXTRACTION_STRATEGIES
 };
+
+// Pure helpers exposed for unit tests — not part of the public API.
+module.exports._internal = {
+  bigramSimilarity,
+  clipText,
+};
