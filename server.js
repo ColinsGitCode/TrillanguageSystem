@@ -58,6 +58,7 @@ const {
     cancelE2EKnowledgeJob,
 } = require('./lib/e2eFixtures');
 const { buildTrainingSidecarPath } = require('./lib/trainingSidecar');
+const log = require('./lib/logger').child({ module: 'http' });
 
 app.use(express.static('public'));
 // Do NOT mount RECORDS_PATH as static. In the docker layout DB_PATH lives
@@ -1020,7 +1021,7 @@ app.post('/api/generate', async (req, res) => {
     });
 
   } catch (err) {
-      console.error('[Generate] Error:', err);
+      log.error({ err, route: '/api/generate' }, 'generate failed');
 
       try {
         const {
@@ -1255,7 +1256,7 @@ app.use(require('./routes/misc'));
 // bad request can't crash the process or leak a stack trace to the client.
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
-    console.error(`[API ${req.method} ${req.originalUrl}] Unhandled error:`, err);
+    log.error({ err, method: req.method, route: req.originalUrl }, 'unhandled route error');
     const status = Number(err && (err.status || err.statusCode)) || 500;
     res.status(status).json({
         error: (err && err.message) || 'Internal server error',
@@ -1267,18 +1268,17 @@ app.use((err, req, res, next) => {
 // but treat an uncaught exception as fatal (the process is in an unknown
 // state) and let the supervisor restart it.
 process.on('unhandledRejection', (reason) => {
-    console.error('[process] Unhandled promise rejection:', reason);
+    log.error({ err: reason instanceof Error ? reason : { message: String(reason) } }, 'unhandled promise rejection');
 });
 process.on('uncaughtException', (err) => {
-    console.error('[process] Uncaught exception — exiting:', err);
+    log.error({ err }, 'uncaught exception — exiting');
     process.exit(1);
 });
 
 const serverInstance = app.listen(PORT, () => {
     generationJobService.configureExecutor(executeGenerationJobViaHttp);
     generationJobService.bootstrap();
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Mission Control available at http://localhost:${PORT}/dashboard.html`);
+    log.info({ port: PORT, dashboard: `http://localhost:${PORT}/dashboard.html` }, 'server listening');
 });
 
 module.exports = { app, serverInstance };

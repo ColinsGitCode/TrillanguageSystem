@@ -8,6 +8,7 @@ const {
   dbService,
   buildTrainingSidecarPath,
 } = require('./_shared');
+const log = require('../lib/logger').child({ module: 'routes/files' });
 
 const router = express.Router();
 
@@ -190,7 +191,7 @@ router.delete('/api/records/by-file', (req, res) => {
                         deletedPaths.add(filePath);
                     }
                 } catch (err) {
-                    console.warn(`[Delete] Failed to remove file: ${filePath}`, err.message);
+                    log.warn({ err, filePath }, 'delete: failed to remove file');
                 }
             });
 
@@ -219,7 +220,7 @@ router.delete('/api/records/by-file', (req, res) => {
             trainingDeleted
         });
     } catch (err) {
-        console.error('[API /records/by-file DELETE] Error:', err);
+        log.error({ err, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: err.message });
     }
 });

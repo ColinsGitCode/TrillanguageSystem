@@ -6,6 +6,7 @@ const path = require('path');
 const { MAX_EXECUTION_BUDGET_MS } = require('../services/geminiTimeouts');
 const { stripFence, signalProcessTree } = require('../services/geminiProcessUtils');
 const { CODES, statusForCode, codedError } = require('../services/geminiErrors');
+const log = require('../lib/logger').child({ module: 'gemini-executor' });
 
 const PORT = Number(process.env.GEMINI_PROXY_PORT || 13210);
 const GEMINI_BIN_CANDIDATES = [
@@ -362,7 +363,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[gemini-proxy] listening on http://0.0.0.0:${PORT}`);
+  log.info({ port: PORT, maxConcurrent: MAX_CONCURRENT, timeoutMs: TIMEOUT_MS }, 'host executor listening');
 });
 
 process.on('SIGTERM', () => server.close());

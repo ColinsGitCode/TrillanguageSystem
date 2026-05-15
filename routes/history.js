@@ -5,6 +5,7 @@ const {
   dbService,
   normalizeCardType,
 } = require('./_shared');
+const log = require('../lib/logger').child({ module: 'routes/history' });
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ router.get('/api/history', (req, res) => {
             }
         });
     } catch (e) {
-        console.error('[API /history] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -71,7 +72,7 @@ router.get('/api/history/:id', (req, res) => {
             record
         });
     } catch (e) {
-        console.error('[API /history/:id] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -97,7 +98,7 @@ router.get('/api/statistics', (req, res) => {
             period: { dateFrom, dateTo }
         });
     } catch (e) {
-        console.error('[API /statistics] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -120,7 +121,7 @@ router.get('/api/search', (req, res) => {
             count: results.length
         });
     } catch (e) {
-        console.error('[API /search] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -136,7 +137,7 @@ router.get('/api/recent', (req, res) => {
             records
         });
     } catch (e) {
-        console.error('[API /recent] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });

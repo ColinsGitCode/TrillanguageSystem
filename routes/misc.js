@@ -8,6 +8,7 @@ const {
   dbService,
   buildTrainingSidecarPath,
 } = require('./_shared');
+const log = require('../lib/logger').child({ module: 'routes/misc' });
 
 const router = express.Router();
 
@@ -88,10 +89,10 @@ router.delete('/api/records/:id', async (req, res) => {
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
                     deletedPaths.add(filePath);
-                    console.log(`[Delete] Removed file: ${filePath}`);
+                    log.info({ filePath }, 'delete: removed file');
                 }
             } catch (fileErr) {
-                console.warn(`[Delete] Failed to remove file: ${filePath}`, fileErr.message);
+                log.warn({ err: fileErr, filePath }, 'delete: failed to remove file');
             }
         }
 
@@ -100,7 +101,7 @@ router.delete('/api/records/:id', async (req, res) => {
             const fallbackDeleted = deleteRecordFiles(record.folder_name, record.base_filename);
             fallbackDeleted.forEach((filePath) => deletedPaths.add(filePath));
         } catch (cleanupErr) {
-            console.warn('[Delete] Fallback file cleanup failed:', cleanupErr.message);
+            log.warn({ err: cleanupErr }, 'delete: fallback file cleanup failed');
         }
 
         // 3. 从数据库删除记录（级联删除会自动删除音频和observability记录）
@@ -110,7 +111,7 @@ router.delete('/api/records/:id', async (req, res) => {
         const highlightDeleted = dbService.deleteCardHighlightByFile(record.folder_name, record.base_filename);
         const trainingDeleted = dbService.deleteCardTrainingAssetByFile(record.folder_name, record.base_filename);
 
-        console.log(`[Delete] Record ${recordId} deleted (${deletedPaths.size} files removed)`);
+        log.info({ recordId, filesRemoved: deletedPaths.size }, 'delete: record deleted');
 
         res.json({
             success: true,
@@ -121,7 +122,7 @@ router.delete('/api/records/:id', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('[API /records/:id DELETE] Error:', err);
+        log.error({ err, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: err.message });
     }
 });

@@ -1,6 +1,7 @@
 const http = require('http');
 const { gatewayTimeoutFor } = require('./geminiTimeouts');
 const { CODES, statusForCode, codedError } = require('./geminiErrors');
+const log = require('../lib/logger').child({ module: 'gemini-gateway' });
 
 const PORT = Number(process.env.GEMINI_GATEWAY_PORT || 18888);
 const EXECUTOR_BASE_URL = String(process.env.GEMINI_EXECUTOR_BASE_URL || 'http://host.docker.internal:13210').replace(/\/$/, '');
@@ -127,8 +128,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[project-gemini-gateway] listening on http://0.0.0.0:${PORT}`);
-  console.log(`[project-gemini-gateway] forwarding to ${EXECUTOR_BASE_URL}`);
+  log.info({ port: PORT, executorBaseUrl: EXECUTOR_BASE_URL }, 'gateway listening');
 });
 
 process.on('SIGTERM', () => server.close());

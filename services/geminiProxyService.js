@@ -4,6 +4,7 @@ const {
   clientTimeoutFor,
 } = require('./geminiTimeouts');
 const { CODES, isRetriableCode, errorCodeOf } = require('./geminiErrors');
+const log = require('../lib/logger').child({ module: 'gemini-proxy' });
 
 function toNumberOr(value, fallback) {
   const num = Number(value);
@@ -314,7 +315,7 @@ async function runGeminiProxy(prompt, options = {}) {
         lastError = error;
         const isNetworkError = /fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(String(error?.message || ''));
         if (hasFallback && isNetworkError) {
-          console.warn('[GeminiProxy] primary url failed, trying fallback:', { primary: candidateUrl, fallback: urlCandidates[i + 1], error: error.message });
+          log.warn({ err: error, primary: candidateUrl, fallback: urlCandidates[i + 1] }, 'primary url failed, trying fallback');
           continue;
         }
 
@@ -331,7 +332,7 @@ async function runGeminiProxy(prompt, options = {}) {
 
         if (timeoutLike && resetOnTimeout) {
           const resetResult = await triggerReset(resetUrl);
-          console.warn('[GeminiProxy] timeout detected, reset requested:', resetResult);
+          log.warn({ resetResult }, 'timeout detected, reset requested');
         }
 
         await sleep(retryDelayMs * attempt);

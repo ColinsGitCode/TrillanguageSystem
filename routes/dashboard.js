@@ -5,6 +5,7 @@ const {
   exampleReviewService,
   dbService,
 } = require('./_shared');
+const log = require('../lib/logger').child({ module: 'routes/dashboard' });
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/api/dashboard/review-stats', (req, res) => {
         }
         res.json({ success: true, ...reviewStats, campaign: campaignProgress });
     } catch (e) {
-        console.error('[API /dashboard/review-stats] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -28,7 +29,7 @@ router.get('/api/dashboard/fewshot-stats', (req, res) => {
         const stats = dbService.getFewShotStats();
         res.json({ success: true, ...stats });
     } catch (e) {
-        console.error('[API /dashboard/fewshot-stats] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
@@ -48,7 +49,7 @@ router.get('/api/dashboard/highlight-stats', (req, res) => {
             period: { dateFrom, dateTo }
         });
     } catch (e) {
-        console.error('[API /dashboard/highlight-stats] Error:', e);
+        log.error({ err: e, route: req.originalUrl }, 'route handler error');
         res.status(500).json({ error: e.message });
     }
 });
