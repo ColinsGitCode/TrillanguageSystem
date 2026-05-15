@@ -16,40 +16,12 @@ const log = require('../lib/logger').child({ module: 'svc/database' });
 const { safeJsonParse } = require('./db/helpers');
 const generationJobsDomain = require('./db/generationJobs');
 const experimentsDomain = require('./db/experiments');
+const generationsDomain = require('./db/generations');
+const highlightsDomain = require('./db/highlights');
+const trainingAssetsDomain = require('./db/trainingAssets');
+const knowledgeJobsDomain = require('./db/knowledgeJobs');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
-
-function stripHtmlTags(text) {
-  return String(text || '').replace(/<[^>]+>/g, '');
-}
-
-function decodeBasicHtmlEntities(text) {
-  return String(text || '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function computeHighlightMetricsFromHtml(html) {
-  const input = String(html || '');
-  if (!input.trim()) return { markCount: 0, highlightedChars: 0 };
-
-  const blockMatches = input.match(/<mark\b[^>]*class=(?:"[^"]*\bstudy-highlight-red\b[^"]*"|'[^']*\bstudy-highlight-red\b[^']*')[^>]*>[\s\S]*?<\/mark>/gi) || [];
-  let highlightedChars = 0;
-
-  blockMatches.forEach((block) => {
-    const inner = block
-      .replace(/^<mark\b[^>]*>/i, '')
-      .replace(/<\/mark>$/i, '');
-    const plain = decodeBasicHtmlEntities(stripHtmlTags(inner)).replace(/\s+/g, ' ').trim();
-    highlightedChars += plain.length;
-  });
-
-  return { markCount: blockMatches.length, highlightedChars };
-}
 
 function normalizeSynonymLookupKey(value) {
   return String(value || '').trim().toLowerCase();
@@ -580,727 +552,71 @@ class DatabaseService {
    * @returns {number} generationId
    */
   insertGeneration(data) {
-    const transaction = this.db.transaction((genData, obsData, audioData) => {
-      try {
-        // 1. 插入主记录
-        const genInsert = this.db.prepare(`
-          INSERT INTO generations (
-            phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
-            folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
-            markdown_content, en_translation, ja_translation, zh_translation,
-            generation_date, request_id
-          ) VALUES (
-            @phrase, @phraseLanguage, @cardType, @sourceMode, @llmProvider, @llmModel,
-            @folderName, @baseFilename, @mdFilePath, @htmlFilePath, @metaFilePath,
-            @markdownContent, @enTranslation, @jaTranslation, @zhTranslation,
-            @generationDate, @requestId
-          )
-        `);
-
-        const genResult = genInsert.run(genData);
-        const generationId = genResult.lastInsertRowid;
-
-        // 2. 插入可观测性指标
-        const obsInsert = this.db.prepare(`
-          INSERT INTO observability_metrics (
-            generation_id, tokens_input, tokens_output, tokens_total, tokens_cached,
-            cost_input, cost_output, cost_total, cost_currency,
-            quota_used, quota_limit, quota_remaining, quota_reset_at, quota_percentage,
-            performance_total_ms, performance_phases,
-            quality_score, quality_checks, quality_dimensions, quality_warnings,
-            prompt_full, prompt_parsed, llm_output, llm_finish_reason, metadata
-          ) VALUES (
-            @generationId, @tokensInput, @tokensOutput, @tokensTotal, @tokensCached,
-            @costInput, @costOutput, @costTotal, @costCurrency,
-            @quotaUsed, @quotaLimit, @quotaRemaining, @quotaResetAt, @quotaPercentage,
-            @performanceTotalMs, @performancePhases,
-            @qualityScore, @qualityChecks, @qualityDimensions, @qualityWarnings,
-            @promptFull, @promptParsed, @llmOutput, @llmFinishReason, @metadata
-          )
-        `);
-
-        obsInsert.run({ ...obsData, generationId });
-
-        // 3. 插入音频文件记录
-        if (audioData && audioData.length > 0) {
-          const audioInsert = this.db.prepare(`
-            INSERT INTO audio_files (
-              generation_id, language, text, filename_suffix, file_path,
-              tts_provider, tts_model, status
-            ) VALUES (
-              @generationId, @language, @text, @filenameSuffix, @filePath,
-              @ttsProvider, @ttsModel, @status
-            )
-          `);
-
-          for (const audio of audioData) {
-            audioInsert.run({ ...audio, generationId });
-          }
-        }
-
-        return generationId;
-      } catch (error) {
-        log.error({ err: error }, 'insert error');
-        throw error;
-      }
-    });
-
-    return transaction(data.generation, data.observability, data.audioFiles || []);
+    return generationsDomain.insertGeneration(this.db, data);
   }
 
-  /**
-   * 记录错误
-   */
   insertError(errorData) {
-    const stmt = this.db.prepare(`
-      INSERT INTO generation_errors (
-        phrase, llm_provider, request_id, error_type, error_message,
-        error_stack, prompt, llm_response, validation_errors
-      ) VALUES (
-        @phrase, @llmProvider, @requestId, @errorType, @errorMessage,
-        @errorStack, @prompt, @llmResponse, @validationErrors
-      )
-    `);
-
-    return stmt.run(errorData);
+    return generationsDomain.insertError(this.db, errorData);
   }
 
-  // ========== 查询操作 ==========
-
-  /**
-   * 分页查询历史记录
-   */
-  queryGenerations({ page = 1, limit = 20, provider, cardType, dateFrom, dateTo, search }) {
-    let sql = `
-      SELECT g.*,
-        (SELECT COUNT(*) FROM audio_files WHERE generation_id = g.id AND status = 'generated') as audio_count,
-        om.quality_score, om.tokens_total, om.cost_total, om.performance_total_ms
-      FROM generations g
-      LEFT JOIN observability_metrics om ON g.id = om.generation_id
-      WHERE 1=1
-    `;
-
-    const params = {};
-
-    if (provider) {
-      sql += ` AND g.llm_provider = @provider`;
-      params.provider = provider;
-    }
-
-    if (cardType) {
-      sql += ` AND g.card_type = @cardType`;
-      params.cardType = cardType;
-    }
-
-    if (dateFrom) {
-      sql += ` AND g.generation_date >= @dateFrom`;
-      params.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      sql += ` AND g.generation_date <= @dateTo`;
-      params.dateTo = dateTo;
-    }
-
-    if (search) {
-      sql += ` AND g.id IN (
-        SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-      )`;
-      params.search = search;
-    }
-
-    sql += ` ORDER BY g.created_at DESC LIMIT @limit OFFSET @offset`;
-    params.limit = limit;
-    params.offset = (page - 1) * limit;
-
-    const stmt = this.db.prepare(sql);
-    return stmt.all(params);
+  queryGenerations(filters = {}) {
+    return generationsDomain.query(this.db, filters);
   }
 
-  /**
-   * 获取总记录数
-   */
-  getTotalCount({ provider, cardType, dateFrom, dateTo, search }) {
-    let sql = `SELECT COUNT(*) as total FROM generations WHERE 1=1`;
-    const params = {};
-
-    if (provider) {
-      sql += ` AND llm_provider = @provider`;
-      params.provider = provider;
-    }
-
-    if (cardType) {
-      sql += ` AND card_type = @cardType`;
-      params.cardType = cardType;
-    }
-
-    if (dateFrom) {
-      sql += ` AND generation_date >= @dateFrom`;
-      params.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      sql += ` AND generation_date <= @dateTo`;
-      params.dateTo = dateTo;
-    }
-
-    if (search) {
-      sql += ` AND id IN (
-        SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-      )`;
-      params.search = search;
-    }
-
-    const stmt = this.db.prepare(sql);
-    return stmt.get(params).total;
+  getTotalCount(filters = {}) {
+    return generationsDomain.getTotalCount(this.db, filters);
   }
 
-  /**
-   * 获取单条记录详情
-   */
   getGenerationById(id) {
-    const generation = this.db.prepare(`
-      SELECT * FROM generations WHERE id = ?
-    `).get(id);
-
-    if (!generation) return null;
-
-    const observability = this.db.prepare(`
-      SELECT * FROM observability_metrics WHERE generation_id = ?
-    `).get(id);
-
-    const audioFiles = this.db.prepare(`
-      SELECT * FROM audio_files WHERE generation_id = ? ORDER BY filename_suffix
-    `).all(id);
-
-    return {
-      ...generation,
-      observability: observability ? {
-        ...observability,
-        performance_phases: JSON.parse(observability.performance_phases || '{}'),
-        quality_checks: JSON.parse(observability.quality_checks || '[]'),
-        quality_dimensions: JSON.parse(observability.quality_dimensions || '{}'),
-        quality_warnings: JSON.parse(observability.quality_warnings || '[]'),
-        prompt_parsed: JSON.parse(observability.prompt_parsed || '{}'),
-        metadata: JSON.parse(observability.metadata || '{}')
-      } : null,
-      audioFiles
-    };
+    return generationsDomain.getById(this.db, id);
   }
 
-  /**
-   * 根据文件夹与基础文件名获取记录
-   */
   getGenerationByFile(folderName, baseFilename) {
-    const generation = this.db.prepare(`
-      SELECT * FROM generations
-      WHERE folder_name = ? AND base_filename = ?
-      ORDER BY id DESC
-      LIMIT 1
-    `).get(folderName, baseFilename);
-
-    return generation || null;
+    return generationsDomain.getByFile(this.db, folderName, baseFilename);
   }
 
-  /**
-   * 获取卡片标红（按 folder/base/sourceHash）
-   */
   getCardHighlightByFile(folderName, baseFilename, sourceHash) {
-    if (!folderName || !baseFilename || !sourceHash) return null;
-    return this.db.prepare(`
-      SELECT
-        id,
-        generation_id AS generationId,
-        folder_name AS folderName,
-        base_filename AS baseFilename,
-        source_hash AS sourceHash,
-        version,
-        html_content AS htmlContent,
-        mark_count AS markCount,
-        highlighted_chars AS highlightedChars,
-        updated_by AS updatedBy,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM card_highlights
-      WHERE folder_name = ?
-        AND base_filename = ?
-        AND source_hash = ?
-      LIMIT 1
-    `).get(folderName, baseFilename, sourceHash) || null;
+    return highlightsDomain.getByFile(this.db, folderName, baseFilename, sourceHash);
   }
 
-  /**
-   * 写入卡片标红（upsert）
-   */
   upsertCardHighlight(payload = {}) {
-    const folderName = String(payload.folderName || '').trim();
-    const baseFilename = String(payload.baseFilename || '').trim();
-    const sourceHash = String(payload.sourceHash || '').trim();
-    const htmlContent = String(payload.htmlContent || '');
-    if (!folderName || !baseFilename || !sourceHash) {
-      throw new Error('folderName/baseFilename/sourceHash are required');
-    }
-    if (!htmlContent.trim()) {
-      throw new Error('htmlContent is required');
-    }
-
-    const generationId = payload.generationId ? Number(payload.generationId) : null;
-    const version = Number(payload.version || 1);
-    const updatedBy = String(payload.updatedBy || 'ui').trim() || 'ui';
-    const metrics = computeHighlightMetricsFromHtml(htmlContent);
-
-    this.db.prepare(`
-      INSERT INTO card_highlights (
-        generation_id,
-        folder_name,
-        base_filename,
-        source_hash,
-        version,
-        html_content,
-        mark_count,
-        highlighted_chars,
-        updated_by,
-        created_at,
-        updated_at
-      ) VALUES (
-        @generationId,
-        @folderName,
-        @baseFilename,
-        @sourceHash,
-        @version,
-        @htmlContent,
-        @markCount,
-        @highlightedChars,
-        @updatedBy,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(folder_name, base_filename, source_hash) DO UPDATE SET
-        generation_id = COALESCE(excluded.generation_id, card_highlights.generation_id),
-        version = excluded.version,
-        html_content = excluded.html_content,
-        mark_count = excluded.mark_count,
-        highlighted_chars = excluded.highlighted_chars,
-        updated_by = excluded.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `).run({
-      generationId,
-      folderName,
-      baseFilename,
-      sourceHash,
-      version,
-      htmlContent,
-      markCount: metrics.markCount,
-      highlightedChars: metrics.highlightedChars,
-      updatedBy
-    });
-
-    return this.getCardHighlightByFile(folderName, baseFilename, sourceHash);
+    return highlightsDomain.upsert(this.db, payload);
   }
 
-  /**
-   * 删除卡片标红（支持指定 sourceHash 或删除该卡片全部版本）
-   */
   deleteCardHighlightByFile(folderName, baseFilename, sourceHash = '') {
-    if (!folderName || !baseFilename) return 0;
-    if (sourceHash) {
-      const result = this.db.prepare(`
-        DELETE FROM card_highlights
-        WHERE folder_name = ?
-          AND base_filename = ?
-          AND source_hash = ?
-      `).run(folderName, baseFilename, sourceHash);
-      return result.changes || 0;
-    }
-    const result = this.db.prepare(`
-      DELETE FROM card_highlights
-      WHERE folder_name = ?
-        AND base_filename = ?
-    `).run(folderName, baseFilename);
-    return result.changes || 0;
+    return highlightsDomain.deleteByFile(this.db, folderName, baseFilename, sourceHash);
   }
 
-  /**
-   * 标红统计（Mission Control / 后续分析）
-   */
-  getHighlightStats({ dateFrom, dateTo, provider, cardType } = {}) {
-    const conditions = ['1=1'];
-    const params = {};
-
-    if (dateFrom) {
-      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) >= @dateFrom`);
-      params.dateFrom = dateFrom;
-    }
-    if (dateTo) {
-      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) <= @dateTo`);
-      params.dateTo = dateTo;
-    }
-    if (provider) {
-      conditions.push(`g.llm_provider = @provider`);
-      params.provider = provider;
-    }
-    if (cardType) {
-      conditions.push(`g.card_type = @cardType`);
-      params.cardType = cardType;
-    }
-
-    const whereSql = conditions.join(' AND ');
-
-    const overview = this.db.prepare(`
-      SELECT
-        COUNT(*) AS highlightedCards,
-        SUM(ch.mark_count) AS totalMarks,
-        AVG(ch.mark_count) AS avgMarksPerCard,
-        SUM(ch.highlighted_chars) AS totalHighlightedChars,
-        AVG(ch.highlighted_chars) AS avgHighlightedChars,
-        MAX(ch.updated_at) AS lastUpdatedAt
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-    `).get(params);
-
-    const byCardType = this.db.prepare(`
-      SELECT
-        COALESCE(g.card_type, 'unknown') AS cardType,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks,
-        AVG(ch.mark_count) AS avgMarks
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY COALESCE(g.card_type, 'unknown')
-      ORDER BY cards DESC
-    `).all(params);
-
-    const byProvider = this.db.prepare(`
-      SELECT
-        COALESCE(g.llm_provider, 'unknown') AS provider,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY COALESCE(g.llm_provider, 'unknown')
-      ORDER BY cards DESC
-    `).all(params);
-
-    const trend = this.db.prepare(`
-      SELECT
-        date(ch.updated_at) AS day,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks,
-        SUM(ch.highlighted_chars) AS highlightedChars
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY date(ch.updated_at)
-      ORDER BY day DESC
-      LIMIT 90
-    `).all(params);
-
-    return {
-      overview: {
-        highlightedCards: Number(overview?.highlightedCards || 0),
-        totalMarks: Number(overview?.totalMarks || 0),
-        avgMarksPerCard: Number((overview?.avgMarksPerCard || 0).toFixed(2)),
-        totalHighlightedChars: Number(overview?.totalHighlightedChars || 0),
-        avgHighlightedChars: Number((overview?.avgHighlightedChars || 0).toFixed(2)),
-        lastUpdatedAt: overview?.lastUpdatedAt || null
-      },
-      byCardType,
-      byProvider,
-      trend
-    };
+  getHighlightStats(filters = {}) {
+    return highlightsDomain.getStats(this.db, filters);
   }
 
   mapTrainingAssetRow(row) {
-    if (!row) return null;
-    return {
-      id: Number(row.id || 0),
-      generationId: Number(row.generation_id || 0),
-      folderName: row.folder_name || '',
-      baseFilename: row.base_filename || '',
-      cardType: row.card_type || 'trilingual',
-      status: row.status || 'failed',
-      source: row.source || 'heuristic',
-      providerUsed: row.provider_used || '',
-      modelUsed: row.model_used || '',
-      promptVersion: row.prompt_version || '',
-      schemaVersion: row.schema_version || 'training_pack_v1',
-      qualityScore: Number(row.quality_score || 0),
-      selfConfidence: Number(row.self_confidence || 0),
-      coverageScore: Number(row.coverage_score || 0),
-      validationErrors: safeJsonParse(row.validation_errors_json, []),
-      fallbackReason: row.fallback_reason || null,
-      tokensInput: Number(row.tokens_input || 0),
-      tokensOutput: Number(row.tokens_output || 0),
-      tokensTotal: Number(row.tokens_total || 0),
-      costTotal: Number(row.cost_total || 0),
-      latencyMs: Number(row.latency_ms || 0),
-      payload: safeJsonParse(row.payload_json, null),
-      sidecarFilePath: row.sidecar_file_path || '',
-      createdAt: row.created_at || null,
-      updatedAt: row.updated_at || null
-    };
+    return trainingAssetsDomain.mapRow(row);
   }
 
   getCardTrainingAssetByGenerationId(generationId) {
-    const id = Number(generationId || 0);
-    if (!id) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM card_training_assets
-      WHERE generation_id = ?
-      LIMIT 1
-    `).get(id);
-    return this.mapTrainingAssetRow(row);
+    return trainingAssetsDomain.getByGenerationId(this.db, generationId);
   }
 
   getCardTrainingAssetByFile(folderName, baseFilename) {
-    const folder = String(folderName || '').trim();
-    const base = String(baseFilename || '').trim();
-    if (!folder || !base) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM card_training_assets
-      WHERE folder_name = ?
-        AND base_filename = ?
-      ORDER BY updated_at DESC, id DESC
-      LIMIT 1
-    `).get(folder, base);
-    return this.mapTrainingAssetRow(row);
+    return trainingAssetsDomain.getByFile(this.db, folderName, baseFilename);
   }
 
   getTrainingBackfillSummary(filters = {}) {
-    const folderName = String(filters.folderName || '').trim();
-    const cardType = String(filters.cardType || '').trim();
-    const provider = String(filters.provider || '').trim().toLowerCase();
-
-    const where = ['1=1'];
-    const params = {};
-
-    if (folderName) {
-      where.push('g.folder_name = @folderName');
-      params.folderName = folderName;
-    }
-
-    if (cardType) {
-      where.push('g.card_type = @cardType');
-      params.cardType = cardType;
-    }
-
-    if (provider) {
-      where.push('g.llm_provider = @provider');
-      params.provider = provider;
-    }
-
-    const row = this.db.prepare(`
-      SELECT
-        COUNT(*) AS total_generations,
-        SUM(CASE WHEN cta.generation_id IS NOT NULL THEN 1 ELSE 0 END) AS with_training,
-        SUM(CASE WHEN cta.generation_id IS NULL THEN 1 ELSE 0 END) AS missing_training,
-        SUM(CASE WHEN cta.status = 'ready' THEN 1 ELSE 0 END) AS ready_count,
-        SUM(CASE WHEN cta.status = 'repaired' THEN 1 ELSE 0 END) AS repaired_count,
-        SUM(CASE WHEN cta.status = 'fallback' THEN 1 ELSE 0 END) AS fallback_count,
-        SUM(CASE WHEN cta.status = 'failed' THEN 1 ELSE 0 END) AS failed_count
-      FROM generations g
-      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
-      WHERE ${where.join(' AND ')}
-    `).get(params) || {};
-
-    return {
-      totalGenerations: Number(row.total_generations || 0),
-      withTraining: Number(row.with_training || 0),
-      missingTraining: Number(row.missing_training || 0),
-      readyCount: Number(row.ready_count || 0),
-      repairedCount: Number(row.repaired_count || 0),
-      fallbackCount: Number(row.fallback_count || 0),
-      failedCount: Number(row.failed_count || 0)
-    };
+    return trainingAssetsDomain.getBackfillSummary(this.db, filters);
   }
 
   listTrainingBackfillCandidates(filters = {}) {
-    const limit = Math.max(1, Math.min(200, Number(filters.limit || 20)));
-    const force = Boolean(filters.force);
-    const folderName = String(filters.folderName || '').trim();
-    const cardType = String(filters.cardType || '').trim();
-    const provider = String(filters.provider || '').trim().toLowerCase();
-
-    const where = ['1=1'];
-    const params = { limit };
-
-    if (folderName) {
-      where.push('g.folder_name = @folderName');
-      params.folderName = folderName;
-    }
-
-    if (cardType) {
-      where.push('g.card_type = @cardType');
-      params.cardType = cardType;
-    }
-
-    if (provider) {
-      where.push('g.llm_provider = @provider');
-      params.provider = provider;
-    }
-
-    if (!force) {
-      where.push('cta.generation_id IS NULL');
-    }
-
-    return this.db.prepare(`
-      SELECT
-        g.id,
-        g.phrase,
-        g.card_type,
-        g.folder_name,
-        g.base_filename,
-        g.llm_provider,
-        g.llm_model,
-        g.md_file_path,
-        g.created_at,
-        cta.status AS training_status
-      FROM generations g
-      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
-      WHERE ${where.join(' AND ')}
-      ORDER BY g.created_at DESC, g.id DESC
-      LIMIT @limit
-    `).all(params).map((row) => ({
-      id: Number(row.id || 0),
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      folderName: row.folder_name || '',
-      baseFilename: row.base_filename || '',
-      provider: row.llm_provider || '',
-      model: row.llm_model || '',
-      mdFilePath: row.md_file_path || '',
-      createdAt: row.created_at || null,
-      trainingStatus: row.training_status || null
-    }));
+    return trainingAssetsDomain.listBackfillCandidates(this.db, filters);
   }
 
   upsertCardTrainingAsset(payload = {}) {
-    const generationId = Number(payload.generationId || 0);
-    if (!generationId) throw new Error('generationId is required');
-    const folderName = String(payload.folderName || '').trim();
-    const baseFilename = String(payload.baseFilename || '').trim();
-    if (!folderName || !baseFilename) {
-      throw new Error('folderName/baseFilename are required');
-    }
-
-    this.db.prepare(`
-      INSERT INTO card_training_assets (
-        generation_id,
-        folder_name,
-        base_filename,
-        card_type,
-        status,
-        source,
-        provider_used,
-        model_used,
-        prompt_version,
-        schema_version,
-        quality_score,
-        self_confidence,
-        coverage_score,
-        validation_errors_json,
-        fallback_reason,
-        tokens_input,
-        tokens_output,
-        tokens_total,
-        cost_total,
-        latency_ms,
-        payload_json,
-        sidecar_file_path,
-        created_at,
-        updated_at
-      ) VALUES (
-        @generationId,
-        @folderName,
-        @baseFilename,
-        @cardType,
-        @status,
-        @source,
-        @providerUsed,
-        @modelUsed,
-        @promptVersion,
-        @schemaVersion,
-        @qualityScore,
-        @selfConfidence,
-        @coverageScore,
-        @validationErrorsJson,
-        @fallbackReason,
-        @tokensInput,
-        @tokensOutput,
-        @tokensTotal,
-        @costTotal,
-        @latencyMs,
-        @payloadJson,
-        @sidecarFilePath,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(generation_id) DO UPDATE SET
-        folder_name = excluded.folder_name,
-        base_filename = excluded.base_filename,
-        card_type = excluded.card_type,
-        status = excluded.status,
-        source = excluded.source,
-        provider_used = excluded.provider_used,
-        model_used = excluded.model_used,
-        prompt_version = excluded.prompt_version,
-        schema_version = excluded.schema_version,
-        quality_score = excluded.quality_score,
-        self_confidence = excluded.self_confidence,
-        coverage_score = excluded.coverage_score,
-        validation_errors_json = excluded.validation_errors_json,
-        fallback_reason = excluded.fallback_reason,
-        tokens_input = excluded.tokens_input,
-        tokens_output = excluded.tokens_output,
-        tokens_total = excluded.tokens_total,
-        cost_total = excluded.cost_total,
-        latency_ms = excluded.latency_ms,
-        payload_json = excluded.payload_json,
-        sidecar_file_path = excluded.sidecar_file_path,
-        updated_at = CURRENT_TIMESTAMP
-    `).run({
-      generationId,
-      folderName,
-      baseFilename,
-      cardType: String(payload.cardType || 'trilingual').trim() || 'trilingual',
-      status: String(payload.status || 'failed').trim() || 'failed',
-      source: String(payload.source || 'heuristic').trim() || 'heuristic',
-      providerUsed: String(payload.providerUsed || '').trim(),
-      modelUsed: String(payload.modelUsed || '').trim(),
-      promptVersion: String(payload.promptVersion || '').trim(),
-      schemaVersion: String(payload.schemaVersion || 'training_pack_v1').trim() || 'training_pack_v1',
-      qualityScore: Number(payload.qualityScore || 0),
-      selfConfidence: Number(payload.selfConfidence || 0),
-      coverageScore: Number(payload.coverageScore || 0),
-      validationErrorsJson: JSON.stringify(Array.isArray(payload.validationErrors) ? payload.validationErrors : []),
-      fallbackReason: payload.fallbackReason ? String(payload.fallbackReason) : null,
-      tokensInput: Number(payload.tokensInput || 0),
-      tokensOutput: Number(payload.tokensOutput || 0),
-      tokensTotal: Number(payload.tokensTotal || 0),
-      costTotal: Number(payload.costTotal || 0),
-      latencyMs: Number(payload.latencyMs || 0),
-      payloadJson: payload.payload ? JSON.stringify(payload.payload) : null,
-      sidecarFilePath: String(payload.sidecarFilePath || '').trim()
-    });
-
-    return this.getCardTrainingAssetByGenerationId(generationId);
+    return trainingAssetsDomain.upsert(this.db, payload);
   }
 
   deleteCardTrainingAssetByFile(folderName, baseFilename) {
-    const folder = String(folderName || '').trim();
-    const base = String(baseFilename || '').trim();
-    if (!folder || !base) return 0;
-    const result = this.db.prepare(`
-      DELETE FROM card_training_assets
-      WHERE folder_name = ?
-        AND base_filename = ?
-    `).run(folder, base);
-    return Number(result.changes || 0);
+    return trainingAssetsDomain.deleteByFile(this.db, folderName, baseFilename);
   }
 
   // ========== Experiments + few-shot ==========
@@ -1528,52 +844,16 @@ class DatabaseService {
     };
   }
 
-  /**
-   * 全文搜索
-   */
   fullTextSearch(query, limit = 20) {
-    const sql = `
-      SELECT g.*,
-        snippet(generations_fts, 4, '<mark>', '</mark>', '...', 30) as snippet
-      FROM generations_fts
-      JOIN generations g ON generations_fts.rowid = g.id
-      WHERE generations_fts MATCH @query
-      ORDER BY rank
-      LIMIT @limit
-    `;
-
-    return this.db.prepare(sql).all({ query, limit });
+    return generationsDomain.fullTextSearch(this.db, query, limit);
   }
 
-  /**
-   * 获取最近的记录
-   */
   getRecentGenerations(limit = 10) {
-    const sql = `
-      SELECT g.id, g.phrase, g.llm_provider, g.created_at,
-        om.quality_score, om.tokens_total
-      FROM generations g
-      LEFT JOIN observability_metrics om ON g.id = om.generation_id
-      ORDER BY g.created_at DESC
-      LIMIT ?
-    `;
-
-    return this.db.prepare(sql).all(limit);
+    return generationsDomain.getRecent(this.db, limit);
   }
 
-  /**
-   * 删除生成记录（级联删除关联的音频和observability记录）
-   */
   deleteGeneration(id) {
-    const sql = 'DELETE FROM generations WHERE id = ?';
-    const result = this.db.prepare(sql).run(id);
-
-    if (result.changes === 0) {
-      throw new Error(`Generation with id ${id} not found`);
-    }
-
-    log.info({ id, changes: result.changes }, 'deleted generation');
-    return result.changes;
+    return generationsDomain.remove(this.db, id);
   }
 
   /**
@@ -1723,228 +1003,37 @@ class DatabaseService {
   }
 
   // ========== Knowledge analysis jobs ==========
+  // Lifecycle (create/status/list/cancel + synonym meta) extracted to
+  // services/db/knowledgeJobs.js. The deeper knowledge_* data tables
+  // (terms/synonym groups/grammar patterns/clusters/relations/index) still
+  // live below until they have their own unit-test layer.
 
   createKnowledgeJob(payload = {}) {
-    const stmt = this.db.prepare(`
-      INSERT INTO knowledge_jobs (
-        job_type, status, scope_json, batch_size, total_batches, done_batches,
-        error_batches, engine_version, triggered_by
-      ) VALUES (
-        @jobType, 'queued', @scopeJson, @batchSize, 0, 0, 0, @engineVersion, @triggeredBy
-      )
-    `);
-
-    const result = stmt.run({
-      jobType: String(payload.jobType || '').trim(),
-      scopeJson: JSON.stringify(payload.scope || {}),
-      batchSize: Math.max(1, Number(payload.batchSize || 50)),
-      engineVersion: String(payload.engineVersion || 'local-v1'),
-      triggeredBy: String(payload.triggeredBy || 'owner')
-    });
-
-    return this.getKnowledgeJobById(result.lastInsertRowid);
+    return knowledgeJobsDomain.create(this.db, payload);
   }
 
   upsertKnowledgeSynonymJobMeta(jobId, meta = {}) {
-    const normalizedJobId = Number(jobId);
-    if (!normalizedJobId) return null;
-    const stmt = this.db.prepare(`
-      INSERT INTO knowledge_synonym_jobs_meta (
-        job_id, model, prompt_version, schema_version, min_candidate_score,
-        max_pairs, max_llm_pairs, llm_enabled, candidate_count, success_count,
-        failed_count, json_parse_rate, avg_latency_ms, p95_latency_ms,
-        options_json, updated_at
-      ) VALUES (
-        @jobId, @model, @promptVersion, @schemaVersion, @minCandidateScore,
-        @maxPairs, @maxLlmPairs, @llmEnabled, @candidateCount, @successCount,
-        @failedCount, @jsonParseRate, @avgLatencyMs, @p95LatencyMs,
-        @optionsJson, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(job_id) DO UPDATE SET
-        model = excluded.model,
-        prompt_version = excluded.prompt_version,
-        schema_version = excluded.schema_version,
-        min_candidate_score = excluded.min_candidate_score,
-        max_pairs = excluded.max_pairs,
-        max_llm_pairs = excluded.max_llm_pairs,
-        llm_enabled = excluded.llm_enabled,
-        candidate_count = excluded.candidate_count,
-        success_count = excluded.success_count,
-        failed_count = excluded.failed_count,
-        json_parse_rate = excluded.json_parse_rate,
-        avg_latency_ms = excluded.avg_latency_ms,
-        p95_latency_ms = excluded.p95_latency_ms,
-        options_json = excluded.options_json,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    stmt.run({
-      jobId: normalizedJobId,
-      model: meta.model ? String(meta.model) : null,
-      promptVersion: meta.promptVersion ? String(meta.promptVersion) : null,
-      schemaVersion: meta.schemaVersion ? String(meta.schemaVersion) : null,
-      minCandidateScore: Number(meta.minCandidateScore == null ? 0.62 : meta.minCandidateScore),
-      maxPairs: Math.max(1, Number(meta.maxPairs == null ? 120 : meta.maxPairs)),
-      maxLlmPairs: Math.max(0, Number(meta.maxLlmPairs == null ? 24 : meta.maxLlmPairs)),
-      llmEnabled: meta.llmEnabled ? 1 : 0,
-      candidateCount: Math.max(0, Number(meta.candidateCount || 0)),
-      successCount: Math.max(0, Number(meta.successCount || 0)),
-      failedCount: Math.max(0, Number(meta.failedCount || 0)),
-      jsonParseRate: Number(meta.jsonParseRate || 0),
-      avgLatencyMs: Number(meta.avgLatencyMs || 0),
-      p95LatencyMs: Number(meta.p95LatencyMs || 0),
-      optionsJson: JSON.stringify(meta.options || {})
-    });
-
-    return this.getKnowledgeSynonymJobMeta(normalizedJobId);
+    return knowledgeJobsDomain.upsertSynonymMeta(this.db, jobId, meta);
   }
 
   getKnowledgeSynonymJobMeta(jobId) {
-    const normalizedJobId = Number(jobId);
-    if (!normalizedJobId) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM knowledge_synonym_jobs_meta
-      WHERE job_id = ?
-      LIMIT 1
-    `).get(normalizedJobId);
-    if (!row) return null;
-    return {
-      jobId: row.job_id,
-      model: row.model || null,
-      promptVersion: row.prompt_version || null,
-      schemaVersion: row.schema_version || null,
-      minCandidateScore: Number(row.min_candidate_score || 0),
-      maxPairs: Number(row.max_pairs || 0),
-      maxLlmPairs: Number(row.max_llm_pairs || 0),
-      llmEnabled: Number(row.llm_enabled || 0) === 1,
-      candidateCount: Number(row.candidate_count || 0),
-      successCount: Number(row.success_count || 0),
-      failedCount: Number(row.failed_count || 0),
-      jsonParseRate: Number(row.json_parse_rate || 0),
-      avgLatencyMs: Number(row.avg_latency_ms || 0),
-      p95LatencyMs: Number(row.p95_latency_ms || 0),
-      options: safeJsonParse(row.options_json, {}),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
+    return knowledgeJobsDomain.getSynonymMeta(this.db, jobId);
   }
 
   updateKnowledgeJobStatus(jobId, patch = {}) {
-    const fields = [];
-    const params = { jobId };
-
-    if (patch.status !== undefined) {
-      fields.push('status = @status');
-      params.status = String(patch.status);
-    }
-    if (patch.totalBatches !== undefined) {
-      fields.push('total_batches = @totalBatches');
-      params.totalBatches = Number(patch.totalBatches || 0);
-    }
-    if (patch.doneBatches !== undefined) {
-      fields.push('done_batches = @doneBatches');
-      params.doneBatches = Number(patch.doneBatches || 0);
-    }
-    if (patch.errorBatches !== undefined) {
-      fields.push('error_batches = @errorBatches');
-      params.errorBatches = Number(patch.errorBatches || 0);
-    }
-    if (patch.resultSummary !== undefined) {
-      fields.push('result_summary_json = @resultSummaryJson');
-      params.resultSummaryJson = JSON.stringify(patch.resultSummary || {});
-    }
-    if (patch.errorMessage !== undefined) {
-      fields.push('error_message = @errorMessage');
-      params.errorMessage = patch.errorMessage ? String(patch.errorMessage) : null;
-    }
-    if (patch.startedAt !== undefined) {
-      fields.push('started_at = @startedAt');
-      params.startedAt = patch.startedAt;
-    }
-    if (patch.finishedAt !== undefined) {
-      fields.push('finished_at = @finishedAt');
-      params.finishedAt = patch.finishedAt;
-    }
-
-    if (!fields.length) return this.getKnowledgeJobById(jobId);
-
-    const sql = `UPDATE knowledge_jobs SET ${fields.join(', ')} WHERE id = @jobId`;
-    this.db.prepare(sql).run(params);
-    return this.getKnowledgeJobById(jobId);
+    return knowledgeJobsDomain.updateStatus(this.db, jobId, patch);
   }
 
   getKnowledgeJobById(jobId) {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM knowledge_jobs
-      WHERE id = ?
-      LIMIT 1
-    `).get(jobId);
-    if (!row) return null;
-    const synonymMeta = row.job_type === 'synonym_boundary'
-      ? this.getKnowledgeSynonymJobMeta(row.id)
-      : null;
-    return {
-      id: row.id,
-      jobType: row.job_type,
-      status: row.status,
-      scope: safeJsonParse(row.scope_json, {}),
-      batchSize: row.batch_size,
-      totalBatches: row.total_batches,
-      doneBatches: row.done_batches,
-      errorBatches: row.error_batches,
-      resultSummary: safeJsonParse(row.result_summary_json, null),
-      errorMessage: row.error_message || null,
-      engineVersion: row.engine_version,
-      triggeredBy: row.triggered_by,
-      synonymMeta,
-      createdAt: row.created_at,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at
-    };
+    return knowledgeJobsDomain.getById(this.db, jobId);
   }
 
   listKnowledgeJobs(limit = 20) {
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM knowledge_jobs
-      ORDER BY id DESC
-      LIMIT ?
-    `).all(Math.max(1, Number(limit || 20)));
-    return rows.map((row) => {
-      const synonymMeta = row.job_type === 'synonym_boundary'
-        ? this.getKnowledgeSynonymJobMeta(row.id)
-        : null;
-      return {
-        id: row.id,
-        jobType: row.job_type,
-        status: row.status,
-        scope: safeJsonParse(row.scope_json, {}),
-        batchSize: row.batch_size,
-        totalBatches: row.total_batches,
-        doneBatches: row.done_batches,
-        errorBatches: row.error_batches,
-        resultSummary: safeJsonParse(row.result_summary_json, null),
-        errorMessage: row.error_message || null,
-        engineVersion: row.engine_version,
-        triggeredBy: row.triggered_by,
-        synonymMeta,
-        createdAt: row.created_at,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at
-      };
-    });
+    return knowledgeJobsDomain.list(this.db, limit);
   }
 
   cancelKnowledgeJob(jobId) {
-    const result = this.db.prepare(`
-      UPDATE knowledge_jobs
-      SET status = 'cancelled', finished_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-        AND status IN ('queued', 'running')
-    `).run(jobId);
-    return result.changes > 0;
+    return knowledgeJobsDomain.cancel(this.db, jobId);
   }
 
   insertKnowledgeRawOutput(jobId, batchNo, outputData = {}) {
