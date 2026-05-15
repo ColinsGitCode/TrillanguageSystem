@@ -303,7 +303,10 @@ async function runGeminiProxy(prompt, options = {}) {
 
   let lastError = null;
   const attempts = Math.max(1, retries + 1);
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  // Labeled so a non-retriable error (or an exhausted retry budget) falls
+  // through to the final wrapped throw — a plain `break` here would only exit
+  // the inner candidate loop and the outer attempt loop would keep retrying.
+  retry: for (let attempt = 1; attempt <= attempts; attempt += 1) {
     for (let i = 0; i < urlCandidates.length; i += 1) {
       const candidateUrl = urlCandidates[i];
       const hasFallback = i < urlCandidates.length - 1;
@@ -326,8 +329,7 @@ async function runGeminiProxy(prompt, options = {}) {
         const retriable = isRetriableError(error)
           && !(timeoutLike && !retryOnTimeout);
         if (!retriable || attempt >= attempts) {
-          i = urlCandidates.length; // break candidate loop
-          break;
+          break retry;
         }
 
         if (timeoutLike && resetOnTimeout) {
@@ -336,7 +338,7 @@ async function runGeminiProxy(prompt, options = {}) {
         }
 
         await sleep(retryDelayMs * attempt);
-        i = urlCandidates.length; // go next attempt
+        break; // exit candidate loop, advance to next attempt
       }
     }
   }
@@ -353,3 +355,17 @@ async function runGeminiProxy(prompt, options = {}) {
 }
 
 module.exports = { runGeminiProxy };
+// Pure helpers exposed for unit tests — not part of the public API; production
+// callers should never reach for these.
+module.exports._internal = {
+  buildResetUrl,
+  isTimeoutLikeError,
+  isMcpDiagnosticError,
+  isRetriableError,
+  sanitizeMcpDiagnosticText,
+  sanitizeMcpDiagnosticsInResponse,
+  assertNoMcpDiagnosticInResponse,
+  looksLikeGateway18888,
+  buildUrlCandidates,
+  buildAuthHeaders,
+};

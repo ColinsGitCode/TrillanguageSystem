@@ -18,7 +18,16 @@ function capture() {
 function mkLogger(opts = {}) {
   const out = capture();
   const err = capture();
-  const log = createLogger({ level: 'debug', outStream: out.stream, errStream: err.stream, ...opts });
+  // Explicit defaults so the test is hermetic regardless of LOG_LEVEL / LOG_SILENT
+  // / NODE_ENV in the calling shell.
+  const log = createLogger({
+    level: 'debug',
+    silent: false,
+    pretty: false,
+    outStream: out.stream,
+    errStream: err.stream,
+    ...opts,
+  });
   return { log, out, err };
 }
 
