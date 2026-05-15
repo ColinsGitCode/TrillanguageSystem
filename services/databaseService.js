@@ -20,6 +20,9 @@ const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
 const trainingAssetsDomain = require('./db/trainingAssets');
 const knowledgeJobsDomain = require('./db/knowledgeJobs');
+const knowledgeIssuesDomain = require('./db/knowledgeIssues');
+const knowledgeGrammarDomain = require('./db/knowledgeGrammar');
+const knowledgeClustersDomain = require('./db/knowledgeClusters');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -1149,47 +1152,7 @@ class DatabaseService {
   }
 
   replaceKnowledgeIssues(issues = [], jobId = null) {
-    const clearStmt = this.db.prepare(`
-      DELETE FROM knowledge_issues
-      WHERE last_job_id = ?
-    `);
-    const insertStmt = this.db.prepare(`
-      INSERT INTO knowledge_issues (
-        issue_type, severity, generation_id, phrase, fingerprint,
-        detail_json, resolved, last_job_id, created_at, updated_at
-      ) VALUES (
-        @issueType, @severity, @generationId, @phrase, @fingerprint,
-        @detailJson, 0, @lastJobId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(issue_type, fingerprint) DO UPDATE SET
-        severity = excluded.severity,
-        generation_id = excluded.generation_id,
-        phrase = excluded.phrase,
-        detail_json = excluded.detail_json,
-        resolved = 0,
-        last_job_id = excluded.last_job_id,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    const transaction = this.db.transaction((rows) => {
-      if (jobId) clearStmt.run(Number(jobId));
-      let count = 0;
-      for (const item of rows) {
-        insertStmt.run({
-          issueType: String(item.issueType || 'unknown'),
-          severity: String(item.severity || 'medium'),
-          generationId: item.generationId ? Number(item.generationId) : null,
-          phrase: item.phrase || null,
-          fingerprint: String(item.fingerprint || crypto.randomBytes(8).toString('hex')),
-          detailJson: JSON.stringify(item.detail || {}),
-          lastJobId: jobId ? Number(jobId) : null
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(issues) ? issues : []);
+    return knowledgeIssuesDomain.replace(this.db, issues, jobId);
   }
 
   saveKnowledgeSynonymCandidates(jobId, candidates = []) {
@@ -1361,99 +1324,11 @@ class DatabaseService {
   }
 
   replaceKnowledgeGrammarData(patterns = [], jobId) {
-    const transaction = this.db.transaction((payload, versionJobId) => {
-      this.db.prepare(`UPDATE knowledge_grammar_patterns SET is_active = 0 WHERE is_active = 1`).run();
-      this.db.prepare(`DELETE FROM knowledge_grammar_refs WHERE pattern_id IN (SELECT id FROM knowledge_grammar_patterns WHERE version_job_id = ?)`).run(versionJobId);
-      this.db.prepare(`DELETE FROM knowledge_grammar_patterns WHERE version_job_id = ?`).run(versionJobId);
-
-      const insertPattern = this.db.prepare(`
-        INSERT INTO knowledge_grammar_patterns (
-          pattern, explanation_zh, confidence, version_job_id, is_active
-        ) VALUES (
-          @pattern, @explanationZh, @confidence, @versionJobId, 1
-        )
-      `);
-      const insertRef = this.db.prepare(`
-        INSERT OR IGNORE INTO knowledge_grammar_refs (
-          pattern_id, generation_id, sentence_excerpt
-        ) VALUES (
-          @patternId, @generationId, @sentenceExcerpt
-        )
-      `);
-
-      let count = 0;
-      for (const pattern of payload) {
-        const result = insertPattern.run({
-          pattern: String(pattern.pattern || ''),
-          explanationZh: String(pattern.explanationZh || ''),
-          confidence: Number(pattern.confidence || 0),
-          versionJobId: Number(versionJobId)
-        });
-        const patternId = Number(result.lastInsertRowid);
-        const refs = Array.isArray(pattern.exampleRefs) ? pattern.exampleRefs : [];
-        refs.forEach((ref) => {
-          if (!ref.generationId) return;
-          insertRef.run({
-            patternId,
-            generationId: Number(ref.generationId),
-            sentenceExcerpt: String(ref.sentence || '')
-          });
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(patterns) ? patterns : [], Number(jobId));
+    return knowledgeGrammarDomain.replaceData(this.db, patterns, jobId);
   }
 
   replaceKnowledgeClusterData(clusters = [], jobId) {
-    const transaction = this.db.transaction((payload, versionJobId) => {
-      this.db.prepare(`UPDATE knowledge_clusters SET is_active = 0 WHERE is_active = 1`).run();
-      this.db.prepare(`DELETE FROM knowledge_cluster_cards WHERE cluster_id IN (SELECT id FROM knowledge_clusters WHERE version_job_id = ?)`).run(versionJobId);
-      this.db.prepare(`DELETE FROM knowledge_clusters WHERE version_job_id = ?`).run(versionJobId);
-
-      const insertCluster = this.db.prepare(`
-        INSERT INTO knowledge_clusters (
-          cluster_key, label, description, keywords_json, confidence, version_job_id, is_active
-        ) VALUES (
-          @clusterKey, @label, @description, @keywordsJson, @confidence, @versionJobId, 1
-        )
-      `);
-      const insertCard = this.db.prepare(`
-        INSERT OR IGNORE INTO knowledge_cluster_cards (
-          cluster_id, generation_id, score
-        ) VALUES (
-          @clusterId, @generationId, @score
-        )
-      `);
-
-      let count = 0;
-      for (const cluster of payload) {
-        const result = insertCluster.run({
-          clusterKey: String(cluster.clusterKey || ''),
-          label: String(cluster.label || 'Unknown'),
-          description: String(cluster.description || ''),
-          keywordsJson: JSON.stringify(cluster.keywords || []),
-          confidence: Number(cluster.confidence || 0),
-          versionJobId: Number(versionJobId)
-        });
-        const clusterId = Number(result.lastInsertRowid);
-        const cards = Array.isArray(cluster.cards) ? cluster.cards : [];
-        cards.forEach((card) => {
-          if (!card.generationId) return;
-          insertCard.run({
-            clusterId,
-            generationId: Number(card.generationId),
-            score: Number(card.score || 0)
-          });
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(clusters) ? clusters : [], Number(jobId));
+    return knowledgeClustersDomain.replaceData(this.db, clusters, jobId);
   }
 
   getKnowledgeOverview({ limit = 8 } = {}) {
@@ -2311,138 +2186,16 @@ class DatabaseService {
     };
   }
 
-  getKnowledgeGrammarPatterns({ pattern = '', limit = 30 } = {}) {
-    const hasPattern = String(pattern || '').trim().length > 0;
-    const rows = this.db.prepare(hasPattern
-      ? `
-        SELECT *
-        FROM knowledge_grammar_patterns
-        WHERE is_active = 1
-          AND pattern LIKE @pattern
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `
-      : `
-        SELECT *
-        FROM knowledge_grammar_patterns
-        WHERE is_active = 1
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `
-    ).all({
-      pattern: `%${String(pattern || '').trim()}%`,
-      limit: Math.max(1, Number(limit || 30))
-    });
-
-    const refs = this.db.prepare(`
-      SELECT r.pattern_id, r.generation_id, r.sentence_excerpt, g.phrase
-      FROM knowledge_grammar_refs r
-      LEFT JOIN generations g ON g.id = r.generation_id
-      WHERE r.pattern_id IN (
-        SELECT id FROM knowledge_grammar_patterns WHERE is_active = 1
-      )
-      ORDER BY r.id ASC
-    `).all();
-
-    const refsMap = new Map();
-    refs.forEach((row) => {
-      if (!refsMap.has(row.pattern_id)) refsMap.set(row.pattern_id, []);
-      refsMap.get(row.pattern_id).push({
-        generationId: row.generation_id,
-        phrase: row.phrase || '',
-        sentence: row.sentence_excerpt || ''
-      });
-    });
-
-    return rows.map((row) => ({
-      id: row.id,
-      pattern: row.pattern,
-      explanationZh: row.explanation_zh,
-      confidence: row.confidence,
-      refs: refsMap.get(row.id) || [],
-      updatedAt: row.updated_at
-    }));
+  getKnowledgeGrammarPatterns(filters = {}) {
+    return knowledgeGrammarDomain.listPatterns(this.db, filters);
   }
 
   getKnowledgeClusters(limit = 20) {
-    const clusters = this.db.prepare(`
-      SELECT *
-      FROM knowledge_clusters
-      WHERE is_active = 1
-      ORDER BY confidence DESC, updated_at DESC
-      LIMIT ?
-    `).all(Math.max(1, Number(limit || 20)));
-
-    const cards = this.db.prepare(`
-      SELECT cc.cluster_id, cc.generation_id, cc.score, g.phrase, g.folder_name
-      FROM knowledge_cluster_cards cc
-      LEFT JOIN generations g ON g.id = cc.generation_id
-      WHERE cc.cluster_id IN (
-        SELECT id FROM knowledge_clusters WHERE is_active = 1
-      )
-      ORDER BY cc.score DESC, cc.id ASC
-    `).all();
-
-    const cardMap = new Map();
-    cards.forEach((row) => {
-      if (!cardMap.has(row.cluster_id)) cardMap.set(row.cluster_id, []);
-      cardMap.get(row.cluster_id).push({
-        generationId: row.generation_id,
-        phrase: row.phrase || '',
-        folderName: row.folder_name || '',
-        score: row.score || 0
-      });
-    });
-
-    return clusters.map((row) => ({
-      id: row.id,
-      clusterKey: row.cluster_key,
-      label: row.label,
-      description: row.description,
-      keywords: safeJsonParse(row.keywords_json, []),
-      confidence: row.confidence,
-      cards: cardMap.get(row.id) || [],
-      updatedAt: row.updated_at
-    }));
+    return knowledgeClustersDomain.listClusters(this.db, limit);
   }
 
-  getKnowledgeIssues({ issueType, severity, resolved, limit = 100 } = {}) {
-    const conditions = ['1=1'];
-    const params = { limit: Math.max(1, Number(limit || 100)) };
-    if (issueType) {
-      conditions.push('issue_type = @issueType');
-      params.issueType = String(issueType);
-    }
-    if (severity) {
-      conditions.push('severity = @severity');
-      params.severity = String(severity);
-    }
-    if (resolved !== undefined) {
-      conditions.push('resolved = @resolved');
-      params.resolved = resolved ? 1 : 0;
-    }
-
-    const sql = `
-      SELECT *
-      FROM knowledge_issues
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY updated_at DESC
-      LIMIT @limit
-    `;
-    const rows = this.db.prepare(sql).all(params);
-    return rows.map((row) => ({
-      id: row.id,
-      issueType: row.issue_type,
-      severity: row.severity,
-      generationId: row.generation_id,
-      phrase: row.phrase,
-      fingerprint: row.fingerprint,
-      detail: safeJsonParse(row.detail_json, {}),
-      resolved: Boolean(row.resolved),
-      lastJobId: row.last_job_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }));
+  getKnowledgeIssues(filters = {}) {
+    return knowledgeIssuesDomain.list(this.db, filters);
   }
 
   getLatestKnowledgeSummary() {

@@ -676,3 +676,395 @@ test.describe('databaseService — experiments + few-shot', () => {
     } finally { db.close(); }
   });
 });
+
+// -- knowledge_issues --------------------------------------------------------
+
+test.describe('databaseService — knowledge_issues', () => {
+  function freshJobId(db, jobType = 'issues_audit') {
+    return db.createKnowledgeJob({ jobType }).id;
+  }
+
+  test.it('replaceKnowledgeIssues inserts and returns the count', () => {
+    const db = freshDb();
+    try {
+      const jobId = freshJobId(db);
+      const count = db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'high', fingerprint: 'fp1', phrase: 'hello', detail: { dup: 2 } },
+        { issueType: 'audio_missing', severity: 'low', fingerprint: 'fp2', phrase: 'world' }
+      ], jobId);
+      assert.equal(count, 2);
+      const rows = db.getKnowledgeIssues();
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0].lastJobId, jobId);
+      const dup = rows.find((r) => r.fingerprint === 'fp1');
+      assert.deepEqual(dup.detail, { dup: 2 });
+      assert.equal(dup.resolved, false);
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeIssues with a jobId clears that jobs prior rows first', () => {
+    const db = freshDb();
+    try {
+      const jobId = freshJobId(db);
+      db.replaceKnowledgeIssues([
+        { issueType: 'format_anomaly', severity: 'medium', fingerprint: 'old1' }
+      ], jobId);
+      assert.equal(db.getKnowledgeIssues().length, 1);
+      // Re-run for the same job with a different fingerprint — the old row
+      // must be cleared.
+      db.replaceKnowledgeIssues([
+        { issueType: 'format_anomaly', severity: 'medium', fingerprint: 'new1' }
+      ], jobId);
+      const rows = db.getKnowledgeIssues();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].fingerprint, 'new1');
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeIssues UPSERTs on (issue_type, fingerprint) and resets resolved=0', () => {
+    const db = freshDb();
+    try {
+      const j1 = freshJobId(db);
+      const j2 = freshJobId(db);
+      db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'low', fingerprint: 'sameFp', detail: { v: 1 } }
+      ], j1);
+      // Manually mark resolved=1 to verify the upsert resets it.
+      db.db.prepare(`UPDATE knowledge_issues SET resolved = 1 WHERE fingerprint = 'sameFp'`).run();
+      assert.equal(db.getKnowledgeIssues({ resolved: true }).length, 1);
+
+      // Re-emit with same (issue_type, fingerprint) but different severity / detail.
+      db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'high', fingerprint: 'sameFp', detail: { v: 2 } }
+      ], j2);
+      const rows = db.getKnowledgeIssues();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].severity, 'high');
+      assert.deepEqual(rows[0].detail, { v: 2 });
+      assert.equal(rows[0].resolved, false);
+      assert.equal(rows[0].lastJobId, j2);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeIssues filters by issueType / severity / resolved', () => {
+    const db = freshDb();
+    try {
+      const jobId = freshJobId(db);
+      db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'high', fingerprint: 'a' },
+        { issueType: 'duplicate_phrase', severity: 'low', fingerprint: 'b' },
+        { issueType: 'audio_missing', severity: 'high', fingerprint: 'c' }
+      ], jobId);
+
+      assert.equal(db.getKnowledgeIssues({ issueType: 'duplicate_phrase' }).length, 2);
+      assert.equal(db.getKnowledgeIssues({ severity: 'high' }).length, 2);
+      assert.equal(
+        db.getKnowledgeIssues({ issueType: 'duplicate_phrase', severity: 'high' }).length,
+        1
+      );
+      assert.equal(db.getKnowledgeIssues({ resolved: false }).length, 3);
+      assert.equal(db.getKnowledgeIssues({ resolved: true }).length, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeIssues honours the limit (clamped to >=1)', () => {
+    const db = freshDb();
+    try {
+      const jobId = freshJobId(db);
+      db.replaceKnowledgeIssues([
+        { issueType: 't', severity: 'low', fingerprint: 'x1' },
+        { issueType: 't', severity: 'low', fingerprint: 'x2' },
+        { issueType: 't', severity: 'low', fingerprint: 'x3' }
+      ], jobId);
+      assert.equal(db.getKnowledgeIssues({ limit: 2 }).length, 2);
+      // Falsy / missing limit falls back to the default of 100.
+      assert.equal(db.getKnowledgeIssues({ limit: 0 }).length, 3);
+      assert.equal(db.getKnowledgeIssues().length, 3);
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeIssues synthesises a fingerprint when omitted', () => {
+    const db = freshDb();
+    try {
+      const jobId = freshJobId(db);
+      db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'low' },
+        { issueType: 'duplicate_phrase', severity: 'low' }
+      ], jobId);
+      const rows = db.getKnowledgeIssues();
+      assert.equal(rows.length, 2);
+      // Synthesised fingerprints are non-empty and distinct.
+      assert.ok(rows[0].fingerprint && rows[1].fingerprint);
+      assert.notEqual(rows[0].fingerprint, rows[1].fingerprint);
+    } finally { db.close(); }
+  });
+});
+
+// -- knowledge_grammar -------------------------------------------------------
+
+test.describe('databaseService — knowledge_grammar', () => {
+  function newJobId(db) {
+    return db.createKnowledgeJob({ jobType: 'grammar_link' }).id;
+  }
+
+  test.it('replaceKnowledgeGrammarData inserts patterns + refs and returns count', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      const genId = db.insertGeneration({
+        generation: buildGenerationFixture().generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      const n = db.replaceKnowledgeGrammarData([
+        {
+          pattern: 'be + V-ing',
+          explanationZh: '进行时',
+          confidence: 0.91,
+          exampleRefs: [{ generationId: genId, sentence: 'I am working.' }]
+        },
+        {
+          pattern: 'have + p.p.',
+          explanationZh: '完成时',
+          confidence: 0.85
+        }
+      ], jobId);
+      assert.equal(n, 2);
+
+      const rows = db.getKnowledgeGrammarPatterns();
+      assert.equal(rows.length, 2);
+      const beIng = rows.find((r) => r.pattern === 'be + V-ing');
+      assert.equal(beIng.explanationZh, '进行时');
+      assert.equal(beIng.refs.length, 1);
+      assert.equal(beIng.refs[0].generationId, genId);
+      assert.equal(beIng.refs[0].sentence, 'I am working.');
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeGrammarData deactivates the prior active version', () => {
+    const db = freshDb();
+    try {
+      const j1 = newJobId(db);
+      db.replaceKnowledgeGrammarData([{ pattern: 'old', explanationZh: '旧', confidence: 0.5 }], j1);
+      assert.equal(db.getKnowledgeGrammarPatterns().length, 1);
+
+      // A second job replaces the active version with new rows.
+      const j2 = newJobId(db);
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'new-a', explanationZh: 'a', confidence: 0.9 },
+        { pattern: 'new-b', explanationZh: 'b', confidence: 0.8 }
+      ], j2);
+      const active = db.getKnowledgeGrammarPatterns();
+      assert.equal(active.length, 2);
+      assert.ok(active.every((r) => r.pattern.startsWith('new-')));
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeGrammarData rerunning the same jobId clears the prior rows for that job', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      db.replaceKnowledgeGrammarData([{ pattern: 'p1', explanationZh: 'x', confidence: 0.5 }], j);
+      // Re-run with the same job id and a different pattern set — old row gone.
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'p2', explanationZh: 'y', confidence: 0.6 }
+      ], j);
+      const rows = db.getKnowledgeGrammarPatterns();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].pattern, 'p2');
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeGrammarPatterns filters by pattern substring (LIKE)', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'be + V-ing', explanationZh: 'a', confidence: 0.5 },
+        { pattern: 'have + p.p.', explanationZh: 'b', confidence: 0.5 },
+        { pattern: 'should + V', explanationZh: 'c', confidence: 0.5 }
+      ], j);
+
+      const beish = db.getKnowledgeGrammarPatterns({ pattern: 'be' });
+      assert.equal(beish.length, 1);
+      assert.equal(beish[0].pattern, 'be + V-ing');
+
+      const plus = db.getKnowledgeGrammarPatterns({ pattern: '+' });
+      assert.equal(plus.length, 3); // all contain '+'
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeGrammarPatterns honours limit', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'a', explanationZh: '', confidence: 0.1 },
+        { pattern: 'b', explanationZh: '', confidence: 0.1 },
+        { pattern: 'c', explanationZh: '', confidence: 0.1 }
+      ], j);
+      assert.equal(db.getKnowledgeGrammarPatterns({ limit: 2 }).length, 2);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeGrammarPatterns groups refs by pattern id', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      const g1 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'one', baseFilename: 'one', requestId: 'rid_one' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      const g2 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'two', baseFilename: 'two', requestId: 'rid_two' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+
+      db.replaceKnowledgeGrammarData([
+        {
+          pattern: 'P',
+          explanationZh: '',
+          confidence: 0.5,
+          exampleRefs: [
+            { generationId: g1, sentence: 'first' },
+            { generationId: g2, sentence: 'second' }
+          ]
+        }
+      ], j);
+
+      const [row] = db.getKnowledgeGrammarPatterns();
+      assert.equal(row.refs.length, 2);
+      assert.deepEqual(row.refs.map((r) => r.sentence).sort(), ['first', 'second']);
+    } finally { db.close(); }
+  });
+});
+
+// -- knowledge_clusters ------------------------------------------------------
+
+test.describe('databaseService — knowledge_clusters', () => {
+  function newJobId(db) {
+    return db.createKnowledgeJob({ jobType: 'cluster' }).id;
+  }
+
+  test.it('replaceKnowledgeClusterData inserts clusters + cards and returns count', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      const genId = db.insertGeneration({
+        generation: buildGenerationFixture().generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      const n = db.replaceKnowledgeClusterData([
+        {
+          clusterKey: 'greetings',
+          label: 'Greetings',
+          description: 'hi family',
+          keywords: ['hello', 'hi'],
+          confidence: 0.8,
+          cards: [{ generationId: genId, score: 0.91 }]
+        },
+        {
+          clusterKey: 'farewells',
+          label: 'Farewells',
+          confidence: 0.7
+        }
+      ], jobId);
+      assert.equal(n, 2);
+
+      const rows = db.getKnowledgeClusters();
+      assert.equal(rows.length, 2);
+      // Sorted by confidence desc, so greetings (0.8) precedes farewells (0.7).
+      assert.equal(rows[0].clusterKey, 'greetings');
+      assert.deepEqual(rows[0].keywords, ['hello', 'hi']);
+      assert.equal(rows[0].cards.length, 1);
+      assert.equal(rows[0].cards[0].generationId, genId);
+      assert.equal(rows[0].cards[0].score, 0.91);
+      assert.equal(rows[1].cards.length, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeClusterData deactivates the prior active version', () => {
+    const db = freshDb();
+    try {
+      const j1 = newJobId(db);
+      db.replaceKnowledgeClusterData([{ clusterKey: 'old', label: 'Old', confidence: 0.5 }], j1);
+      assert.equal(db.getKnowledgeClusters().length, 1);
+
+      const j2 = newJobId(db);
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'new-a', label: 'A', confidence: 0.9 },
+        { clusterKey: 'new-b', label: 'B', confidence: 0.8 }
+      ], j2);
+      const active = db.getKnowledgeClusters();
+      assert.equal(active.length, 2);
+      assert.ok(active.every((r) => r.clusterKey.startsWith('new-')));
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeClusterData rerunning the same jobId clears prior rows for that job', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      db.replaceKnowledgeClusterData([{ clusterKey: 'c1', label: 'C1', confidence: 0.5 }], j);
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'c2', label: 'C2', confidence: 0.6 }
+      ], j);
+      const rows = db.getKnowledgeClusters();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].clusterKey, 'c2');
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeClusters orders by confidence desc and respects limit', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'low', label: 'L', confidence: 0.1 },
+        { clusterKey: 'high', label: 'H', confidence: 0.9 },
+        { clusterKey: 'mid', label: 'M', confidence: 0.5 }
+      ], j);
+
+      const all = db.getKnowledgeClusters();
+      assert.deepEqual(all.map((r) => r.clusterKey), ['high', 'mid', 'low']);
+
+      const top2 = db.getKnowledgeClusters(2);
+      assert.deepEqual(top2.map((r) => r.clusterKey), ['high', 'mid']);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeClusters sorts cards within a cluster by score desc', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      const g1 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'one', baseFilename: 'one', requestId: 'rid_cl_1' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      const g2 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'two', baseFilename: 'two', requestId: 'rid_cl_2' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      db.replaceKnowledgeClusterData([
+        {
+          clusterKey: 'k',
+          label: 'L',
+          confidence: 0.5,
+          cards: [
+            { generationId: g1, score: 0.3 },
+            { generationId: g2, score: 0.9 }
+          ]
+        }
+      ], j);
+      const [row] = db.getKnowledgeClusters();
+      assert.equal(row.cards.length, 2);
+      assert.equal(row.cards[0].score, 0.9);
+      assert.equal(row.cards[1].score, 0.3);
+    } finally { db.close(); }
+  });
+});
