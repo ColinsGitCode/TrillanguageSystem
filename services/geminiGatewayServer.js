@@ -1,8 +1,11 @@
 const http = require('http');
+const { gatewayTimeoutFor } = require('./geminiTimeouts');
+const { CODES, statusForCode, codedError } = require('./geminiErrors');
 
 const PORT = Number(process.env.GEMINI_GATEWAY_PORT || 18888);
 const EXECUTOR_BASE_URL = String(process.env.GEMINI_EXECUTOR_BASE_URL || 'http://host.docker.internal:13210').replace(/\/$/, '');
-const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_GATEWAY_TIMEOUT_MS || 130000);
+// Admin calls (reset/health) are quick; only /api/gemini gets the long budget.
+const ADMIN_TIMEOUT_MS = 8000;
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -11,6 +14,26 @@ function sendJson(res, status, payload) {
     'Content-Length': Buffer.byteLength(body)
   });
   res.end(body);
+}
+
+// Send a structured { error, code } body with the code's matching HTTP status.
+function sendCodedError(res, err) {
+  const code = (err && err.code) || CODES.GATEWAY_ERROR;
+  const status = (err && err.status) || statusForCode(code);
+  sendJson(res, status, { error: (err && err.message) || 'gateway error', code });
+}
+
+// Classify a failure talking to the executor into a structured gateway error.
+function classifyForwardError(err) {
+  if (err && err.code) return err;
+  if (err && err.name === 'AbortError') {
+    return codedError(CODES.GATEWAY_TIMEOUT, 'Gateway timed out waiting for executor');
+  }
+  const text = String((err && err.message) || err || '');
+  if (/fetch failed|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ENOTFOUND/i.test(text)) {
+    return codedError(CODES.GATEWAY_UPSTREAM_UNREACHABLE, `Executor unreachable: ${text}`);
+  }
+  return codedError(CODES.GATEWAY_ERROR, text || 'gateway error');
 }
 
 function collectBody(req) {
@@ -28,9 +51,9 @@ function collectBody(req) {
   });
 }
 
-async function forwardJson(pathname, payload, method = 'POST') {
+async function forwardJson(pathname, payload, method = 'POST', timeoutMs = ADMIN_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${EXECUTOR_BASE_URL}${pathname}`, {
       method,
@@ -86,13 +109,20 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/api/gemini') {
       const body = await collectBody(req);
       const payload = body ? JSON.parse(body) : {};
-      const result = await forwardJson('/api/gemini', payload, 'POST');
-      return sendJson(res, result.status, result.json);
+      // Wait one hop longer than the executor's budget so its clean timeout
+      // error propagates instead of the gateway aborting first.
+      const timeoutMs = gatewayTimeoutFor(payload.executionTimeoutMs || payload.timeoutMs);
+      try {
+        const result = await forwardJson('/api/gemini', payload, 'POST', timeoutMs);
+        return sendJson(res, result.status, result.json);
+      } catch (err) {
+        return sendCodedError(res, classifyForwardError(err));
+      }
     }
 
-    return sendJson(res, 404, { error: 'Not found' });
+    return sendJson(res, 404, { error: 'Not found', code: CODES.GATEWAY_ERROR });
   } catch (err) {
-    return sendJson(res, 500, { error: err.message || 'gateway error' });
+    return sendCodedError(res, classifyForwardError(err));
   }
 });
 

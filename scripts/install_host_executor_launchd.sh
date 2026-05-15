@@ -11,7 +11,7 @@ LOG_DIR="$PROJECT_ROOT/logs/launchd"
 STDOUT_PATH="$LOG_DIR/gemini-host-proxy.stdout.log"
 STDERR_PATH="$LOG_DIR/gemini-host-proxy.stderr.log"
 GEMINI_PROXY_PORT="${GEMINI_PROXY_PORT:-13210}"
-GEMINI_PROXY_TIMEOUT_MS="${GEMINI_PROXY_TIMEOUT_MS:-260000}"
+GEMINI_MAX_EXECUTION_BUDGET_MS="${GEMINI_MAX_EXECUTION_BUDGET_MS:-240000}"
 GEMINI_PROXY_FORCE_KILL_MS="${GEMINI_PROXY_FORCE_KILL_MS:-1000}"
 GEMINI_PROXY_MODEL="${GEMINI_PROXY_MODEL:-gemini-3-flash-preview}"
 
@@ -59,8 +59,8 @@ write_plist() {
     <string>${PATH}</string>
     <key>GEMINI_PROXY_PORT</key>
     <string>${GEMINI_PROXY_PORT}</string>
-    <key>GEMINI_PROXY_TIMEOUT_MS</key>
-    <string>${GEMINI_PROXY_TIMEOUT_MS}</string>
+    <key>GEMINI_MAX_EXECUTION_BUDGET_MS</key>
+    <string>${GEMINI_MAX_EXECUTION_BUDGET_MS}</string>
     <key>GEMINI_PROXY_FORCE_KILL_MS</key>
     <string>${GEMINI_PROXY_FORCE_KILL_MS}</string>
     <key>GEMINI_PROXY_MODEL</key>

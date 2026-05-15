@@ -3,6 +3,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY services/geminiGatewayServer.js /app/services/geminiGatewayServer.js
+COPY services/geminiTimeouts.js /app/services/geminiTimeouts.js
+COPY services/geminiErrors.js /app/services/geminiErrors.js
 
 EXPOSE 18888
 

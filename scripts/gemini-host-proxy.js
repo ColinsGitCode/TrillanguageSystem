@@ -1,8 +1,11 @@
 const http = require('http');
-const { spawn, spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { MAX_EXECUTION_BUDGET_MS } = require('../services/geminiTimeouts');
+const { stripFence, signalProcessTree } = require('../services/geminiProcessUtils');
+const { CODES, statusForCode, codedError } = require('../services/geminiErrors');
 
 const PORT = Number(process.env.GEMINI_PROXY_PORT || 13210);
 const GEMINI_BIN_CANDIDATES = [
@@ -11,13 +14,51 @@ const GEMINI_BIN_CANDIDATES = [
   '/opt/homebrew/bin/gemini',
   '/usr/local/bin/gemini'
 ].filter(Boolean);
-const TIMEOUT_MS = Number(process.env.GEMINI_PROXY_TIMEOUT_MS || 90000);
+// Hard ceiling on any single CLI run. Per-request budgets can be shorter but
+// never longer than this — see services/geminiTimeouts.js.
+const TIMEOUT_MS = MAX_EXECUTION_BUDGET_MS;
 const OUTPUT_DIR = process.env.GEMINI_PROXY_OUTPUT_DIR || '';
 const DEFAULT_MODEL = process.env.GEMINI_PROXY_MODEL || '';
 const MODEL_ARG = process.env.GEMINI_PROXY_MODEL_ARG || '--model';
 const PROMPT_ARG = process.env.GEMINI_PROXY_PROMPT_ARG || '-p';
 const ACTIVE_PROCS = new Set();
 const PROCESS_FORCE_KILL_MS = Number(process.env.GEMINI_PROXY_FORCE_KILL_MS || 1000);
+// Backpressure: the host runs a single gemini CLI install. Cap how many run
+// at once so concurrent callers (interactive + job queues) can't thrash it.
+const MAX_CONCURRENT = Math.max(1, Number(process.env.GEMINI_MAX_CONCURRENT || 2));
+// How long a request waits for a free slot before giving up with 429.
+const QUEUE_WAIT_MS = Math.max(0, Number(process.env.GEMINI_QUEUE_WAIT_MS || 30000));
+let inflight = 0;
+const slotWaiters = [];
+
+// Acquire a concurrency slot, waiting up to QUEUE_WAIT_MS. Resolves false if
+// no slot frees up in time — the caller should then return EXECUTOR_BUSY.
+function acquireSlot() {
+  if (inflight < MAX_CONCURRENT) {
+    inflight += 1;
+    return Promise.resolve(true);
+  }
+  if (QUEUE_WAIT_MS <= 0) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const waiter = () => {
+      clearTimeout(timer);
+      inflight += 1;
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      const idx = slotWaiters.indexOf(waiter);
+      if (idx >= 0) slotWaiters.splice(idx, 1);
+      resolve(false);
+    }, QUEUE_WAIT_MS);
+    slotWaiters.push(waiter);
+  });
+}
+
+function releaseSlot() {
+  inflight = Math.max(0, inflight - 1);
+  const next = slotWaiters.shift();
+  if (next) next();
+}
 const PROJECT_ROOT = path.join(__dirname, '..');
 const USER_HOME = os.homedir();
 const USER_GEMINI_DIR = path.join(USER_HOME, '.gemini');
@@ -113,72 +154,9 @@ function buildGeminiEnv() {
   return env;
 }
 
-function stripFence(text) {
-  if (!text) return '';
-  let cleaned = text.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
-  }
-  return cleaned;
-}
-
 function parsePositiveNumber(value, fallback = 0) {
   const num = Number(value);
   return Number.isFinite(num) && num > 0 ? num : fallback;
-}
-
-function collectDescendantPids(rootPid, seen = new Set()) {
-  const pid = Number(rootPid);
-  if (!Number.isFinite(pid) || pid <= 0 || seen.has(pid)) {
-    return [];
-  }
-  seen.add(pid);
-  let stdout = '';
-  try {
-    const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' });
-    stdout = result.stdout || '';
-  } catch (_) {
-    return [];
-  }
-  const children = stdout
-    .split(/\s+/)
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0 && !seen.has(value));
-
-  const all = [...children];
-  for (const child of children) {
-    all.push(...collectDescendantPids(child, seen));
-  }
-  return all;
-}
-
-function signalProcessTree(proc, signal = 'SIGTERM') {
-  if (!proc || !proc.pid) return 0;
-  const targets = [
-    ...collectDescendantPids(proc.pid),
-    proc.pid
-  ];
-  const uniqueTargets = [...new Set(targets)].filter((pid) => Number.isFinite(pid) && pid > 0);
-  let signalled = 0;
-
-  if (process.platform !== 'win32') {
-    try {
-      process.kill(-proc.pid, signal);
-      signalled += 1;
-    } catch (_) {
-      // Fall back to per-pid signalling below.
-    }
-  }
-
-  for (const pid of uniqueTargets) {
-    try {
-      process.kill(pid, signal);
-      signalled += 1;
-    } catch (_) {
-      // ignore stale pids
-    }
-  }
-  return signalled;
 }
 
 function resetRunningProcesses(reason = 'manual_reset') {
@@ -211,9 +189,13 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
     const promptText = String(prompt || '');
     const requestTimeoutMs = parsePositiveNumber(runtimeOptions.timeoutMs, TIMEOUT_MS);
     const requestedExecutionTimeoutMs = parsePositiveNumber(runtimeOptions.executionTimeoutMs, 0);
-    const timeoutMs = requestedExecutionTimeoutMs > 0
-      ? Math.min(requestedExecutionTimeoutMs, requestTimeoutMs)
-      : Math.min(requestTimeoutMs, TIMEOUT_MS);
+    // The executor's own ceiling always wins, regardless of what the caller asks.
+    const timeoutMs = Math.min(
+      requestedExecutionTimeoutMs > 0
+        ? Math.min(requestedExecutionTimeoutMs, requestTimeoutMs)
+        : requestTimeoutMs,
+      TIMEOUT_MS
+    );
     const selectedModel = String(modelOverride || DEFAULT_MODEL || '').trim();
     const args = [];
     if (selectedModel) {
@@ -251,7 +233,10 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
         setTimeout(() => cleanup(), PROCESS_FORCE_KILL_MS);
       }
       const modelLabel = selectedModel || 'default';
-      finish(false, new Error(`Gemini CLI timeout (${timeoutMs}ms, model=${modelLabel}, promptChars=${promptText.length})`));
+      finish(false, codedError(
+        CODES.EXECUTOR_TIMEOUT,
+        `Gemini CLI timeout (${timeoutMs}ms, model=${modelLabel}, promptChars=${promptText.length})`
+      ));
     }, timeoutMs);
 
     proc.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -259,14 +244,20 @@ function runGemini(prompt, baseName = 'suggestion', modelOverride = '', runtimeO
     proc.on('error', (err) => {
       clearTimeout(timer);
       cleanup();
-      finish(false, err);
+      finish(false, codedError(CODES.EXECUTOR_SPAWN_ERROR, err.message || 'gemini spawn failed'));
     });
 
     proc.on('close', (code) => {
       clearTimeout(timer);
       cleanup();
       if (code !== 0) {
-        return finish(false, new Error(stderr || `Gemini CLI exit code ${code}`));
+        const detail = stderr.trim() || `Gemini CLI exit code ${code}`;
+        // Rate limits surface as a non-zero exit; classify so callers back off.
+        const rateLimited = /rate limit|RESOURCE_EXHAUSTED|capacity|quota/i.test(detail);
+        return finish(false, codedError(
+          rateLimited ? CODES.RATE_LIMITED : CODES.EXECUTOR_CLI_ERROR,
+          detail
+        ));
       }
       const cleaned = stripFence(stdout);
       if (OUTPUT_DIR) {
@@ -296,12 +287,19 @@ function collectBody(req) {
       data += chunk.toString();
       if (data.length > 2 * 1024 * 1024) {
         req.destroy();
-        reject(new Error('Request body too large'));
+        reject(codedError(CODES.EXECUTOR_BAD_REQUEST, 'Request body too large'));
       }
     });
     req.on('end', () => resolve(data));
     req.on('error', reject);
   });
+}
+
+// Send a structured { error, code } body with the code's matching HTTP status.
+function sendCodedError(res, err) {
+  const code = (err && err.code) || CODES.EXECUTOR_ERROR;
+  const status = (err && err.status) || statusForCode(code);
+  sendJson(res, status, { error: (err && err.message) || 'executor error', code });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -312,6 +310,8 @@ const server = http.createServer(async (req, res) => {
       geminiBin: GEMINI_BIN,
       defaultModel: DEFAULT_MODEL || null,
       activeProcesses: ACTIVE_PROCS.size,
+      inflight,
+      maxConcurrent: MAX_CONCURRENT,
       geminiHome: GEMINI_HOME,
       geminiConfigDir: GEMINI_CONFIG_DIR,
       settingsPath: PROJECT_GEMINI_SETTINGS,
@@ -329,12 +329,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/gemini') {
+    let acquired = false;
     try {
       const body = await collectBody(req);
-      const data = body ? JSON.parse(body) : {};
+      let data;
+      try {
+        data = body ? JSON.parse(body) : {};
+      } catch (_) {
+        throw codedError(CODES.EXECUTOR_BAD_REQUEST, 'Invalid JSON body');
+      }
       const prompt = data.prompt;
       if (!prompt) {
-        return sendJson(res, 400, { error: 'Missing prompt' });
+        throw codedError(CODES.EXECUTOR_BAD_REQUEST, 'Missing prompt');
+      }
+      acquired = await acquireSlot();
+      if (!acquired) {
+        throw codedError(CODES.EXECUTOR_BUSY, `Executor busy (max ${MAX_CONCURRENT} concurrent, waited ${QUEUE_WAIT_MS}ms)`);
       }
       const result = await runGemini(prompt, data.baseName, data.model, {
         timeoutMs: data.timeoutMs,
@@ -342,11 +352,13 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(res, 200, result);
     } catch (err) {
-      return sendJson(res, 500, { error: err.message });
+      return sendCodedError(res, err);
+    } finally {
+      if (acquired) releaseSlot();
     }
   }
 
-  sendJson(res, 404, { error: 'Not found' });
+  sendJson(res, 404, { error: 'Not found', code: CODES.EXECUTOR_BAD_REQUEST });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
