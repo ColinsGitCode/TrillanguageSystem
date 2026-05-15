@@ -60,7 +60,11 @@ const {
 const { buildTrainingSidecarPath } = require('./lib/trainingSidecar');
 
 app.use(express.static('public'));
-app.use('/data', express.static(RECORDS_PATH));
+// Do NOT mount RECORDS_PATH as static. In the docker layout DB_PATH lives
+// inside RECORDS_PATH, so an `/data/<dbfile>` would have served the entire
+// SQLite database (verified: 200 OK on /data/trilingual_records.db and
+// /data/trilingual_records.db-wal). All audio + file reads go through
+// /api/folders/:folder/files/:file, which validates the path properly.
 app.use(express.json({ limit: '10mb' }));
 
 function resolveRecordMarkdownContent(record) {
