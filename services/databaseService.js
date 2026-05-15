@@ -3873,3 +3873,7 @@ class DatabaseService {
 
 // 导出单例
 module.exports = new DatabaseService();
+// Class itself is exposed so unit tests can spin up isolated in-memory
+// instances (`new DatabaseService(':memory:')`). Production code should
+// keep using the singleton.
+module.exports.DatabaseService = DatabaseService;
