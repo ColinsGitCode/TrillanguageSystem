@@ -44,6 +44,11 @@ const {
   cancelE2EKnowledgeJob,
 } = require('../lib/e2eFixtures');
 const { buildTrainingSidecarPath } = require('../lib/trainingSidecar');
+const {
+  persistTrainingAssetRecord,
+  generateAndPersistTrainingAsset,
+  backfillTrainingAssets,
+} = require('../services/trainingAssetService');
 
 module.exports = {
   buildPrompt,
@@ -103,4 +108,7 @@ module.exports = {
   createE2EKnowledgeJob,
   cancelE2EKnowledgeJob,
   buildTrainingSidecarPath,
+  persistTrainingAssetRecord,
+  generateAndPersistTrainingAsset,
+  backfillTrainingAssets,
 };

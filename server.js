@@ -1,7 +1,6 @@
 // server.js (Partial Update)
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const { buildPrompt, buildMarkdownPrompt } = require('./services/promptEngine');
@@ -19,7 +18,11 @@ const fewShotMetricsService = require('./services/fewShotMetricsService');
 const experimentTrackingService = require('./services/experimentTrackingService');
 const exampleReviewService = require('./services/exampleReviewService');
 const generationJobService = require('./services/generationJobService');
-const trainingPackService = require('./services/trainingPackService');
+const {
+    persistTrainingAssetRecord,
+    generateAndPersistTrainingAsset,
+    summarizeTrainingAsset,
+} = require('./services/trainingAssetService');
 const { normalizeAudioExtension, stripKnownAudioExtension } = require('./services/audioFormat');
 
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('./services/observabilityService');
@@ -33,7 +36,6 @@ const {
     PORT,
     RECORDS_PATH,
     DEFAULT_LLM_PROVIDER,
-    TRAINING_TEACHER_MODEL,
     DEFAULT_GEMINI_MODEL,
     E2E_TEST_MODE,
     toNumberOr,
@@ -49,7 +51,6 @@ const {
     buildE2ETrainingResult,
     buildE2EGenerateResult,
 } = require('./lib/e2eFixtures');
-const { buildTrainingSidecarPath } = require('./lib/trainingSidecar');
 const log = require('./lib/logger').child({ module: 'http' });
 
 app.use(express.static('public'));
@@ -59,21 +60,6 @@ app.use(express.static('public'));
 // /data/trilingual_records.db-wal). All audio + file reads go through
 // /api/folders/:folder/files/:file, which validates the path properly.
 app.use(express.json({ limit: '10mb' }));
-
-function resolveRecordMarkdownContent(record) {
-    const inlineMarkdown = String(record?.markdown_content || '').trim();
-    if (inlineMarkdown) return inlineMarkdown;
-    const mdPath = String(record?.md_file_path || '').trim();
-    if (!mdPath) return '';
-    try {
-        if (fs.existsSync(mdPath)) {
-            return fs.readFileSync(mdPath, 'utf-8');
-        }
-    } catch (err) {
-        console.warn('[Training] Failed to read markdown file for backfill:', mdPath, err.message);
-    }
-    return '';
-}
 
 function truncateExamplesForBudget(examples, outputMode, maxChars) {
     if (!Array.isArray(examples)) return [];
@@ -100,73 +86,6 @@ function truncateExamplesForBudget(examples, outputMode, maxChars) {
         if (outputText.length <= maxChars) return ex;
         return { ...ex, output: `${outputText.slice(0, maxChars)}...` };
     });
-}
-
-function buildTrainingFallbackResult({ phrase, cardType, markdown, reason, latencyMs = 0, validationErrors = [] }) {
-  const fallback = trainingPackService.fallbackHeuristicPack({ phrase, cardType, markdown });
-  return {
-    status: fallback.ok ? 'fallback' : 'failed',
-    source: 'heuristic',
-    payload: fallback.ok ? fallback.payload : null,
-    qualityScore: fallback.ok ? fallback.qualityScore : 0,
-    coverageScore: fallback.ok ? fallback.coverageScore : 0,
-    selfConfidence: fallback.ok ? fallback.selfConfidence : 0,
-    validationErrors,
-    fallbackReason: reason || 'heuristic_fallback',
-    providerUsed: 'gemini',
-    modelUsed: TRAINING_TEACHER_MODEL,
-    promptVersion: trainingPackService.TRAINING_PROMPT_VERSION,
-    schemaVersion: trainingPackService.TRAINING_SCHEMA_VERSION,
-    tokensInput: 0,
-    tokensOutput: 0,
-    tokensTotal: 0,
-    costTotal: 0,
-    latencyMs,
-    rawOutput: ''
-  };
-}
-
-function persistTrainingAssetRecord(context = {}, trainingResult) {
-  const generationId = Number(context.generationId || 0);
-  const phrase = String(context.phrase || '').trim();
-  const folderName = String(context.folderName || '').trim();
-  const baseName = String(context.baseName || '').trim();
-  const cardType = normalizeCardType(context.cardType);
-  const targetDir = String(context.targetDir || '').trim();
-  const sidecarPath = buildTrainingSidecarPath(targetDir, baseName);
-  const sidecarPayload = buildTrainingSidecarPayload(trainingResult, {
-    generationId,
-    phrase,
-    folderName,
-    baseName,
-    cardType
-  });
-  persistTrainingSidecar(sidecarPath, sidecarPayload);
-
-  return dbService.upsertCardTrainingAsset({
-    generationId,
-    folderName,
-    baseFilename: baseName,
-    cardType,
-    status: trainingResult.status,
-    source: trainingResult.source,
-    providerUsed: trainingResult.providerUsed,
-    modelUsed: trainingResult.modelUsed,
-    promptVersion: trainingResult.promptVersion,
-    schemaVersion: trainingResult.schemaVersion,
-    qualityScore: trainingResult.qualityScore,
-    selfConfidence: trainingResult.selfConfidence,
-    coverageScore: trainingResult.coverageScore,
-    validationErrors: trainingResult.validationErrors || [],
-    fallbackReason: trainingResult.fallbackReason || null,
-    tokensInput: trainingResult.tokensInput || 0,
-    tokensOutput: trainingResult.tokensOutput || 0,
-    tokensTotal: trainingResult.tokensTotal || 0,
-    costTotal: trainingResult.costTotal || 0,
-    latencyMs: trainingResult.latencyMs || 0,
-    payload: trainingResult.payload || null,
-    sidecarFilePath: sidecarPath
-  });
 }
 
 function normalizeAudioTasks(tasks, baseName) {
@@ -258,230 +177,6 @@ async function executeGenerationJobViaHttp(job) {
     throw error;
   }
   return data;
-}
-
-function buildTrainingSidecarPayload(trainingAsset, context = {}) {
-    return {
-        schemaVersion: trainingAsset?.schemaVersion || 'training_pack_v1',
-        generatedAt: new Date().toISOString(),
-        generationId: Number(context.generationId || trainingAsset?.generationId || 0) || null,
-        phrase: String(context.phrase || ''),
-        folderName: String(context.folderName || ''),
-        baseName: String(context.baseName || ''),
-        cardType: String(context.cardType || 'trilingual'),
-        status: trainingAsset?.status || 'failed',
-        source: trainingAsset?.source || 'heuristic',
-        providerUsed: trainingAsset?.providerUsed || 'gemini',
-        modelUsed: trainingAsset?.modelUsed || '',
-        promptVersion: trainingAsset?.promptVersion || '',
-        qualityScore: Number(trainingAsset?.qualityScore || 0),
-        coverageScore: Number(trainingAsset?.coverageScore || 0),
-        selfConfidence: Number(trainingAsset?.selfConfidence || 0),
-        validationErrors: Array.isArray(trainingAsset?.validationErrors) ? trainingAsset.validationErrors : [],
-        fallbackReason: trainingAsset?.fallbackReason || null,
-        payload: trainingAsset?.payload || null
-    };
-}
-
-function persistTrainingSidecar(sidecarPath, payload) {
-    if (!sidecarPath) return false;
-    try {
-        fs.writeFileSync(sidecarPath, JSON.stringify(payload, null, 2), 'utf-8');
-        return true;
-    } catch (err) {
-        console.warn('[Training] Failed to write sidecar:', sidecarPath, err.message);
-        return false;
-    }
-}
-
-function summarizeTrainingAsset(trainingAsset) {
-    if (!trainingAsset) {
-        return {
-            status: 'failed',
-            source: 'heuristic',
-            qualityScore: 0,
-            assetId: null
-        };
-    }
-    return {
-        status: trainingAsset.status || 'failed',
-        source: trainingAsset.source || 'heuristic',
-        qualityScore: Number(trainingAsset.qualityScore || 0),
-        assetId: Number(trainingAsset.id || 0) || null
-    };
-}
-
-async function generateAndPersistTrainingAsset(context = {}) {
-    const generationId = Number(context.generationId || 0);
-    if (!generationId) {
-        return {
-            status: 'failed',
-            source: 'heuristic',
-            qualityScore: 0,
-            assetId: null,
-            reason: 'missing_generation_id'
-        };
-    }
-
-    const phrase = String(context.phrase || '').trim();
-    const cardType = normalizeCardType(context.cardType);
-    const markdown = String(context.markdown || '').trim();
-    const folderName = String(context.folderName || '').trim();
-    const baseName = String(context.baseName || '').trim();
-    if (!phrase || !markdown || !folderName || !baseName) {
-        return {
-            status: 'failed',
-            source: 'heuristic',
-            qualityScore: 0,
-            assetId: null,
-            reason: 'missing_context'
-        };
-    }
-
-    let trainingResult;
-    try {
-        trainingResult = await trainingPackService.generateTrainingPack({
-            phrase,
-            cardType,
-            markdown,
-            providerHint: 'gemini',
-            model: TRAINING_TEACHER_MODEL,
-            baseName: `${baseName}_train`,
-            runtimeMode: context.runtimeMode || 'default'
-        });
-    } catch (err) {
-        trainingResult = buildTrainingFallbackResult({
-            phrase,
-            cardType,
-            markdown,
-            reason: 'generate_training_asset_failed',
-            validationErrors: [`generate_training_asset_failed: ${err.message}`],
-            latencyMs: 0
-        });
-        console.warn('[Training] generateAndPersistTrainingAsset fallback:', err.message);
-    }
-
-    const saved = persistTrainingAssetRecord(context, trainingResult);
-
-    return saved || {
-        ...summarizeTrainingAsset(trainingResult),
-        generationId
-    };
-}
-
-async function backfillTrainingAssets(options = {}) {
-    const limit = Math.max(1, Math.min(200, Number(options.limit || 20)));
-    const force = Boolean(options.force);
-    const rawCardType = String(options.cardType || '').trim();
-    const filters = {
-        limit,
-        force,
-        folderName: String(options.folderName || '').trim(),
-        cardType: rawCardType ? normalizeCardType(rawCardType) : '',
-        provider: String(options.provider || '').trim().toLowerCase()
-    };
-
-    const candidates = dbService.listTrainingBackfillCandidates(filters);
-    const results = [];
-    let readyCount = 0;
-    let repairedCount = 0;
-    let fallbackCount = 0;
-    let failedCount = 0;
-
-    for (const candidate of candidates) {
-        try {
-            const record = dbService.getGenerationById(candidate.id);
-            if (!record) {
-                results.push({
-                    generationId: candidate.id,
-                    phrase: candidate.phrase,
-                    folderName: candidate.folderName,
-                    baseName: candidate.baseFilename,
-                    status: 'skipped',
-                    reason: 'generation_not_found'
-                });
-                continue;
-            }
-
-            const markdown = resolveRecordMarkdownContent(record);
-            if (!markdown) {
-                results.push({
-                    generationId: record.id,
-                    phrase: record.phrase,
-                    folderName: record.folder_name,
-                    baseName: record.base_filename,
-                    status: 'skipped',
-                    reason: 'markdown_not_found'
-                });
-                continue;
-            }
-
-            const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : path.join(RECORDS_PATH, record.folder_name);
-            const training = await generateAndPersistTrainingAsset({
-                generationId: record.id,
-                phrase: record.phrase,
-                cardType: record.card_type,
-                markdown,
-                folderName: record.folder_name,
-                baseName: record.base_filename,
-                targetDir,
-                runtimeMode: 'backfill'
-            });
-
-            if (training.status === 'ready') readyCount += 1;
-            else if (training.status === 'repaired') repairedCount += 1;
-            else if (training.status === 'fallback') fallbackCount += 1;
-            else failedCount += 1;
-
-            results.push({
-                generationId: record.id,
-                phrase: record.phrase,
-                folderName: record.folder_name,
-                baseName: record.base_filename,
-                status: training.status || 'failed',
-                source: training.source || 'heuristic',
-                qualityScore: Number(training.qualityScore || 0),
-                assetId: Number(training.id || training.assetId || 0) || null
-            });
-        } catch (err) {
-            failedCount += 1;
-            results.push({
-                generationId: candidate.id,
-                phrase: candidate.phrase,
-                folderName: candidate.folderName,
-                baseName: candidate.baseFilename,
-                status: 'failed',
-                source: 'heuristic',
-                qualityScore: 0,
-                assetId: null,
-                reason: err.message
-            });
-            console.warn('[Training backfill] candidate failed:', candidate.id, err.message);
-        }
-    }
-
-    const summary = dbService.getTrainingBackfillSummary({
-        folderName: filters.folderName,
-        cardType: filters.cardType,
-        provider: filters.provider
-    });
-
-    return {
-        limit,
-        force,
-        requestedFilters: {
-            folderName: filters.folderName || null,
-            cardType: filters.cardType || null,
-            provider: filters.provider || null
-        },
-        processed: results.length,
-        readyCount,
-        repairedCount,
-        fallbackCount,
-        failedCount,
-        results,
-        summary
-    };
 }
 
 async function generateWithAutoFallback(phrase, provider, perf, options = {}) {
@@ -1127,109 +822,7 @@ app.use(require('./routes/review'));
 
 app.use(require('./routes/knowledge'));
 
-app.get('/api/training/backfill/summary', (req, res) => {
-    try {
-        const summary = dbService.getTrainingBackfillSummary({
-            folderName: String(req.query.folder || '').trim(),
-            cardType: String(req.query.cardType || '').trim(),
-            provider: String(req.query.provider || '').trim().toLowerCase()
-        });
-        res.json({ success: true, summary });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/training/backfill', async (req, res) => {
-    try {
-        const {
-            limit = 20,
-            force = false,
-            folder = '',
-            cardType = '',
-            provider = ''
-        } = req.body || {};
-
-        const result = await backfillTrainingAssets({
-            limit,
-            force,
-            folderName: folder,
-            cardType,
-            provider
-        });
-        res.json({ success: true, ...result });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/api/training/by-generation/:id', (req, res) => {
-    try {
-        const generationId = Number(req.params.id || 0);
-        if (!generationId) {
-            return res.status(400).json({ error: 'invalid generation id' });
-        }
-        const training = dbService.getCardTrainingAssetByGenerationId(generationId);
-        if (!training) {
-            return res.status(404).json({ error: 'training asset not found' });
-        }
-        res.json({ success: true, training });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/api/training/by-file', (req, res) => {
-    try {
-        const folder = String(req.query.folder || '').trim();
-        const base = String(req.query.base || '').trim();
-        if (!folder || !base) {
-            return res.status(400).json({ error: 'folder and base are required' });
-        }
-        const training = dbService.getCardTrainingAssetByFile(folder, base);
-        if (!training) {
-            return res.status(404).json({ error: 'training asset not found' });
-        }
-        res.json({ success: true, training });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/training/by-generation/:id/regenerate', async (req, res) => {
-    try {
-        const generationId = Number(req.params.id || 0);
-        if (!generationId) {
-            return res.status(400).json({ error: 'invalid generation id' });
-        }
-        const record = dbService.getGenerationById(generationId);
-        if (!record) {
-            return res.status(404).json({ error: 'generation not found' });
-        }
-        const targetDir = record.md_file_path ? path.dirname(record.md_file_path) : '';
-        const training = E2E_TEST_MODE
-          ? persistTrainingAssetRecord({
-              generationId: record.id,
-              phrase: record.phrase,
-              cardType: record.card_type,
-              folderName: record.folder_name,
-              baseName: record.base_filename,
-              targetDir
-            }, buildE2ETrainingResult({ phrase: record.phrase, cardType: record.card_type }))
-          : await generateAndPersistTrainingAsset({
-              generationId: record.id,
-              phrase: record.phrase,
-              cardType: record.card_type,
-              markdown: record.markdown_content || '',
-              folderName: record.folder_name,
-              baseName: record.base_filename,
-              targetDir
-            });
-        res.json({ success: true, training });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+app.use(require('./routes/training'));
 
 app.use(require('./routes/files'));
 
