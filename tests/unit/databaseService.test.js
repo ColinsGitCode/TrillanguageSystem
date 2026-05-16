@@ -1187,3 +1187,206 @@ test.describe('databaseService — knowledge_terms_index', () => {
     } finally { db.close(); }
   });
 });
+
+// -- knowledge_synonyms ------------------------------------------------------
+
+test.describe('databaseService — knowledge_synonyms', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+  function newJobId(db) {
+    return db.createKnowledgeJob({ jobType: 'synonym_boundary' }).id;
+  }
+
+  test.it('saveKnowledgeSynonymCandidates returns 0 for falsy jobId', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.saveKnowledgeSynonymCandidates(0, [{ pairKey: 'a||b' }]), 0);
+      assert.equal(db.saveKnowledgeSynonymCandidates(null, []), 0);
+    } finally { db.close(); }
+  });
+
+  test.it('saveKnowledgeSynonymCandidates inserts then upserts on (job_id, pair_key)', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      const n1 = db.saveKnowledgeSynonymCandidates(jobId, [
+        { pairKey: 'a||b', termA: 'a', termB: 'b', candidateScore: 0.5, status: 'queued' },
+        { pairKey: 'c||d', termA: 'c', termB: 'd', candidateScore: 0.7, status: 'queued' }
+      ]);
+      assert.equal(n1, 2);
+
+      // Re-run with same job + same pairKey but new score/status — should replace the row.
+      const n2 = db.saveKnowledgeSynonymCandidates(jobId, [
+        { pairKey: 'a||b', termA: 'a', termB: 'b', candidateScore: 0.9, status: 'done' }
+      ]);
+      assert.equal(n2, 1);
+
+      // The DELETE-then-INSERT pattern means a re-run wipes the previous rows.
+      const row = db.db.prepare(`SELECT COUNT(*) AS c FROM knowledge_synonym_candidates WHERE job_id = ?`).get(jobId);
+      assert.equal(row.c, 1);
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeSynonymData inserts a group and its members, returning count', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      const g1 = newGenId(db, { phrase: 'one', baseFilename: 'one', requestId: 'rid_syn_1' });
+      const g2 = newGenId(db, { phrase: 'two', baseFilename: 'two', requestId: 'rid_syn_2' });
+      const n = db.replaceKnowledgeSynonymData([
+        {
+          pairKey: 'big||large',
+          termA: 'big',
+          termB: 'large',
+          riskLevel: 'medium',
+          confidence: 0.88,
+          recommendation: 'context-sensitive',
+          members: [
+            { generationId: g1, term: 'big', lang: 'en' },
+            { generationId: g2, term: 'large', lang: 'en' }
+          ]
+        }
+      ], jobId);
+      assert.equal(n, 1);
+
+      const hits = db.getKnowledgeSynonymsByPhrase('big');
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0].pairKey, 'big||large');
+      assert.equal(hits[0].confidence, 0.88);
+      assert.equal(hits[0].members.length, 2);
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeSynonymData deactivates the prior active version', () => {
+    const db = freshDb();
+    try {
+      const j1 = newJobId(db);
+      db.replaceKnowledgeSynonymData([{ pairKey: 'old||pair', termA: 'old', termB: 'pair', confidence: 0.5 }], j1);
+      assert.equal(db.listKnowledgeSynonymBoundaries().total, 1);
+
+      const j2 = newJobId(db);
+      db.replaceKnowledgeSynonymData([{ pairKey: 'new||pair', termA: 'new', termB: 'pair', confidence: 0.7 }], j2);
+      const list = db.listKnowledgeSynonymBoundaries();
+      assert.equal(list.total, 1);
+      assert.equal(list.items[0].pairKey, 'new||pair');
+    } finally { db.close(); }
+  });
+
+  test.it('replaceKnowledgeSynonymData re-emit replaces members on the same group', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      const g1 = newGenId(db, { phrase: 'x', baseFilename: 'x', requestId: 'rid_syn_x' });
+      const g2 = newGenId(db, { phrase: 'y', baseFilename: 'y', requestId: 'rid_syn_y' });
+
+      db.replaceKnowledgeSynonymData([
+        {
+          pairKey: 'p||q', termA: 'p', termB: 'q',
+          evidenceHash: 'hash1', schemaVersion: '1.0.0',
+          members: [{ generationId: g1, term: 'p', lang: 'en' }]
+        }
+      ], jobId);
+
+      db.replaceKnowledgeSynonymData([
+        {
+          pairKey: 'p||q', termA: 'p', termB: 'q',
+          evidenceHash: 'hash1', schemaVersion: '1.0.0',
+          members: [{ generationId: g2, term: 'q', lang: 'en' }]
+        }
+      ], jobId);
+
+      const [hit] = db.getKnowledgeSynonymsByPhrase('p');
+      assert.equal(hit.members.length, 1);
+      assert.equal(hit.members[0].generationId, g2);
+      assert.equal(hit.members[0].term, 'q');
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeSynonymBoundaries paginates + risk-orders + filters by query/riskLevel/jobId', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      db.replaceKnowledgeSynonymData([
+        { pairKey: 'low||a', termA: 'low', termB: 'a', riskLevel: 'low', confidence: 0.1 },
+        { pairKey: 'high||a', termA: 'high', termB: 'a', riskLevel: 'high', confidence: 0.9 },
+        { pairKey: 'med||a', termA: 'med', termB: 'a', riskLevel: 'medium', confidence: 0.5 }
+      ], jobId);
+
+      const all = db.listKnowledgeSynonymBoundaries();
+      assert.equal(all.total, 3);
+      // Risk-level desc (high > medium > low)
+      assert.deepEqual(all.items.map((r) => r.riskLevel), ['high', 'medium', 'low']);
+
+      const onlyHigh = db.listKnowledgeSynonymBoundaries({ riskLevel: 'high' });
+      assert.equal(onlyHigh.total, 1);
+      assert.equal(onlyHigh.items[0].pairKey, 'high||a');
+
+      const byQuery = db.listKnowledgeSynonymBoundaries({ query: 'med' });
+      assert.equal(byQuery.total, 1);
+      assert.equal(byQuery.items[0].pairKey, 'med||a');
+
+      const paged = db.listKnowledgeSynonymBoundaries({ page: 1, pageSize: 2 });
+      assert.equal(paged.total, 3);
+      assert.equal(paged.items.length, 2);
+      const page2 = db.listKnowledgeSynonymBoundaries({ page: 2, pageSize: 2 });
+      assert.equal(page2.items.length, 1);
+
+      // Filtering by jobId returns rows for *that* job regardless of is_active.
+      const byJob = db.listKnowledgeSynonymBoundaries({ jobId });
+      assert.equal(byJob.total, 3);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeSynonymBoundaryDetail returns null for empty pairKey', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getKnowledgeSynonymBoundaryDetail({}), null);
+      assert.equal(db.getKnowledgeSynonymBoundaryDetail({ pairKey: '   ' }), null);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeSynonymBoundaryDetail looks up by pair_key (case-insensitive) and inflates members + candidate', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      db.saveKnowledgeSynonymCandidates(jobId, [
+        { pairKey: 'pp||qq', termA: 'pp', termB: 'qq', candidateScore: 0.77, evidenceHash: 'ev1', status: 'done' }
+      ]);
+      db.replaceKnowledgeSynonymData([
+        {
+          pairKey: 'pp||qq', termA: 'pp', termB: 'qq',
+          confidence: 0.8, recommendation: 'reco',
+          members: [{ term: 'pp', lang: 'en' }]
+        }
+      ], jobId);
+
+      const detail = db.getKnowledgeSynonymBoundaryDetail({ pairKey: 'PP||QQ' });
+      assert.ok(detail);
+      assert.equal(detail.pairKey, 'pp||qq');
+      assert.equal(detail.recommendation, 'reco');
+      assert.equal(detail.members.length, 1);
+      assert.equal(detail.candidate?.candidateScore, 0.77);
+      assert.equal(detail.candidate?.status, 'done');
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeSynonymBoundaryDetail supports id: lookup', () => {
+    const db = freshDb();
+    try {
+      const jobId = newJobId(db);
+      db.replaceKnowledgeSynonymData([
+        { pairKey: 'k1||k2', termA: 'k1', termB: 'k2', confidence: 0.5 }
+      ], jobId);
+      const row = db.db.prepare(`SELECT id FROM knowledge_synonym_groups LIMIT 1`).get();
+      const detail = db.getKnowledgeSynonymBoundaryDetail({ pairKey: `id:${row.id}` });
+      assert.ok(detail);
+      assert.equal(detail.id, row.id);
+      assert.equal(detail.pairKey, 'k1||k2');
+    } finally { db.close(); }
+  });
+});
