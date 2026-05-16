@@ -1068,3 +1068,122 @@ test.describe('databaseService — knowledge_clusters', () => {
     } finally { db.close(); }
   });
 });
+
+// -- knowledge_terms_index ---------------------------------------------------
+
+test.describe('databaseService — knowledge_terms_index', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+  function newJobId(db) {
+    return db.createKnowledgeJob({ jobType: 'index' }).id;
+  }
+
+  test.it('upsertKnowledgeTermsIndex returns 0 for empty / non-array input', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.upsertKnowledgeTermsIndex([], 1), 0);
+      assert.equal(db.upsertKnowledgeTermsIndex(null, 1), 0);
+      assert.equal(db.upsertKnowledgeTermsIndex(undefined), 0);
+    } finally { db.close(); }
+  });
+
+  test.it('upsertKnowledgeTermsIndex inserts rows and getKnowledgeIndex returns them', () => {
+    const db = freshDb();
+    try {
+      const g1 = newGenId(db, { phrase: 'hello', baseFilename: 'hello', requestId: 'rid_ti_1' });
+      const g2 = newGenId(db, { phrase: 'bonjour', baseFilename: 'bonjour', requestId: 'rid_ti_2' });
+      const jobId = newJobId(db);
+
+      const n = db.upsertKnowledgeTermsIndex([
+        {
+          generationId: g1, phrase: 'hello',
+          enHeadword: 'hello', jaHeadword: 'こんにちは', zhHeadword: '你好',
+          aliases: ['hi'], tags: ['greeting'], score: 0.9
+        },
+        { generationId: g2, phrase: 'bonjour', enHeadword: 'good day', score: 0.7 }
+      ], jobId);
+      assert.equal(n, 2);
+
+      const all = db.getKnowledgeIndex();
+      assert.equal(all.length, 2);
+      const hello = all.find((r) => r.generationId === g1);
+      assert.deepEqual(hello.aliases, ['hi']);
+      assert.deepEqual(hello.tags, ['greeting']);
+      assert.equal(hello.jaHeadword, 'こんにちは');
+    } finally { db.close(); }
+  });
+
+  test.it('upsertKnowledgeTermsIndex UPSERTs on generation_id (one row per generation)', () => {
+    const db = freshDb();
+    try {
+      const g = newGenId(db, { phrase: 'pet', baseFilename: 'pet', requestId: 'rid_ti_up' });
+      const job = newJobId(db);
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g, phrase: 'pet', enHeadword: 'pet', score: 0.5, tags: ['v1'] }
+      ], job);
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g, phrase: 'pet (revised)', enHeadword: 'PET', score: 0.95, tags: ['v2'] }
+      ], job);
+
+      const rows = db.getKnowledgeIndex();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].phrase, 'pet (revised)');
+      assert.equal(rows[0].enHeadword, 'PET');
+      assert.equal(rows[0].score, 0.95);
+      assert.deepEqual(rows[0].tags, ['v2']);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeIndex matches query across phrase / en / ja / zh headwords', () => {
+    const db = freshDb();
+    try {
+      const g1 = newGenId(db, { phrase: 'apple', baseFilename: 'apple', requestId: 'rid_idx_a' });
+      const g2 = newGenId(db, { phrase: 'p1', baseFilename: 'p1', requestId: 'rid_idx_b' });
+      const g3 = newGenId(db, { phrase: 'p2', baseFilename: 'p2', requestId: 'rid_idx_c' });
+      const g4 = newGenId(db, { phrase: 'p3', baseFilename: 'p3', requestId: 'rid_idx_d' });
+
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g1, phrase: 'apple', enHeadword: 'apple' },
+        { generationId: g2, phrase: 'unrelated', enHeadword: 'pineapple' }, // matches via en
+        { generationId: g3, phrase: 'fruit', enHeadword: 'x', jaHeadword: 'りんごapple', zhHeadword: 'x' }, // matches via ja
+        { generationId: g4, phrase: 'other', enHeadword: 'x', jaHeadword: 'x', zhHeadword: '苹apple果' } // matches via zh
+      ], newJobId(db));
+
+      const hits = db.getKnowledgeIndex({ query: 'apple' });
+      const gens = hits.map((h) => h.generationId).sort();
+      assert.deepEqual(gens, [g1, g2, g3, g4].sort());
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeIndex honours limit (clamped >=1) and falls back to default on falsy', () => {
+    const db = freshDb();
+    try {
+      const ids = [
+        newGenId(db, { phrase: 'a', baseFilename: 'a', requestId: 'rid_lim_a' }),
+        newGenId(db, { phrase: 'b', baseFilename: 'b', requestId: 'rid_lim_b' }),
+        newGenId(db, { phrase: 'c', baseFilename: 'c', requestId: 'rid_lim_c' })
+      ];
+      db.upsertKnowledgeTermsIndex(ids.map((id) => ({ generationId: id, phrase: 'p' })), newJobId(db));
+
+      assert.equal(db.getKnowledgeIndex({ limit: 2 }).length, 2);
+      // limit:0 → falls back to default 50, returns all 3
+      assert.equal(db.getKnowledgeIndex({ limit: 0 }).length, 3);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeIndex returns empty when nothing matches the query', () => {
+    const db = freshDb();
+    try {
+      const g = newGenId(db);
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g, phrase: 'something', enHeadword: 'something' }
+      ], newJobId(db));
+      assert.deepEqual(db.getKnowledgeIndex({ query: '__no_such_token__' }), []);
+    } finally { db.close(); }
+  });
+});
