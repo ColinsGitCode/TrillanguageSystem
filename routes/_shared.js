@@ -47,8 +47,14 @@ const { buildTrainingSidecarPath } = require('../lib/trainingSidecar');
 const {
   persistTrainingAssetRecord,
   generateAndPersistTrainingAsset,
+  summarizeTrainingAsset,
   backfillTrainingAssets,
 } = require('../services/trainingAssetService');
+const {
+  generateWithProvider,
+  generateWithAutoFallback,
+} = require('../services/cardGenerationService');
+const { validateGeneratedContent, normalizeAudioTasks } = require('../lib/generationHelpers');
 
 module.exports = {
   buildPrompt,
@@ -110,5 +116,10 @@ module.exports = {
   buildTrainingSidecarPath,
   persistTrainingAssetRecord,
   generateAndPersistTrainingAsset,
+  summarizeTrainingAsset,
   backfillTrainingAssets,
+  generateWithProvider,
+  generateWithAutoFallback,
+  validateGeneratedContent,
+  normalizeAudioTasks,
 };
