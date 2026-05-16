@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~130 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~221 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e:smoke          # Happy-path generation/OCR/history (per file — see note below)
@@ -53,17 +53,23 @@ npm run training:backfill       # Backfill training packs for existing cards
 ### Directory map
 
 ```
-server.js              ~860 lines — middleware + mount routes + the still-inline
-                       generation pipeline (generateWithProvider, /api/generate,
-                       /api/ocr) + error middleware + listen
+server.js              ~100 lines — bootstrap only: middleware, route mounting,
+                       generation_jobs HTTP-worker bridge, error middleware,
+                       listen. All business logic lives in services/ + routes/
 lib/                   Process-wide infrastructure
 ├── logger.js          Zero-dep structured logger (JSON / pretty / silent)
 ├── serverConfig.js    Env-derived consts + pure helpers
 ├── throttle.js        Per-IP generate throttle with periodic sweep
 ├── e2eFixtures.js     E2E test fixtures (knowledge jobs, generate result)
+├── generationHelpers.js  Pure helpers used by the generate pipeline
+│                         (truncateExamplesForBudget, normalizeAudioTasks,
+│                         validateGeneratedContent, validateSanitized
+│                         GeminiCardResponse, extractGeminiMarkdownResponse)
 └── trainingSidecar.js Training sidecar path helper
 routes/                Each file = one express.Router() for a domain
 ├── _shared.js         Re-exports services + lib for routes to destructure
+├── generate.js        /api/generate (the main card-generation endpoint)
+├── ocr.js             /api/ocr (tesseract / local / auto)
 ├── generationJobs.js  /api/generation-jobs/*  (8 routes)
 ├── health.js          /api/health + /api/gemini/auth/*
 ├── history.js         /api/history /statistics /search /recent
@@ -74,7 +80,31 @@ routes/                Each file = one express.Router() for a domain
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            /api/experiments + DELETE /api/records/:id
 services/              Business logic
-├── databaseService.js 3875 lines — god object scheduled for domain split
+├── databaseService.js ~1100 lines — schema setup, additive migrations
+│                       (ensureTableColumns), and thin delegations to
+│                       services/db/<domain>.js (see below)
+├── db/                Per-domain SQL modules each backed by direct unit tests
+│   ├── helpers.js               safeJsonParse
+│   ├── generations.js           generations + observability_metrics +
+│   │                            audio_files insert txn + query/FTS/recent
+│   ├── highlights.js            card_highlights CRUD + stats
+│   ├── trainingAssets.js        card_training_assets CRUD + backfill joins
+│   ├── generationJobs.js        generation_jobs lifecycle + events + retry
+│   ├── experiments.js           few_shot_runs + experiment_samples + rounds
+│   ├── knowledgeJobs.js         knowledge_jobs lifecycle + synonym meta
+│   ├── knowledgeIssues.js       knowledge_issues replace + filtered list
+│   ├── knowledgeGrammar.js      knowledge_grammar_patterns + refs
+│   ├── knowledgeClusters.js     knowledge_clusters + cluster_cards
+│   ├── knowledgeTermsIndex.js   knowledge_terms_index upsert + search
+│   ├── knowledgeSynonyms.js     candidates + groups + members + boundary
+│   │                            detail; owns the pair-key helpers
+│   └── knowledgeRelations.js    knowledge_outputs_raw write + overview /
+│                                aggregateByGenerationIds / card/term/
+│                                pattern/cluster relations / latest summary
+├── cardGenerationService.js  Core generation pipeline (generateWithProvider):
+│                             prompt build → optional few-shot enhancement →
+│                             provider call → response normalize → tokens /
+│                             cost / quality / metadata. No DB, no fs, no TTS.
 ├── databaseHelpers.js
 ├── geminiTimeouts.js  Single-knob timeout hierarchy (client > gateway > exec)
 ├── geminiErrors.js    Structured error codes (EXECUTOR_TIMEOUT, RATE_LIMITED…)
@@ -101,7 +131,7 @@ services/              Business logic
 ├── statisticsService.js
 └── e2eFixtureService.js / fileManager.js
 scripts/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~131 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~220 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (25+ tables, FTS5 virtual table)
 ```
@@ -115,7 +145,7 @@ User Input → promptEngine (CoT + few-shot) → LLM provider → JSON → htmlR
 
 ### LLM provider chain
 
-`server.js` picks a provider per request:
+[services/cardGenerationService.js](services/cardGenerationService.js) picks a provider per request:
 - **`provider === 'local'`** → `services/localLlmService.js` (OpenAI-compatible local endpoint, `LLM_BASE_URL`)
 - **`provider === 'gemini'`** with **`GEMINI_MODE=host-proxy`** (default, production path) → `services/geminiProxyService.js`
 - **`provider === 'gemini'`** with **`GEMINI_MODE=cli`** → `services/geminiCliService.js` (also enables `/api/gemini/auth/*`)
@@ -137,7 +167,7 @@ viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
 
 ### Persistence
 
-- **SQLite** via `better-sqlite3`. [services/databaseService.js](services/databaseService.js) (3875 lines) is the data layer; planned for domain split (knowledge — 45%, generation jobs, training assets, etc.). The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
+- **SQLite** via `better-sqlite3`. [services/databaseService.js](services/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/db/](services/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
 - Schema in `database/schema.sql` (~25 tables: `generations`, `audio_files`, `observability_metrics`, `generation_jobs`/`_events`, `few_shot_*`, `experiment_*`, `review_*`, `example_*`, `knowledge_*`, `card_training_assets`, `card_highlights`, …). FTS5 virtual table backs full-text search.
 - **Migrations are additive and automatic** via `ensureTableColumns(...)` on startup. Add columns there, not as separate migration files.
 - Generated card files live on disk under `RECORDS_PATH`, `YYYYMMDD` folders, `(2)`/`(3)` suffixes on conflicts (`fileManager.js`).
@@ -163,7 +193,7 @@ Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `kno
 
 ## Logging
 
-[lib/logger.js](lib/logger.js) is the project logger — pino/bunyan-style API, zero deps, structured JSON by default, pretty mode for dev. **Don't reach for `console.*`** in new code; the only remaining `console.*` calls are inside `server.js`'s `generateWithProvider` (Phase 4.5 will migrate them).
+[lib/logger.js](lib/logger.js) is the project logger — pino/bunyan-style API, zero deps, structured JSON by default, pretty mode for dev. **Don't reach for `console.*`** in new code.
 
 ```js
 const log = require('./lib/logger').child({ module: 'svc/foo' });
@@ -176,7 +206,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~131 tests across 13 modules in ~1s.
+- Run with `npm test`. ~221 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` / `goldenExamplesService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
@@ -232,9 +262,8 @@ The `gemini` CLI binary + [scripts/gemini-host-proxy.js](scripts/gemini-host-pro
 
 ## Known unfinished work
 
-- **server.js Phase 4.5**: `generateWithProvider` + `generateWithAutoFallback` + `/api/generate` + `/api/ocr` are still inline. Need unit tests for the 5 remaining pure helpers (`validateGeneratedContent`, `normalizeAudioTasks`, `validateSanitizedGeminiCardResponse`, `truncateExamplesForBudget`, `extractGeminiMarkdownResponse`) before extraction is safe.
-- **databaseService domain split**: 14 baseline tests exist; the file itself is unchanged. Knowledge subsystem (~1700 lines, 45%) is the natural first slice. Add domain-specific tests before each extraction.
 - **E2E cross-file pollution**: shared server + shared DB. Per-file isolation (unique `DB_PATH` / `RECORDS_PATH` per spec) would let `playwright test` over the whole dir.
+- **knowledgeAnalysisEngine.js (~1000 lines)** still has no direct unit tests — it's exercised through `/api/knowledge/*` integration only. Splitting per task type (summary / index / synonym_boundary / grammar_link / cluster / issues_audit) would be the natural follow-on to the `services/db/knowledge*.js` split.
 
 ## Docs
 
