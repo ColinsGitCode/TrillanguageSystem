@@ -57,6 +57,11 @@ async function executeGenerationJobViaHttp(job) {
 }
 
 // API Endpoints
+if (process.env.E2E_TEST_MODE === '1') {
+    // Test-only: lets each Playwright spec wipe DB + records dir without
+    // restarting the server. NEVER mount in production.
+    app.use(require('./routes/testReset'));
+}
 app.use(require('./routes/generationJobs'));
 app.use(require('./routes/generate'));
 app.use(require('./routes/ocr'));

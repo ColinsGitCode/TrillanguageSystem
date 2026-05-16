@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { resetServerState } = require('./fixtures/resetServerState');
 
 let basePhrase = `PW smoke base ${Date.now()}`;
 let restoredPhraseA = `PW restore A ${Date.now()}`;
@@ -72,6 +73,12 @@ async function deleteByFile(request, folder, base) {
 }
 
 test.describe.serial('Playwright smoke', () => {
+  test.beforeAll(async ({ request }) => {
+    // Reset DB + records dir so this spec file is hermetic regardless of
+    // what other specs ran before it.
+    await resetServerState(request);
+  });
+
   test('01 首页加载与空闲状态', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('hero-queue-state')).toHaveText('IDLE');

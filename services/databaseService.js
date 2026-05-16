@@ -24,6 +24,7 @@ const knowledgeClustersDomain = require('./db/knowledgeClusters');
 const knowledgeTermsIndexDomain = require('./db/knowledgeTermsIndex');
 const knowledgeSynonymsDomain = require('./db/knowledgeSynonyms');
 const knowledgeRelationsDomain = require('./db/knowledgeRelations');
+const testResetDomain = require('./db/testReset');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -1102,6 +1103,13 @@ class DatabaseService {
 
   getLatestKnowledgeSummary() {
     return knowledgeRelationsDomain.getLatestSummary(this.db);
+  }
+
+  // Test-only: wipe every project table. Gated by E2E_TEST_MODE at the
+  // route layer; safe to expose here because it's a no-op on the production
+  // singleton unless something explicitly calls it.
+  truncateAllForTests() {
+    return testResetDomain.truncateAll(this.db);
   }
 
   /**

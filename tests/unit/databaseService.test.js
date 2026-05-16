@@ -1598,3 +1598,78 @@ test.describe('databaseService — knowledge_relations + overview + summary', ()
     } finally { db.close(); }
   });
 });
+
+// -- test reset --------------------------------------------------------------
+
+test.describe('databaseService — truncateAllForTests', () => {
+  test.it('wipes generations + dependent child rows', () => {
+    const db = freshDb();
+    try {
+      const id = db.insertGeneration(buildGenerationFixture({
+        audioFiles: [{
+          language: 'en', text: 'hi', filenameSuffix: '_en_1', filePath: '/tmp/x.mp3',
+          ttsProvider: 't', ttsModel: 't', status: 'ready'
+        }]
+      }));
+      assert.ok(id > 0);
+      assert.ok(db.getGenerationById(id));
+
+      db.truncateAllForTests();
+
+      assert.equal(db.getGenerationById(id), null);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM generations').get().c, 0);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM audio_files').get().c, 0);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM observability_metrics').get().c, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('wipes knowledge_* + experiments + jobs tables', () => {
+    const db = freshDb();
+    try {
+      // Touch a representative row in each domain so the truncate has work to do.
+      const job = db.createKnowledgeJob({ jobType: 'index' }).id;
+      const g = db.insertGeneration(buildGenerationFixture());
+      db.upsertKnowledgeTermsIndex([{ generationId: g, phrase: 'x', score: 0.1 }], job);
+      db.replaceKnowledgeIssues([{ issueType: 't', severity: 'low', fingerprint: 'fp' }], job);
+      db.replaceKnowledgeGrammarData([{ pattern: 'p', explanationZh: '', confidence: 0.1 }], job);
+      db.replaceKnowledgeClusterData([{ clusterKey: 'k', label: 'L', confidence: 0.1 }], job);
+      db.replaceKnowledgeSynonymData([{ pairKey: 'a||b', termA: 'a', termB: 'b' }], job);
+      db.insertKnowledgeRawOutput(job, 1, { input: {}, output: {} });
+      db.upsertExperimentRound({ experimentId: 'e1', roundNumber: 0 });
+      db.insertExperimentSample({ experimentId: 'e1', roundNumber: 0, phrase: 'p', qualityScore: 0 });
+
+      // sanity: at least one row in each
+      const cnt = (t) => db.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+      assert.ok(cnt('knowledge_jobs') > 0);
+      assert.ok(cnt('knowledge_terms_index') > 0);
+      assert.ok(cnt('knowledge_issues') > 0);
+      assert.ok(cnt('knowledge_synonym_groups') > 0);
+      assert.ok(cnt('knowledge_outputs_raw') > 0);
+      assert.ok(cnt('experiment_rounds') > 0);
+      assert.ok(cnt('experiment_samples') > 0);
+
+      db.truncateAllForTests();
+
+      for (const t of [
+        'knowledge_jobs', 'knowledge_terms_index', 'knowledge_issues',
+        'knowledge_grammar_patterns', 'knowledge_clusters',
+        'knowledge_synonym_groups', 'knowledge_synonym_members',
+        'knowledge_outputs_raw', 'experiment_rounds', 'experiment_samples',
+        'generations'
+      ]) {
+        assert.equal(cnt(t), 0, `expected ${t} to be empty after truncate`);
+      }
+    } finally { db.close(); }
+  });
+
+  test.it('resets AUTOINCREMENT so the next insert gets id=1', () => {
+    const db = freshDb();
+    try {
+      const id1 = db.insertGeneration(buildGenerationFixture());
+      assert.ok(id1 >= 1);
+      db.truncateAllForTests();
+      const id2 = db.insertGeneration(buildGenerationFixture());
+      assert.equal(id2, 1);
+    } finally { db.close(); }
+  });
+});
