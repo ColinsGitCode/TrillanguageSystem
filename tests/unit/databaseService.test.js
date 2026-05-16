@@ -1390,3 +1390,211 @@ test.describe('databaseService — knowledge_synonyms', () => {
     } finally { db.close(); }
   });
 });
+
+// -- knowledge_relations / overview / summary --------------------------------
+
+test.describe('databaseService — knowledge_relations + overview + summary', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+
+  test.it('insertKnowledgeRawOutput appends a row scoped to a job', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'summary' }).id;
+      db.insertKnowledgeRawOutput(job, 1, {
+        input: { foo: 'bar' },
+        output: { result: 'hello' },
+        status: 'ok'
+      });
+      const row = db.db.prepare(`SELECT * FROM knowledge_outputs_raw WHERE job_id = ?`).get(job);
+      assert.ok(row);
+      assert.equal(row.batch_no, 1);
+      assert.equal(row.status, 'ok');
+      const parsed = JSON.parse(row.output_json);
+      assert.equal(parsed.result, 'hello');
+      // input_digest is the sha1 of the input.
+      assert.ok(/^[0-9a-f]{40}$/.test(row.input_digest));
+    } finally { db.close(); }
+  });
+
+  test.it('getLatestKnowledgeSummary returns null when no summary exists, then the latest result', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getLatestKnowledgeSummary(), null);
+
+      const job = db.createKnowledgeJob({ jobType: 'summary' }).id;
+      db.updateKnowledgeJobStatus(job, { status: 'success', finishedAt: '2026-05-17T00:00:00Z' });
+      db.insertKnowledgeRawOutput(job, 1, {
+        input: {},
+        output: { result: { headline: 'all good', counts: { terms: 3 } } },
+        status: 'ok'
+      });
+
+      const summary = db.getLatestKnowledgeSummary();
+      assert.deepEqual(summary, { headline: 'all good', counts: { terms: 3 } });
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeSourceCards filters by folderFrom/folderTo + cardTypes + limit', () => {
+    const db = freshDb();
+    try {
+      newGenId(db, { folderName: '20260101', cardType: 'trilingual', requestId: 'rid_src_a' });
+      newGenId(db, { folderName: '20260201', cardType: 'grammar_ja', requestId: 'rid_src_b' });
+      newGenId(db, { folderName: '20260301', cardType: 'trilingual', requestId: 'rid_src_c' });
+
+      const all = db.getKnowledgeSourceCards({});
+      assert.equal(all.length, 3);
+
+      const ranged = db.getKnowledgeSourceCards({ folderFrom: '20260201', folderTo: '20260201' });
+      assert.equal(ranged.length, 1);
+      assert.equal(ranged[0].folder_name, '20260201');
+
+      const onlyTri = db.getKnowledgeSourceCards({ cardTypes: ['trilingual'] });
+      assert.equal(onlyTri.length, 2);
+
+      const limited = db.getKnowledgeSourceCards({ limit: 1 });
+      assert.equal(limited.length, 1);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeOverview returns zero counts on an empty db and tops after data loads', () => {
+    const db = freshDb();
+    try {
+      const empty = db.getKnowledgeOverview();
+      assert.equal(empty.counts.termCount, 0);
+      assert.equal(empty.counts.grammarPatternCount, 0);
+      assert.equal(empty.counts.clusterCount, 0);
+      assert.equal(empty.counts.openIssueCount, 0);
+      assert.deepEqual(empty.topTerms, []);
+
+      const job = db.createKnowledgeJob({ jobType: 'index' }).id;
+      const g = newGenId(db, { phrase: 'one', baseFilename: 'one', requestId: 'rid_ov_1' });
+      db.upsertKnowledgeTermsIndex([{ generationId: g, phrase: 'one', score: 0.9 }], job);
+      db.replaceKnowledgeGrammarData([{ pattern: 'P', explanationZh: '', confidence: 0.8 }], job);
+      db.replaceKnowledgeClusterData([{ clusterKey: 'k', label: 'L', confidence: 0.7 }], job);
+      db.replaceKnowledgeIssues([{ issueType: 'duplicate_phrase', severity: 'high', fingerprint: 'f1' }], job);
+
+      const full = db.getKnowledgeOverview();
+      assert.equal(full.counts.termCount, 1);
+      assert.equal(full.counts.grammarPatternCount, 1);
+      assert.equal(full.counts.clusterCount, 1);
+      assert.equal(full.counts.openIssueCount, 1);
+      assert.equal(full.topTerms[0].phrase, 'one');
+      assert.equal(full.topPatterns[0].pattern, 'P');
+      assert.equal(full.topClusters[0].clusterKey, 'k');
+      assert.equal(full.topIssues[0].issueType, 'duplicate_phrase');
+    } finally { db.close(); }
+  });
+
+  test.it('_aggregateKnowledgeByGenerationIds returns empty {patterns,clusters,issues} for [] input', () => {
+    const db = freshDb();
+    try {
+      assert.deepEqual(db._aggregateKnowledgeByGenerationIds([]), { patterns: [], clusters: [], issues: [] });
+      assert.deepEqual(db._aggregateKnowledgeByGenerationIds(null), { patterns: [], clusters: [], issues: [] });
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeCardRelations returns null for unknown / falsy id', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getKnowledgeCardRelations(0), null);
+      assert.equal(db.getKnowledgeCardRelations(99999), null);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeCardRelations stitches together term/grammar/cluster/issues for a card', () => {
+    const db = freshDb();
+    try {
+      const job = db.createKnowledgeJob({ jobType: 'index' }).id;
+      const g = newGenId(db, { phrase: 'subject', baseFilename: 'subject', requestId: 'rid_rel_1' });
+
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g, phrase: 'subject', enHeadword: 'subject', score: 0.9 }
+      ], job);
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'pat', explanationZh: 'x', confidence: 0.8, exampleRefs: [{ generationId: g, sentence: 's' }] }
+      ], job);
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'k', label: 'L', confidence: 0.7, cards: [{ generationId: g, score: 0.9 }] }
+      ], job);
+      db.replaceKnowledgeIssues([
+        { issueType: 'duplicate_phrase', severity: 'high', fingerprint: 'f1', generationId: g }
+      ], job);
+
+      const rel = db.getKnowledgeCardRelations(g);
+      assert.ok(rel);
+      assert.equal(rel.card.generationId, g);
+      assert.equal(rel.term.phrase, 'subject');
+      assert.equal(rel.grammarHits.length, 1);
+      assert.equal(rel.clusters.length, 1);
+      assert.equal(rel.issues.length, 1);
+      assert.equal(rel.issues[0].severity, 'high');
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeTermRelations returns empty shape for empty keyword and matches otherwise', () => {
+    const db = freshDb();
+    try {
+      assert.deepEqual(db.getKnowledgeTermRelations(''), {
+        term: '', matchedEntries: [], patterns: [], clusters: [], issues: [], relatedCards: []
+      });
+
+      const job = db.createKnowledgeJob({ jobType: 'index' }).id;
+      const g = newGenId(db, { phrase: 'p', baseFilename: 'p', requestId: 'rid_tr_1' });
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g, phrase: 'apple', enHeadword: 'apple', score: 0.5 }
+      ], job);
+
+      const r = db.getKnowledgeTermRelations('apple');
+      assert.equal(r.term, 'apple');
+      assert.equal(r.matchedEntries.length, 1);
+      assert.equal(r.relatedCards.length, 1);
+      assert.deepEqual(r.relatedCards[0].reasons, ['term']);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgePatternRelations returns shape with pattern:null when nothing matches', () => {
+    const db = freshDb();
+    try {
+      const empty = db.getKnowledgePatternRelations('');
+      assert.equal(empty.pattern, null);
+
+      const job = db.createKnowledgeJob({ jobType: 'grammar_link' }).id;
+      const g = newGenId(db, { phrase: 'p', baseFilename: 'p', requestId: 'rid_pat_1' });
+      db.replaceKnowledgeGrammarData([
+        { pattern: 'be V-ing', explanationZh: 'x', confidence: 0.9, exampleRefs: [{ generationId: g, sentence: 's' }] }
+      ], job);
+
+      const hit = db.getKnowledgePatternRelations('be V');
+      assert.ok(hit.pattern);
+      assert.equal(hit.pattern.pattern, 'be V-ing');
+      assert.equal(hit.refs.length, 1);
+      assert.equal(hit.refs[0].generationId, g);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeClusterRelations: empty key + no-match return null cluster; exact key returns cards', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getKnowledgeClusterRelations('').cluster, null);
+      assert.equal(db.getKnowledgeClusterRelations('does-not-exist').cluster, null);
+
+      const job = db.createKnowledgeJob({ jobType: 'cluster' }).id;
+      const g = newGenId(db, { phrase: 'p', baseFilename: 'p', requestId: 'rid_cr_1' });
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'greetings', label: 'L', confidence: 0.6, cards: [{ generationId: g, score: 0.8 }] }
+      ], job);
+
+      const hit = db.getKnowledgeClusterRelations('greetings');
+      assert.ok(hit.cluster);
+      assert.equal(hit.cluster.clusterKey, 'greetings');
+      assert.equal(hit.cards.length, 1);
+      assert.equal(hit.cards[0].generationId, g);
+    } finally { db.close(); }
+  });
+});
