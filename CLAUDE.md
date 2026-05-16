@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~221 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~238 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e:smoke          # Happy-path generation/OCR/history (per file — see note below)
@@ -125,13 +125,17 @@ services/              Business logic
 ├── goldenExamplesService.js / fewShotMetricsService.js / experimentTrackingService.js
 ├── exampleReviewService.js
 ├── generationJobService.js / knowledgeJobService.js
-├── knowledgeAnalysisEngine.js (~1000 lines)
+├── knowledgeAnalysisEngine.js  Thin dispatcher — runTask(type, cards, opts).
+│                               Per-task logic under services/knowledge/:
+│                               textUtils.js (shared helpers) + tasks/
+│                               {summary, cardIndex, grammarLink, cluster,
+│                               issuesAudit, synonymBoundary}.js
 ├── tesseractOcrService.js
 ├── markdownParser.js
 ├── statisticsService.js
 └── e2eFixtureService.js / fileManager.js
 scripts/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~220 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~238 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (25+ tables, FTS5 virtual table)
 ```
@@ -206,12 +210,14 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~221 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~238 tests across ~27 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` / `goldenExamplesService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
 
 **E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
+
+`POST /api/_test/reset` is mounted only under `E2E_TEST_MODE=1` and wipes every project table (via `dbService.truncateAllForTests()`) plus the records dir, so each spec file can run hermetic. New spec files MUST call `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)). With this in place `playwright test tests/e2e/` over the whole directory now works without per-file isolation.
 
 ## Lint
 
@@ -262,8 +268,7 @@ The `gemini` CLI binary + [scripts/gemini-host-proxy.js](scripts/gemini-host-pro
 
 ## Known unfinished work
 
-- **E2E cross-file pollution**: shared server + shared DB. Per-file isolation (unique `DB_PATH` / `RECORDS_PATH` per spec) would let `playwright test` over the whole dir.
-- **knowledgeAnalysisEngine.js (~1000 lines)** still has no direct unit tests — it's exercised through `/api/knowledge/*` integration only. Splitting per task type (summary / index / synonym_boundary / grammar_link / cluster / issues_audit) would be the natural follow-on to the `services/db/knowledge*.js` split.
+- **E2E full-directory run is now supported**: each spec calls `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits the `POST /api/_test/reset` endpoint mounted only under `E2E_TEST_MODE=1`. Running `playwright test tests/e2e/` over the whole directory works without per-file teardown. New specs MUST add the beforeAll reset hook or they'll see leftover DB rows from earlier files.
 
 ## Docs
 
