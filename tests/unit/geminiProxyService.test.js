@@ -149,6 +149,29 @@ test.describe('runGeminiProxy: integration with mocked fetch', () => {
     assert.equal(m.calls.length, 1);
   });
 
+  test.it('uses legacy proxy timeout env vars when no explicit budget is passed', async (t) => {
+    const savedRequestTimeout = process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS;
+    const savedExecutionTimeout = process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS;
+    process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS = '260000';
+    process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS = '234000';
+
+    const m = mockFetch(() => jsonResponse(200, { markdown: 'hello' }));
+    t.after(() => {
+      m.restore();
+      if (savedRequestTimeout === undefined) delete process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS;
+      else process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS = savedRequestTimeout;
+      if (savedExecutionTimeout === undefined) delete process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS;
+      else process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS = savedExecutionTimeout;
+    });
+
+    await runGeminiProxy('prompt', { ...baseOptions, retries: 0 });
+
+    const payload = JSON.parse(m.calls[0].opts.body);
+    assert.equal(payload.timeoutMs, 234000);
+    assert.equal(payload.executionTimeoutMs, 234000);
+    assert.equal(payload.params.executionTimeoutMs, 234000);
+  });
+
   test.it('propagates status/code/payload on a non-2xx with structured body', async (t) => {
     const body = { error: 'rate limited', code: CODES.RATE_LIMITED };
     const m = mockFetch(() => jsonResponse(429, body));

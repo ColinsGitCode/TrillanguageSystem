@@ -11,6 +11,33 @@ function toNumberOr(value, fallback) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) return num;
+  }
+  return 0;
+}
+
+function resolveExecutionBudget(options = {}) {
+  const explicitBudget = firstFiniteNumber(options.timeoutMs);
+  if (explicitBudget) return explicitBudget;
+  // Backward compatibility for deployments that still set the old proxy envs.
+  // The old "execution" timeout maps to the new executor budget semantics.
+  return firstFiniteNumber(
+    process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS,
+    process.env.GEMINI_EXECUTION_BUDGET_MS,
+    process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS,
+    EXECUTION_BUDGET_MS
+  );
+}
+
+function resolveExecutionTimeout(options = {}) {
+  const explicitTimeout = firstFiniteNumber(options.executionTimeoutMs);
+  if (explicitTimeout) return explicitTimeout;
+  return firstFiniteNumber(process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS);
+}
+
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -269,8 +296,8 @@ async function runGeminiProxy(prompt, options = {}) {
   // Execution budget = how long the gemini CLI may run. The transport layers
   // derive their own (longer) abort deadlines from it via geminiTimeouts, so
   // the executor always times out first and reports a clean, specific error.
-  const executionBudget = toNumberOr(options.timeoutMs, EXECUTION_BUDGET_MS);
-  const executionTimeoutMs = toNumberOr(options.executionTimeoutMs, 0);
+  const executionBudget = resolveExecutionBudget(options);
+  const executionTimeoutMs = resolveExecutionTimeout(options);
   payload.timeoutMs = clampExecutionBudget(executionBudget);
   if (executionTimeoutMs > 0) {
     payload.executionTimeoutMs = executionTimeoutMs;
