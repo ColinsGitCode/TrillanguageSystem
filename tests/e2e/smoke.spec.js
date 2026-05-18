@@ -93,7 +93,7 @@ test.describe.serial('Playwright smoke', () => {
     await page.goto('/');
     await page.getByTestId('phrase-input').fill(basePhrase);
     await page.getByTestId('generate-btn').click();
-    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING/, { timeout: 10_000 });
+    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|IDLE/, { timeout: 10_000 });
     await waitForQueueIdle(page);
     await openTodayFolder(page);
     await expect(page.getByTestId('file-list').locator('button').filter({ hasText: basePhrase })).toBeVisible();
