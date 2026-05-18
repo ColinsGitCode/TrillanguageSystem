@@ -37,6 +37,26 @@ process.env.RECORDS_PATH = tmpRecords;
 // synchronously; the bound port is only known once 'listening' fires.
 const { serverInstance } = require('../../server.js');
 const dbService = require('../../services/databaseService');
+const generationJobService = require('../../services/generationJobService');
+
+// Stop the generation-jobs worker from racing tests.
+// Two reinforcing moves:
+//   1. Hook 'listening' to clear the executor that server.js's own
+//      listen-callback just bound (FIFO guarantees we run after it).
+//   2. Monkey-patch configureExecutor to a no-op so nothing can re-bind
+//      a real executor later (bootstrap's 100ms setTimeout, retries, etc.).
+// With executor=null + setter blocked, processQueue() and enqueue() both
+// early-return, so jobs we insert via /api/generation-jobs stay in their
+// 'queued' state and the cancel/clear endpoints behave deterministically.
+function lockExecutor() {
+  generationJobService.configureExecutor(null);
+  generationJobService.configureExecutor = () => {}; // ignore future rebinds
+}
+serverInstance.on('listening', lockExecutor);
+// In case the 'listening' event already fired before this module ran,
+// lock once asynchronously past the current tick so any pending listen
+// callback has already executed.
+setImmediate(lockExecutor);
 
 let baseUrlPromise = null;
 function getBaseUrl() {
