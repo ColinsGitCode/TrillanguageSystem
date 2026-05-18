@@ -1,7 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
+const { resetServerState } = require('./fixtures/resetServerState');
 
 test.describe('Playwright page smoke', () => {
+  test.beforeAll(async ({ request }) => {
+    await resetServerState(request);
+  });
+
   test('00 首页在 Gemini Host Executor 离线时显示告警', async ({ page }) => {
     await page.route('**/api/health', async (route) => {
       await route.fulfill({

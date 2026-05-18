@@ -12,6 +12,15 @@ class GenerationJobService {
     this.executor = typeof fn === 'function' ? fn : null;
   }
 
+  // Test-only: drop the in-process scheduling state so the next test starts
+  // with a fresh queue. Persistent rows are wiped separately via DB truncate.
+  // Executor + bootstrapDone are left in place; they were configured by
+  // server.js on listen() and shouldn't be re-bound.
+  resetForTests() {
+    this.clearRetryTimer();
+    this.running = false;
+  }
+
   bootstrap() {
     if (this.bootstrapDone) return;
     this.bootstrapDone = true;

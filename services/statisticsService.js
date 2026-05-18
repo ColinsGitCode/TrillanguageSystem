@@ -93,7 +93,7 @@ function wilcoxonSignedRank(before, after) {
   }
 
   // Rank absolute differences
-  const indexed = diffs.map((d, i) => ({ diff: d, abs: Math.abs(d), sign: d > 0 ? 1 : -1 }));
+  const indexed = diffs.map((d) => ({ diff: d, abs: Math.abs(d), sign: d > 0 ? 1 : -1 }));
   indexed.sort((a, b) => a.abs - b.abs);
 
   // Assign ranks with tie handling
@@ -191,7 +191,7 @@ function tDistPValue(t, df) {
 }
 
 /** t 分布临界值 (近似, 用于 CI) */
-function tCriticalValue(df, alpha) {
+function tCriticalValue(df, _alpha) {
   // Common values lookup for small df
   const table = {
     1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
@@ -240,6 +240,10 @@ function regIncBeta(a, b, x) {
   return front * (f - 1) / a;
 }
 
+// Lanczos / Stirling constants are textbook values that intentionally exceed
+// JS double precision — runtime truncation is part of how this approximation
+// is tuned. Suppressing no-loss-of-precision for this block only.
+/* eslint-disable no-loss-of-precision */
 /** Log-gamma (Stirling approximation) */
 function lgamma(x) {
   if (x <= 0) return 0;
@@ -252,6 +256,7 @@ function lgamma(x) {
   for (let j = 0; j < 6; j++) ser += c[j] / ++y;
   return -tmp + Math.log(2.5066282746310005 * ser / x);
 }
+/* eslint-enable no-loss-of-precision */
 
 module.exports = {
   pairedTTest,

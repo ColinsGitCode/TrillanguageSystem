@@ -1,65 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// ========== Few-shot 示例库（优化后保留2个核心示例） ==========
-const FEWSHOT_EXAMPLES = {
-    // 示例 1: 日常词汇
-    daily: {
-        input: "打招呼",
-        output: `# 打招呼
-
-## 1. 英文:
-- **翻译**: greet / say hello
-- **解释**: A polite action of acknowledging someone
-- **例句1**: Hey, I just wanted to greet the new neighbors.
-  - 嘿，我只是想跟新邻居打个招呼。
-- **例句2**: Don't forget to greet your teacher.
-  - 别忘了跟老师打招呼。
-
-## 2. 日本語:
-- **翻訳**: 挨拶(あいさつ)する
-- **解説**: 人(ひと)に会(あ)った時(とき)に声(こえ)をかける行為(こうい)
-- **例句1**: 朝(あさ)、会社(かいしゃ)で挨拶(あいさつ)するのは基本(きほん)だよ。
-  - 早上在公司打招呼是基本礼仪。
-- **例句2**: 彼(かれ)はいつも笑顔(えがお)で挨拶(あいさつ)してくれる。
-  - 他总是笑着打招呼。
-
-## 3. 中文:
-- **翻译**: 打招呼 [原文]
-- **解释**: 见面时表示问候的礼貌行为
-- **语域**: 通用
-- **辨析**: "打招呼"侧重主动问候，"问好"更正式，"打个招呼"更口语化`
-    },
-
-    // 示例 2: 技术术语
-    technical: {
-        input: "API",
-        output: `# API
-
-## 1. 英文:
-- **翻译**: API (Application Programming Interface) [原文]
-- **解释**: Rules allowing different software to communicate
-- **例句1**: We need to integrate their payment API.
-  - 我们需要集成他们的支付 API。
-- **例句2**: This API documentation is well written.
-  - 这个 API 文档写得很好。
-
-## 2. 日本語:
-- **翻訳**: API（エーピーアイ）
-- **解説**: ソフトウェア同士(どうし)が通信(つうしん)するルール集(しゅう)
-- **例句1**: この API(エーピーアイ)を使(つか)えば、データを取得(しゅとく)できます。
-  - 使用这个 API 就能获取数据。
-- **例句2**: REST API(レスト・エーピーアイ)を勉強(べんきょう)してる。
-  - 我正在学习 REST API。
-
-## 3. 中文:
-- **翻译**: 应用程序编程接口
-- **解释**: 允许不同软件系统相互通信的规则
-- **语域**: 书面/技术
-- **辨析**: API 是技术术语，日常口语中一般直接说"接口"`
-    }
-};
-
 // ========== 提示词构建函数（优化版：~1500 tokens） ==========
 
 /**
@@ -178,8 +119,8 @@ function buildMarkdownPrompt(args) {
     } catch (err) {
         // Fallback to minimal inline prompt if template missing
         template = cardType === 'grammar_ja'
-            ? `你是日语语法学习卡片生成器。\n输入内容: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`
-            : `你是中英日三语学习卡片生成器。\n输入短语: \"{{ phrase }}\"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+            ? `你是日语语法学习卡片生成器。\n输入内容: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`
+            : `你是中英日三语学习卡片生成器。\n输入短语: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
     }
 
     return template.replace(/\{\{\s*phrase\s*\}\}/g, phrase);

@@ -10,6 +10,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const log = require('../lib/logger').child({ module: 'svc/health' });
 
 class HealthCheckService {
   static buildGatewayHealthUrl() {
@@ -536,11 +537,11 @@ class HealthCheckService {
               }
             } catch (err) {
               // 跳过无法访问的文件
-              console.warn(`[Storage] Cannot access: ${filePath}`);
+              log.warn({ filePath }, 'storage: cannot access file');
             }
           }
         } catch (err) {
-          console.error(`[Storage] Cannot read directory: ${dir}`, err);
+          log.error({ err, dir }, 'storage: cannot read directory');
         }
 
         return size;
@@ -568,7 +569,7 @@ class HealthCheckService {
           }
         });
       } catch (err) {
-        console.error('[Storage] Cannot count records', err);
+        log.error({ err }, 'storage: cannot count records');
       }
 
       service.status = percentage > 90 ? 'degraded' : 'online';

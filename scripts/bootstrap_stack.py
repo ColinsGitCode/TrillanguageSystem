@@ -99,7 +99,7 @@ def start_proxy():
     cleanup_stale_pid()
     log(f"[proxy] starting: {' '.join(PROXY_CMD)}")
     proxy_env = {**os.environ}
-    proxy_env.setdefault("GEMINI_PROXY_TIMEOUT_MS", "260000")
+    proxy_env.setdefault("GEMINI_MAX_EXECUTION_BUDGET_MS", "240000")
     explicit_home = proxy_env.get("GEMINI_PROXY_HOME")
     if explicit_home:
         proxy_env.setdefault("GEMINI_SETTINGS_PATH", os.path.join(explicit_home, "settings.json"))

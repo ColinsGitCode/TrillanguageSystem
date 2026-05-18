@@ -61,7 +61,6 @@ function buildRuntimeOptions(input = {}) {
   const retriesDefault = isBackfill ? 1 : 1;
   const repairRetriesDefault = isBackfill ? 0 : 1;
   const retryDelayDefault = isBackfill ? 600 : 1200;
-  const breakerRetryDelayDefault = isBackfill ? 8000 : 6000;
   const disableRepairOnTimeoutDefault = isBackfill;
 
   return {
@@ -94,18 +93,10 @@ function buildRuntimeOptions(input = {}) {
       input.retryDelayMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_DELAY_MS : process.env.TRAINING_PROXY_RETRY_DELAY_MS),
       retryDelayDefault
     ),
-    breakerRetryDelayMs: toNumberOr(
-      input.breakerRetryDelayMs ?? (isBackfill ? process.env.TRAINING_BACKFILL_BREAKER_RETRY_DELAY_MS : process.env.TRAINING_BREAKER_RETRY_DELAY_MS),
-      breakerRetryDelayDefault
-    ),
     resetOnTimeout: parseBoolean(input.resetOnTimeout ?? process.env.TRAINING_PROXY_RESET_ON_TIMEOUT, true),
     retryOnTimeout: parseBoolean(
       input.retryOnTimeout ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_ON_TIMEOUT : process.env.TRAINING_PROXY_RETRY_ON_TIMEOUT),
       !isBackfill
-    ),
-    retryOnBreakerOpen: parseBoolean(
-      input.retryOnBreakerOpen ?? (isBackfill ? process.env.TRAINING_BACKFILL_RETRY_ON_BREAKER_OPEN : process.env.TRAINING_RETRY_ON_BREAKER_OPEN),
-      true
     ),
     disableRepairOnTimeout: parseBoolean(
       input.disableRepairOnTimeout ?? (isBackfill ? process.env.TRAINING_BACKFILL_DISABLE_REPAIR_ON_TIMEOUT : process.env.TRAINING_DISABLE_REPAIR_ON_TIMEOUT),
@@ -675,10 +666,8 @@ async function callTeacherModel(prompt, options = {}) {
     executionTimeoutMs: toNumberOr(options.executionTimeoutMs, 0),
     retries: toNumberOr(options.retries, 1),
     retryDelayMs: toNumberOr(options.retryDelayMs, 1200),
-    breakerRetryDelayMs: toNumberOr(options.breakerRetryDelayMs, 6000),
     resetOnTimeout: options.resetOnTimeout,
     retryOnTimeout: options.retryOnTimeout,
-    retryOnBreakerOpen: options.retryOnBreakerOpen,
     validateSanitizedResponse: options.validateSanitizedResponse
   });
   const rawText = getResponseText(response);
@@ -712,10 +701,8 @@ async function repairTrainingPack(input = {}) {
     executionTimeoutMs: input.executionTimeoutMs,
     retries: input.retries,
     retryDelayMs: input.retryDelayMs,
-    breakerRetryDelayMs: input.breakerRetryDelayMs,
     resetOnTimeout: input.resetOnTimeout,
     retryOnTimeout: input.retryOnTimeout,
-    retryOnBreakerOpen: input.retryOnBreakerOpen,
     validateSanitizedResponse: buildSanitizedTrainingResponseValidator({ phrase, cardType })
   });
   const latencyMs = Date.now() - start;
@@ -780,10 +767,8 @@ async function generateTrainingPack(input = {}) {
       executionTimeoutMs: runtime.executionTimeoutMs,
       retries: runtime.retries,
       retryDelayMs: runtime.retryDelayMs,
-      breakerRetryDelayMs: runtime.breakerRetryDelayMs,
       resetOnTimeout: runtime.resetOnTimeout,
       retryOnTimeout: runtime.retryOnTimeout,
-      retryOnBreakerOpen: runtime.retryOnBreakerOpen,
       validateSanitizedResponse: buildSanitizedTrainingResponseValidator({ phrase, cardType })
     });
     const llmLatency = Date.now() - llmStart;
@@ -830,10 +815,8 @@ async function generateTrainingPack(input = {}) {
         executionTimeoutMs: runtime.repairExecutionTimeoutMs,
         retries: runtime.repairRetries,
         retryDelayMs: runtime.retryDelayMs,
-        breakerRetryDelayMs: runtime.breakerRetryDelayMs,
         resetOnTimeout: runtime.resetOnTimeout,
-        retryOnTimeout: runtime.retryOnTimeout,
-        retryOnBreakerOpen: runtime.retryOnBreakerOpen
+        retryOnTimeout: runtime.retryOnTimeout
       });
       attempts.push({ stage: 'repair', model: repaired.model || model, latencyMs: repaired.latencyMs || 0 });
       if (repaired.ok) {
@@ -955,10 +938,8 @@ async function generateTrainingPack(input = {}) {
       executionTimeoutMs: runtime.repairExecutionTimeoutMs,
       retries: runtime.repairRetries,
       retryDelayMs: runtime.retryDelayMs,
-      breakerRetryDelayMs: runtime.breakerRetryDelayMs,
       resetOnTimeout: runtime.resetOnTimeout,
-      retryOnTimeout: runtime.retryOnTimeout,
-      retryOnBreakerOpen: runtime.retryOnBreakerOpen
+      retryOnTimeout: runtime.retryOnTimeout
     });
     attempts.push({ stage: 'repair', model: repaired.model || model, latencyMs: repaired.latencyMs || 0 });
     if (repaired.ok) {

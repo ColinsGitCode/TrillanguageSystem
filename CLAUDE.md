@@ -4,120 +4,272 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Trilingual Records Viewer (三语卡片生成系统) - A web application that generates trilingual (Chinese/English/Japanese) learning cards through AI-powered content generation and text-to-speech synthesis. Users input phrases and the system generates comprehensive learning materials with translations, definitions, example sentences, and synchronized audio.
+Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via an LLM and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a few-shot / training-pack experimentation pipeline, and a knowledge analysis subsystem (synonym groups, grammar patterns, semantic clusters).
 
 ## Commands
 
 **Run locally:**
 ```bash
 npm install
-npm start          # Server on port 3010
+npm start                       # Server on port 3010
+npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate process on host)
 ```
 
-**Docker (recommended):**
+**Tests:**
 ```bash
-docker compose up -d --build    # Build and start all containers
-docker compose ps               # Check status
-docker compose logs -f          # Stream logs
-docker compose down             # Stop and remove
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~238 tests, ~1s)
+npm run test:unit               # Alias for the above
+npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
+npm run test:e2e:smoke          # Happy-path generation/OCR/history (per file — see note below)
+npm run test:e2e:pages          # Page navigation/routing
+npm run test:e2e:gemini-sanitize # MCP diagnostic stripping regression
+npm run test:e2e:real           # Hits real Gemini (needs RUN_REAL_GEMINI_E2E=1)
+```
+**E2E pre-existing flake**: the three e2e files share one server + DB in the Playwright run, so running `playwright test` over the whole `tests/e2e/` directory cross-pollutes state. Run them one file at a time when verifying changes. Single test: `npx playwright test tests/e2e/<file>.spec.js -g "<name>"`.
+
+**Lint:**
+```bash
+npm run lint                    # ESLint 9 flat config, zero-warning baseline
+npm run lint:fix                # Auto-fix
 ```
 
-**Test generation endpoint:**
+**Docker (recommended for full stack):**
 ```bash
-curl -X POST http://localhost:3010/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"phrase":"hello world"}'
+docker compose up -d --build    # viewer + gemini-proxy + ocr + tts-en + tts-ja
+docker compose logs -f
+```
+
+**Few-shot experiment workflow:**
+```bash
+npm run fewshot:rounds          # Multi-round few-shot experiments
+npm run fewshot:export-round    # Round trend dataset
+npm run fewshot:render-round-charts  # d3/ charts
+npm run fewshot:report-round    # KPI report
+npm run training:backfill       # Backfill training packs for existing cards
 ```
 
 ## Architecture
 
-### Data Flow
+### Directory map
+
 ```
-User Input → Prompt Engine (CoT + Few-shot) → LLM (Gemini API) → JSON Response → HTML Renderer → File Manager → TTS Service → Audio Files
+server.js              ~100 lines — bootstrap only: middleware, route mounting,
+                       generation_jobs HTTP-worker bridge, error middleware,
+                       listen. All business logic lives in services/ + routes/
+lib/                   Process-wide infrastructure
+├── logger.js          Zero-dep structured logger (JSON / pretty / silent)
+├── serverConfig.js    Env-derived consts + pure helpers
+├── throttle.js        Per-IP generate throttle with periodic sweep
+├── e2eFixtures.js     E2E test fixtures (knowledge jobs, generate result)
+├── generationHelpers.js  Pure helpers used by the generate pipeline
+│                         (truncateExamplesForBudget, normalizeAudioTasks,
+│                         validateGeneratedContent, validateSanitized
+│                         GeminiCardResponse, extractGeminiMarkdownResponse)
+└── trainingSidecar.js Training sidecar path helper
+routes/                Each file = one express.Router() for a domain
+├── _shared.js         Re-exports services + lib for routes to destructure
+├── generate.js        /api/generate (the main card-generation endpoint)
+├── ocr.js             /api/ocr (tesseract / local / auto)
+├── generationJobs.js  /api/generation-jobs/*  (8 routes)
+├── health.js          /api/health + /api/gemini/auth/*
+├── history.js         /api/history /statistics /search /recent
+├── dashboard.js       /api/dashboard/*
+├── review.js          /api/review/*  (11 routes)
+├── knowledge.js       /api/knowledge/*  (17 routes)
+├── training.js        /api/training/*  (5 routes)
+├── files.js           /api/folders + /highlights + /records/by-file
+└── misc.js            /api/experiments + DELETE /api/records/:id
+services/              Business logic
+├── databaseService.js ~1100 lines — schema setup, additive migrations
+│                       (ensureTableColumns), and thin delegations to
+│                       services/db/<domain>.js (see below)
+├── db/                Per-domain SQL modules each backed by direct unit tests
+│   ├── helpers.js               safeJsonParse
+│   ├── generations.js           generations + observability_metrics +
+│   │                            audio_files insert txn + query/FTS/recent
+│   ├── highlights.js            card_highlights CRUD + stats
+│   ├── trainingAssets.js        card_training_assets CRUD + backfill joins
+│   ├── generationJobs.js        generation_jobs lifecycle + events + retry
+│   ├── experiments.js           few_shot_runs + experiment_samples + rounds
+│   ├── knowledgeJobs.js         knowledge_jobs lifecycle + synonym meta
+│   ├── knowledgeIssues.js       knowledge_issues replace + filtered list
+│   ├── knowledgeGrammar.js      knowledge_grammar_patterns + refs
+│   ├── knowledgeClusters.js     knowledge_clusters + cluster_cards
+│   ├── knowledgeTermsIndex.js   knowledge_terms_index upsert + search
+│   ├── knowledgeSynonyms.js     candidates + groups + members + boundary
+│   │                            detail; owns the pair-key helpers
+│   └── knowledgeRelations.js    knowledge_outputs_raw write + overview /
+│                                aggregateByGenerationIds / card/term/
+│                                pattern/cluster relations / latest summary
+├── cardGenerationService.js  Core generation pipeline (generateWithProvider):
+│                             prompt build → optional few-shot enhancement →
+│                             provider call → response normalize → tokens /
+│                             cost / quality / metadata. No DB, no fs, no TTS.
+├── databaseHelpers.js
+├── geminiTimeouts.js  Single-knob timeout hierarchy (client > gateway > exec)
+├── geminiErrors.js    Structured error codes (EXECUTOR_TIMEOUT, RATE_LIMITED…)
+├── geminiProcessUtils.js  CLI spawn + process-tree kill (shared)
+├── geminiProxyService.js  HTTP client for the gemini proxy chain
+├── geminiGatewayServer.js  Docker gateway (:18888) — runs in container
+├── geminiCliService.js     In-process CLI transport
+├── geminiService.js        Legacy Gemini API native client (OCR fallback)
+├── geminiAuthService.js    OAuth flow (CLI mode only)
+├── localLlmService.js
+├── trainingPackService.js
+├── trainingAssetService.js Training pack pipeline (sidecar, persist, backfill)
+├── observabilityService.js
+├── healthCheckService.js
+├── htmlRenderer.js / contentPostProcessor.js / audioFormat.js
+├── ttsService.js / japaneseFurigana.js
+├── promptEngine.js
+├── goldenExamplesService.js / fewShotMetricsService.js / experimentTrackingService.js
+├── exampleReviewService.js
+├── generationJobService.js / knowledgeJobService.js
+├── knowledgeAnalysisEngine.js  Thin dispatcher — runTask(type, cards, opts).
+│                               Per-task logic under services/knowledge/:
+│                               textUtils.js (shared helpers) + tasks/
+│                               {summary, cardIndex, grammarLink, cluster,
+│                               issuesAudit, synonymBoundary}.js
+├── tesseractOcrService.js
+├── markdownParser.js
+├── statisticsService.js
+└── e2eFixtureService.js / fileManager.js
+scripts/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
+tests/unit/            node:test, ~238 tests, in-memory SQLite for DB tests
+tests/e2e/             Playwright
+database/schema.sql    SQLite schema (25+ tables, FTS5 virtual table)
 ```
 
-### Core Services (services/)
+### Generation data flow
+```
+User Input → promptEngine (CoT + few-shot) → LLM provider → JSON → htmlRenderer → fileManager → ttsService
+                                                  ↓
+                              databaseService (history, observability, metrics)
+```
 
-- **promptEngine.js** - Builds optimized LLM prompts with Chain of Thought reasoning, Few-shot examples, and quality standards. Implements complete prompt engineering optimization for accurate translations and natural example sentences.
-- **geminiService.js** - Gemini API communication with native API format. Supports both text generation and multimodal OCR. Handles JSON extraction from markdown fences and control character escaping.
-- **htmlRenderer.js** - Markdown→HTML conversion using marked.js. Orchestrates Japanese furigana conversion and audio tag injection.
-- **japaneseFurigana.js** - Kuroshiro wrapper for kanji→ruby tag conversion. Lazy-loaded singleton.
-- **ttsService.js** - Dual TTS: Kokoro (English) and VOICEVOX (Japanese). Processes audio tasks sequentially.
-- **fileManager.js** - YYYYMMDD folder organization with duplicate handling via "(2)", "(3)" suffixes.
+### LLM provider chain
 
-### API Routes (server.js)
+[services/cardGenerationService.js](services/cardGenerationService.js) picks a provider per request:
+- **`provider === 'local'`** → `services/localLlmService.js` (OpenAI-compatible local endpoint, `LLM_BASE_URL`)
+- **`provider === 'gemini'`** with **`GEMINI_MODE=host-proxy`** (default, production path) → `services/geminiProxyService.js`
+- **`provider === 'gemini'`** with **`GEMINI_MODE=cli`** → `services/geminiCliService.js` (also enables `/api/gemini/auth/*`)
 
-- `POST /api/generate` - Generate trilingual card (4-second rate limit per IP)
-- `POST /api/ocr` - OCR image recognition using Gemini Vision API
-- `GET /api/folders` - List date folders
-- `GET /api/folders/:folder/files` - List files in folder
-- `GET /api/folders/:folder/files/:file` - Get file content
+The host-proxy path is a **3-hop chain** because the `gemini` CLI must run on the host, not in Docker:
+```
+viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
+        → host executor (scripts/gemini-host-proxy.js :13210, spawns `gemini` CLI)
+```
+
+**Timeout hierarchy** is derived from a single base in [services/geminiTimeouts.js](services/geminiTimeouts.js):
+- `GEMINI_EXECUTION_BUDGET_MS` (default 90s) = max CLI run for an interactive call
+- `GEMINI_MAX_EXECUTION_BUDGET_MS` (default 240s) = hard ceiling (sized for training)
+- `GEMINI_HOP_BUFFER_MS` (default 15s) added per transport hop so the executor times out first with a clean error
+
+**Error code convention** is in [services/geminiErrors.js](services/geminiErrors.js). Each layer raises `Error` objects with `.code`, `.status`, and `.payload`. `geminiProxyService` propagates these even through wrapped errors so `generationJobService` can classify (`isTransientCapacityError` reads `.payload.code`). Don't regex-match error messages — use the `code` field.
+
+**Concurrency**: the host executor enforces `GEMINI_MAX_CONCURRENT` (default 2) — concurrent callers above the limit wait `GEMINI_QUEUE_WAIT_MS` for a slot then receive `429 EXECUTOR_BUSY`.
+
+### Persistence
+
+- **SQLite** via `better-sqlite3`. [services/databaseService.js](services/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/db/](services/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
+- Schema in `database/schema.sql` (~25 tables: `generations`, `audio_files`, `observability_metrics`, `generation_jobs`/`_events`, `few_shot_*`, `experiment_*`, `review_*`, `example_*`, `knowledge_*`, `card_training_assets`, `card_highlights`, …). FTS5 virtual table backs full-text search.
+- **Migrations are additive and automatic** via `ensureTableColumns(...)` on startup. Add columns there, not as separate migration files.
+- Generated card files live on disk under `RECORDS_PATH`, `YYYYMMDD` folders, `(2)`/`(3)` suffixes on conflicts (`fileManager.js`).
+- **Security note**: `RECORDS_PATH` is NOT mounted as static. In the docker layout `DB_PATH` lives inside `RECORDS_PATH`, so a static mount used to expose the DB (and WAL) at `/data/trilingual_records.db` — see the comment in server.js. All file reads go through `/api/folders/:folder/files/:file`.
+
+### Background jobs
+
+DB-backed queues with `pending → running → completed/failed`, retry/backoff, stale-job recovery on startup:
+- [services/generationJobService.js](services/generationJobService.js) — async card generation (`/api/generation-jobs/*`)
+- [services/knowledgeJobService.js](services/knowledgeJobService.js) — knowledge tasks (`/api/knowledge/jobs/*`)
+
+### Subsystems
+
+- **Few-shot / training** — `goldenExamplesService` selects high-quality past outputs as few-shot examples (`HIGH_QUALITY_GEMINI` strategy, gated by quality score; `bigramSimilarity` for matching). `exampleReviewService` handles human review campaigns (5-dimension scoring). `experimentTrackingService` + `fewShotMetricsService` log/measure A/B variants. `trainingPackService` exports cards as structured training packs (`training_pack_v1`, repair variant). `trainingAssetService` is the orchestration layer: sidecar JSON + DB upsert + backfill loop. Prompts in `prompts/card_training_pack_*.md`.
+- **Knowledge analysis** — `knowledgeAnalysisEngine.js` runs 6 task types (summary, index, synonym_boundary, grammar_link, cluster, issues_audit). UI: `knowledge-hub.html` (viewer), `knowledge-ops.html` (job mgmt).
+- **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
 
 ### Frontend (public/)
 
-Vanilla JS with marked.js (markdown) and DOMPurify (XSS sanitization). Grid layout with folder sidebar and file panel.
+Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `knowledge-hub.html`, `knowledge-ops.html`. ES modules in `public/js/modules/` (`app.js`, `api.js`, `store.js`, `audio-player.js`, `dashboard.js`, `generation-job-detail.js`, `virtual-list.js`). marked.js + DOMPurify.
 
-**Text Selection → Generate**: Users can select text within the card CONTENT area. A floating "✦ Generate Card" button appears above the selection. Clicking it closes the card modal, fills the phrase input, and focuses it for confirmation. Implementation: `initSelectionToGenerate()` / `checkSelection()` in `app.js`.
+**Text Selection → Generate**: select text in a card's content; floating "✦ Generate Card" button enqueues a background generation task — does NOT close the modal. See `initSelectionToGenerate()` / `checkSelection()` in `app.js`.
+
+## Logging
+
+[lib/logger.js](lib/logger.js) is the project logger — pino/bunyan-style API, zero deps, structured JSON by default, pretty mode for dev. **Don't reach for `console.*`** in new code.
+
+```js
+const log = require('./lib/logger').child({ module: 'svc/foo' });
+log.info({ port: 3010 }, 'listening');
+log.error({ err }, 'failed');     // err is an Error; gets serialized with code+status
+```
+
+Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1`. Tests use `silent: false, pretty: false` explicitly so the calling shell can't suppress assertions.
+
+## Testing
+
+**Unit** ([tests/unit/](tests/unit/), node:test):
+- Run with `npm test`. ~238 tests across ~27 modules in ~1s.
+- DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
+- Pure helpers in `geminiProxyService` / `goldenExamplesService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
+- Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
+
+**E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
+
+`POST /api/_test/reset` is mounted only under `E2E_TEST_MODE=1` and wipes every project table (via `dbService.truncateAllForTests()`) plus the records dir, so each spec file can run hermetic. New spec files MUST call `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)). With this in place `playwright test tests/e2e/` over the whole directory now works without per-file isolation.
+
+## Lint
+
+ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only — `public/`, `tests/e2e/`, `Docs/`, `d3/` are ignored. Conservative ruleset built on `eslint:recommended`; stylistic checks downgraded to warnings. **Current baseline: 0 errors, 0 warnings.** Keep it there.
 
 ## Key Conventions
 
-**Prompt Engineering** (services/promptEngine.js):
-- Implements Chain of Thought (CoT) 5-step reasoning process
-- Includes 3 Few-shot examples: daily vocabulary, technical terms, ambiguous words
-- Enforces example sentence quality standards (5 dimensions: authenticity, length, difficulty, naturalness, diversity)
-- Handles polysemy disambiguation and context understanding
-- Built-in quality self-check mechanism
-
-**Legacy templates** (`codex_prompt/`):
-- `phrase_3LANS_markdown.md` - Original Markdown output spec (deprecated, kept for reference)
-- `phrase_3LANS_html.md` - Original HTML output spec (deprecated, kept for reference)
-- Current system uses programmatic prompt generation in promptEngine.js
-
-**LLM Response Structure:**
-```json
-{
-  "markdown_content": "# Phrase\n## 1. English...",
-  "html_content": "<!doctype html>...",
-  "audio_tasks": [
-    { "text": "sentence", "lang": "en", "filename_suffix": "_en_1" }
-  ]
-}
-```
-
-**File naming:** Safe characters only (alphanumeric, space, dash). Conflicts get "(2)", "(3)" suffixes.
-
-**Japanese ruby in markdown:** `kanji(hiragana)` auto-converts to `<ruby>kanji<rt>hiragana</rt></ruby>`
-
-**Security:** HTML validation forbids script/iframe/object/embed tags. CSP headers on HTML responses.
+- **Prompt engineering** (`services/promptEngine.js`): CoT 5-step reasoning, few-shot examples, 5-dimension example-quality standards, polysemy disambiguation, built-in self-check. Current prompts are generated programmatically; `prompts/phrase_3LANS_markdown.md` is deprecated legacy.
+- **LLM response structure**: `{ markdown_content, html_content, audio_tasks: [{ text, lang, filename_suffix }] }`.
+- **Audio file extensions**: English → `.mp3` (Safari compat), Japanese → `.wav` ([services/audioFormat.js](services/audioFormat.js)).
+- **Japanese ruby**: `kanji(hiragana)` in markdown → `<ruby>` tags via Kuroshiro ([services/japaneseFurigana.js](services/japaneseFurigana.js)).
+- **File naming**: safe chars only (alphanumeric, space, dash); `(2)`/`(3)` suffixes on conflicts.
+- **Card highlight persistence**: `card_highlights` keyed on `(folder, base, sourceHash)` with `ON CONFLICT` update. UI persists `<mark class="study-highlight-red">` HTML.
+- **Security**: HTML validation forbids `script`/`iframe`/`object`/`embed`; CSP headers on HTML responses; no static-served data directory.
 
 ## Environment Variables
 
-See `.env.example`. Key settings:
+See `.env.example` for the full set. Key knobs:
 
-**Gemini API (Current):**
-- `GEMINI_API_KEY` - Get from https://aistudio.google.com/app/apikey
-- `GEMINI_MODEL` - Model selection (default: `gemini-1.5-flash-latest`)
-- `GEMINI_BASE_URL` - API endpoint (default: Google's official endpoint)
-- `LLM_MAX_TOKENS` - Max output tokens (recommended: 2048 for full optimization)
-- `LLM_TEMPERATURE` - Randomness control (recommended: 0.2)
+**LLM provider chain:**
+- `GEMINI_MODE` = `host-proxy` (default) or `cli`
+- `GEMINI_PROXY_URL` — must be the `:18888` gateway (default `http://host.docker.internal:18888/api/gemini`)
+- `GEMINI_EXECUTION_BUDGET_MS` / `GEMINI_MAX_EXECUTION_BUDGET_MS` / `GEMINI_HOP_BUFFER_MS` — single-knob timeout hierarchy
+- `GEMINI_MAX_CONCURRENT` / `GEMINI_QUEUE_WAIT_MS` — host executor concurrency
+- `GEMINI_PROXY_MODEL`, `TRAINING_TEACHER_MODEL` — model selection
+- `GEMINI_PROXY_API_KEY` / `GEMINI_PROXY_BEARER_TOKEN`, `GEMINI_PROXY_AUTH_MODE`
+- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` — local LLM (OpenAI-compatible)
 
-**Local LLM (Archived):**
-- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` - Local Qwen endpoint (commented out in .env)
+**Logging:** `LOG_LEVEL`, `LOG_PRETTY`, `LOG_SILENT`.
 
-**Other:**
-- `TTS_EN_ENDPOINT`, `TTS_JA_ENDPOINT` - TTS service endpoints
-- `RECORDS_PATH` - Data storage path (default: `/data/trilingual_records`)
-- `HTML_RENDER_MODE=local` - Use local markdown rendering
+**Few-shot:** `ENABLE_GOLDEN_EXAMPLES`, `ENABLE_GEMINI_FEWSHOT`, `GOLDEN_EXAMPLES_STRATEGY`, `GOLDEN_EXAMPLES_COUNT`, `GOLDEN_EXAMPLES_MIN_SCORE`, `FEWSHOT_TOKEN_BUDGET_RATIO`.
 
-**Gemini Free Tier Quotas:**
-- Gemini 1.5 Flash: 15 RPM, 1M TPM, 1,500 RPD
-- Single card generation: ~2,500 tokens
-- Single OCR: ~1,500 tokens
+**Storage:** `DB_PATH`, `RECORDS_PATH`, `RECORDS_TIMEZONE`. Use `DB_PATH=:memory:` in unit tests to keep them off disk.
 
-## Docker Services
+**TTS:** `TTS_EN_ENDPOINT` (Kokoro), `TTS_JA_ENDPOINT` (VOICEVOX).
 
-- **3010**: Web viewer
-- **8000**: Kokoro TTS (English)
-- **50021**: VOICEVOX (Japanese)
+**OCR:** `OCR_PROVIDER=tesseract` (recommended), `OCR_TESSERACT_ENDPOINT`, `OCR_LANGS`.
 
-Data volume maps to `/Users/xueguodong/Desktop/trilingual_records`
+## Docker services
+
+- **3010** — viewer (Express)
+- **18888** — gemini-proxy gateway container (forwards to host executor)
+- **ocr** — Tesseract OCR sidecar
+- **8000** — Kokoro TTS (English)
+- **50021** — VOICEVOX (Japanese)
+
+The `gemini` CLI binary + [scripts/gemini-host-proxy.js](scripts/gemini-host-proxy.js) run on the **host**, not in Docker. Install as a macOS LaunchAgent via [scripts/install_host_executor_launchd.sh](scripts/install_host_executor_launchd.sh).
+
+## Known unfinished work
+
+- **E2E full-directory run is now supported**: each spec calls `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits the `POST /api/_test/reset` endpoint mounted only under `E2E_TEST_MODE=1`. Running `playwright test tests/e2e/` over the whole directory works without per-file teardown. New specs MUST add the beforeAll reset hook or they'll see leftover DB rows from earlier files.
+
+## Docs
+
+`Docs/` holds longer-form material: `Architecture/`, `Features/`, `Operations/`, `Status/`, `Experiments/`, `TestReports/`. Check there for deployment / ops details.

@@ -1,4 +1,5 @@
 require('dotenv').config();
+const log = require('../lib/logger').child({ module: 'svc/local-llm' });
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || 'http://localhost:11434/v1'; // Default to Ollama port
 const LLM_API_KEY = process.env.LLM_API_KEY || 'EMPTY';
@@ -33,8 +34,7 @@ function parseJsonFromText(rawText) {
     if (String(error?.message || '').includes('Unexpected end of JSON input')) {
       throw new Error('Failed to parse JSON response: output appears truncated. Try reducing prompt size or increasing model context.');
     }
-    console.error('JSON Parse Error:', error);
-    console.error('Raw Text:', rawText);
+    log.error({ err: error, rawText }, 'JSON parse error');
     throw new Error('Failed to parse JSON response: ' + error.message);
   }
 }
@@ -141,7 +141,7 @@ async function recognizeImage(base64Image) {
 
 async function generateContent(prompt) {
   try {
-    console.log(`[Local LLM] Sending request to ${LLM_BASE_URL}...`);
+    log.info({ baseUrl: LLM_BASE_URL }, 'local LLM: sending request');
 
     let maxTokens = MAX_TOKENS;
     let data;
@@ -160,15 +160,14 @@ async function generateContent(prompt) {
       }
 
       maxTokens = Math.max(128, Math.min(maxTokens, available));
-      console.warn(`[Local LLM] Retrying with max_tokens=${maxTokens} (context ${limits.context}, input ${limits.input}).`);
+      log.warn({ maxTokens, context: limits.context, input: limits.input }, 'local LLM: retrying with smaller max_tokens');
       data = await requestCompletion(prompt, maxTokens, outputMode);
     }
 
     const text = extractTextFromContent(data?.choices?.[0]?.message?.content || '');
     const usage = data.usage;
 
-    console.log('[Local LLM] Response received.');
-    console.log('[Local LLM] Usage:', usage);
+    log.info({ usage }, 'local LLM: response received');
 
     if (outputMode === 'markdown') {
       return {
@@ -197,7 +196,7 @@ async function generateContent(prompt) {
     };
 
   } catch (error) {
-    console.error('[Local LLM] Generation failed:', error);
+    log.error({ err: error }, 'local LLM: generation failed');
     throw error;
   }
 }

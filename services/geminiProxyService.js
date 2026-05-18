@@ -1,6 +1,41 @@
+const {
+  EXECUTION_BUDGET_MS,
+  clampExecutionBudget,
+  clientTimeoutFor,
+} = require('./geminiTimeouts');
+const { CODES, isRetriableCode, errorCodeOf } = require('./geminiErrors');
+const log = require('../lib/logger').child({ module: 'gemini-proxy' });
+
 function toNumberOr(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) return num;
+  }
+  return 0;
+}
+
+function resolveExecutionBudget(options = {}) {
+  const explicitBudget = firstFiniteNumber(options.timeoutMs);
+  if (explicitBudget) return explicitBudget;
+  // Backward compatibility for deployments that still set the old proxy envs.
+  // The old "execution" timeout maps to the new executor budget semantics.
+  return firstFiniteNumber(
+    process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS,
+    process.env.GEMINI_EXECUTION_BUDGET_MS,
+    process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS,
+    EXECUTION_BUDGET_MS
+  );
+}
+
+function resolveExecutionTimeout(options = {}) {
+  const explicitTimeout = firstFiniteNumber(options.executionTimeoutMs);
+  if (explicitTimeout) return explicitTimeout;
+  return firstFiniteNumber(process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS);
 }
 
 function parseBoolean(value, fallback) {
@@ -16,11 +51,10 @@ function sleep(ms) {
 }
 
 function buildResetUrl(apiUrl) {
+  // The gateway forwards /admin/reset to the host executor, so deriving the
+  // reset URL from the configured endpoint works for both gateway and direct
+  // executor URLs.
   try {
-    if (looksLikeGateway18888(apiUrl)) {
-      // Gateway may not expose /admin/reset; only call executor reset explicitly.
-      return '';
-    }
     const parsed = new URL(apiUrl);
     parsed.pathname = '/admin/reset';
     parsed.search = '';
@@ -38,15 +72,14 @@ function isMcpDiagnosticError(message) {
   return /mcp diagnostic detected|mcp issues detected|run\s+\/mcp\s+list\s+for\s+status/i.test(String(message || ''));
 }
 
-function isRetriableError(message) {
-  const text = String(message || '');
+function isRetriableError(error) {
+  // Prefer the structured code carried by chain errors; fall back to message
+  // text for network-level failures that never reach a coded layer.
+  if (isRetriableCode(errorCodeOf(error))) return true;
+  const text = String((error && error.message) || error || '');
   return isTimeoutLikeError(text)
     || isMcpDiagnosticError(text)
     || /Gemini proxy error \(5\d\d\)|fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(text);
-}
-
-function isBreakerOpenError(message) {
-  return /circuit breaker is open|breaker open|upstream_unavailable/i.test(String(message || ''));
 }
 
 function maybeTrim(value) {
@@ -208,8 +241,20 @@ async function runOnce(url, payload, timeoutMs, headers, options = {}) {
 
     if (!res.ok) {
       const text = await res.text();
-      const detail = String(text || '').trim();
-      throw new Error(`Gemini proxy error (${res.status})${detail ? `: ${detail}` : ''}`);
+      let body = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch (_) {
+        body = null;
+      }
+      const detail = (body && body.error) || String(text || '').trim();
+      const err = new Error(`Gemini proxy error (${res.status})${detail ? `: ${detail}` : ''}`);
+      // Preserve the structured status/code/payload so callers (and the job
+      // queue) can classify the failure instead of regex-matching the message.
+      err.status = res.status;
+      err.payload = body || { error: detail, code: '' };
+      if (body && body.code) err.code = body.code;
+      throw err;
     }
     const json = await res.json();
     const { response: sanitized, modified } = sanitizeMcpDiagnosticsInResponse(json);
@@ -226,7 +271,9 @@ async function runOnce(url, payload, timeoutMs, headers, options = {}) {
     return sanitized;
   } catch (err) {
     if (err?.name === 'AbortError') {
-      throw new Error(`Gemini proxy request timeout (${timeoutMs}ms)`);
+      const timeoutErr = new Error(`Gemini proxy request timeout (${timeoutMs}ms)`);
+      timeoutErr.code = CODES.GATEWAY_TIMEOUT;
+      throw timeoutErr;
     }
     throw err;
   } finally {
@@ -246,12 +293,17 @@ async function runGeminiProxy(prompt, options = {}) {
   if (project) {
     payload.project = project;
   }
-  const timeoutMs = toNumberOr(options.timeoutMs ?? process.env.GEMINI_PROXY_REQUEST_TIMEOUT_MS, 120000);
-  payload.timeoutMs = timeoutMs;
-  const executionTimeoutMs = toNumberOr(options.executionTimeoutMs ?? process.env.GEMINI_PROXY_EXECUTION_TIMEOUT_MS, 0);
+  // Execution budget = how long the gemini CLI may run. The transport layers
+  // derive their own (longer) abort deadlines from it via geminiTimeouts, so
+  // the executor always times out first and reports a clean, specific error.
+  const executionBudget = resolveExecutionBudget(options);
+  const executionTimeoutMs = resolveExecutionTimeout(options);
+  payload.timeoutMs = clampExecutionBudget(executionBudget);
   if (executionTimeoutMs > 0) {
     payload.executionTimeoutMs = executionTimeoutMs;
   }
+  // The client fetch must outlive whatever the executor actually runs.
+  const timeoutMs = clientTimeoutFor(Math.max(executionBudget, executionTimeoutMs));
   const paramPolicy = maybeTrim(options.paramPolicy || process.env.GEMINI_PROXY_PARAM_POLICY || 'strict').toLowerCase();
   if (executionTimeoutMs > 0 || (paramPolicy && paramPolicy !== 'strict')) {
     payload.paramPolicy = paramPolicy || 'strict';
@@ -261,10 +313,8 @@ async function runGeminiProxy(prompt, options = {}) {
 
   const retries = toNumberOr(options.retries ?? process.env.GEMINI_PROXY_RETRIES, 1);
   const retryDelayMs = toNumberOr(options.retryDelayMs ?? process.env.GEMINI_PROXY_RETRY_DELAY_MS, 1200);
-  const breakerRetryDelayMs = toNumberOr(options.breakerRetryDelayMs ?? process.env.GEMINI_PROXY_BREAKER_RETRY_DELAY_MS, 6000);
   const resetOnTimeout = parseBoolean(options.resetOnTimeout ?? process.env.GEMINI_PROXY_AUTO_RESET, true);
   const retryOnTimeout = parseBoolean(options.retryOnTimeout ?? process.env.GEMINI_PROXY_RETRY_ON_TIMEOUT, true);
-  const retryOnBreakerOpen = parseBoolean(options.retryOnBreakerOpen ?? process.env.GEMINI_PROXY_RETRY_ON_BREAKER_OPEN, true);
   const enforceGateway = parseBoolean(options.enforceGateway ?? process.env.GEMINI_PROXY_ENFORCE_GATEWAY, true);
   const requireGatewayAuth = parseBoolean(options.requireGatewayAuth ?? process.env.GEMINI_PROXY_REQUIRE_AUTH, true);
   const resetUrl = options.resetUrl || process.env.GEMINI_PROXY_RESET_URL || buildResetUrl(url);
@@ -280,7 +330,10 @@ async function runGeminiProxy(prompt, options = {}) {
 
   let lastError = null;
   const attempts = Math.max(1, retries + 1);
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  // Labeled so a non-retriable error (or an exhausted retry budget) falls
+  // through to the final wrapped throw — a plain `break` here would only exit
+  // the inner candidate loop and the outer attempt loop would keep retrying.
+  retry: for (let attempt = 1; attempt <= attempts; attempt += 1) {
     for (let i = 0; i < urlCandidates.length; i += 1) {
       const candidateUrl = urlCandidates[i];
       const hasFallback = i < urlCandidates.length - 1;
@@ -292,32 +345,54 @@ async function runGeminiProxy(prompt, options = {}) {
         lastError = error;
         const isNetworkError = /fetch failed|Network is unreachable|EHOSTUNREACH|ECONNREFUSED|ENETUNREACH/i.test(String(error?.message || ''));
         if (hasFallback && isNetworkError) {
-          console.warn('[GeminiProxy] primary url failed, trying fallback:', { primary: candidateUrl, fallback: urlCandidates[i + 1], error: error.message });
+          log.warn({ err: error, primary: candidateUrl, fallback: urlCandidates[i + 1] }, 'primary url failed, trying fallback');
           continue;
         }
 
-        const timeoutLike = isTimeoutLikeError(error.message);
-        const breakerOpen = isBreakerOpenError(error.message);
-        const retriable = isRetriableError(error.message)
-          && !(timeoutLike && !retryOnTimeout)
-          && !(breakerOpen && !retryOnBreakerOpen);
+        const code = errorCodeOf(error);
+        const timeoutLike = code === CODES.EXECUTOR_TIMEOUT
+          || code === CODES.GATEWAY_TIMEOUT
+          || isTimeoutLikeError(error.message);
+        const retriable = isRetriableError(error)
+          && !(timeoutLike && !retryOnTimeout);
         if (!retriable || attempt >= attempts) {
-          i = urlCandidates.length; // break candidate loop
-          break;
+          break retry;
         }
 
         if (timeoutLike && resetOnTimeout) {
           const resetResult = await triggerReset(resetUrl);
-          console.warn('[GeminiProxy] timeout detected, reset requested:', resetResult);
+          log.warn({ resetResult }, 'timeout detected, reset requested');
         }
 
-        await sleep(breakerOpen ? breakerRetryDelayMs : (retryDelayMs * attempt));
-        i = urlCandidates.length; // go next attempt
+        await sleep(retryDelayMs * attempt);
+        break; // exit candidate loop, advance to next attempt
       }
     }
   }
 
-  throw new Error(`Gemini proxy failed after ${attempts} attempt(s): ${lastError?.message || 'unknown error'}`);
+  const finalError = new Error(`Gemini proxy failed after ${attempts} attempt(s): ${lastError?.message || 'unknown error'}`);
+  // Carry the underlying structured fields through so the job queue can still
+  // classify the failure (capacity / timeout / etc.) after retries are spent.
+  if (lastError) {
+    if (lastError.status) finalError.status = lastError.status;
+    if (lastError.payload) finalError.payload = lastError.payload;
+    if (lastError.code) finalError.code = lastError.code;
+  }
+  throw finalError;
 }
 
 module.exports = { runGeminiProxy };
+// Pure helpers exposed for unit tests — not part of the public API; production
+// callers should never reach for these.
+module.exports._internal = {
+  buildResetUrl,
+  isTimeoutLikeError,
+  isMcpDiagnosticError,
+  isRetriableError,
+  sanitizeMcpDiagnosticText,
+  sanitizeMcpDiagnosticsInResponse,
+  assertNoMcpDiagnosticInResponse,
+  looksLikeGateway18888,
+  buildUrlCandidates,
+  buildAuthHeaders,
+};

@@ -11,74 +11,22 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const log = require('../lib/logger').child({ module: 'svc/database' });
+const generationJobsDomain = require('./db/generationJobs');
+const experimentsDomain = require('./db/experiments');
+const generationsDomain = require('./db/generations');
+const highlightsDomain = require('./db/highlights');
+const trainingAssetsDomain = require('./db/trainingAssets');
+const knowledgeJobsDomain = require('./db/knowledgeJobs');
+const knowledgeIssuesDomain = require('./db/knowledgeIssues');
+const knowledgeGrammarDomain = require('./db/knowledgeGrammar');
+const knowledgeClustersDomain = require('./db/knowledgeClusters');
+const knowledgeTermsIndexDomain = require('./db/knowledgeTermsIndex');
+const knowledgeSynonymsDomain = require('./db/knowledgeSynonyms');
+const knowledgeRelationsDomain = require('./db/knowledgeRelations');
+const testResetDomain = require('./db/testReset');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
-
-function stripHtmlTags(text) {
-  return String(text || '').replace(/<[^>]+>/g, '');
-}
-
-function decodeBasicHtmlEntities(text) {
-  return String(text || '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function computeHighlightMetricsFromHtml(html) {
-  const input = String(html || '');
-  if (!input.trim()) return { markCount: 0, highlightedChars: 0 };
-
-  const blockMatches = input.match(/<mark\b[^>]*class=(?:"[^"]*\bstudy-highlight-red\b[^"]*"|'[^']*\bstudy-highlight-red\b[^']*')[^>]*>[\s\S]*?<\/mark>/gi) || [];
-  let highlightedChars = 0;
-
-  blockMatches.forEach((block) => {
-    const inner = block
-      .replace(/^<mark\b[^>]*>/i, '')
-      .replace(/<\/mark>$/i, '');
-    const plain = decodeBasicHtmlEntities(stripHtmlTags(inner)).replace(/\s+/g, ' ').trim();
-    highlightedChars += plain.length;
-  });
-
-  return { markCount: blockMatches.length, highlightedChars };
-}
-
-function safeJsonParse(text, fallback) {
-  if (text == null || text === '') return fallback;
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    return fallback;
-  }
-}
-
-function normalizeSynonymLookupKey(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function sanitizeSynonymDisplayKey(value) {
-  const key = String(value || '').trim();
-  if (!key) return '';
-  const lower = key.toLowerCase();
-  if (lower === '...' || lower === 'null' || lower === 'undefined' || lower === 'n/a' || lower === 'na') {
-    return '';
-  }
-  return key;
-}
-
-function buildSynonymDetailKey(row = {}) {
-  const pairKey = sanitizeSynonymDisplayKey(row.pair_key);
-  if (pairKey) return pairKey;
-  const groupKey = sanitizeSynonymDisplayKey(row.group_key);
-  if (groupKey) return groupKey;
-  const rowId = Number(row.id || 0);
-  if (rowId > 0) return `id:${rowId}`;
-  return '';
-}
 
 function readTableColumns(db, tableName) {
   return db.prepare(`PRAGMA table_info(${tableName})`).all();
@@ -98,7 +46,7 @@ function ensureTableColumns(db, tableName, columnDefs = []) {
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDef}`);
       existing.add(columnName.toLowerCase());
     } catch (err) {
-      console.warn(`[Database] Column migration skipped: ${tableName}.${columnName} ->`, err.message);
+      log.warn({ err, table: tableName, column: columnName }, 'column migration skipped');
     }
   });
 }
@@ -111,7 +59,9 @@ class DatabaseService {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    this.db = new Database(dbPath, { verbose: console.log });
+    // Route every SQL through the logger at debug level — silent by default,
+    // visible with LOG_LEVEL=debug. Stops schema init from flooding stdout.
+    this.db = new Database(dbPath, { verbose: (sql) => log.debug({ sql }, 'sqlite') });
 
     // 性能优化
     this.db.pragma('journal_mode = WAL');
@@ -119,7 +69,7 @@ class DatabaseService {
 
     this.initializeTables();
 
-    console.log('[Database] Initialized:', dbPath);
+    log.info({ dbPath }, 'database initialized');
   }
 
   /**
@@ -129,7 +79,7 @@ class DatabaseService {
     const schemaPath = path.join(__dirname, '../database/schema.sql');
 
     if (!fs.existsSync(schemaPath)) {
-      console.warn('[Database] Schema file not found:', schemaPath);
+      log.warn({ schemaPath }, 'schema file not found');
       return;
     }
 
@@ -137,7 +87,7 @@ class DatabaseService {
     this.db.exec(schema);
     this.ensureSchemaMigrations();
 
-    console.log('[Database] Tables initialized');
+    log.info('database tables initialized');
   }
 
   ensureSchemaMigrations() {
@@ -156,7 +106,7 @@ class DatabaseService {
       try {
         this.db.exec(sql);
       } catch (err) {
-        console.warn('[Database] Migration skipped:', sql, err.message);
+        log.warn({ err, sql }, 'migration skipped');
       }
     });
 
@@ -583,1005 +533,112 @@ class DatabaseService {
    * @returns {number} generationId
    */
   insertGeneration(data) {
-    const transaction = this.db.transaction((genData, obsData, audioData) => {
-      try {
-        // 1. 插入主记录
-        const genInsert = this.db.prepare(`
-          INSERT INTO generations (
-            phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
-            folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
-            markdown_content, en_translation, ja_translation, zh_translation,
-            generation_date, request_id
-          ) VALUES (
-            @phrase, @phraseLanguage, @cardType, @sourceMode, @llmProvider, @llmModel,
-            @folderName, @baseFilename, @mdFilePath, @htmlFilePath, @metaFilePath,
-            @markdownContent, @enTranslation, @jaTranslation, @zhTranslation,
-            @generationDate, @requestId
-          )
-        `);
-
-        const genResult = genInsert.run(genData);
-        const generationId = genResult.lastInsertRowid;
-
-        // 2. 插入可观测性指标
-        const obsInsert = this.db.prepare(`
-          INSERT INTO observability_metrics (
-            generation_id, tokens_input, tokens_output, tokens_total, tokens_cached,
-            cost_input, cost_output, cost_total, cost_currency,
-            quota_used, quota_limit, quota_remaining, quota_reset_at, quota_percentage,
-            performance_total_ms, performance_phases,
-            quality_score, quality_checks, quality_dimensions, quality_warnings,
-            prompt_full, prompt_parsed, llm_output, llm_finish_reason, metadata
-          ) VALUES (
-            @generationId, @tokensInput, @tokensOutput, @tokensTotal, @tokensCached,
-            @costInput, @costOutput, @costTotal, @costCurrency,
-            @quotaUsed, @quotaLimit, @quotaRemaining, @quotaResetAt, @quotaPercentage,
-            @performanceTotalMs, @performancePhases,
-            @qualityScore, @qualityChecks, @qualityDimensions, @qualityWarnings,
-            @promptFull, @promptParsed, @llmOutput, @llmFinishReason, @metadata
-          )
-        `);
-
-        obsInsert.run({ ...obsData, generationId });
-
-        // 3. 插入音频文件记录
-        if (audioData && audioData.length > 0) {
-          const audioInsert = this.db.prepare(`
-            INSERT INTO audio_files (
-              generation_id, language, text, filename_suffix, file_path,
-              tts_provider, tts_model, status
-            ) VALUES (
-              @generationId, @language, @text, @filenameSuffix, @filePath,
-              @ttsProvider, @ttsModel, @status
-            )
-          `);
-
-          for (const audio of audioData) {
-            audioInsert.run({ ...audio, generationId });
-          }
-        }
-
-        return generationId;
-      } catch (error) {
-        console.error('[Database] Insert error:', error);
-        throw error;
-      }
-    });
-
-    return transaction(data.generation, data.observability, data.audioFiles || []);
+    return generationsDomain.insertGeneration(this.db, data);
   }
 
-  /**
-   * 记录错误
-   */
   insertError(errorData) {
-    const stmt = this.db.prepare(`
-      INSERT INTO generation_errors (
-        phrase, llm_provider, request_id, error_type, error_message,
-        error_stack, prompt, llm_response, validation_errors
-      ) VALUES (
-        @phrase, @llmProvider, @requestId, @errorType, @errorMessage,
-        @errorStack, @prompt, @llmResponse, @validationErrors
-      )
-    `);
-
-    return stmt.run(errorData);
+    return generationsDomain.insertError(this.db, errorData);
   }
 
-  // ========== 查询操作 ==========
-
-  /**
-   * 分页查询历史记录
-   */
-  queryGenerations({ page = 1, limit = 20, provider, cardType, dateFrom, dateTo, search }) {
-    let sql = `
-      SELECT g.*,
-        (SELECT COUNT(*) FROM audio_files WHERE generation_id = g.id AND status = 'generated') as audio_count,
-        om.quality_score, om.tokens_total, om.cost_total, om.performance_total_ms
-      FROM generations g
-      LEFT JOIN observability_metrics om ON g.id = om.generation_id
-      WHERE 1=1
-    `;
-
-    const params = {};
-
-    if (provider) {
-      sql += ` AND g.llm_provider = @provider`;
-      params.provider = provider;
-    }
-
-    if (cardType) {
-      sql += ` AND g.card_type = @cardType`;
-      params.cardType = cardType;
-    }
-
-    if (dateFrom) {
-      sql += ` AND g.generation_date >= @dateFrom`;
-      params.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      sql += ` AND g.generation_date <= @dateTo`;
-      params.dateTo = dateTo;
-    }
-
-    if (search) {
-      sql += ` AND g.id IN (
-        SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-      )`;
-      params.search = search;
-    }
-
-    sql += ` ORDER BY g.created_at DESC LIMIT @limit OFFSET @offset`;
-    params.limit = limit;
-    params.offset = (page - 1) * limit;
-
-    const stmt = this.db.prepare(sql);
-    return stmt.all(params);
+  queryGenerations(filters = {}) {
+    return generationsDomain.query(this.db, filters);
   }
 
-  /**
-   * 获取总记录数
-   */
-  getTotalCount({ provider, cardType, dateFrom, dateTo, search }) {
-    let sql = `SELECT COUNT(*) as total FROM generations WHERE 1=1`;
-    const params = {};
-
-    if (provider) {
-      sql += ` AND llm_provider = @provider`;
-      params.provider = provider;
-    }
-
-    if (cardType) {
-      sql += ` AND card_type = @cardType`;
-      params.cardType = cardType;
-    }
-
-    if (dateFrom) {
-      sql += ` AND generation_date >= @dateFrom`;
-      params.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      sql += ` AND generation_date <= @dateTo`;
-      params.dateTo = dateTo;
-    }
-
-    if (search) {
-      sql += ` AND id IN (
-        SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-      )`;
-      params.search = search;
-    }
-
-    const stmt = this.db.prepare(sql);
-    return stmt.get(params).total;
+  getTotalCount(filters = {}) {
+    return generationsDomain.getTotalCount(this.db, filters);
   }
 
-  /**
-   * 获取单条记录详情
-   */
   getGenerationById(id) {
-    const generation = this.db.prepare(`
-      SELECT * FROM generations WHERE id = ?
-    `).get(id);
-
-    if (!generation) return null;
-
-    const observability = this.db.prepare(`
-      SELECT * FROM observability_metrics WHERE generation_id = ?
-    `).get(id);
-
-    const audioFiles = this.db.prepare(`
-      SELECT * FROM audio_files WHERE generation_id = ? ORDER BY filename_suffix
-    `).all(id);
-
-    return {
-      ...generation,
-      observability: observability ? {
-        ...observability,
-        performance_phases: JSON.parse(observability.performance_phases || '{}'),
-        quality_checks: JSON.parse(observability.quality_checks || '[]'),
-        quality_dimensions: JSON.parse(observability.quality_dimensions || '{}'),
-        quality_warnings: JSON.parse(observability.quality_warnings || '[]'),
-        prompt_parsed: JSON.parse(observability.prompt_parsed || '{}'),
-        metadata: JSON.parse(observability.metadata || '{}')
-      } : null,
-      audioFiles
-    };
+    return generationsDomain.getById(this.db, id);
   }
 
-  /**
-   * 根据文件夹与基础文件名获取记录
-   */
   getGenerationByFile(folderName, baseFilename) {
-    const generation = this.db.prepare(`
-      SELECT * FROM generations
-      WHERE folder_name = ? AND base_filename = ?
-      ORDER BY id DESC
-      LIMIT 1
-    `).get(folderName, baseFilename);
-
-    return generation || null;
+    return generationsDomain.getByFile(this.db, folderName, baseFilename);
   }
 
-  /**
-   * 获取卡片标红（按 folder/base/sourceHash）
-   */
   getCardHighlightByFile(folderName, baseFilename, sourceHash) {
-    if (!folderName || !baseFilename || !sourceHash) return null;
-    return this.db.prepare(`
-      SELECT
-        id,
-        generation_id AS generationId,
-        folder_name AS folderName,
-        base_filename AS baseFilename,
-        source_hash AS sourceHash,
-        version,
-        html_content AS htmlContent,
-        mark_count AS markCount,
-        highlighted_chars AS highlightedChars,
-        updated_by AS updatedBy,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM card_highlights
-      WHERE folder_name = ?
-        AND base_filename = ?
-        AND source_hash = ?
-      LIMIT 1
-    `).get(folderName, baseFilename, sourceHash) || null;
+    return highlightsDomain.getByFile(this.db, folderName, baseFilename, sourceHash);
   }
 
-  /**
-   * 写入卡片标红（upsert）
-   */
   upsertCardHighlight(payload = {}) {
-    const folderName = String(payload.folderName || '').trim();
-    const baseFilename = String(payload.baseFilename || '').trim();
-    const sourceHash = String(payload.sourceHash || '').trim();
-    const htmlContent = String(payload.htmlContent || '');
-    if (!folderName || !baseFilename || !sourceHash) {
-      throw new Error('folderName/baseFilename/sourceHash are required');
-    }
-    if (!htmlContent.trim()) {
-      throw new Error('htmlContent is required');
-    }
-
-    const generationId = payload.generationId ? Number(payload.generationId) : null;
-    const version = Number(payload.version || 1);
-    const updatedBy = String(payload.updatedBy || 'ui').trim() || 'ui';
-    const metrics = computeHighlightMetricsFromHtml(htmlContent);
-
-    this.db.prepare(`
-      INSERT INTO card_highlights (
-        generation_id,
-        folder_name,
-        base_filename,
-        source_hash,
-        version,
-        html_content,
-        mark_count,
-        highlighted_chars,
-        updated_by,
-        created_at,
-        updated_at
-      ) VALUES (
-        @generationId,
-        @folderName,
-        @baseFilename,
-        @sourceHash,
-        @version,
-        @htmlContent,
-        @markCount,
-        @highlightedChars,
-        @updatedBy,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(folder_name, base_filename, source_hash) DO UPDATE SET
-        generation_id = COALESCE(excluded.generation_id, card_highlights.generation_id),
-        version = excluded.version,
-        html_content = excluded.html_content,
-        mark_count = excluded.mark_count,
-        highlighted_chars = excluded.highlighted_chars,
-        updated_by = excluded.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `).run({
-      generationId,
-      folderName,
-      baseFilename,
-      sourceHash,
-      version,
-      htmlContent,
-      markCount: metrics.markCount,
-      highlightedChars: metrics.highlightedChars,
-      updatedBy
-    });
-
-    return this.getCardHighlightByFile(folderName, baseFilename, sourceHash);
+    return highlightsDomain.upsert(this.db, payload);
   }
 
-  /**
-   * 删除卡片标红（支持指定 sourceHash 或删除该卡片全部版本）
-   */
   deleteCardHighlightByFile(folderName, baseFilename, sourceHash = '') {
-    if (!folderName || !baseFilename) return 0;
-    if (sourceHash) {
-      const result = this.db.prepare(`
-        DELETE FROM card_highlights
-        WHERE folder_name = ?
-          AND base_filename = ?
-          AND source_hash = ?
-      `).run(folderName, baseFilename, sourceHash);
-      return result.changes || 0;
-    }
-    const result = this.db.prepare(`
-      DELETE FROM card_highlights
-      WHERE folder_name = ?
-        AND base_filename = ?
-    `).run(folderName, baseFilename);
-    return result.changes || 0;
+    return highlightsDomain.deleteByFile(this.db, folderName, baseFilename, sourceHash);
   }
 
-  /**
-   * 标红统计（Mission Control / 后续分析）
-   */
-  getHighlightStats({ dateFrom, dateTo, provider, cardType } = {}) {
-    const conditions = ['1=1'];
-    const params = {};
-
-    if (dateFrom) {
-      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) >= @dateFrom`);
-      params.dateFrom = dateFrom;
-    }
-    if (dateTo) {
-      conditions.push(`COALESCE(g.generation_date, date(ch.updated_at)) <= @dateTo`);
-      params.dateTo = dateTo;
-    }
-    if (provider) {
-      conditions.push(`g.llm_provider = @provider`);
-      params.provider = provider;
-    }
-    if (cardType) {
-      conditions.push(`g.card_type = @cardType`);
-      params.cardType = cardType;
-    }
-
-    const whereSql = conditions.join(' AND ');
-
-    const overview = this.db.prepare(`
-      SELECT
-        COUNT(*) AS highlightedCards,
-        SUM(ch.mark_count) AS totalMarks,
-        AVG(ch.mark_count) AS avgMarksPerCard,
-        SUM(ch.highlighted_chars) AS totalHighlightedChars,
-        AVG(ch.highlighted_chars) AS avgHighlightedChars,
-        MAX(ch.updated_at) AS lastUpdatedAt
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-    `).get(params);
-
-    const byCardType = this.db.prepare(`
-      SELECT
-        COALESCE(g.card_type, 'unknown') AS cardType,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks,
-        AVG(ch.mark_count) AS avgMarks
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY COALESCE(g.card_type, 'unknown')
-      ORDER BY cards DESC
-    `).all(params);
-
-    const byProvider = this.db.prepare(`
-      SELECT
-        COALESCE(g.llm_provider, 'unknown') AS provider,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY COALESCE(g.llm_provider, 'unknown')
-      ORDER BY cards DESC
-    `).all(params);
-
-    const trend = this.db.prepare(`
-      SELECT
-        date(ch.updated_at) AS day,
-        COUNT(*) AS cards,
-        SUM(ch.mark_count) AS marks,
-        SUM(ch.highlighted_chars) AS highlightedChars
-      FROM card_highlights ch
-      LEFT JOIN generations g ON g.id = ch.generation_id
-      WHERE ${whereSql}
-      GROUP BY date(ch.updated_at)
-      ORDER BY day DESC
-      LIMIT 90
-    `).all(params);
-
-    return {
-      overview: {
-        highlightedCards: Number(overview?.highlightedCards || 0),
-        totalMarks: Number(overview?.totalMarks || 0),
-        avgMarksPerCard: Number((overview?.avgMarksPerCard || 0).toFixed(2)),
-        totalHighlightedChars: Number(overview?.totalHighlightedChars || 0),
-        avgHighlightedChars: Number((overview?.avgHighlightedChars || 0).toFixed(2)),
-        lastUpdatedAt: overview?.lastUpdatedAt || null
-      },
-      byCardType,
-      byProvider,
-      trend
-    };
+  getHighlightStats(filters = {}) {
+    return highlightsDomain.getStats(this.db, filters);
   }
 
   mapTrainingAssetRow(row) {
-    if (!row) return null;
-    return {
-      id: Number(row.id || 0),
-      generationId: Number(row.generation_id || 0),
-      folderName: row.folder_name || '',
-      baseFilename: row.base_filename || '',
-      cardType: row.card_type || 'trilingual',
-      status: row.status || 'failed',
-      source: row.source || 'heuristic',
-      providerUsed: row.provider_used || '',
-      modelUsed: row.model_used || '',
-      promptVersion: row.prompt_version || '',
-      schemaVersion: row.schema_version || 'training_pack_v1',
-      qualityScore: Number(row.quality_score || 0),
-      selfConfidence: Number(row.self_confidence || 0),
-      coverageScore: Number(row.coverage_score || 0),
-      validationErrors: safeJsonParse(row.validation_errors_json, []),
-      fallbackReason: row.fallback_reason || null,
-      tokensInput: Number(row.tokens_input || 0),
-      tokensOutput: Number(row.tokens_output || 0),
-      tokensTotal: Number(row.tokens_total || 0),
-      costTotal: Number(row.cost_total || 0),
-      latencyMs: Number(row.latency_ms || 0),
-      payload: safeJsonParse(row.payload_json, null),
-      sidecarFilePath: row.sidecar_file_path || '',
-      createdAt: row.created_at || null,
-      updatedAt: row.updated_at || null
-    };
+    return trainingAssetsDomain.mapRow(row);
   }
 
   getCardTrainingAssetByGenerationId(generationId) {
-    const id = Number(generationId || 0);
-    if (!id) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM card_training_assets
-      WHERE generation_id = ?
-      LIMIT 1
-    `).get(id);
-    return this.mapTrainingAssetRow(row);
+    return trainingAssetsDomain.getByGenerationId(this.db, generationId);
   }
 
   getCardTrainingAssetByFile(folderName, baseFilename) {
-    const folder = String(folderName || '').trim();
-    const base = String(baseFilename || '').trim();
-    if (!folder || !base) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM card_training_assets
-      WHERE folder_name = ?
-        AND base_filename = ?
-      ORDER BY updated_at DESC, id DESC
-      LIMIT 1
-    `).get(folder, base);
-    return this.mapTrainingAssetRow(row);
+    return trainingAssetsDomain.getByFile(this.db, folderName, baseFilename);
   }
 
   getTrainingBackfillSummary(filters = {}) {
-    const folderName = String(filters.folderName || '').trim();
-    const cardType = String(filters.cardType || '').trim();
-    const provider = String(filters.provider || '').trim().toLowerCase();
-
-    const where = ['1=1'];
-    const params = {};
-
-    if (folderName) {
-      where.push('g.folder_name = @folderName');
-      params.folderName = folderName;
-    }
-
-    if (cardType) {
-      where.push('g.card_type = @cardType');
-      params.cardType = cardType;
-    }
-
-    if (provider) {
-      where.push('g.llm_provider = @provider');
-      params.provider = provider;
-    }
-
-    const row = this.db.prepare(`
-      SELECT
-        COUNT(*) AS total_generations,
-        SUM(CASE WHEN cta.generation_id IS NOT NULL THEN 1 ELSE 0 END) AS with_training,
-        SUM(CASE WHEN cta.generation_id IS NULL THEN 1 ELSE 0 END) AS missing_training,
-        SUM(CASE WHEN cta.status = 'ready' THEN 1 ELSE 0 END) AS ready_count,
-        SUM(CASE WHEN cta.status = 'repaired' THEN 1 ELSE 0 END) AS repaired_count,
-        SUM(CASE WHEN cta.status = 'fallback' THEN 1 ELSE 0 END) AS fallback_count,
-        SUM(CASE WHEN cta.status = 'failed' THEN 1 ELSE 0 END) AS failed_count
-      FROM generations g
-      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
-      WHERE ${where.join(' AND ')}
-    `).get(params) || {};
-
-    return {
-      totalGenerations: Number(row.total_generations || 0),
-      withTraining: Number(row.with_training || 0),
-      missingTraining: Number(row.missing_training || 0),
-      readyCount: Number(row.ready_count || 0),
-      repairedCount: Number(row.repaired_count || 0),
-      fallbackCount: Number(row.fallback_count || 0),
-      failedCount: Number(row.failed_count || 0)
-    };
+    return trainingAssetsDomain.getBackfillSummary(this.db, filters);
   }
 
   listTrainingBackfillCandidates(filters = {}) {
-    const limit = Math.max(1, Math.min(200, Number(filters.limit || 20)));
-    const force = Boolean(filters.force);
-    const folderName = String(filters.folderName || '').trim();
-    const cardType = String(filters.cardType || '').trim();
-    const provider = String(filters.provider || '').trim().toLowerCase();
-
-    const where = ['1=1'];
-    const params = { limit };
-
-    if (folderName) {
-      where.push('g.folder_name = @folderName');
-      params.folderName = folderName;
-    }
-
-    if (cardType) {
-      where.push('g.card_type = @cardType');
-      params.cardType = cardType;
-    }
-
-    if (provider) {
-      where.push('g.llm_provider = @provider');
-      params.provider = provider;
-    }
-
-    if (!force) {
-      where.push('cta.generation_id IS NULL');
-    }
-
-    return this.db.prepare(`
-      SELECT
-        g.id,
-        g.phrase,
-        g.card_type,
-        g.folder_name,
-        g.base_filename,
-        g.llm_provider,
-        g.llm_model,
-        g.md_file_path,
-        g.created_at,
-        cta.status AS training_status
-      FROM generations g
-      LEFT JOIN card_training_assets cta ON cta.generation_id = g.id
-      WHERE ${where.join(' AND ')}
-      ORDER BY g.created_at DESC, g.id DESC
-      LIMIT @limit
-    `).all(params).map((row) => ({
-      id: Number(row.id || 0),
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      folderName: row.folder_name || '',
-      baseFilename: row.base_filename || '',
-      provider: row.llm_provider || '',
-      model: row.llm_model || '',
-      mdFilePath: row.md_file_path || '',
-      createdAt: row.created_at || null,
-      trainingStatus: row.training_status || null
-    }));
+    return trainingAssetsDomain.listBackfillCandidates(this.db, filters);
   }
 
   upsertCardTrainingAsset(payload = {}) {
-    const generationId = Number(payload.generationId || 0);
-    if (!generationId) throw new Error('generationId is required');
-    const folderName = String(payload.folderName || '').trim();
-    const baseFilename = String(payload.baseFilename || '').trim();
-    if (!folderName || !baseFilename) {
-      throw new Error('folderName/baseFilename are required');
-    }
-
-    this.db.prepare(`
-      INSERT INTO card_training_assets (
-        generation_id,
-        folder_name,
-        base_filename,
-        card_type,
-        status,
-        source,
-        provider_used,
-        model_used,
-        prompt_version,
-        schema_version,
-        quality_score,
-        self_confidence,
-        coverage_score,
-        validation_errors_json,
-        fallback_reason,
-        tokens_input,
-        tokens_output,
-        tokens_total,
-        cost_total,
-        latency_ms,
-        payload_json,
-        sidecar_file_path,
-        created_at,
-        updated_at
-      ) VALUES (
-        @generationId,
-        @folderName,
-        @baseFilename,
-        @cardType,
-        @status,
-        @source,
-        @providerUsed,
-        @modelUsed,
-        @promptVersion,
-        @schemaVersion,
-        @qualityScore,
-        @selfConfidence,
-        @coverageScore,
-        @validationErrorsJson,
-        @fallbackReason,
-        @tokensInput,
-        @tokensOutput,
-        @tokensTotal,
-        @costTotal,
-        @latencyMs,
-        @payloadJson,
-        @sidecarFilePath,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(generation_id) DO UPDATE SET
-        folder_name = excluded.folder_name,
-        base_filename = excluded.base_filename,
-        card_type = excluded.card_type,
-        status = excluded.status,
-        source = excluded.source,
-        provider_used = excluded.provider_used,
-        model_used = excluded.model_used,
-        prompt_version = excluded.prompt_version,
-        schema_version = excluded.schema_version,
-        quality_score = excluded.quality_score,
-        self_confidence = excluded.self_confidence,
-        coverage_score = excluded.coverage_score,
-        validation_errors_json = excluded.validation_errors_json,
-        fallback_reason = excluded.fallback_reason,
-        tokens_input = excluded.tokens_input,
-        tokens_output = excluded.tokens_output,
-        tokens_total = excluded.tokens_total,
-        cost_total = excluded.cost_total,
-        latency_ms = excluded.latency_ms,
-        payload_json = excluded.payload_json,
-        sidecar_file_path = excluded.sidecar_file_path,
-        updated_at = CURRENT_TIMESTAMP
-    `).run({
-      generationId,
-      folderName,
-      baseFilename,
-      cardType: String(payload.cardType || 'trilingual').trim() || 'trilingual',
-      status: String(payload.status || 'failed').trim() || 'failed',
-      source: String(payload.source || 'heuristic').trim() || 'heuristic',
-      providerUsed: String(payload.providerUsed || '').trim(),
-      modelUsed: String(payload.modelUsed || '').trim(),
-      promptVersion: String(payload.promptVersion || '').trim(),
-      schemaVersion: String(payload.schemaVersion || 'training_pack_v1').trim() || 'training_pack_v1',
-      qualityScore: Number(payload.qualityScore || 0),
-      selfConfidence: Number(payload.selfConfidence || 0),
-      coverageScore: Number(payload.coverageScore || 0),
-      validationErrorsJson: JSON.stringify(Array.isArray(payload.validationErrors) ? payload.validationErrors : []),
-      fallbackReason: payload.fallbackReason ? String(payload.fallbackReason) : null,
-      tokensInput: Number(payload.tokensInput || 0),
-      tokensOutput: Number(payload.tokensOutput || 0),
-      tokensTotal: Number(payload.tokensTotal || 0),
-      costTotal: Number(payload.costTotal || 0),
-      latencyMs: Number(payload.latencyMs || 0),
-      payloadJson: payload.payload ? JSON.stringify(payload.payload) : null,
-      sidecarFilePath: String(payload.sidecarFilePath || '').trim()
-    });
-
-    return this.getCardTrainingAssetByGenerationId(generationId);
+    return trainingAssetsDomain.upsert(this.db, payload);
   }
 
   deleteCardTrainingAssetByFile(folderName, baseFilename) {
-    const folder = String(folderName || '').trim();
-    const base = String(baseFilename || '').trim();
-    if (!folder || !base) return 0;
-    const result = this.db.prepare(`
-      DELETE FROM card_training_assets
-      WHERE folder_name = ?
-        AND base_filename = ?
-    `).run(folder, base);
-    return Number(result.changes || 0);
+    return trainingAssetsDomain.deleteByFile(this.db, folderName, baseFilename);
   }
 
-  /**
-   * Few-shot runs by experiment id
-   */
+  // ========== Experiments + few-shot ==========
+  // Domain extracted to services/db/experiments.js. These are thin
+  // delegations so external callers (scripts/run_fewshot_rounds.js,
+  // experimentTrackingService, etc.) keep the dbService.METHOD(...) shape.
+
   getFewShotRuns(experimentId) {
-    if (!experimentId) return [];
-    return this.db.prepare(`
-      SELECT * FROM few_shot_runs
-      WHERE experiment_id = ?
-      ORDER BY created_at ASC
-    `).all(experimentId);
+    return experimentsDomain.getFewShotRuns(this.db, experimentId);
   }
 
-  /**
-   * Few-shot examples by run ids
-   */
   getFewShotExamples(runIds = []) {
-    if (!runIds.length) return [];
-    const placeholders = runIds.map(() => '?').join(', ');
-    return this.db.prepare(`
-      SELECT * FROM few_shot_examples
-      WHERE run_id IN (${placeholders})
-      ORDER BY id ASC
-    `).all(...runIds);
+    return experimentsDomain.getFewShotExamples(this.db, runIds);
   }
 
-  /**
-   * 写入或更新实验轮次配置
-   */
   upsertExperimentRound(roundData) {
-    const stmt = this.db.prepare(`
-      INSERT INTO experiment_rounds (
-        experiment_id, round_number, round_name, variant, llm_model,
-        fewshot_enabled, fewshot_strategy, fewshot_count, fewshot_min_score,
-        token_budget_ratio, context_window, notes
-      ) VALUES (
-        @experimentId, @roundNumber, @roundName, @variant, @llmModel,
-        @fewshotEnabled, @fewshotStrategy, @fewshotCount, @fewshotMinScore,
-        @tokenBudgetRatio, @contextWindow, @notes
-      )
-      ON CONFLICT(experiment_id, round_number) DO UPDATE SET
-        round_name = excluded.round_name,
-        variant = excluded.variant,
-        llm_model = excluded.llm_model,
-        fewshot_enabled = excluded.fewshot_enabled,
-        fewshot_strategy = excluded.fewshot_strategy,
-        fewshot_count = excluded.fewshot_count,
-        fewshot_min_score = excluded.fewshot_min_score,
-        token_budget_ratio = excluded.token_budget_ratio,
-        context_window = excluded.context_window,
-        notes = COALESCE(excluded.notes, experiment_rounds.notes),
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    stmt.run({
-      experimentId: roundData.experimentId,
-      roundNumber: Number(roundData.roundNumber || 0),
-      roundName: roundData.roundName || null,
-      variant: roundData.variant || null,
-      llmModel: roundData.llmModel || null,
-      fewshotEnabled: roundData.fewshotEnabled ? 1 : 0,
-      fewshotStrategy: roundData.fewshotStrategy || null,
-      fewshotCount: Number(roundData.fewshotCount || 0),
-      fewshotMinScore: roundData.fewshotMinScore ?? null,
-      tokenBudgetRatio: roundData.tokenBudgetRatio ?? null,
-      contextWindow: roundData.contextWindow ?? null,
-      notes: roundData.notes || null
-    });
+    return experimentsDomain.upsertRound(this.db, roundData);
   }
 
-  /**
-   * 写入实验样本
-   */
   insertExperimentSample(sample) {
-    const stmt = this.db.prepare(`
-      INSERT INTO experiment_samples (
-        experiment_id, round_number, generation_id, phrase, provider, variant,
-        is_teacher, quality_score, quality_dimensions, tokens_total, latency_ms,
-        prompt_hash, fewshot_enabled, success, error_message
-      ) VALUES (
-        @experimentId, @roundNumber, @generationId, @phrase, @provider, @variant,
-        @isTeacher, @qualityScore, @qualityDimensions, @tokensTotal, @latencyMs,
-        @promptHash, @fewshotEnabled, @success, @errorMessage
-      )
-    `);
-
-    const result = stmt.run({
-      experimentId: sample.experimentId,
-      roundNumber: Number(sample.roundNumber || 0),
-      generationId: sample.generationId ?? null,
-      phrase: sample.phrase || '',
-      provider: sample.provider || 'local',
-      variant: sample.variant || null,
-      isTeacher: sample.isTeacher ? 1 : 0,
-      qualityScore: sample.qualityScore ?? null,
-      qualityDimensions: sample.qualityDimensions ? JSON.stringify(sample.qualityDimensions) : null,
-      tokensTotal: sample.tokensTotal ?? null,
-      latencyMs: sample.latencyMs ?? null,
-      promptHash: sample.promptHash || null,
-      fewshotEnabled: sample.fewshotEnabled ? 1 : 0,
-      success: sample.success === false ? 0 : 1,
-      errorMessage: sample.errorMessage || null
-    });
-
-    return result.lastInsertRowid;
+    return experimentsDomain.insertSample(this.db, sample);
   }
 
-  /**
-   * 写入或更新 Teacher 参考输出
-   */
   upsertTeacherReference(ref) {
-    const stmt = this.db.prepare(`
-      INSERT INTO teacher_references (
-        experiment_id, round_number, phrase, provider, generation_id,
-        quality_score, output_hash, output_text
-      ) VALUES (
-        @experimentId, @roundNumber, @phrase, @provider, @generationId,
-        @qualityScore, @outputHash, @outputText
-      )
-      ON CONFLICT(experiment_id, round_number, phrase) DO UPDATE SET
-        provider = excluded.provider,
-        generation_id = excluded.generation_id,
-        quality_score = excluded.quality_score,
-        output_hash = excluded.output_hash,
-        output_text = excluded.output_text,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    stmt.run({
-      experimentId: ref.experimentId,
-      roundNumber: Number(ref.roundNumber || 0),
-      phrase: ref.phrase || '',
-      provider: ref.provider || 'gemini',
-      generationId: ref.generationId ?? null,
-      qualityScore: ref.qualityScore ?? null,
-      outputHash: ref.outputHash || null,
-      outputText: ref.outputText || null
-    });
+    return experimentsDomain.upsertTeacherReference(this.db, ref);
   }
 
-  /**
-   * 重算并回写实验轮次聚合指标
-   */
   recomputeExperimentRoundStats(experimentId, roundNumber) {
-    const localStats = this.db.prepare(`
-      SELECT
-        COUNT(*) AS sampleCount,
-        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS successCount,
-        AVG(quality_score) AS avgQuality,
-        AVG(tokens_total) AS avgTokens,
-        AVG(latency_ms) AS avgLatency
-      FROM experiment_samples
-      WHERE experiment_id = ?
-        AND round_number = ?
-        AND is_teacher = 0
-    `).get(experimentId, roundNumber);
-
-    const teacherStats = this.db.prepare(`
-      SELECT AVG(quality_score) AS teacherAvg
-      FROM teacher_references
-      WHERE experiment_id = ?
-        AND round_number <= ?
-    `).get(experimentId, roundNumber);
-
-    this.db.prepare(`
-      UPDATE experiment_rounds
-      SET
-        sample_count = @sampleCount,
-        success_count = @successCount,
-        avg_quality_score = @avgQuality,
-        avg_tokens_total = @avgTokens,
-        avg_latency_ms = @avgLatency,
-        teacher_avg_quality = @teacherAvg,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE experiment_id = @experimentId
-        AND round_number = @roundNumber
-    `).run({
-      experimentId,
-      roundNumber,
-      sampleCount: localStats?.sampleCount || 0,
-      successCount: localStats?.successCount || 0,
-      avgQuality: localStats?.avgQuality ?? null,
-      avgTokens: localStats?.avgTokens ?? null,
-      avgLatency: localStats?.avgLatency ?? null,
-      teacherAvg: teacherStats?.teacherAvg ?? null
-    });
+    return experimentsDomain.recomputeRoundStats(this.db, experimentId, roundNumber);
   }
 
-  /**
-   * 获取实验轮次聚合数据（用于趋势图）
-   */
   getExperimentRoundTrend(experimentId) {
-    if (!experimentId) return [];
-    return this.db.prepare(`
-      SELECT
-        round_number AS roundNumber,
-        round_name AS roundName,
-        variant,
-        llm_model AS llmModel,
-        fewshot_enabled AS fewshotEnabled,
-        fewshot_strategy AS fewshotStrategy,
-        fewshot_count AS fewshotCount,
-        fewshot_min_score AS fewshotMinScore,
-        token_budget_ratio AS tokenBudgetRatio,
-        context_window AS contextWindow,
-        sample_count AS sampleCount,
-        success_count AS successCount,
-        avg_quality_score AS avgQualityScore,
-        avg_tokens_total AS avgTokensTotal,
-        avg_latency_ms AS avgLatencyMs,
-        teacher_avg_quality AS teacherAvgQuality,
-        (teacher_avg_quality - avg_quality_score) AS teacherGap,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM experiment_rounds
-      WHERE experiment_id = ?
-      ORDER BY round_number ASC
-    `).all(experimentId);
+    return experimentsDomain.getRoundTrend(this.db, experimentId);
   }
 
-  /**
-   * 获取实验样本明细
-   */
   getExperimentSamples(experimentId) {
-    if (!experimentId) return [];
-    const rows = this.db.prepare(`
-      SELECT
-        id,
-        experiment_id AS experimentId,
-        round_number AS roundNumber,
-        generation_id AS generationId,
-        phrase,
-        provider,
-        variant,
-        is_teacher AS isTeacher,
-        quality_score AS qualityScore,
-        quality_dimensions AS qualityDimensions,
-        tokens_total AS tokensTotal,
-        latency_ms AS latencyMs,
-        prompt_hash AS promptHash,
-        fewshot_enabled AS fewshotEnabled,
-        success,
-        error_message AS errorMessage,
-        created_at AS createdAt
-      FROM experiment_samples
-      WHERE experiment_id = ?
-      ORDER BY round_number ASC, id ASC
-    `).all(experimentId);
-
-    return rows.map((row) => ({
-      ...row,
-      qualityDimensions: row.qualityDimensions ? JSON.parse(row.qualityDimensions) : null
-    }));
+    return experimentsDomain.getSamples(this.db, experimentId);
   }
 
-  /**
-   * 获取 Teacher 参考输出
-   */
   getTeacherReferences(experimentId) {
-    if (!experimentId) return [];
-    return this.db.prepare(`
-      SELECT
-        id,
-        experiment_id AS experimentId,
-        round_number AS roundNumber,
-        phrase,
-        provider,
-        generation_id AS generationId,
-        quality_score AS qualityScore,
-        output_hash AS outputHash,
-        output_text AS outputText,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM teacher_references
-      WHERE experiment_id = ?
-      ORDER BY round_number ASC, id ASC
-    `).all(experimentId);
+    return experimentsDomain.getTeacherReferences(this.db, experimentId);
   }
 
   /**
@@ -1768,52 +825,16 @@ class DatabaseService {
     };
   }
 
-  /**
-   * 全文搜索
-   */
   fullTextSearch(query, limit = 20) {
-    const sql = `
-      SELECT g.*,
-        snippet(generations_fts, 4, '<mark>', '</mark>', '...', 30) as snippet
-      FROM generations_fts
-      JOIN generations g ON generations_fts.rowid = g.id
-      WHERE generations_fts MATCH @query
-      ORDER BY rank
-      LIMIT @limit
-    `;
-
-    return this.db.prepare(sql).all({ query, limit });
+    return generationsDomain.fullTextSearch(this.db, query, limit);
   }
 
-  /**
-   * 获取最近的记录
-   */
   getRecentGenerations(limit = 10) {
-    const sql = `
-      SELECT g.id, g.phrase, g.llm_provider, g.created_at,
-        om.quality_score, om.tokens_total
-      FROM generations g
-      LEFT JOIN observability_metrics om ON g.id = om.generation_id
-      ORDER BY g.created_at DESC
-      LIMIT ?
-    `;
-
-    return this.db.prepare(sql).all(limit);
+    return generationsDomain.getRecent(this.db, limit);
   }
 
-  /**
-   * 删除生成记录（级联删除关联的音频和observability记录）
-   */
   deleteGeneration(id) {
-    const sql = 'DELETE FROM generations WHERE id = ?';
-    const result = this.db.prepare(sql).run(id);
-
-    if (result.changes === 0) {
-      throw new Error(`Generation with id ${id} not found`);
-    }
-
-    console.log(`[Database] Deleted generation id=${id} (changes=${result.changes})`);
-    return result.changes;
+    return generationsDomain.remove(this.db, id);
   }
 
   /**
@@ -1894,1969 +915,201 @@ class DatabaseService {
   }
 
   // ========== Generation jobs ==========
+  // Domain extracted to services/db/generationJobs.js; these are thin
+  // delegations so external callers (routes, generationJobService, server.js)
+  // keep their dbService.METHOD(...) call shape unchanged.
 
   mapGenerationJobRow(row) {
-    if (!row) return null;
-    return {
-      id: row.id,
-      jobType: row.job_type || 'trilingual',
-      phraseRaw: row.phrase_raw || row.phrase_normalized,
-      phraseNormalized: row.phrase_normalized,
-      sourceMode: row.source_mode || null,
-      targetFolder: row.target_folder || '',
-      provider: row.llm_provider || 'gemini',
-      llmModel: row.llm_model || '',
-      enableCompare: Number(row.enable_compare || 0) === 1,
-      status: row.status,
-      attempts: Number(row.attempts || 0),
-      maxRetries: Number(row.max_retries || 0),
-      errorMessage: row.error_message || '',
-      retryAfterTs: Number(row.retry_after_ts || 0) || null,
-      sourceContext: safeJsonParse(row.source_context_json, {}),
-      createdByClient: row.created_by_client || '',
-      resultGenerationId: row.result_generation_id ? Number(row.result_generation_id) : null,
-      resultFolder: row.result_folder || '',
-      resultBaseFilename: row.result_base_filename || '',
-      requestPayload: safeJsonParse(row.request_payload_json, {}),
-      resultSummary: safeJsonParse(row.result_summary_json, null),
-      createdAt: row.created_at,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      clearedAt: row.cleared_at
-    };
+    return generationJobsDomain.mapRow(row);
   }
 
   mapGenerationJobEventRow(row) {
-    if (!row) return null;
-    return {
-      id: Number(row.id || 0),
-      jobId: Number(row.job_id || 0),
-      eventType: String(row.event_type || '').trim() || 'unknown',
-      payload: safeJsonParse(row.payload_json, {}),
-      createdAt: row.created_at || ''
-    };
+    return generationJobsDomain.mapEventRow(row);
   }
 
   createGenerationJob(payload = {}) {
-    const stmt = this.db.prepare(`
-      INSERT INTO generation_jobs (
-        job_type, phrase_raw, phrase_normalized, source_mode, target_folder,
-        llm_provider, llm_model, enable_compare, status, attempts, max_retries,
-        source_context_json, created_by_client, request_payload_json
-      ) VALUES (
-        @jobType, @phraseRaw, @phraseNormalized, @sourceMode, @targetFolder,
-        @provider, @llmModel, @enableCompare, 'queued', 0, @maxRetries,
-        @sourceContextJson, @createdByClient, @requestPayloadJson
-      )
-    `);
-
-    const result = stmt.run({
-      jobType: String(payload.jobType || 'trilingual').trim() || 'trilingual',
-      phraseRaw: String(payload.phraseRaw || payload.phraseNormalized || '').trim(),
-      phraseNormalized: String(payload.phraseNormalized || '').trim(),
-      sourceMode: payload.sourceMode ? String(payload.sourceMode).trim() : null,
-      targetFolder: payload.targetFolder ? String(payload.targetFolder).trim() : null,
-      provider: String(payload.provider || 'gemini').trim() || 'gemini',
-      llmModel: payload.llmModel ? String(payload.llmModel).trim() : null,
-      enableCompare: payload.enableCompare ? 1 : 0,
-      maxRetries: Math.max(0, Number(payload.maxRetries == null ? 2 : payload.maxRetries)),
-      sourceContextJson: JSON.stringify(payload.sourceContext || {}),
-      createdByClient: payload.createdByClient ? String(payload.createdByClient) : null,
-      requestPayloadJson: JSON.stringify(payload.requestPayload || {})
-    });
-
-    return this.getGenerationJobById(result.lastInsertRowid);
+    return generationJobsDomain.create(this.db, payload);
   }
 
   appendGenerationJobEvent(jobId, eventType, payload = {}) {
-    const numericId = Number(jobId);
-    if (!numericId) return null;
-    this.db.prepare(`
-      INSERT INTO generation_job_events (job_id, event_type, payload_json)
-      VALUES (@jobId, @eventType, @payloadJson)
-    `).run({
-      jobId: numericId,
-      eventType: String(eventType || 'unknown').trim() || 'unknown',
-      payloadJson: JSON.stringify(payload || {})
-    });
-    return true;
+    return generationJobsDomain.appendEvent(this.db, jobId, eventType, payload);
   }
 
-  listGenerationJobEvents({ jobId = 0, limit = 20 } = {}) {
-    const safeLimit = Math.max(1, Math.min(100, Number(limit || 20)));
-    const numericJobId = Number(jobId || 0);
-    const rows = numericJobId > 0
-      ? this.db.prepare(`
-          SELECT *
-          FROM generation_job_events
-          WHERE job_id = ?
-          ORDER BY id ASC
-          LIMIT ?
-        `).all(numericJobId, safeLimit)
-      : this.db.prepare(`
-          SELECT *
-          FROM generation_job_events
-          ORDER BY id DESC
-          LIMIT ?
-        `).all(safeLimit).reverse();
-    return rows.map((row) => this.mapGenerationJobEventRow(row));
+  listGenerationJobEvents(opts = {}) {
+    return generationJobsDomain.listEvents(this.db, opts);
   }
 
   getGenerationJobById(jobId) {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM generation_jobs
-      WHERE id = ?
-      LIMIT 1
-    `).get(Number(jobId || 0));
-    return this.mapGenerationJobRow(row);
+    return generationJobsDomain.getById(this.db, jobId);
   }
 
   listGenerationJobs(limit = 30) {
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM generation_jobs
-      WHERE cleared_at IS NULL
-      ORDER BY id DESC
-      LIMIT ?
-    `).all(Math.max(1, Number(limit || 30)));
-    return rows.map((row) => this.mapGenerationJobRow(row));
+    return generationJobsDomain.list(this.db, limit);
   }
 
   getGenerationJobSummary() {
-    const counts = this.db.prepare(`
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
-        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
-      FROM generation_jobs
-      WHERE cleared_at IS NULL
-    `).get();
-    const activeRow = this.db.prepare(`
-      SELECT *
-      FROM generation_jobs
-      WHERE cleared_at IS NULL
-        AND status = 'running'
-      ORDER BY started_at DESC, id DESC
-      LIMIT 1
-    `).get();
-    return {
-      total: Number(counts.total || 0),
-      queued: Number(counts.queued || 0),
-      running: Number(counts.running || 0),
-      success: Number(counts.success || 0),
-      failed: Number(counts.failed || 0),
-      cancelled: Number(counts.cancelled || 0),
-      activeJob: this.mapGenerationJobRow(activeRow)
-    };
+    return generationJobsDomain.getSummary(this.db);
   }
 
   hasActiveDuplicateGenerationJob(phraseNormalized, jobType = 'trilingual') {
-    const row = this.db.prepare(`
-      SELECT id
-      FROM generation_jobs
-      WHERE cleared_at IS NULL
-        AND status IN ('queued', 'running', 'failed')
-        AND phrase_normalized = ?
-        AND job_type = ?
-      LIMIT 1
-    `).get(String(phraseNormalized || '').trim(), String(jobType || 'trilingual').trim());
-    return Boolean(row);
+    return generationJobsDomain.hasActiveDuplicate(this.db, phraseNormalized, jobType);
   }
 
   updateGenerationJob(jobId, patch = {}) {
-    const fields = [];
-    const params = { jobId: Number(jobId || 0) };
-
-    const fieldMap = [
-      ['status', 'status'],
-      ['attempts', 'attempts'],
-      ['maxRetries', 'max_retries'],
-      ['errorMessage', 'error_message'],
-      ['retryAfterTs', 'retry_after_ts'],
-      ['llmModel', 'llm_model'],
-      ['sourceMode', 'source_mode'],
-      ['targetFolder', 'target_folder'],
-      ['resultGenerationId', 'result_generation_id'],
-      ['resultFolder', 'result_folder'],
-      ['resultBaseFilename', 'result_base_filename'],
-      ['createdByClient', 'created_by_client'],
-      ['startedAt', 'started_at'],
-      ['finishedAt', 'finished_at'],
-      ['clearedAt', 'cleared_at']
-    ];
-
-    fieldMap.forEach(([inputKey, column]) => {
-      if (patch[inputKey] === undefined) return;
-      fields.push(`${column} = @${inputKey}`);
-      params[inputKey] = patch[inputKey];
-    });
-
-    if (patch.sourceContext !== undefined) {
-      fields.push('source_context_json = @sourceContextJson');
-      params.sourceContextJson = JSON.stringify(patch.sourceContext || {});
-    }
-    if (patch.requestPayload !== undefined) {
-      fields.push('request_payload_json = @requestPayloadJson');
-      params.requestPayloadJson = JSON.stringify(patch.requestPayload || {});
-    }
-    if (patch.resultSummary !== undefined) {
-      fields.push('result_summary_json = @resultSummaryJson');
-      params.resultSummaryJson = JSON.stringify(patch.resultSummary || {});
-    }
-
-    if (!fields.length) return this.getGenerationJobById(jobId);
-
-    this.db.prepare(`UPDATE generation_jobs SET ${fields.join(', ')} WHERE id = @jobId`).run(params);
-    return this.getGenerationJobById(jobId);
+    return generationJobsDomain.update(this.db, jobId, patch);
   }
 
   recoverStaleRunningGenerationJobs() {
-    const affected = this.db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'queued',
-          error_message = '服务重启后恢复：原执行中任务已重新排队。',
-          retry_after_ts = NULL,
-          started_at = NULL,
-          finished_at = NULL
-      WHERE cleared_at IS NULL
-        AND status = 'running'
-    `).run();
-    return Number(affected.changes || 0);
+    return generationJobsDomain.recoverStaleRunning(this.db);
   }
 
   takeNextQueuedGenerationJob() {
-    const tx = this.db.transaction(() => {
-      const row = this.db.prepare(`
-        SELECT *
-        FROM generation_jobs
-        WHERE cleared_at IS NULL
-          AND status = 'queued'
-          AND (retry_after_ts IS NULL OR retry_after_ts <= CAST(strftime('%s','now') AS INTEGER) * 1000)
-        ORDER BY id ASC
-        LIMIT 1
-      `).get();
-      if (!row) return null;
-
-      const nextAttempts = Number(row.attempts || 0) + 1;
-      this.db.prepare(`
-        UPDATE generation_jobs
-        SET status = 'running',
-            attempts = ?,
-            retry_after_ts = NULL,
-            started_at = CURRENT_TIMESTAMP,
-            finished_at = NULL,
-            error_message = NULL
-        WHERE id = ?
-      `).run(nextAttempts, row.id);
-
-      return this.db.prepare(`SELECT * FROM generation_jobs WHERE id = ? LIMIT 1`).get(row.id);
-    });
-
-    return this.mapGenerationJobRow(tx());
+    return generationJobsDomain.takeNextQueued(this.db);
   }
 
   retryGenerationJob(jobId) {
-    const result = this.db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'queued',
-          error_message = NULL,
-          retry_after_ts = NULL,
-          started_at = NULL,
-          finished_at = NULL,
-          cleared_at = NULL
-      WHERE id = ?
-        AND status = 'failed'
-    `).run(Number(jobId || 0));
-    return result.changes > 0 ? this.getGenerationJobById(jobId) : null;
+    return generationJobsDomain.retry(this.db, jobId);
   }
 
   clearCompletedGenerationJobs() {
-    const result = this.db.prepare(`
-      UPDATE generation_jobs
-      SET cleared_at = CURRENT_TIMESTAMP
-      WHERE cleared_at IS NULL
-        AND status IN ('success', 'cancelled')
-    `).run();
-    return Number(result.changes || 0);
+    return generationJobsDomain.clearCompleted(this.db);
   }
 
   cancelGenerationJob(jobId) {
-    const result = this.db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'cancelled',
-          retry_after_ts = NULL,
-          finished_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-        AND cleared_at IS NULL
-        AND status = 'queued'
-    `).run(Number(jobId || 0));
-    return result.changes > 0 ? this.getGenerationJobById(jobId) : null;
+    return generationJobsDomain.cancel(this.db, jobId);
   }
 
   getNextQueuedGenerationRetryTs() {
-    const row = this.db.prepare(`
-      SELECT MIN(retry_after_ts) AS retry_after_ts
-      FROM generation_jobs
-      WHERE cleared_at IS NULL
-        AND status = 'queued'
-        AND retry_after_ts IS NOT NULL
-        AND retry_after_ts > CAST(strftime('%s','now') AS INTEGER) * 1000
-    `).get();
-    const ts = Number(row?.retry_after_ts || 0);
-    return Number.isFinite(ts) && ts > 0 ? ts : null;
+    return generationJobsDomain.getNextQueuedRetryTs(this.db);
   }
 
   // ========== Knowledge analysis jobs ==========
+  // Lifecycle (create/status/list/cancel + synonym meta) extracted to
+  // services/db/knowledgeJobs.js. The deeper knowledge_* data tables
+  // (terms/synonym groups/grammar patterns/clusters/relations/index) still
+  // live below until they have their own unit-test layer.
 
   createKnowledgeJob(payload = {}) {
-    const stmt = this.db.prepare(`
-      INSERT INTO knowledge_jobs (
-        job_type, status, scope_json, batch_size, total_batches, done_batches,
-        error_batches, engine_version, triggered_by
-      ) VALUES (
-        @jobType, 'queued', @scopeJson, @batchSize, 0, 0, 0, @engineVersion, @triggeredBy
-      )
-    `);
-
-    const result = stmt.run({
-      jobType: String(payload.jobType || '').trim(),
-      scopeJson: JSON.stringify(payload.scope || {}),
-      batchSize: Math.max(1, Number(payload.batchSize || 50)),
-      engineVersion: String(payload.engineVersion || 'local-v1'),
-      triggeredBy: String(payload.triggeredBy || 'owner')
-    });
-
-    return this.getKnowledgeJobById(result.lastInsertRowid);
+    return knowledgeJobsDomain.create(this.db, payload);
   }
 
   upsertKnowledgeSynonymJobMeta(jobId, meta = {}) {
-    const normalizedJobId = Number(jobId);
-    if (!normalizedJobId) return null;
-    const stmt = this.db.prepare(`
-      INSERT INTO knowledge_synonym_jobs_meta (
-        job_id, model, prompt_version, schema_version, min_candidate_score,
-        max_pairs, max_llm_pairs, llm_enabled, candidate_count, success_count,
-        failed_count, json_parse_rate, avg_latency_ms, p95_latency_ms,
-        options_json, updated_at
-      ) VALUES (
-        @jobId, @model, @promptVersion, @schemaVersion, @minCandidateScore,
-        @maxPairs, @maxLlmPairs, @llmEnabled, @candidateCount, @successCount,
-        @failedCount, @jsonParseRate, @avgLatencyMs, @p95LatencyMs,
-        @optionsJson, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(job_id) DO UPDATE SET
-        model = excluded.model,
-        prompt_version = excluded.prompt_version,
-        schema_version = excluded.schema_version,
-        min_candidate_score = excluded.min_candidate_score,
-        max_pairs = excluded.max_pairs,
-        max_llm_pairs = excluded.max_llm_pairs,
-        llm_enabled = excluded.llm_enabled,
-        candidate_count = excluded.candidate_count,
-        success_count = excluded.success_count,
-        failed_count = excluded.failed_count,
-        json_parse_rate = excluded.json_parse_rate,
-        avg_latency_ms = excluded.avg_latency_ms,
-        p95_latency_ms = excluded.p95_latency_ms,
-        options_json = excluded.options_json,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    stmt.run({
-      jobId: normalizedJobId,
-      model: meta.model ? String(meta.model) : null,
-      promptVersion: meta.promptVersion ? String(meta.promptVersion) : null,
-      schemaVersion: meta.schemaVersion ? String(meta.schemaVersion) : null,
-      minCandidateScore: Number(meta.minCandidateScore == null ? 0.62 : meta.minCandidateScore),
-      maxPairs: Math.max(1, Number(meta.maxPairs == null ? 120 : meta.maxPairs)),
-      maxLlmPairs: Math.max(0, Number(meta.maxLlmPairs == null ? 24 : meta.maxLlmPairs)),
-      llmEnabled: meta.llmEnabled ? 1 : 0,
-      candidateCount: Math.max(0, Number(meta.candidateCount || 0)),
-      successCount: Math.max(0, Number(meta.successCount || 0)),
-      failedCount: Math.max(0, Number(meta.failedCount || 0)),
-      jsonParseRate: Number(meta.jsonParseRate || 0),
-      avgLatencyMs: Number(meta.avgLatencyMs || 0),
-      p95LatencyMs: Number(meta.p95LatencyMs || 0),
-      optionsJson: JSON.stringify(meta.options || {})
-    });
-
-    return this.getKnowledgeSynonymJobMeta(normalizedJobId);
+    return knowledgeJobsDomain.upsertSynonymMeta(this.db, jobId, meta);
   }
 
   getKnowledgeSynonymJobMeta(jobId) {
-    const normalizedJobId = Number(jobId);
-    if (!normalizedJobId) return null;
-    const row = this.db.prepare(`
-      SELECT *
-      FROM knowledge_synonym_jobs_meta
-      WHERE job_id = ?
-      LIMIT 1
-    `).get(normalizedJobId);
-    if (!row) return null;
-    return {
-      jobId: row.job_id,
-      model: row.model || null,
-      promptVersion: row.prompt_version || null,
-      schemaVersion: row.schema_version || null,
-      minCandidateScore: Number(row.min_candidate_score || 0),
-      maxPairs: Number(row.max_pairs || 0),
-      maxLlmPairs: Number(row.max_llm_pairs || 0),
-      llmEnabled: Number(row.llm_enabled || 0) === 1,
-      candidateCount: Number(row.candidate_count || 0),
-      successCount: Number(row.success_count || 0),
-      failedCount: Number(row.failed_count || 0),
-      jsonParseRate: Number(row.json_parse_rate || 0),
-      avgLatencyMs: Number(row.avg_latency_ms || 0),
-      p95LatencyMs: Number(row.p95_latency_ms || 0),
-      options: safeJsonParse(row.options_json, {}),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
+    return knowledgeJobsDomain.getSynonymMeta(this.db, jobId);
   }
 
   updateKnowledgeJobStatus(jobId, patch = {}) {
-    const fields = [];
-    const params = { jobId };
-
-    if (patch.status !== undefined) {
-      fields.push('status = @status');
-      params.status = String(patch.status);
-    }
-    if (patch.totalBatches !== undefined) {
-      fields.push('total_batches = @totalBatches');
-      params.totalBatches = Number(patch.totalBatches || 0);
-    }
-    if (patch.doneBatches !== undefined) {
-      fields.push('done_batches = @doneBatches');
-      params.doneBatches = Number(patch.doneBatches || 0);
-    }
-    if (patch.errorBatches !== undefined) {
-      fields.push('error_batches = @errorBatches');
-      params.errorBatches = Number(patch.errorBatches || 0);
-    }
-    if (patch.resultSummary !== undefined) {
-      fields.push('result_summary_json = @resultSummaryJson');
-      params.resultSummaryJson = JSON.stringify(patch.resultSummary || {});
-    }
-    if (patch.errorMessage !== undefined) {
-      fields.push('error_message = @errorMessage');
-      params.errorMessage = patch.errorMessage ? String(patch.errorMessage) : null;
-    }
-    if (patch.startedAt !== undefined) {
-      fields.push('started_at = @startedAt');
-      params.startedAt = patch.startedAt;
-    }
-    if (patch.finishedAt !== undefined) {
-      fields.push('finished_at = @finishedAt');
-      params.finishedAt = patch.finishedAt;
-    }
-
-    if (!fields.length) return this.getKnowledgeJobById(jobId);
-
-    const sql = `UPDATE knowledge_jobs SET ${fields.join(', ')} WHERE id = @jobId`;
-    this.db.prepare(sql).run(params);
-    return this.getKnowledgeJobById(jobId);
+    return knowledgeJobsDomain.updateStatus(this.db, jobId, patch);
   }
 
   getKnowledgeJobById(jobId) {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM knowledge_jobs
-      WHERE id = ?
-      LIMIT 1
-    `).get(jobId);
-    if (!row) return null;
-    const synonymMeta = row.job_type === 'synonym_boundary'
-      ? this.getKnowledgeSynonymJobMeta(row.id)
-      : null;
-    return {
-      id: row.id,
-      jobType: row.job_type,
-      status: row.status,
-      scope: safeJsonParse(row.scope_json, {}),
-      batchSize: row.batch_size,
-      totalBatches: row.total_batches,
-      doneBatches: row.done_batches,
-      errorBatches: row.error_batches,
-      resultSummary: safeJsonParse(row.result_summary_json, null),
-      errorMessage: row.error_message || null,
-      engineVersion: row.engine_version,
-      triggeredBy: row.triggered_by,
-      synonymMeta,
-      createdAt: row.created_at,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at
-    };
+    return knowledgeJobsDomain.getById(this.db, jobId);
   }
 
   listKnowledgeJobs(limit = 20) {
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM knowledge_jobs
-      ORDER BY id DESC
-      LIMIT ?
-    `).all(Math.max(1, Number(limit || 20)));
-    return rows.map((row) => {
-      const synonymMeta = row.job_type === 'synonym_boundary'
-        ? this.getKnowledgeSynonymJobMeta(row.id)
-        : null;
-      return {
-        id: row.id,
-        jobType: row.job_type,
-        status: row.status,
-        scope: safeJsonParse(row.scope_json, {}),
-        batchSize: row.batch_size,
-        totalBatches: row.total_batches,
-        doneBatches: row.done_batches,
-        errorBatches: row.error_batches,
-        resultSummary: safeJsonParse(row.result_summary_json, null),
-        errorMessage: row.error_message || null,
-        engineVersion: row.engine_version,
-        triggeredBy: row.triggered_by,
-        synonymMeta,
-        createdAt: row.created_at,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at
-      };
-    });
+    return knowledgeJobsDomain.list(this.db, limit);
   }
 
   cancelKnowledgeJob(jobId) {
-    const result = this.db.prepare(`
-      UPDATE knowledge_jobs
-      SET status = 'cancelled', finished_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-        AND status IN ('queued', 'running')
-    `).run(jobId);
-    return result.changes > 0;
+    return knowledgeJobsDomain.cancel(this.db, jobId);
   }
 
   insertKnowledgeRawOutput(jobId, batchNo, outputData = {}) {
-    const inputDigest = crypto
-      .createHash('sha1')
-      .update(JSON.stringify(outputData.input || {}))
-      .digest('hex');
-
-    this.db.prepare(`
-      INSERT INTO knowledge_outputs_raw (
-        job_id, batch_no, input_digest, status, output_json, error_message
-      ) VALUES (
-        @jobId, @batchNo, @inputDigest, @status, @outputJson, @errorMessage
-      )
-    `).run({
-      jobId,
-      batchNo: Number(batchNo || 1),
-      inputDigest,
-      status: String(outputData.status || 'ok'),
-      outputJson: JSON.stringify(outputData.output || {}),
-      errorMessage: outputData.errorMessage ? String(outputData.errorMessage) : null
-    });
+    return knowledgeRelationsDomain.insertRawOutput(this.db, jobId, batchNo, outputData);
   }
 
   getKnowledgeSourceCards(scope = {}) {
-    const conditions = ['1=1'];
-    const params = {};
-
-    if (scope.folderFrom) {
-      conditions.push('g.folder_name >= @folderFrom');
-      params.folderFrom = String(scope.folderFrom);
-    }
-    if (scope.folderTo) {
-      conditions.push('g.folder_name <= @folderTo');
-      params.folderTo = String(scope.folderTo);
-    }
-    if (Array.isArray(scope.cardTypes) && scope.cardTypes.length > 0) {
-      const placeholders = scope.cardTypes.map((_, idx) => `@cardType${idx}`);
-      scope.cardTypes.forEach((value, idx) => {
-        params[`cardType${idx}`] = String(value);
-      });
-      conditions.push(`g.card_type IN (${placeholders.join(', ')})`);
-    }
-
-    const limit = Number(scope.limit || 0);
-    const limitSql = Number.isFinite(limit) && limit > 0 ? `LIMIT ${Math.floor(limit)}` : '';
-
-    const sql = `
-      SELECT
-        g.id, g.phrase, g.card_type, g.source_mode, g.llm_provider, g.llm_model,
-        g.folder_name, g.base_filename, g.md_file_path, g.html_file_path,
-        g.markdown_content, g.en_translation, g.ja_translation, g.zh_translation,
-        g.created_at,
-        om.quality_score, om.tokens_total, om.performance_total_ms
-      FROM generations g
-      LEFT JOIN observability_metrics om ON om.generation_id = g.id
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY g.created_at DESC
-      ${limitSql}
-    `;
-
-    return this.db.prepare(sql).all(params);
+    return knowledgeRelationsDomain.getSourceCards(this.db, scope);
   }
 
   upsertKnowledgeTermsIndex(entries = [], jobId = null) {
-    if (!Array.isArray(entries) || entries.length === 0) return 0;
-    const stmt = this.db.prepare(`
-      INSERT INTO knowledge_terms_index (
-        generation_id, phrase, card_type, folder_name, lang_profile,
-        en_headword, ja_headword, zh_headword, aliases_json, tags_json,
-        score, last_job_id, updated_at
-      ) VALUES (
-        @generationId, @phrase, @cardType, @folderName, @langProfile,
-        @enHeadword, @jaHeadword, @zhHeadword, @aliasesJson, @tagsJson,
-        @score, @lastJobId, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(generation_id) DO UPDATE SET
-        phrase = excluded.phrase,
-        card_type = excluded.card_type,
-        folder_name = excluded.folder_name,
-        lang_profile = excluded.lang_profile,
-        en_headword = excluded.en_headword,
-        ja_headword = excluded.ja_headword,
-        zh_headword = excluded.zh_headword,
-        aliases_json = excluded.aliases_json,
-        tags_json = excluded.tags_json,
-        score = excluded.score,
-        last_job_id = excluded.last_job_id,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-    const transaction = this.db.transaction((rows) => {
-      let count = 0;
-      for (const item of rows) {
-        stmt.run({
-          generationId: Number(item.generationId),
-          phrase: String(item.phrase || ''),
-          cardType: String(item.cardType || 'trilingual'),
-          folderName: String(item.folderName || ''),
-          langProfile: String(item.langProfile || 'mixed'),
-          enHeadword: item.enHeadword || null,
-          jaHeadword: item.jaHeadword || null,
-          zhHeadword: item.zhHeadword || null,
-          aliasesJson: JSON.stringify(item.aliases || []),
-          tagsJson: JSON.stringify(item.tags || []),
-          score: Number(item.score || 0),
-          lastJobId: jobId ? Number(jobId) : null
-        });
-        count += 1;
-      }
-      return count;
-    });
-    return transaction(entries);
+    return knowledgeTermsIndexDomain.upsert(this.db, entries, jobId);
   }
 
   replaceKnowledgeIssues(issues = [], jobId = null) {
-    const clearStmt = this.db.prepare(`
-      DELETE FROM knowledge_issues
-      WHERE last_job_id = ?
-    `);
-    const insertStmt = this.db.prepare(`
-      INSERT INTO knowledge_issues (
-        issue_type, severity, generation_id, phrase, fingerprint,
-        detail_json, resolved, last_job_id, created_at, updated_at
-      ) VALUES (
-        @issueType, @severity, @generationId, @phrase, @fingerprint,
-        @detailJson, 0, @lastJobId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT(issue_type, fingerprint) DO UPDATE SET
-        severity = excluded.severity,
-        generation_id = excluded.generation_id,
-        phrase = excluded.phrase,
-        detail_json = excluded.detail_json,
-        resolved = 0,
-        last_job_id = excluded.last_job_id,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-
-    const transaction = this.db.transaction((rows) => {
-      if (jobId) clearStmt.run(Number(jobId));
-      let count = 0;
-      for (const item of rows) {
-        insertStmt.run({
-          issueType: String(item.issueType || 'unknown'),
-          severity: String(item.severity || 'medium'),
-          generationId: item.generationId ? Number(item.generationId) : null,
-          phrase: item.phrase || null,
-          fingerprint: String(item.fingerprint || crypto.randomBytes(8).toString('hex')),
-          detailJson: JSON.stringify(item.detail || {}),
-          lastJobId: jobId ? Number(jobId) : null
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(issues) ? issues : []);
+    return knowledgeIssuesDomain.replace(this.db, issues, jobId);
   }
 
   saveKnowledgeSynonymCandidates(jobId, candidates = []) {
-    const normalizedJobId = Number(jobId);
-    if (!normalizedJobId) return 0;
-    const rows = Array.isArray(candidates) ? candidates : [];
-    const transaction = this.db.transaction((payload) => {
-      this.db.prepare(`DELETE FROM knowledge_synonym_candidates WHERE job_id = ?`).run(normalizedJobId);
-      const stmt = this.db.prepare(`
-        INSERT INTO knowledge_synonym_candidates (
-          job_id, pair_key, term_a, term_b, candidate_score,
-          evidence_hash, evidence_snapshot_json, status, llm_latency_ms, llm_error, updated_at
-        ) VALUES (
-          @jobId, @pairKey, @termA, @termB, @candidateScore,
-          @evidenceHash, @evidenceSnapshotJson, @status, @llmLatencyMs, @llmError, CURRENT_TIMESTAMP
-        )
-        ON CONFLICT(job_id, pair_key) DO UPDATE SET
-          term_a = excluded.term_a,
-          term_b = excluded.term_b,
-          candidate_score = excluded.candidate_score,
-          evidence_hash = excluded.evidence_hash,
-          evidence_snapshot_json = excluded.evidence_snapshot_json,
-          status = excluded.status,
-          llm_latency_ms = excluded.llm_latency_ms,
-          llm_error = excluded.llm_error,
-          updated_at = CURRENT_TIMESTAMP
-      `);
-      let count = 0;
-      payload.forEach((item) => {
-        stmt.run({
-          jobId: normalizedJobId,
-          pairKey: String(item.pairKey || ''),
-          termA: String(item.termA || ''),
-          termB: String(item.termB || ''),
-          candidateScore: Number(item.candidateScore || 0),
-          evidenceHash: item.evidenceHash ? String(item.evidenceHash) : null,
-          evidenceSnapshotJson: JSON.stringify(item.evidenceSnapshot || {}),
-          status: String(item.status || 'queued'),
-          llmLatencyMs: Math.max(0, Number(item.llmLatencyMs || 0)),
-          llmError: item.llmError ? String(item.llmError) : null
-        });
-        count += 1;
-      });
-      return count;
-    });
-    return transaction(rows);
+    return knowledgeSynonymsDomain.saveCandidates(this.db, jobId, candidates);
   }
 
   replaceKnowledgeSynonymData(groups = [], jobId, options = {}) {
-    const transaction = this.db.transaction((payload, versionJobId, extraOptions) => {
-      this.db.prepare(`UPDATE knowledge_synonym_groups SET is_active = 0 WHERE is_active = 1`).run();
-
-      const insertGroup = this.db.prepare(`
-        INSERT INTO knowledge_synonym_groups (
-          group_key, pair_key, term_a, term_b, tone, register_text, collocation_note,
-          misuse_risk, risk_level, recommendation, actionable_hint,
-          confidence, coverage_ratio, model, prompt_version, schema_version,
-          evidence_hash, result_json, context_split_json, misuse_risks_json, jp_nuance_json,
-          boundary_tags_a_json, boundary_tags_b_json, parse_status, version_job_id, is_active
-        ) VALUES (
-          @groupKey, @pairKey, @termA, @termB, @tone, @registerText, @collocationNote,
-          @misuseRisk, @riskLevel, @recommendation, @actionableHint,
-          @confidence, @coverageRatio, @model, @promptVersion, @schemaVersion,
-          @evidenceHash, @resultJson, @contextSplitJson, @misuseRisksJson, @jpNuanceJson,
-          @boundaryTagsAJson, @boundaryTagsBJson, @parseStatus, @versionJobId, 1
-        )
-        ON CONFLICT(pair_key, schema_version, evidence_hash) DO UPDATE SET
-          group_key = excluded.group_key,
-          term_a = excluded.term_a,
-          term_b = excluded.term_b,
-          tone = excluded.tone,
-          register_text = excluded.register_text,
-          collocation_note = excluded.collocation_note,
-          misuse_risk = excluded.misuse_risk,
-          risk_level = excluded.risk_level,
-          recommendation = excluded.recommendation,
-          actionable_hint = excluded.actionable_hint,
-          confidence = excluded.confidence,
-          coverage_ratio = excluded.coverage_ratio,
-          model = excluded.model,
-          prompt_version = excluded.prompt_version,
-          schema_version = excluded.schema_version,
-          result_json = excluded.result_json,
-          context_split_json = excluded.context_split_json,
-          misuse_risks_json = excluded.misuse_risks_json,
-          jp_nuance_json = excluded.jp_nuance_json,
-          boundary_tags_a_json = excluded.boundary_tags_a_json,
-          boundary_tags_b_json = excluded.boundary_tags_b_json,
-          parse_status = excluded.parse_status,
-          version_job_id = excluded.version_job_id,
-          is_active = 1,
-          updated_at = CURRENT_TIMESTAMP
-      `);
-      const selectGroupId = this.db.prepare(`
-        SELECT id
-        FROM knowledge_synonym_groups
-        WHERE pair_key = @pairKey
-          AND schema_version = @schemaVersion
-          AND evidence_hash = @evidenceHash
-        LIMIT 1
-      `);
-      const insertMember = this.db.prepare(`
-        INSERT INTO knowledge_synonym_members (
-          group_id, generation_id, term, lang
-        ) VALUES (
-          @groupId, @generationId, @term, @lang
-        )
-      `);
-      const deleteMembers = this.db.prepare(`DELETE FROM knowledge_synonym_members WHERE group_id = ?`);
-
-      let count = 0;
-      for (const group of payload) {
-        const pairKey = String(
-          group.pairKey
-          || group.groupKey
-          || `${group.termA || ''}||${group.termB || ''}`
-        ).trim().toLowerCase();
-        const schemaVersion = String(group.schemaVersion || extraOptions.schemaVersion || '1.0.0');
-        const evidenceHash = String(
-          group.evidenceHash
-          || crypto.createHash('sha1').update(`${pairKey}|${schemaVersion}|${versionJobId}`).digest('hex')
-        );
-        insertGroup.run({
-          groupKey: String(group.groupKey || pairKey),
-          pairKey,
-          termA: group.termA ? String(group.termA) : null,
-          termB: group.termB ? String(group.termB) : null,
-          tone: group.boundaryMatrix?.tone || null,
-          registerText: group.boundaryMatrix?.register || null,
-          collocationNote: group.boundaryMatrix?.collocation || null,
-          misuseRisk: group.misuseRisk || 'medium',
-          riskLevel: group.riskLevel || group.misuseRisk || 'medium',
-          recommendation: group.recommendation || '',
-          actionableHint: group.actionableHint || null,
-          confidence: Number(group.confidence || 0),
-          coverageRatio: Number(group.coverageRatio || 0),
-          model: group.model || extraOptions.model || null,
-          promptVersion: group.promptVersion || extraOptions.promptVersion || null,
-          schemaVersion,
-          evidenceHash,
-          resultJson: JSON.stringify(group.resultJson || group.result || {}),
-          contextSplitJson: JSON.stringify(group.contextSplit || []),
-          misuseRisksJson: JSON.stringify(group.misuseRisks || []),
-          jpNuanceJson: JSON.stringify(group.jpNuance || {}),
-          boundaryTagsAJson: JSON.stringify(group.boundaryTagsA || []),
-          boundaryTagsBJson: JSON.stringify(group.boundaryTagsB || []),
-          parseStatus: String(group.parseStatus || 'ok'),
-          versionJobId: Number(versionJobId)
-        });
-        const row = selectGroupId.get({ pairKey, schemaVersion, evidenceHash });
-        const groupId = row ? Number(row.id) : 0;
-        if (!groupId) continue;
-        deleteMembers.run(groupId);
-        const members = Array.isArray(group.members) ? group.members : [];
-        for (const member of members) {
-          insertMember.run({
-            groupId,
-            generationId: member.generationId ? Number(member.generationId) : null,
-            term: String(member.term || ''),
-            lang: String(member.lang || 'zh')
-          });
-        }
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(groups) ? groups : [], Number(jobId), options || {});
+    return knowledgeSynonymsDomain.replaceData(this.db, groups, jobId, options);
   }
 
   replaceKnowledgeGrammarData(patterns = [], jobId) {
-    const transaction = this.db.transaction((payload, versionJobId) => {
-      this.db.prepare(`UPDATE knowledge_grammar_patterns SET is_active = 0 WHERE is_active = 1`).run();
-      this.db.prepare(`DELETE FROM knowledge_grammar_refs WHERE pattern_id IN (SELECT id FROM knowledge_grammar_patterns WHERE version_job_id = ?)`).run(versionJobId);
-      this.db.prepare(`DELETE FROM knowledge_grammar_patterns WHERE version_job_id = ?`).run(versionJobId);
-
-      const insertPattern = this.db.prepare(`
-        INSERT INTO knowledge_grammar_patterns (
-          pattern, explanation_zh, confidence, version_job_id, is_active
-        ) VALUES (
-          @pattern, @explanationZh, @confidence, @versionJobId, 1
-        )
-      `);
-      const insertRef = this.db.prepare(`
-        INSERT OR IGNORE INTO knowledge_grammar_refs (
-          pattern_id, generation_id, sentence_excerpt
-        ) VALUES (
-          @patternId, @generationId, @sentenceExcerpt
-        )
-      `);
-
-      let count = 0;
-      for (const pattern of payload) {
-        const result = insertPattern.run({
-          pattern: String(pattern.pattern || ''),
-          explanationZh: String(pattern.explanationZh || ''),
-          confidence: Number(pattern.confidence || 0),
-          versionJobId: Number(versionJobId)
-        });
-        const patternId = Number(result.lastInsertRowid);
-        const refs = Array.isArray(pattern.exampleRefs) ? pattern.exampleRefs : [];
-        refs.forEach((ref) => {
-          if (!ref.generationId) return;
-          insertRef.run({
-            patternId,
-            generationId: Number(ref.generationId),
-            sentenceExcerpt: String(ref.sentence || '')
-          });
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(patterns) ? patterns : [], Number(jobId));
+    return knowledgeGrammarDomain.replaceData(this.db, patterns, jobId);
   }
 
   replaceKnowledgeClusterData(clusters = [], jobId) {
-    const transaction = this.db.transaction((payload, versionJobId) => {
-      this.db.prepare(`UPDATE knowledge_clusters SET is_active = 0 WHERE is_active = 1`).run();
-      this.db.prepare(`DELETE FROM knowledge_cluster_cards WHERE cluster_id IN (SELECT id FROM knowledge_clusters WHERE version_job_id = ?)`).run(versionJobId);
-      this.db.prepare(`DELETE FROM knowledge_clusters WHERE version_job_id = ?`).run(versionJobId);
-
-      const insertCluster = this.db.prepare(`
-        INSERT INTO knowledge_clusters (
-          cluster_key, label, description, keywords_json, confidence, version_job_id, is_active
-        ) VALUES (
-          @clusterKey, @label, @description, @keywordsJson, @confidence, @versionJobId, 1
-        )
-      `);
-      const insertCard = this.db.prepare(`
-        INSERT OR IGNORE INTO knowledge_cluster_cards (
-          cluster_id, generation_id, score
-        ) VALUES (
-          @clusterId, @generationId, @score
-        )
-      `);
-
-      let count = 0;
-      for (const cluster of payload) {
-        const result = insertCluster.run({
-          clusterKey: String(cluster.clusterKey || ''),
-          label: String(cluster.label || 'Unknown'),
-          description: String(cluster.description || ''),
-          keywordsJson: JSON.stringify(cluster.keywords || []),
-          confidence: Number(cluster.confidence || 0),
-          versionJobId: Number(versionJobId)
-        });
-        const clusterId = Number(result.lastInsertRowid);
-        const cards = Array.isArray(cluster.cards) ? cluster.cards : [];
-        cards.forEach((card) => {
-          if (!card.generationId) return;
-          insertCard.run({
-            clusterId,
-            generationId: Number(card.generationId),
-            score: Number(card.score || 0)
-          });
-        });
-        count += 1;
-      }
-      return count;
-    });
-
-    return transaction(Array.isArray(clusters) ? clusters : [], Number(jobId));
+    return knowledgeClustersDomain.replaceData(this.db, clusters, jobId);
   }
 
-  getKnowledgeOverview({ limit = 8 } = {}) {
-    const normalizedLimit = Math.max(1, Number(limit || 8));
-    const counts = this.db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM knowledge_terms_index) AS term_count,
-        (SELECT COUNT(*) FROM knowledge_grammar_patterns WHERE is_active = 1) AS grammar_pattern_count,
-        (SELECT COUNT(*) FROM knowledge_clusters WHERE is_active = 1) AS cluster_count,
-        (SELECT COUNT(*) FROM knowledge_issues WHERE resolved = 0) AS open_issue_count,
-        (SELECT COUNT(*) FROM knowledge_jobs WHERE status = 'running') AS running_jobs,
-        (SELECT COUNT(*) FROM knowledge_jobs WHERE status = 'queued') AS queued_jobs
-    `).get() || {};
-
-    const topTerms = this.db.prepare(`
-      SELECT generation_id, phrase, card_type, score, folder_name
-      FROM knowledge_terms_index
-      ORDER BY score DESC, updated_at DESC
-      LIMIT ?
-    `).all(normalizedLimit).map((row) => ({
-      generationId: row.generation_id,
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      score: Number(row.score || 0),
-      folderName: row.folder_name || ''
-    }));
-
-    const topPatterns = this.db.prepare(`
-      SELECT pattern, confidence
-      FROM knowledge_grammar_patterns
-      WHERE is_active = 1
-      ORDER BY confidence DESC, updated_at DESC
-      LIMIT ?
-    `).all(normalizedLimit).map((row) => ({
-      pattern: row.pattern || '',
-      confidence: Number(row.confidence || 0)
-    }));
-
-    const topClusters = this.db.prepare(`
-      SELECT c.cluster_key, c.label, c.confidence, COUNT(cc.generation_id) AS card_count
-      FROM knowledge_clusters c
-      LEFT JOIN knowledge_cluster_cards cc ON cc.cluster_id = c.id
-      WHERE c.is_active = 1
-      GROUP BY c.id
-      ORDER BY c.confidence DESC, card_count DESC
-      LIMIT ?
-    `).all(normalizedLimit).map((row) => ({
-      clusterKey: row.cluster_key || '',
-      label: row.label || '',
-      confidence: Number(row.confidence || 0),
-      cardCount: Number(row.card_count || 0)
-    }));
-
-    const topIssues = this.db.prepare(`
-      SELECT issue_type, severity, COUNT(*) AS issue_count
-      FROM knowledge_issues
-      WHERE resolved = 0
-      GROUP BY issue_type, severity
-      ORDER BY issue_count DESC, severity DESC
-      LIMIT ?
-    `).all(normalizedLimit).map((row) => ({
-      issueType: row.issue_type || '',
-      severity: row.severity || 'medium',
-      count: Number(row.issue_count || 0)
-    }));
-
-    return {
-      counts: {
-        termCount: Number(counts.term_count || 0),
-        grammarPatternCount: Number(counts.grammar_pattern_count || 0),
-        clusterCount: Number(counts.cluster_count || 0),
-        openIssueCount: Number(counts.open_issue_count || 0),
-        runningJobs: Number(counts.running_jobs || 0),
-        queuedJobs: Number(counts.queued_jobs || 0)
-      },
-      topTerms,
-      topPatterns,
-      topClusters,
-      topIssues
-    };
+  getKnowledgeOverview(filters = {}) {
+    return knowledgeRelationsDomain.getOverview(this.db, filters);
   }
 
   _aggregateKnowledgeByGenerationIds(generationIds = [], limit = 12) {
-    const ids = Array.from(new Set((Array.isArray(generationIds) ? generationIds : [])
-      .map((id) => Number(id))
-      .filter((id) => Number.isFinite(id) && id > 0)));
-    if (!ids.length) {
-      return { patterns: [], clusters: [], issues: [] };
-    }
-
-    const placeholders = ids.map(() => '?').join(',');
-    const normalizedLimit = Math.max(1, Number(limit || 12));
-
-    const patterns = this.db.prepare(`
-      SELECT p.pattern, MAX(p.confidence) AS confidence, COUNT(DISTINCT r.generation_id) AS card_count
-      FROM knowledge_grammar_refs r
-      JOIN knowledge_grammar_patterns p ON p.id = r.pattern_id
-      WHERE p.is_active = 1
-        AND r.generation_id IN (${placeholders})
-      GROUP BY p.pattern
-      ORDER BY card_count DESC, confidence DESC
-      LIMIT ?
-    `).all(...ids, normalizedLimit).map((row) => ({
-      pattern: row.pattern || '',
-      confidence: Number(row.confidence || 0),
-      cardCount: Number(row.card_count || 0)
-    }));
-
-    const clusters = this.db.prepare(`
-      SELECT c.cluster_key, c.label, MAX(c.confidence) AS confidence, COUNT(DISTINCT cc.generation_id) AS card_count
-      FROM knowledge_cluster_cards cc
-      JOIN knowledge_clusters c ON c.id = cc.cluster_id
-      WHERE c.is_active = 1
-        AND cc.generation_id IN (${placeholders})
-      GROUP BY c.cluster_key, c.label
-      ORDER BY card_count DESC, confidence DESC
-      LIMIT ?
-    `).all(...ids, normalizedLimit).map((row) => ({
-      clusterKey: row.cluster_key || '',
-      label: row.label || '',
-      confidence: Number(row.confidence || 0),
-      cardCount: Number(row.card_count || 0)
-    }));
-
-    const issues = this.db.prepare(`
-      SELECT issue_type, severity, COUNT(*) AS issue_count
-      FROM knowledge_issues
-      WHERE generation_id IN (${placeholders})
-      GROUP BY issue_type, severity
-      ORDER BY issue_count DESC, severity DESC
-      LIMIT ?
-    `).all(...ids, normalizedLimit).map((row) => ({
-      issueType: row.issue_type || '',
-      severity: row.severity || 'medium',
-      count: Number(row.issue_count || 0)
-    }));
-
-    return { patterns, clusters, issues };
+    return knowledgeRelationsDomain.aggregateByGenerationIds(this.db, generationIds, limit);
   }
 
-  getKnowledgeCardRelations(generationId, { limit = 12 } = {}) {
-    const id = Number(generationId);
-    if (!id) return null;
-    const normalizedLimit = Math.max(1, Number(limit || 12));
-
-    const card = this.db.prepare(`
-      SELECT id, phrase, card_type, folder_name, base_filename, llm_provider, llm_model, created_at
-      FROM generations
-      WHERE id = ?
-      LIMIT 1
-    `).get(id);
-    if (!card) return null;
-
-    const termRow = this.db.prepare(`
-      SELECT *
-      FROM knowledge_terms_index
-      WHERE generation_id = ?
-      LIMIT 1
-    `).get(id);
-
-    const grammarHits = this.db.prepare(`
-      SELECT p.pattern, p.explanation_zh, p.confidence, r.sentence_excerpt
-      FROM knowledge_grammar_refs r
-      JOIN knowledge_grammar_patterns p ON p.id = r.pattern_id
-      WHERE r.generation_id = ?
-        AND p.is_active = 1
-      ORDER BY p.confidence DESC, r.id ASC
-      LIMIT ?
-    `).all(id, normalizedLimit).map((row) => ({
-      pattern: row.pattern || '',
-      explanationZh: row.explanation_zh || '',
-      confidence: Number(row.confidence || 0),
-      sentence: row.sentence_excerpt || ''
-    }));
-
-    const clusters = this.db.prepare(`
-      SELECT c.cluster_key, c.label, c.description, c.confidence, cc.score
-      FROM knowledge_cluster_cards cc
-      JOIN knowledge_clusters c ON c.id = cc.cluster_id
-      WHERE cc.generation_id = ?
-        AND c.is_active = 1
-      ORDER BY cc.score DESC, c.confidence DESC
-      LIMIT ?
-    `).all(id, normalizedLimit).map((row) => ({
-      clusterKey: row.cluster_key || '',
-      label: row.label || '',
-      description: row.description || '',
-      confidence: Number(row.confidence || 0),
-      score: Number(row.score || 0)
-    }));
-
-    const issues = this.db.prepare(`
-      SELECT issue_type, severity, detail_json, resolved, updated_at
-      FROM knowledge_issues
-      WHERE generation_id = ?
-      ORDER BY
-        CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
-        updated_at DESC
-      LIMIT ?
-    `).all(id, normalizedLimit).map((row) => ({
-      issueType: row.issue_type || '',
-      severity: row.severity || 'medium',
-      detail: safeJsonParse(row.detail_json, {}),
-      resolved: Boolean(row.resolved),
-      updatedAt: row.updated_at
-    }));
-
-    const examples = this.db.prepare(`
-      SELECT
-        eu.id AS example_id,
-        eu.lang,
-        eu.sentence_text,
-        eu.translation_text,
-        eu.eligibility,
-        eu.review_score_overall,
-        eu.review_votes,
-        eus.source_slot
-      FROM example_unit_sources eus
-      JOIN example_units eu ON eu.id = eus.example_id
-      WHERE eus.generation_id = ?
-      ORDER BY eus.source_slot ASC
-      LIMIT ?
-    `).all(id, normalizedLimit).map((row) => ({
-      exampleId: Number(row.example_id || 0),
-      lang: row.lang || '',
-      sourceSlot: row.source_slot || '',
-      sentence: row.sentence_text || '',
-      translation: row.translation_text || '',
-      eligibility: row.eligibility || 'pending',
-      reviewScoreOverall: row.review_score_overall == null ? null : Number(row.review_score_overall),
-      reviewVotes: Number(row.review_votes || 0)
-    }));
-
-    const synonymRows = this.db.prepare(`
-      SELECT
-        g.id AS group_id,
-        g.group_key,
-        g.misuse_risk,
-        g.recommendation,
-        g.confidence,
-        g.coverage_ratio,
-        m.term,
-        m.lang
-      FROM knowledge_synonym_members m
-      JOIN knowledge_synonym_groups g ON g.id = m.group_id
-      WHERE m.generation_id = ?
-        AND g.is_active = 1
-      ORDER BY g.confidence DESC, m.id ASC
-    `).all(id);
-    const synonymMap = new Map();
-    synonymRows.forEach((row) => {
-      const key = Number(row.group_id);
-      if (!synonymMap.has(key)) {
-        synonymMap.set(key, {
-          id: key,
-          groupKey: row.group_key || '',
-          misuseRisk: row.misuse_risk || 'medium',
-          recommendation: row.recommendation || '',
-          confidence: Number(row.confidence || 0),
-          coverageRatio: Number(row.coverage_ratio || 0),
-          members: []
-        });
-      }
-      synonymMap.get(key).members.push({
-        term: row.term || '',
-        lang: row.lang || ''
-      });
-    });
-
-    const relatedMap = new Map();
-    const clusterRelated = this.db.prepare(`
-      SELECT DISTINCT g.id AS generation_id, g.phrase, g.folder_name, g.base_filename, g.card_type, cc2.score
-      FROM knowledge_cluster_cards cc1
-      JOIN knowledge_cluster_cards cc2
-        ON cc1.cluster_id = cc2.cluster_id
-       AND cc2.generation_id != cc1.generation_id
-      LEFT JOIN generations g ON g.id = cc2.generation_id
-      WHERE cc1.generation_id = ?
-      ORDER BY cc2.score DESC, cc2.id ASC
-      LIMIT ?
-    `).all(id, normalizedLimit);
-    clusterRelated.forEach((row) => {
-      if (!row.generation_id) return;
-      const key = Number(row.generation_id);
-      if (!relatedMap.has(key)) {
-        relatedMap.set(key, {
-          generationId: key,
-          phrase: row.phrase || '',
-          folderName: row.folder_name || '',
-          baseName: row.base_filename || '',
-          cardType: row.card_type || 'trilingual',
-          reasons: [],
-          relevance: 0
-        });
-      }
-      const item = relatedMap.get(key);
-      item.reasons.push('cluster');
-      item.relevance = Math.max(item.relevance, Number(row.score || 0));
-    });
-    const grammarRelated = this.db.prepare(`
-      SELECT DISTINCT g.id AS generation_id, g.phrase, g.folder_name, g.base_filename, g.card_type
-      FROM knowledge_grammar_refs r1
-      JOIN knowledge_grammar_refs r2
-        ON r1.pattern_id = r2.pattern_id
-       AND r2.generation_id != r1.generation_id
-      LEFT JOIN generations g ON g.id = r2.generation_id
-      WHERE r1.generation_id = ?
-      ORDER BY r2.id ASC
-      LIMIT ?
-    `).all(id, normalizedLimit);
-    grammarRelated.forEach((row) => {
-      if (!row.generation_id) return;
-      const key = Number(row.generation_id);
-      if (!relatedMap.has(key)) {
-        relatedMap.set(key, {
-          generationId: key,
-          phrase: row.phrase || '',
-          folderName: row.folder_name || '',
-          baseName: row.base_filename || '',
-          cardType: row.card_type || 'trilingual',
-          reasons: [],
-          relevance: 0
-        });
-      }
-      const item = relatedMap.get(key);
-      item.reasons.push('pattern');
-      item.relevance = Math.max(item.relevance, 1);
-    });
-
-    const relatedCards = Array.from(relatedMap.values())
-      .map((item) => ({
-        ...item,
-        reasons: Array.from(new Set(item.reasons))
-      }))
-      .sort((a, b) => b.relevance - a.relevance)
-      .slice(0, normalizedLimit);
-
-    return {
-      card: {
-        generationId: Number(card.id),
-        phrase: card.phrase || '',
-        cardType: card.card_type || 'trilingual',
-        folderName: card.folder_name || '',
-        baseName: card.base_filename || '',
-        provider: card.llm_provider || '',
-        model: card.llm_model || '',
-        createdAt: card.created_at
-      },
-      term: termRow ? {
-        generationId: Number(termRow.generation_id),
-        phrase: termRow.phrase || '',
-        cardType: termRow.card_type || 'trilingual',
-        langProfile: termRow.lang_profile || '',
-        enHeadword: termRow.en_headword || null,
-        jaHeadword: termRow.ja_headword || null,
-        zhHeadword: termRow.zh_headword || null,
-        aliases: safeJsonParse(termRow.aliases_json, []),
-        tags: safeJsonParse(termRow.tags_json, []),
-        score: Number(termRow.score || 0)
-      } : null,
-      examples,
-      grammarHits,
-      clusters,
-      issues,
-      synonymGroups: Array.from(synonymMap.values()),
-      relatedCards
-    };
+  getKnowledgeCardRelations(generationId, filters = {}) {
+    return knowledgeRelationsDomain.getCardRelations(this.db, generationId, filters);
   }
 
-  getKnowledgeTermRelations(term, { limit = 20 } = {}) {
-    const keyword = String(term || '').trim();
-    if (!keyword) {
-      return { term: '', matchedEntries: [], patterns: [], clusters: [], issues: [], relatedCards: [] };
-    }
-    const normalizedLimit = Math.max(1, Number(limit || 20));
-    const rows = this.db.prepare(`
-      SELECT
-        t.generation_id, t.phrase, t.card_type, t.folder_name, t.lang_profile,
-        t.en_headword, t.ja_headword, t.zh_headword, t.aliases_json, t.tags_json, t.score,
-        g.base_filename
-      FROM knowledge_terms_index t
-      LEFT JOIN generations g ON g.id = t.generation_id
-      WHERE t.phrase LIKE @q
-         OR t.en_headword LIKE @q
-         OR t.ja_headword LIKE @q
-         OR t.zh_headword LIKE @q
-      ORDER BY t.score DESC, t.updated_at DESC
-      LIMIT @limit
-    `).all({ q: `%${keyword}%`, limit: normalizedLimit });
-
-    const matchedEntries = rows.map((row) => ({
-      generationId: Number(row.generation_id),
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      folderName: row.folder_name || '',
-      langProfile: row.lang_profile || '',
-      enHeadword: row.en_headword || null,
-      jaHeadword: row.ja_headword || null,
-      zhHeadword: row.zh_headword || null,
-      aliases: safeJsonParse(row.aliases_json, []),
-      tags: safeJsonParse(row.tags_json, []),
-      score: Number(row.score || 0),
-      baseName: row.base_filename || ''
-    }));
-
-    const generationIds = matchedEntries.map((item) => item.generationId);
-    const relatedCards = matchedEntries.slice(0, normalizedLimit).map((item) => ({
-      generationId: item.generationId,
-      phrase: item.phrase,
-      folderName: item.folderName,
-      baseName: item.baseName || '',
-      cardType: item.cardType,
-      reasons: ['term'],
-      relevance: item.score
-    }));
-
-    const grouped = this._aggregateKnowledgeByGenerationIds(generationIds, normalizedLimit);
-    return {
-      term: keyword,
-      matchedEntries,
-      patterns: grouped.patterns,
-      clusters: grouped.clusters,
-      issues: grouped.issues,
-      relatedCards
-    };
+  getKnowledgeTermRelations(term, filters = {}) {
+    return knowledgeRelationsDomain.getTermRelations(this.db, term, filters);
   }
 
-  getKnowledgePatternRelations(pattern, { limit = 20 } = {}) {
-    const keyword = String(pattern || '').trim();
-    if (!keyword) {
-      return { pattern: null, refs: [], terms: [], clusters: [], issues: [], relatedCards: [] };
-    }
-    const normalizedLimit = Math.max(1, Number(limit || 20));
-    const patternRow = this.db.prepare(`
-      SELECT id, pattern, explanation_zh, confidence
-      FROM knowledge_grammar_patterns
-      WHERE is_active = 1
-        AND pattern LIKE @pattern
-      ORDER BY confidence DESC, updated_at DESC
-      LIMIT 1
-    `).get({ pattern: `%${keyword}%` });
-    if (!patternRow) {
-      return { pattern: null, refs: [], terms: [], clusters: [], issues: [], relatedCards: [] };
-    }
-
-    const refs = this.db.prepare(`
-      SELECT r.generation_id, r.sentence_excerpt, g.phrase, g.folder_name, g.base_filename, g.card_type
-      FROM knowledge_grammar_refs r
-      LEFT JOIN generations g ON g.id = r.generation_id
-      WHERE r.pattern_id = ?
-      ORDER BY r.id ASC
-      LIMIT ?
-    `).all(patternRow.id, normalizedLimit).map((row) => ({
-      generationId: Number(row.generation_id || 0),
-      sentence: row.sentence_excerpt || '',
-      phrase: row.phrase || '',
-      folderName: row.folder_name || '',
-      baseName: row.base_filename || '',
-      cardType: row.card_type || 'trilingual'
-    }));
-
-    const generationIds = refs.map((row) => row.generationId).filter((id) => id > 0);
-    const grouped = this._aggregateKnowledgeByGenerationIds(generationIds, normalizedLimit);
-    const terms = this.db.prepare(`
-      SELECT generation_id, phrase, card_type, folder_name, score
-      FROM knowledge_terms_index
-      WHERE generation_id IN (${generationIds.length ? generationIds.map(() => '?').join(',') : '0'})
-      ORDER BY score DESC, updated_at DESC
-      LIMIT ?
-    `).all(...generationIds, normalizedLimit).map((row) => ({
-      generationId: Number(row.generation_id),
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      folderName: row.folder_name || '',
-      score: Number(row.score || 0)
-    }));
-
-    const relatedCards = refs.map((row) => ({
-      generationId: row.generationId,
-      phrase: row.phrase,
-      folderName: row.folderName,
-      baseName: row.baseName,
-      cardType: row.cardType,
-      reasons: ['pattern'],
-      relevance: 1
-    }));
-
-    return {
-      pattern: {
-        id: Number(patternRow.id),
-        pattern: patternRow.pattern || '',
-        explanationZh: patternRow.explanation_zh || '',
-        confidence: Number(patternRow.confidence || 0)
-      },
-      refs,
-      terms,
-      clusters: grouped.clusters,
-      issues: grouped.issues,
-      relatedCards
-    };
+  getKnowledgePatternRelations(pattern, filters = {}) {
+    return knowledgeRelationsDomain.getPatternRelations(this.db, pattern, filters);
   }
 
-  getKnowledgeClusterRelations(clusterKey, { limit = 20 } = {}) {
-    const keyword = String(clusterKey || '').trim();
-    if (!keyword) {
-      return { cluster: null, cards: [], terms: [], patterns: [], issues: [] };
-    }
-    const normalizedLimit = Math.max(1, Number(limit || 20));
-    const cluster = this.db.prepare(`
-      SELECT id, cluster_key, label, description, confidence, keywords_json
-      FROM knowledge_clusters
-      WHERE is_active = 1
-        AND cluster_key = @key
-      LIMIT 1
-    `).get({ key: keyword });
-    if (!cluster) {
-      return { cluster: null, cards: [], terms: [], patterns: [], issues: [] };
-    }
-
-    const cards = this.db.prepare(`
-      SELECT cc.generation_id, cc.score, g.phrase, g.folder_name, g.base_filename, g.card_type
-      FROM knowledge_cluster_cards cc
-      LEFT JOIN generations g ON g.id = cc.generation_id
-      WHERE cc.cluster_id = ?
-      ORDER BY cc.score DESC, cc.id ASC
-      LIMIT ?
-    `).all(cluster.id, normalizedLimit).map((row) => ({
-      generationId: Number(row.generation_id || 0),
-      phrase: row.phrase || '',
-      folderName: row.folder_name || '',
-      baseName: row.base_filename || '',
-      cardType: row.card_type || 'trilingual',
-      score: Number(row.score || 0)
-    }));
-
-    const generationIds = cards.map((item) => item.generationId).filter((id) => id > 0);
-    const grouped = this._aggregateKnowledgeByGenerationIds(generationIds, normalizedLimit);
-    const terms = this.db.prepare(`
-      SELECT generation_id, phrase, card_type, folder_name, score
-      FROM knowledge_terms_index
-      WHERE generation_id IN (${generationIds.length ? generationIds.map(() => '?').join(',') : '0'})
-      ORDER BY score DESC, updated_at DESC
-      LIMIT ?
-    `).all(...generationIds, normalizedLimit).map((row) => ({
-      generationId: Number(row.generation_id),
-      phrase: row.phrase || '',
-      cardType: row.card_type || 'trilingual',
-      folderName: row.folder_name || '',
-      score: Number(row.score || 0)
-    }));
-
-    return {
-      cluster: {
-        id: Number(cluster.id),
-        clusterKey: cluster.cluster_key || '',
-        label: cluster.label || '',
-        description: cluster.description || '',
-        confidence: Number(cluster.confidence || 0),
-        keywords: safeJsonParse(cluster.keywords_json, [])
-      },
-      cards,
-      terms,
-      patterns: grouped.patterns,
-      issues: grouped.issues
-    };
+  getKnowledgeClusterRelations(clusterKey, filters = {}) {
+    return knowledgeRelationsDomain.getClusterRelations(this.db, clusterKey, filters);
   }
 
-  getKnowledgeIndex({ query = '', limit = 50 } = {}) {
-    const hasQuery = String(query || '').trim().length > 0;
-    const sql = hasQuery
-      ? `
-        SELECT *
-        FROM knowledge_terms_index
-        WHERE phrase LIKE @q OR en_headword LIKE @q OR ja_headword LIKE @q OR zh_headword LIKE @q
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `
-      : `
-        SELECT *
-        FROM knowledge_terms_index
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `;
-    const rows = this.db.prepare(sql).all({
-      q: `%${String(query || '').trim()}%`,
-      limit: Math.max(1, Number(limit || 50))
-    });
-    return rows.map((row) => ({
-      generationId: row.generation_id,
-      phrase: row.phrase,
-      cardType: row.card_type,
-      folderName: row.folder_name,
-      langProfile: row.lang_profile,
-      enHeadword: row.en_headword,
-      jaHeadword: row.ja_headword,
-      zhHeadword: row.zh_headword,
-      aliases: safeJsonParse(row.aliases_json, []),
-      tags: safeJsonParse(row.tags_json, []),
-      score: row.score,
-      updatedAt: row.updated_at
-    }));
+  getKnowledgeIndex(filters = {}) {
+    return knowledgeTermsIndexDomain.search(this.db, filters);
   }
 
   getKnowledgeSynonymsByPhrase(phrase, limit = 20) {
-    const keyword = `%${String(phrase || '').trim()}%`;
-    const groups = this.db.prepare(`
-      SELECT DISTINCT g.*
-      FROM knowledge_synonym_groups g
-      LEFT JOIN knowledge_synonym_members m ON m.group_id = g.id
-      WHERE g.is_active = 1
-        AND (
-          g.group_key LIKE @keyword
-          OR g.pair_key LIKE @keyword
-          OR g.term_a LIKE @keyword
-          OR g.term_b LIKE @keyword
-          OR m.term LIKE @keyword
-        )
-      ORDER BY g.updated_at DESC
-      LIMIT @limit
-    `).all({ keyword, limit: Math.max(1, Number(limit || 20)) });
-
-    const membersByGroup = this.db.prepare(`
-      SELECT group_id, generation_id, term, lang
-      FROM knowledge_synonym_members
-      WHERE group_id IN (
-        SELECT id FROM knowledge_synonym_groups WHERE is_active = 1
-      )
-      ORDER BY id ASC
-    `).all();
-
-    const groupedMembers = new Map();
-    membersByGroup.forEach((row) => {
-      if (!groupedMembers.has(row.group_id)) groupedMembers.set(row.group_id, []);
-      groupedMembers.get(row.group_id).push({
-        generationId: row.generation_id,
-        term: row.term,
-        lang: row.lang
-      });
-    });
-
-    return groups.map((group) => ({
-      id: group.id,
-      groupKey: group.group_key,
-      pairKey: buildSynonymDetailKey(group),
-      termA: group.term_a || null,
-      termB: group.term_b || null,
-      boundaryMatrix: {
-        tone: group.tone,
-        register: group.register_text,
-        collocation: group.collocation_note
-      },
-      misuseRisk: group.misuse_risk,
-      riskLevel: group.risk_level || group.misuse_risk || 'medium',
-      recommendation: group.recommendation,
-      actionableHint: group.actionable_hint || null,
-      confidence: group.confidence,
-      coverageRatio: group.coverage_ratio,
-      model: group.model || null,
-      promptVersion: group.prompt_version || null,
-      schemaVersion: group.schema_version || null,
-      parseStatus: group.parse_status || 'ok',
-      contextSplit: safeJsonParse(group.context_split_json, []),
-      misuseRisks: safeJsonParse(group.misuse_risks_json, []),
-      jpNuance: safeJsonParse(group.jp_nuance_json, {}),
-      boundaryTagsA: safeJsonParse(group.boundary_tags_a_json, []),
-      boundaryTagsB: safeJsonParse(group.boundary_tags_b_json, []),
-      members: groupedMembers.get(group.id) || [],
-      updatedAt: group.updated_at
-    }));
+    return knowledgeSynonymsDomain.findByPhrase(this.db, phrase, limit);
   }
 
-  listKnowledgeSynonymBoundaries({ jobId, riskLevel, query = '', page = 1, pageSize = 20 } = {}) {
-    const normalizedPage = Math.max(1, Number(page || 1));
-    const normalizedPageSize = Math.max(1, Math.min(200, Number(pageSize || 20)));
-    const conditions = ['1=1'];
-    const params = {
-      limit: normalizedPageSize,
-      offset: (normalizedPage - 1) * normalizedPageSize
-    };
-
-    if (jobId) {
-      conditions.push('g.version_job_id = @jobId');
-      params.jobId = Number(jobId);
-    } else {
-      conditions.push('g.is_active = 1');
-    }
-    if (riskLevel) {
-      conditions.push('COALESCE(g.risk_level, g.misuse_risk, \'medium\') = @riskLevel');
-      params.riskLevel = String(riskLevel);
-    }
-    if (String(query || '').trim()) {
-      conditions.push('(g.pair_key LIKE @q OR g.term_a LIKE @q OR g.term_b LIKE @q OR g.group_key LIKE @q)');
-      params.q = `%${String(query).trim()}%`;
-    }
-
-    const totalRow = this.db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM knowledge_synonym_groups g
-      WHERE ${conditions.join(' AND ')}
-    `).get(params);
-
-    const rows = this.db.prepare(`
-      SELECT g.*
-      FROM knowledge_synonym_groups g
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY
-        CASE COALESCE(g.risk_level, g.misuse_risk, 'low')
-          WHEN 'high' THEN 3
-          WHEN 'medium' THEN 2
-          ELSE 1
-        END DESC,
-        g.confidence DESC,
-        g.updated_at DESC
-      LIMIT @limit OFFSET @offset
-    `).all(params);
-
-    return {
-      total: Number(totalRow?.total || 0),
-      page: normalizedPage,
-      pageSize: normalizedPageSize,
-      items: rows.map((row) => ({
-        pairKey: buildSynonymDetailKey(row),
-        groupKey: row.group_key,
-        termA: row.term_a || null,
-        termB: row.term_b || null,
-        riskLevel: row.risk_level || row.misuse_risk || 'medium',
-        confidence: Number(row.confidence || 0),
-        recommendation: row.recommendation || '',
-        actionableHint: row.actionable_hint || '',
-        model: row.model || null,
-        promptVersion: row.prompt_version || null,
-        schemaVersion: row.schema_version || null,
-        parseStatus: row.parse_status || 'ok',
-        updatedAt: row.updated_at,
-        versionJobId: Number(row.version_job_id || 0)
-      }))
-    };
+  listKnowledgeSynonymBoundaries(filters = {}) {
+    return knowledgeSynonymsDomain.listBoundaries(this.db, filters);
   }
 
-  getKnowledgeSynonymBoundaryDetail({ pairKey, jobId } = {}) {
-    const rawKey = String(pairKey || '').trim();
-    if (!rawKey) return null;
-
-    const idMatch = rawKey.match(/^id:(\d+)$/i);
-    const normalizedKey = normalizeSynonymLookupKey(rawKey);
-    const baseParams = { pairKey: normalizedKey };
-    let row = null;
-
-    if (idMatch) {
-      const id = Number(idMatch[1]);
-      row = this.db.prepare(jobId
-        ? `
-          SELECT *
-          FROM knowledge_synonym_groups
-          WHERE id = @id
-            AND version_job_id = @jobId
-          LIMIT 1
-        `
-        : `
-          SELECT *
-          FROM knowledge_synonym_groups
-          WHERE id = @id
-            AND is_active = 1
-          LIMIT 1
-        `).get(jobId ? { id, jobId: Number(jobId) } : { id });
-    } else {
-      row = this.db.prepare(jobId
-        ? `
-          SELECT *
-          FROM knowledge_synonym_groups
-          WHERE (
-            LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
-            OR LOWER(TRIM(COALESCE(group_key, ''))) = @pairKey
-          )
-            AND version_job_id = @jobId
-          ORDER BY updated_at DESC
-          LIMIT 1
-        `
-        : `
-          SELECT *
-          FROM knowledge_synonym_groups
-          WHERE (
-            LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
-            OR LOWER(TRIM(COALESCE(group_key, ''))) = @pairKey
-          )
-            AND is_active = 1
-          ORDER BY updated_at DESC
-          LIMIT 1
-        `).get(jobId ? { ...baseParams, jobId: Number(jobId) } : baseParams);
-    }
-
-    if (!row) return null;
-    const members = this.db.prepare(`
-      SELECT generation_id, term, lang
-      FROM knowledge_synonym_members
-      WHERE group_id = ?
-      ORDER BY id ASC
-    `).all(row.id).map((item) => ({
-      generationId: item.generation_id ? Number(item.generation_id) : null,
-      term: item.term || '',
-      lang: item.lang || ''
-    }));
-
-    const candidateKey = normalizeSynonymLookupKey(
-      sanitizeSynonymDisplayKey(row.pair_key)
-      || sanitizeSynonymDisplayKey(row.group_key)
-      || rawKey
-    );
-    const candidates = this.db.prepare(`
-      SELECT candidate_score, evidence_hash, evidence_snapshot_json, status, llm_latency_ms, llm_error, updated_at
-      FROM knowledge_synonym_candidates
-      WHERE LOWER(TRIM(COALESCE(pair_key, ''))) = @pairKey
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `).get({ pairKey: candidateKey });
-
-    return {
-      id: Number(row.id),
-      pairKey: buildSynonymDetailKey(row),
-      groupKey: row.group_key || '',
-      termA: row.term_a || null,
-      termB: row.term_b || null,
-      boundaryMatrix: {
-        tone: row.tone || '',
-        register: row.register_text || '',
-        collocation: row.collocation_note || ''
-      },
-      misuseRisk: row.misuse_risk || 'medium',
-      riskLevel: row.risk_level || row.misuse_risk || 'medium',
-      recommendation: row.recommendation || '',
-      actionableHint: row.actionable_hint || '',
-      confidence: Number(row.confidence || 0),
-      coverageRatio: Number(row.coverage_ratio || 0),
-      model: row.model || null,
-      promptVersion: row.prompt_version || null,
-      schemaVersion: row.schema_version || null,
-      parseStatus: row.parse_status || 'ok',
-      result: safeJsonParse(row.result_json, {}),
-      contextSplit: safeJsonParse(row.context_split_json, []),
-      misuseRisks: safeJsonParse(row.misuse_risks_json, []),
-      jpNuance: safeJsonParse(row.jp_nuance_json, {}),
-      boundaryTagsA: safeJsonParse(row.boundary_tags_a_json, []),
-      boundaryTagsB: safeJsonParse(row.boundary_tags_b_json, []),
-      members,
-      candidate: candidates ? {
-        candidateScore: Number(candidates.candidate_score || 0),
-        evidenceHash: candidates.evidence_hash || null,
-        evidenceSnapshot: safeJsonParse(candidates.evidence_snapshot_json, {}),
-        status: candidates.status || 'queued',
-        llmLatencyMs: Number(candidates.llm_latency_ms || 0),
-        llmError: candidates.llm_error || null,
-        updatedAt: candidates.updated_at || null
-      } : null,
-      updatedAt: row.updated_at
-    };
+  getKnowledgeSynonymBoundaryDetail(filters = {}) {
+    return knowledgeSynonymsDomain.getBoundaryDetail(this.db, filters);
   }
 
-  getKnowledgeGrammarPatterns({ pattern = '', limit = 30 } = {}) {
-    const hasPattern = String(pattern || '').trim().length > 0;
-    const rows = this.db.prepare(hasPattern
-      ? `
-        SELECT *
-        FROM knowledge_grammar_patterns
-        WHERE is_active = 1
-          AND pattern LIKE @pattern
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `
-      : `
-        SELECT *
-        FROM knowledge_grammar_patterns
-        WHERE is_active = 1
-        ORDER BY updated_at DESC
-        LIMIT @limit
-      `
-    ).all({
-      pattern: `%${String(pattern || '').trim()}%`,
-      limit: Math.max(1, Number(limit || 30))
-    });
-
-    const refs = this.db.prepare(`
-      SELECT r.pattern_id, r.generation_id, r.sentence_excerpt, g.phrase
-      FROM knowledge_grammar_refs r
-      LEFT JOIN generations g ON g.id = r.generation_id
-      WHERE r.pattern_id IN (
-        SELECT id FROM knowledge_grammar_patterns WHERE is_active = 1
-      )
-      ORDER BY r.id ASC
-    `).all();
-
-    const refsMap = new Map();
-    refs.forEach((row) => {
-      if (!refsMap.has(row.pattern_id)) refsMap.set(row.pattern_id, []);
-      refsMap.get(row.pattern_id).push({
-        generationId: row.generation_id,
-        phrase: row.phrase || '',
-        sentence: row.sentence_excerpt || ''
-      });
-    });
-
-    return rows.map((row) => ({
-      id: row.id,
-      pattern: row.pattern,
-      explanationZh: row.explanation_zh,
-      confidence: row.confidence,
-      refs: refsMap.get(row.id) || [],
-      updatedAt: row.updated_at
-    }));
+  getKnowledgeGrammarPatterns(filters = {}) {
+    return knowledgeGrammarDomain.listPatterns(this.db, filters);
   }
 
   getKnowledgeClusters(limit = 20) {
-    const clusters = this.db.prepare(`
-      SELECT *
-      FROM knowledge_clusters
-      WHERE is_active = 1
-      ORDER BY confidence DESC, updated_at DESC
-      LIMIT ?
-    `).all(Math.max(1, Number(limit || 20)));
-
-    const cards = this.db.prepare(`
-      SELECT cc.cluster_id, cc.generation_id, cc.score, g.phrase, g.folder_name
-      FROM knowledge_cluster_cards cc
-      LEFT JOIN generations g ON g.id = cc.generation_id
-      WHERE cc.cluster_id IN (
-        SELECT id FROM knowledge_clusters WHERE is_active = 1
-      )
-      ORDER BY cc.score DESC, cc.id ASC
-    `).all();
-
-    const cardMap = new Map();
-    cards.forEach((row) => {
-      if (!cardMap.has(row.cluster_id)) cardMap.set(row.cluster_id, []);
-      cardMap.get(row.cluster_id).push({
-        generationId: row.generation_id,
-        phrase: row.phrase || '',
-        folderName: row.folder_name || '',
-        score: row.score || 0
-      });
-    });
-
-    return clusters.map((row) => ({
-      id: row.id,
-      clusterKey: row.cluster_key,
-      label: row.label,
-      description: row.description,
-      keywords: safeJsonParse(row.keywords_json, []),
-      confidence: row.confidence,
-      cards: cardMap.get(row.id) || [],
-      updatedAt: row.updated_at
-    }));
+    return knowledgeClustersDomain.listClusters(this.db, limit);
   }
 
-  getKnowledgeIssues({ issueType, severity, resolved, limit = 100 } = {}) {
-    const conditions = ['1=1'];
-    const params = { limit: Math.max(1, Number(limit || 100)) };
-    if (issueType) {
-      conditions.push('issue_type = @issueType');
-      params.issueType = String(issueType);
-    }
-    if (severity) {
-      conditions.push('severity = @severity');
-      params.severity = String(severity);
-    }
-    if (resolved !== undefined) {
-      conditions.push('resolved = @resolved');
-      params.resolved = resolved ? 1 : 0;
-    }
-
-    const sql = `
-      SELECT *
-      FROM knowledge_issues
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY updated_at DESC
-      LIMIT @limit
-    `;
-    const rows = this.db.prepare(sql).all(params);
-    return rows.map((row) => ({
-      id: row.id,
-      issueType: row.issue_type,
-      severity: row.severity,
-      generationId: row.generation_id,
-      phrase: row.phrase,
-      fingerprint: row.fingerprint,
-      detail: safeJsonParse(row.detail_json, {}),
-      resolved: Boolean(row.resolved),
-      lastJobId: row.last_job_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }));
+  getKnowledgeIssues(filters = {}) {
+    return knowledgeIssuesDomain.list(this.db, filters);
   }
 
   getLatestKnowledgeSummary() {
-    const row = this.db.prepare(`
-      SELECT r.output_json
-      FROM knowledge_outputs_raw r
-      INNER JOIN knowledge_jobs j ON j.id = r.job_id
-      WHERE j.job_type = 'summary'
-        AND j.status IN ('success', 'partial')
-      ORDER BY j.finished_at DESC, j.id DESC, r.batch_no ASC
-      LIMIT 1
-    `).get();
-    if (!row) return null;
-    const parsed = safeJsonParse(row.output_json, null);
-    return parsed && parsed.result ? parsed.result : parsed;
+    return knowledgeRelationsDomain.getLatestSummary(this.db);
+  }
+
+  // Test-only: wipe every project table. Gated by E2E_TEST_MODE at the
+  // route layer; safe to expose here because it's a no-op on the production
+  // singleton unless something explicitly calls it.
+  truncateAllForTests() {
+    return testResetDomain.truncateAll(this.db);
   }
 
   /**
@@ -3864,9 +1117,13 @@ class DatabaseService {
    */
   close() {
     this.db.close();
-    console.log('[Database] Connection closed');
+    log.info('database connection closed');
   }
 }
 
 // 导出单例
 module.exports = new DatabaseService();
+// Class itself is exposed so unit tests can spin up isolated in-memory
+// instances (`new DatabaseService(':memory:')`). Production code should
+// keep using the singleton.
+module.exports.DatabaseService = DatabaseService;

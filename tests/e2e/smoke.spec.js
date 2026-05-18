@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { resetServerState } = require('./fixtures/resetServerState');
 
 let basePhrase = `PW smoke base ${Date.now()}`;
 let restoredPhraseA = `PW restore A ${Date.now()}`;
@@ -35,6 +36,14 @@ async function closeModal(page) {
 }
 
 async function selectNodeText(page, selector, expectedText) {
+  // The TRAIN panel renders/hydrates asynchronously, so the target node may
+  // not exist the instant the tab is clicked — wait for it before selecting.
+  await page.waitForFunction(
+    ({ selector, expectedText }) => [...document.querySelectorAll(selector)]
+      .some((el) => (el.textContent || '').trim() === expectedText),
+    { selector, expectedText },
+    { timeout: 10_000 }
+  );
   const result = await page.evaluate(({ selector, expectedText }) => {
     const target = [...document.querySelectorAll(selector)].find((el) => (el.textContent || '').trim() === expectedText);
     if (!target) return { ok: false, reason: `target not found: ${expectedText}` };
@@ -64,6 +73,12 @@ async function deleteByFile(request, folder, base) {
 }
 
 test.describe.serial('Playwright smoke', () => {
+  test.beforeAll(async ({ request }) => {
+    // Reset DB + records dir so this spec file is hermetic regardless of
+    // what other specs ran before it.
+    await resetServerState(request);
+  });
+
   test('01 首页加载与空闲状态', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('hero-queue-state')).toHaveText('IDLE');

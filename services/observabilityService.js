@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { parseTrilingualMarkdown } = require('./markdownParser');
+const log = require('../lib/logger').child({ module: 'svc/observability' });
 
 /**
  * 可观测性服务 - 统一管理 Token、性能、质量等指标
@@ -33,7 +34,7 @@ class TokenCounter {
 
     if (!usage) {
       // 如果没有 usage 信息，尝试估算
-      console.warn('[TokenCounter] No usage metadata found, estimating tokens');
+      log.warn('TokenCounter: no usage metadata found, estimating tokens');
       return {
         input: 0,
         output: 0,
@@ -59,7 +60,7 @@ class TokenCounter {
     const usage = response?.usage;
 
     if (!usage) {
-      console.warn('[TokenCounter] No usage info found, estimating tokens');
+      log.warn('TokenCounter: no usage info found, estimating tokens');
       return {
         input: 0,
         output: 0,

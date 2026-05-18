@@ -9,6 +9,7 @@
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
+const log = require('../lib/logger').child({ module: 'svc/gemini-api' });
 
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL_NAME = process.env.GEMINI_MODEL || "gemini-1.5-flash"; // updated default
@@ -23,7 +24,7 @@ const GENERATION_CONFIG = {
   responseMimeType: "application/json", // Force JSON mode
 };
 
-console.log('[Gemini Service] Initialized with model:', MODEL_NAME);
+log.info({ model: MODEL_NAME }, 'gemini API service initialized');
 
 /**
  * Clean and parse JSON from text (handling markdown code blocks if present)
@@ -41,8 +42,7 @@ function parseJsonFromText(rawText) {
   try {
     return JSON.parse(cleanText);
   } catch (error) {
-    console.error('JSON Parse Error:', error);
-    console.error('Raw Text:', rawText);
+    log.error({ err: error, rawText }, 'JSON parse error');
     throw new Error('Failed to parse JSON response: ' + error.message);
   }
 }
@@ -53,8 +53,8 @@ function parseJsonFromText(rawText) {
  */
 async function generateContent(prompt) {
   try {
-    console.log('[Gemini] Sending prompt...');
-    
+    log.info('gemini API: sending prompt');
+
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: GENERATION_CONFIG,
@@ -64,8 +64,10 @@ async function generateContent(prompt) {
     const text = response.text();
     const usage = response.usageMetadata; // Extract usage
 
-    console.log('[Gemini] Response received.');
-    console.log('[Gemini] Tokens - Prompt:', usage?.promptTokenCount, 'Candidates:', usage?.candidatesTokenCount);
+    log.info({
+      promptTokens: usage?.promptTokenCount,
+      candidateTokens: usage?.candidatesTokenCount,
+    }, 'gemini API: response received');
 
     const content = parseJsonFromText(text);
 
@@ -79,7 +81,7 @@ async function generateContent(prompt) {
     };
 
   } catch (error) {
-    console.error('[Gemini] Generation failed:', error);
+    log.error({ err: error }, 'gemini API: generation failed');
     throw error;
   }
 }
@@ -116,7 +118,7 @@ async function recognizeImage(base64Image) {
     
     return result.response.text();
   } catch (error) {
-    console.error('[Gemini OCR] Failed:', error);
+    log.error({ err: error }, 'gemini OCR failed');
     throw error;
   }
 }
