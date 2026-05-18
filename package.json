@@ -8,6 +8,7 @@
     "gemini-proxy": "node scripts/gemini-host-proxy.js",
     "test": "node --test tests/unit/*.test.js",
     "test:unit": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "smoke": "bash ./scripts/smoke.sh",
