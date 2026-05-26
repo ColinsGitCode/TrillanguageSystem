@@ -677,7 +677,7 @@ h1 {
   align-items: flex-start;
   justify-content: center;
   z-index: 1000;
-  padding: 86px 30px 26px;
+  padding: 12px 28px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -692,7 +692,7 @@ h1 {
   background: #ffffff;
   border-radius: 16px;
   width: 90vw;
-  height: calc(100vh - 118px);
+  height: calc(100vh - 24px);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
@@ -1129,12 +1129,12 @@ h1 {
   }
 
   .modal {
-    padding: 68px 12px 12px;
+    padding: 8px;
   }
 
   .modal-content {
     width: 96vw;
-    height: calc(100vh - 82px);
+    height: calc(100vh - 16px);
   }
 }
 

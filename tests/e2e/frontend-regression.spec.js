@@ -45,6 +45,24 @@ async function openCard(page, title) {
   await expect(page.getByTestId('card-modal-title')).toContainText(title);
 }
 
+async function expectCardModalExpanded(page) {
+  const layout = await page.evaluate(() => {
+    const card = document.querySelector('.modern-card')?.getBoundingClientRect();
+    const header = document.querySelector('.mc-header')?.getBoundingClientRect();
+    const tabs = document.querySelector('.mc-header .panel-tabs')?.getBoundingClientRect();
+    const ticker = document.querySelector('#cardContent .hud-ticker')?.getBoundingClientRect();
+    return {
+      viewportHeight: window.innerHeight,
+      cardHeight: Math.round(card?.height || 0),
+      headerHeight: Math.round(header?.height || 0),
+      tabToContentGap: Math.round((ticker?.top || 0) - (tabs?.bottom || 0))
+    };
+  });
+  expect(layout.cardHeight).toBeGreaterThanOrEqual(layout.viewportHeight - 36);
+  expect(layout.headerHeight).toBeLessThanOrEqual(190);
+  expect(layout.tabToContentGap).toBeLessThanOrEqual(18);
+}
+
 async function deleteRecord(request, folder, base) {
   const res = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(base)}`);
   expect(res.ok()).toBeTruthy();
@@ -124,6 +142,7 @@ test.describe.serial('前端综合回归', () => {
 
     folder = await openFirstFolder(page);
     await openCard(page, phrase);
+    await expectCardModalExpanded(page);
 
     await page.getByTestId('tab-content').click();
     await expect(page.getByTestId('card-content-panel')).toBeVisible();

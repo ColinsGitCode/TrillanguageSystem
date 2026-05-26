@@ -28,8 +28,9 @@
   box-shadow: none !important;
   max-width: 1080px !important;
   width: 95% !important;
+  height: calc(100vh - 24px) !important;
   padding: 0 !important;
-  overflow: visible !important;
+  overflow: hidden !important;
 }
 
 /* The Modern Card */
@@ -42,7 +43,8 @@
   color: var(--text-ink);
   display: flex;
   flex-direction: column;
-  max-height: 85vh;
+  height: 100%;
+  max-height: none;
   position: relative;
   border: 1px solid var(--border-subtle);
   font-size: 1.5rem;
@@ -53,10 +55,11 @@
 
 /* Card Header */
 .mc-header {
-  padding: 3rem 3rem 2rem 3rem;
+  padding: 1rem 3rem 0.25rem;
   background: linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%);
   border-bottom: 1px solid var(--border-subtle);
   text-align: center;
+  flex: 0 0 auto;
 }
 
 .mc-tabs {
@@ -93,10 +96,10 @@
 
 .mc-phrase {
   font-family: var(--font-serif);
-  font-size: 2.5em;
+  font-size: 2em;
   font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
+  line-height: 1.05;
+  margin-bottom: 0.35rem;
   color: var(--text-ink);
 }
 
@@ -108,7 +111,7 @@
 
 .mc-meta {
   font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-size: 0.72em;
   color: var(--text-slate);
   display: flex;
   justify-content: center;
@@ -118,13 +121,15 @@
 .mc-meta span {
   background: #f3f4f6;
   border: 1px solid var(--border-subtle);
-  padding: 0.2rem 0.6rem;
+  padding: 0.12rem 0.45rem;
   border-radius: 4px;
 }
 
 /* Scrollable Content Body */
 .mc-body {
-  padding: 2rem 3rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.35rem 2rem 1.4rem;
   overflow-y: auto;
   line-height: 1.7;
 }
@@ -587,9 +592,10 @@ rt {
 
 /* Mobile */
 @media (max-width: 600px) {
-  .mc-header { padding: 2rem 1.5rem; }
-  .mc-body { padding: 1.5rem 1.5rem; }
-  .mc-phrase { font-size: 1.8rem; }
+  .modal-content { height: calc(100vh - 16px) !important; }
+  .mc-header { padding: 0.75rem 1rem 0.25rem; }
+  .mc-body { padding: 0.35rem 1rem 1rem; }
+  .mc-phrase { font-size: 1.65rem; }
   .mc-delete-popover {
     left: 1rem;
     right: 1rem;
