@@ -95,12 +95,13 @@ const generationQueueState = {
     retryTimerId: null,
     pollTimerId: null,
     lastSuccessCount: 0,
+    panelDismissed: false,
     panelEl: null,
     summaryEl: null,
     listEl: null,
     eventsEl: null,
     toastEl: null,
-    collapseBtn: null,
+    closeBtn: null,
     clearDoneBtn: null,
     retryFailedBtn: null
 };
@@ -1758,7 +1759,7 @@ function initGenerationQueuePanel() {
         <div class="gen-queue-actions">
           <button type="button" class="gen-queue-btn" data-action="retry-failed">重试失败</button>
           <button type="button" class="gen-queue-btn" data-action="clear-done">清理完成</button>
-          <button type="button" class="gen-queue-btn" data-action="toggle">收起</button>
+          <button type="button" class="gen-queue-btn" data-action="close" data-testid="queue-panel-close">关闭</button>
         </div>
       </div>
       <div class="gen-queue-summary">空闲</div>
@@ -1775,7 +1776,7 @@ function initGenerationQueuePanel() {
     generationQueueState.toastEl = panel.querySelector('.gen-queue-toast');
     generationQueueState.retryFailedBtn = panel.querySelector('[data-action="retry-failed"]');
     generationQueueState.clearDoneBtn = panel.querySelector('[data-action="clear-done"]');
-    generationQueueState.collapseBtn = panel.querySelector('[data-action="toggle"]');
+    generationQueueState.closeBtn = panel.querySelector('[data-action="close"]');
 
     const retryFailedTasks = async () => {
         const failedTasks = generationQueueState.tasks.filter((task) => task.status === 'failed');
@@ -1815,9 +1816,9 @@ function initGenerationQueuePanel() {
         }
     };
 
-    generationQueueState.collapseBtn.onclick = () => {
-        const collapsed = panel.classList.toggle('collapsed');
-        generationQueueState.collapseBtn.textContent = collapsed ? '展开' : '收起';
+    generationQueueState.closeBtn.onclick = () => {
+        generationQueueState.panelDismissed = true;
+        panel.classList.add('hidden');
     };
 
     generationQueueState.listEl.addEventListener('click', async (event) => {
@@ -1846,9 +1847,8 @@ function initGenerationQueuePanel() {
 
     if (els.heroTaskQueueStatus) {
         els.heroTaskQueueStatus.onclick = () => {
+            generationQueueState.panelDismissed = false;
             panel.classList.remove('hidden');
-            panel.classList.remove('collapsed');
-            generationQueueState.collapseBtn.textContent = '收起';
         };
     }
 
@@ -2129,7 +2129,7 @@ function renderGenerationQueuePanel() {
     generationQueueState.retryFailedBtn.title = infrastructureState.generationBlockedReason || '';
     generationQueueState.clearDoneBtn.disabled = success === 0;
 
-    if (tasks.length > 0 || generationQueueState.running) {
+    if ((tasks.length > 0 || generationQueueState.running) && !generationQueueState.panelDismissed) {
         panel.classList.remove('hidden');
     }
 

@@ -91,7 +91,26 @@ test.describe.serial('前端综合回归', () => {
     await expectNoDiagnostics(diagnostics);
   });
 
-  test('02 UI 生成卡片后 CONTENT/TRAIN/INTEL 可打开且训练资产完整', async ({ page, request }) => {
+  test('02 队列浮窗可关闭并从顶部状态恢复', async ({ page }) => {
+    const diagnostics = collectDiagnostics(page);
+
+    await page.goto('/');
+    const queuePanel = page.locator('#generationQueuePanel');
+    await expect(queuePanel).toBeHidden();
+
+    await page.getByTestId('hero-queue-status').click();
+    await expect(queuePanel).toBeVisible();
+
+    await queuePanel.getByRole('button', { name: '关闭' }).click();
+    await expect(queuePanel).toBeHidden();
+
+    await page.getByTestId('hero-queue-status').click();
+    await expect(queuePanel).toBeVisible();
+
+    await expectNoDiagnostics(diagnostics);
+  });
+
+  test('03 UI 生成卡片后 CONTENT/TRAIN/INTEL 可打开且训练资产完整', async ({ page, request }) => {
     const diagnostics = collectDiagnostics(page);
     const phrase = `PW frontend regression ${Date.now()}`;
     let folder = '';
@@ -134,7 +153,7 @@ test.describe.serial('前端综合回归', () => {
     await expectNoDiagnostics(diagnostics);
   });
 
-  test('03 Dashboard / Knowledge OPS / Knowledge Hub 基础页面无前端错误', async ({ page }) => {
+  test('04 Dashboard / Knowledge OPS / Knowledge Hub 基础页面无前端错误', async ({ page }) => {
     const diagnostics = collectDiagnostics(page);
 
     await page.goto('/dashboard.html');

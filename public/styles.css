@@ -2372,12 +2372,6 @@ h1 {
   padding: 10px 10px 8px;
 }
 
-.gen-queue-panel.collapsed .gen-queue-summary,
-.gen-queue-panel.collapsed .gen-queue-list,
-.gen-queue-panel.collapsed .gen-queue-toast {
-  display: none;
-}
-
 .gen-queue-head {
   display: flex;
   align-items: center;
