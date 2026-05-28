@@ -4,56 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  truncateExamplesForBudget,
   normalizeAudioTasks,
   validateGeneratedContent,
   extractGeminiMarkdownResponse,
   validateSanitizedGeminiCardResponse,
 } = require('../../lib/generationHelpers');
-
-test.describe('truncateExamplesForBudget', () => {
-  test.it('returns [] for non-array input', () => {
-    assert.deepEqual(truncateExamplesForBudget(null, 'markdown', 10), []);
-    assert.deepEqual(truncateExamplesForBudget(undefined, 'json', 10), []);
-    assert.deepEqual(truncateExamplesForBudget('nope', 'markdown', 10), []);
-  });
-
-  test.it('passes short markdown examples through untouched', () => {
-    const examples = [{ id: 'a', output: 'short' }];
-    const out = truncateExamplesForBudget(examples, 'markdown', 100);
-    assert.equal(out[0], examples[0]); // same reference, not cloned
-  });
-
-  test.it('truncates over-budget markdown output and appends ellipsis', () => {
-    const examples = [{ id: 'a', output: 'abcdefghij' }];
-    const out = truncateExamplesForBudget(examples, 'markdown', 4);
-    assert.equal(out[0].output, 'abcd...');
-    assert.equal(out[0].id, 'a'); // other fields preserved
-  });
-
-  test.it('truncates parsed JSON markdown_content when over budget', () => {
-    const long = 'x'.repeat(20);
-    const examples = [{ output: JSON.stringify({ markdown_content: long, other: 'keep' }) }];
-    const out = truncateExamplesForBudget(examples, 'json', 5);
-    const parsed = JSON.parse(out[0].output);
-    assert.equal(parsed.markdown_content, 'xxxxx...');
-    assert.equal(parsed.other, 'keep');
-  });
-
-  test.it('leaves JSON examples untouched when markdown_content is under budget', () => {
-    const examples = [{ output: JSON.stringify({ markdown_content: 'short', other: 'keep' }) }];
-    const out = truncateExamplesForBudget(examples, 'json', 100);
-    const parsed = JSON.parse(out[0].output);
-    assert.equal(parsed.markdown_content, 'short');
-    assert.equal(parsed.other, 'keep');
-  });
-
-  test.it('falls back to raw truncation when JSON parse fails', () => {
-    const examples = [{ output: 'not valid json {{{{{ but too long' }];
-    const out = truncateExamplesForBudget(examples, 'json', 5);
-    assert.equal(out[0].output, 'not v...');
-  });
-});
 
 test.describe('normalizeAudioTasks', () => {
   test.it('returns [] for non-array input', () => {

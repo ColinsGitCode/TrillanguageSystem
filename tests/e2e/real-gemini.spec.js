@@ -147,26 +147,10 @@ test.describe('Real Gemini acceptance', () => {
     await expect(fileButton).toBeVisible();
 
     await fileButton.click();
-    await page.getByTestId('tab-train').click();
-    await expect(page.getByTestId('train-wrap')).toBeVisible();
-    await expect(page.getByTestId('train-status')).toContainText(/READY|REPAIRED|FALLBACK/);
-
-    const beforeRes = await request.get(`${realBaseUrl}/api/training/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(phrase)}`);
-    expect(beforeRes.ok()).toBeTruthy();
-    const beforeJson = await beforeRes.json();
-    const beforeUpdatedAt = beforeJson?.training?.updatedAt || '';
-
-    await page.getByTestId('train-regenerate-btn').click();
-
-    await expect.poll(async () => {
-      const res = await request.get(`${realBaseUrl}/api/training/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(phrase)}`);
-      if (!res.ok()) return '';
-      const json = await res.json();
-      return json?.training?.updatedAt || '';
-    }, {
-      timeout: 300000,
-      message: '等待 TRAIN regenerate 完成'
-    }).not.toBe(beforeUpdatedAt);
+    await page.getByTestId('tab-content').click();
+    await expect(page.getByTestId('card-content-panel')).toBeVisible();
+    await page.getByTestId('tab-intel').click();
+    await expect(page.getByText('QUALITY GRADE')).toBeVisible();
 
     if (folder) {
       const res = await request.delete(`${realBaseUrl}/api/records/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(phrase)}`);

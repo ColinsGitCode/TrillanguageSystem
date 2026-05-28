@@ -128,7 +128,7 @@ test.describe.serial('前端综合回归', () => {
     await expectNoDiagnostics(diagnostics);
   });
 
-  test('03 UI 生成卡片后 CONTENT/TRAIN/INTEL 可打开且训练资产完整', async ({ page, request }) => {
+  test('03 UI 生成卡片后 CONTENT/INTEL 可打开且元数据完整', async ({ page, request }) => {
     const diagnostics = collectDiagnostics(page);
     const phrase = `PW frontend regression ${Date.now()}`;
     let folder = '';
@@ -147,18 +147,6 @@ test.describe.serial('前端综合回归', () => {
     await page.getByTestId('tab-content').click();
     await expect(page.getByTestId('card-content-panel')).toBeVisible();
     await expect.poll(() => page.locator('.audio-btn').count()).toBeGreaterThanOrEqual(1);
-
-    await page.getByTestId('tab-train').click();
-    await expect(page.getByTestId('train-wrap')).toBeVisible();
-    await expect(page.getByTestId('train-source')).toContainText('LLM高质量');
-    await expect(page.getByTestId('train-status')).toContainText('READY');
-    await expect(page.getByTestId('train-quality')).toContainText('Quality');
-    await expect(page.locator('[data-train-section="quiz"]')).toHaveCount(4);
-    await expect(page.locator('[data-train-section="enCollocation"]')).toHaveCount(4);
-    await expect(page.locator('[data-train-section="jaChunk"]')).toHaveCount(4);
-
-    await page.locator('.card-training-reveal-btn').first().click();
-    await expect(page.locator('.card-training-answer').first()).toBeVisible();
 
     await page.getByTestId('tab-intel').click();
     await expect(page.getByText('QUALITY GRADE')).toBeVisible();

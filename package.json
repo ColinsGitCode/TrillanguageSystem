@@ -21,12 +21,7 @@
     "test:e2e:gemini-sanitize": "playwright test tests/e2e/gemini-sanitize.spec.js",
     "test:e2e:real": "RUN_REAL_GEMINI_E2E=1 playwright test tests/e2e/real-gemini.spec.js",
     "test:e2e:real:nightly": "bash ./scripts/tests/runRealNightlyE2E.sh",
-    "training:backfill": "node scripts/migrations/backfillTrainingAssets.js",
-    "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
-    "fewshot:rounds": "node scripts/fewshot/run_fewshot_rounds.js",
-    "fewshot:export-round": "node scripts/fewshot/export_round_trend_dataset.js",
-    "fewshot:render-round-charts": "node d3/render_round_trend_charts.mjs",
-    "fewshot:report-round": "node scripts/fewshot/generate_round_kpi_report.js"
+    "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
