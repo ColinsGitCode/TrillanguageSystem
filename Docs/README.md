@@ -1,11 +1,10 @@
 # Docs 文档入口
 
-当前文档按用途分为 6 类：
+当前文档按用途分为 5 类：
 
 - `Docs/Architecture/`：系统架构、数据库、Observability、测试架构
 - `Docs/Features/`：仍在使用的功能设计
 - `Docs/Operations/`：运行、Gemini、知识任务、模型配置与排障
-- `Docs/Experiments/`：Code as Prompt、Few-shot、质量评估与实验方案
 - `Docs/TestReports/`：测试报告与验收产物
 - `Docs/Archive/`：里程碑、退役功能、历史归档（含已过期的现状快照 `Archive/StaleStatus/`）
 
@@ -40,21 +39,11 @@
 - `Docs/Operations/Gemini/GEMINI_CLI_知识分析任务执行规范.md`
 - `Docs/Operations/vLLM_Recommended_Config.md`
 
-### 4. Code as Prompt / Few-shot / 质量评估
-
-- `Docs/Experiments/CodeAsPrompt/Few-Shot机制设计方案.md`
-- `Docs/Experiments/CodeAsPrompt/Schema-First_校验修复循环落地方案.md`
-- `Docs/Experiments/CodeAsPrompt/review_scoring_and_injection_gate.md`
-- `Docs/Experiments/CodeAsPrompt/例句人工评审驱动FewShot注入方案.md`
-- `Docs/Experiments/CodeAsPrompt/商用模型API场景下Prompt优化优先级建议.md`
-- `Docs/Experiments/Quality/QUALITY_IMPROVEMENT_GUIDE.md`
-- `Docs/Experiments/Quality/质量评价设计文档.md`
-
-### 5. UI / Card 功能
+### 4. UI / Card 功能
 
 - `Docs/Features/Modern_Card_UI_Design.md`
 
-### 6. 测试与验收
+### 5. 测试与验收
 
 - `Docs/Architecture/Testing/Playwright_E2E_Testing_Design.md`
 - `Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
@@ -64,7 +53,7 @@
 - `Docs/TestReports/TEST_PLAN_20260518.md`
 - `Docs/TestReports/TEST_RUN_20260518.md`
 
-### 7. 历史与归档
+### 6. 历史与归档
 
 - `Docs/Archive/Milestones/`：版本里程碑日志与重构记录
 - `Docs/Archive/RetiredFeatures/`：已退役能力的设计文档
