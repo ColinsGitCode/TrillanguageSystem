@@ -76,10 +76,9 @@ const els = {
 };
 
 let fileListState = null;
-const reviewState = {
-    activeCampaign: null,
-    reviewer: localStorage.getItem('review_reviewer') || 'owner'
-};
+// Identity stamped on card-highlight writes (updatedBy). Kept under the
+// legacy localStorage key so previously-saved names still apply.
+const cardEditorName = localStorage.getItem('review_reviewer') || 'owner';
 let selectionFabCleanup = null;
 let activeCardContext = null;
 
@@ -110,7 +109,6 @@ const QUEUE_SNAPSHOT_VERSION = 3;
 const TODAY_FOLDER_TASK_ENTRIES = new Set(['main-input', 'selection', 'ocr-input']);
 const CARD_HIGHLIGHT_STORAGE_PREFIX = 'card_highlight_v1';
 const HIGHLIGHT_SCOPE_CONTENT = 'content';
-const HIGHLIGHT_SCOPE_TRAIN = 'train';
 const SELECTION_GENERATE_MAX_CHARS = 200;
 const SELECTION_HIGHLIGHT_MAX_CHARS = 2000;
 const infrastructureState = {
@@ -1084,564 +1082,6 @@ function bindAudioButtons(container, defaultFolder = null) {
     });
 }
 
-const TRAINING_EN_STOPWORDS = new Set([
-    'a', 'an', 'the', 'this', 'that', 'these', 'those',
-    'i', 'you', 'he', 'she', 'it', 'we', 'they',
-    'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
-    'do', 'does', 'did', 'done', 'have', 'has', 'had',
-    'and', 'or', 'but', 'if', 'then', 'so', 'as',
-    'at', 'by', 'for', 'from', 'in', 'of', 'on', 'to', 'with', 'without',
-    'my', 'your', 'his', 'her', 'its', 'our', 'their',
-    'me', 'him', 'them', 'us',
-    'not', 'no', 'yes', 'very', 'just', 'only', 'also', 'too'
-]);
-
-function stripMarkdownInline(text) {
-    return String(text || '')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/__([^_]+)__/g, '$1')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function stripJapaneseRubyReading(text) {
-    return String(text || '')
-        .replace(/([一-龯々〆ヵヶ]{1,10})\(([\u3040-\u30FFー・]{1,20})\)/g, '$1')
-        .replace(/\(([\u3040-\u30FFー・]{1,20})\)/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function hasJapaneseChar(text) {
-    return /[\u3040-\u30FF\u3400-\u9FFF々〆ヵヶ]/.test(String(text || ''));
-}
-
-function escapeRegexLiteral(text) {
-    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function parseTrainingExamplesFromMarkdown(markdown, cardType = 'trilingual') {
-    const lines = String(markdown || '').split(/\r?\n/);
-    let section = '';
-    let currentExample = null;
-    const enExamples = [];
-    const jaExamples = [];
-
-    const pushExample = (lang, sentenceRaw) => {
-        const sentenceBase = stripMarkdownInline(sentenceRaw);
-        if (!sentenceBase) {
-            currentExample = null;
-            return;
-        }
-        const sentence = lang === 'ja' ? stripJapaneseRubyReading(sentenceBase) : sentenceBase;
-        const item = { lang, sentence, translation: '' };
-        if (lang === 'en') enExamples.push(item);
-        if (lang === 'ja') jaExamples.push(item);
-        currentExample = item;
-    };
-
-    lines.forEach((line) => {
-        const headingMatch = line.match(/^##\s*\d+\.\s*(.+?)\s*:?\s*$/);
-        if (headingMatch) {
-            const heading = headingMatch[1];
-            if (/英文/i.test(heading)) {
-                section = 'en';
-            } else if (/日本語|日语/i.test(heading)) {
-                section = 'ja';
-            } else {
-                section = '';
-            }
-            currentExample = null;
-            return;
-        }
-
-        const exampleMatch = line.match(/^\s*-\s*\*\*例句\d+\*\*:\s*(.+)$/);
-        if (exampleMatch) {
-            if (section === 'en') {
-                pushExample('en', exampleMatch[1]);
-            } else if (section === 'ja') {
-                pushExample('ja', exampleMatch[1]);
-            } else if (normalizeCardType(cardType) === 'grammar_ja') {
-                pushExample('ja', exampleMatch[1]);
-            } else {
-                currentExample = null;
-            }
-            return;
-        }
-
-        if (!currentExample) return;
-        const bulletMatch = line.match(/^\s*-\s+(.+)$/);
-        if (!bulletMatch) return;
-        let text = stripMarkdownInline(bulletMatch[1]);
-        if (!text) return;
-        if (/^外来语标注[:：]/i.test(text)) return;
-        if (/^[A-Z][A-Z\s]+:/.test(text)) return;
-        if (currentExample.lang === 'ja') {
-            text = stripJapaneseRubyReading(text);
-        }
-        if (!currentExample.translation) {
-            currentExample.translation = text;
-        }
-    });
-
-    return {
-        enExamples: enExamples.filter((item) => item.sentence),
-        jaExamples: jaExamples.filter((item) => item.sentence)
-    };
-}
-
-function extractEnglishCollocations(enExamples, phrase, maxCount = 6) {
-    const phraseWords = new Set(
-        (String(phrase || '').toLowerCase().match(/[a-z]+/g) || []).filter((w) => !TRAINING_EN_STOPWORDS.has(w))
-    );
-    const map = new Map();
-
-    enExamples.forEach((example, idx) => {
-        const words = (String(example.sentence || '').toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []);
-        for (let n = 2; n <= 3; n += 1) {
-            for (let i = 0; i <= words.length - n; i += 1) {
-                const chunkWords = words.slice(i, i + n);
-                if (chunkWords.every((w) => TRAINING_EN_STOPWORDS.has(w))) continue;
-                const key = chunkWords.join(' ');
-                const item = map.get(key) || {
-                    text: key,
-                    count: 0,
-                    phraseHit: 0,
-                    sourceIndex: idx,
-                    sourceSentence: example.sentence,
-                    sourceTranslation: example.translation || ''
-                };
-                item.count += 1;
-                if (chunkWords.some((w) => phraseWords.has(w))) item.phraseHit += 1;
-                map.set(key, item);
-            }
-        }
-    });
-
-    return Array.from(map.values())
-        .filter((item) => item.count > 1 || item.phraseHit > 0)
-        .sort((a, b) => {
-            if (b.phraseHit !== a.phraseHit) return b.phraseHit - a.phraseHit;
-            if (b.count !== a.count) return b.count - a.count;
-            return b.text.length - a.text.length;
-        })
-        .slice(0, maxCount)
-        .map((item, idx) => ({
-            id: `en-${idx + 1}`,
-            lang: 'en',
-            type: 'collocation',
-            text: item.text,
-            sourceSentence: item.sourceSentence,
-            sourceTranslation: item.sourceTranslation
-        }));
-}
-
-function extractJapaneseChunks(jaExamples, phrase, maxCount = 6) {
-    const map = new Map();
-    const normalizedPhrase = stripJapaneseRubyReading(String(phrase || ''));
-    const particlePattern = /[一-龯ぁ-んァ-ヶー]{1,10}(?:を|が|に|で|と|へ|から|まで|より|は|も|の)[一-龯ぁ-んァ-ヶー]{1,10}/g;
-    const verbPattern = /[一-龯ぁ-んァ-ヶー]{2,14}(?:する|した|して|している|できる|でき|になる|なった|ている|ない|たい)/g;
-    const grammarLexicon = ['わけでもなく', 'において', 'について', 'に対して', 'として', 'により', 'に向けて', 'ておく', 'てしまう'];
-
-    const addChunk = (chunk, example, idx, boost = 0) => {
-        const text = stripJapaneseRubyReading(chunk).replace(/[、。！？]/g, '').trim();
-        if (!text || text.length < 2 || text.length > 20) return;
-        const item = map.get(text) || {
-            text,
-            count: 0,
-            boost: 0,
-            sourceIndex: idx,
-            sourceSentence: example.sentence,
-            sourceTranslation: example.translation || ''
-        };
-        item.count += 1;
-        item.boost += boost;
-        map.set(text, item);
-    };
-
-    jaExamples.forEach((example, idx) => {
-        const sentence = stripJapaneseRubyReading(example.sentence || '');
-        if (!sentence) return;
-
-        if (normalizedPhrase && hasJapaneseChar(normalizedPhrase) && sentence.includes(normalizedPhrase)) {
-            addChunk(normalizedPhrase, example, idx, 3);
-        }
-
-        grammarLexicon.forEach((pattern) => {
-            if (sentence.includes(pattern)) addChunk(pattern, example, idx, 2);
-        });
-
-        const particleMatches = sentence.match(particlePattern) || [];
-        particleMatches.forEach((chunk) => addChunk(chunk, example, idx, 1));
-
-        const verbMatches = sentence.match(verbPattern) || [];
-        verbMatches.forEach((chunk) => addChunk(chunk, example, idx, 1));
-    });
-
-    return Array.from(map.values())
-        .sort((a, b) => {
-            if (b.boost !== a.boost) return b.boost - a.boost;
-            if (b.count !== a.count) return b.count - a.count;
-            return b.text.length - a.text.length;
-        })
-        .slice(0, maxCount)
-        .map((item, idx) => ({
-            id: `ja-${idx + 1}`,
-            lang: 'ja',
-            type: 'chunk',
-            text: item.text,
-            sourceSentence: item.sourceSentence,
-            sourceTranslation: item.sourceTranslation
-        }));
-}
-
-function buildTrainingQuizzes(items, lang, maxCount = 4) {
-    return items.slice(0, maxCount).map((item, idx) => {
-        const sentence = String(item.sourceSentence || '');
-        let prompt = sentence;
-
-        if (lang === 'en') {
-            const pattern = new RegExp(`\\b${escapeRegexLiteral(item.text)}\\b`, 'i');
-            if (pattern.test(sentence)) {
-                prompt = sentence.replace(pattern, '____');
-            }
-        } else if (item.text && sentence.includes(item.text)) {
-            prompt = sentence.replace(item.text, '＿＿＿＿');
-        }
-
-        if (prompt === sentence && sentence) {
-            prompt = `${sentence}（请找出重点语块）`;
-        }
-
-        return {
-            id: `${lang}-quiz-${idx + 1}`,
-            lang,
-            prompt,
-            answer: item.text,
-            translation: item.sourceTranslation || ''
-        };
-    });
-}
-
-function buildCardTrainingData(markdown, title, cardType = 'trilingual') {
-    const parsed = parseTrainingExamplesFromMarkdown(markdown, cardType);
-    const enItems = extractEnglishCollocations(parsed.enExamples, title, 6);
-    const jaItems = extractJapaneseChunks(parsed.jaExamples, title, 6);
-    return {
-        enItems,
-        jaItems,
-        quizzes: [
-            ...buildTrainingQuizzes(enItems, 'en', 3),
-            ...buildTrainingQuizzes(jaItems, 'ja', 3)
-        ],
-        sampleStats: {
-            enExampleCount: parsed.enExamples.length,
-            jaExampleCount: parsed.jaExamples.length
-        }
-    };
-}
-
-function mapTrainingPayloadToViewData(payload = {}) {
-    const enItems = (Array.isArray(payload.enCollocations) ? payload.enCollocations : []).map((item) => ({
-        id: item.id || '',
-        lang: 'en',
-        text: item.pattern || '',
-        meaning: item.meaningZh || '',
-        usage: item.usageZh || '',
-        sourceSentence: item.exampleEn || '',
-        sourceTranslation: item.exampleZh || '',
-        distractors: Array.isArray(item.distractors) ? item.distractors : []
-    }));
-    const jaItems = (Array.isArray(payload.jaChunks) ? payload.jaChunks : []).map((item) => ({
-        id: item.id || '',
-        lang: 'ja',
-        text: item.chunk || '',
-        reading: item.reading || '',
-        meaning: item.meaningZh || '',
-        usage: item.usageZh || '',
-        sourceSentence: item.exampleJa || '',
-        sourceTranslation: item.exampleZh || '',
-        grammarLabel: item.grammarLabel || '',
-        distractors: Array.isArray(item.distractors) ? item.distractors : []
-    }));
-    const quizzes = (Array.isArray(payload.quizzes) ? payload.quizzes : []).map((item) => ({
-        id: item.id || '',
-        lang: String(item.lang || 'en').toLowerCase() === 'ja' ? 'ja' : 'en',
-        type: String(item.type || 'cloze').toLowerCase() === 'choice' ? 'choice' : 'cloze',
-        prompt: item.question || '',
-        answer: item.answer || '',
-        translation: item.explanationZh || '',
-        choices: Array.isArray(item.choices) ? item.choices : [],
-        relatedUnitIds: Array.isArray(item.relatedUnitIds) ? item.relatedUnitIds : []
-    }));
-
-    return {
-        enItems,
-        jaItems,
-        quizzes,
-        sampleStats: {
-            enExampleCount: enItems.length,
-            jaExampleCount: jaItems.length
-        }
-    };
-}
-
-function buildTrainingSourceLabel(source) {
-    const key = String(source || '').toLowerCase();
-    if (key === 'llm') return 'LLM高质量';
-    if (key === 'repaired') return '修复后';
-    if (key === 'heuristic') return '规则回退';
-    return '未知来源';
-}
-
-function buildTrainingStatusLabel(status) {
-    const key = String(status || '').toLowerCase();
-    if (key === 'ready') return 'READY';
-    if (key === 'repaired') return 'REPAIRED';
-    if (key === 'fallback') return 'FALLBACK';
-    return 'FAILED';
-}
-
-function renderTrainingItems(items, emptyText = '暂无可训练内容') {
-    if (!items.length) {
-        return `<div class="card-training-empty">${escapeHtml(emptyText)}</div>`;
-    }
-    return items.map((item) => `
-        <div class="card-training-item" data-train-section="${item.lang === 'en' ? 'enCollocation' : 'jaChunk'}" data-train-id="${escapeHtml(item.id || '')}" data-train-lang="${escapeHtml(item.lang || '')}">
-            <div class="card-training-item-head">
-                <span class="card-training-lang ${item.lang}" data-train-field="lang">${item.lang === 'en' ? 'EN' : 'JA'}</span>
-                <span class="card-training-key" data-train-field="text">${escapeHtml(item.text || '')}</span>
-            </div>
-            ${item.reading ? `<div class="card-training-reading" data-train-field="reading">读音：${escapeHtml(item.reading)}</div>` : ''}
-            ${item.grammarLabel ? `<div class="card-training-grammar" data-train-field="grammarLabel">语法标签：${escapeHtml(item.grammarLabel)}</div>` : ''}
-            ${item.meaning ? `<div class="card-training-meaning" data-train-field="meaning">释义：${escapeHtml(item.meaning)}</div>` : ''}
-            ${item.usage ? `<div class="card-training-usage" data-train-field="usage">用法：${escapeHtml(item.usage)}</div>` : ''}
-            <div class="card-training-sentence" data-train-field="sourceSentence">${escapeHtml(item.sourceSentence || '')}</div>
-            ${item.sourceTranslation ? `<div class="card-training-translation" data-train-field="sourceTranslation">${escapeHtml(item.sourceTranslation)}</div>` : ''}
-            ${Array.isArray(item.distractors) && item.distractors.length ? `<div class="card-training-distractors" data-train-field="distractors">干扰项：${item.distractors.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
-        </div>
-    `).join('');
-}
-
-function renderTrainingQuizzes(quizzes) {
-    if (!quizzes.length) {
-        return '<div class="card-training-empty">暂无训练题目</div>';
-    }
-    return quizzes.map((item) => `
-        <div class="card-training-quiz" data-train-section="quiz" data-train-id="${escapeHtml(item.id || '')}" data-train-lang="${escapeHtml(item.lang || '')}">
-            <div class="card-training-quiz-head">
-                <span class="card-training-lang ${item.lang}" data-train-field="lang">${item.lang === 'en' ? 'EN' : 'JA'}</span>
-                <span data-train-field="type">${item.type === 'choice' ? '选择训练' : '填空训练'}</span>
-            </div>
-            <div class="card-training-quiz-prompt" data-train-field="prompt">${escapeHtml(item.prompt || '')}</div>
-            ${Array.isArray(item.choices) && item.choices.length ? `<div class="card-training-choices" data-train-field="choices">选项：${item.choices.map((v) => escapeHtml(v)).join(' / ')}</div>` : ''}
-            ${item.translation ? `<div class="card-training-translation" data-train-field="translation">${escapeHtml(item.translation)}</div>` : ''}
-            <button type="button" class="card-training-reveal-btn" data-answer="${escapeHtml(item.answer || '')}">显示答案</button>
-            <div class="card-training-answer hidden" data-train-field="answer">答案：${escapeHtml(item.answer || '')}</div>
-        </div>
-    `).join('');
-}
-
-function bindCardTrainingPanel(container, context = {}) {
-    container.querySelectorAll('.card-training-reveal-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const answer = btn.nextElementSibling;
-            if (!answer) return;
-            const opening = answer.classList.contains('hidden');
-            answer.classList.toggle('hidden', !opening);
-            btn.textContent = opening ? '隐藏答案' : '显示答案';
-        });
-    });
-
-    const regenerateBtn = container.querySelector('[data-action="regenerate-training"]');
-    if (regenerateBtn) {
-        regenerateBtn.addEventListener('click', async () => {
-            const generationId = Number(context.generationId || 0);
-            if (!generationId) return;
-            regenerateBtn.disabled = true;
-            regenerateBtn.textContent = '重算中...';
-            try {
-                await api.regenerateTrainingByGeneration(generationId);
-                await loadCardTrainingPanel({
-                    ...context,
-                    forceRefresh: true
-                });
-                showGenerationQueueToast('训练包已重算并更新');
-            } catch (err) {
-                alert('重算失败: ' + err.message);
-                regenerateBtn.disabled = false;
-                regenerateBtn.textContent = '重新生成训练包';
-            }
-        });
-    }
-}
-
-function renderTrainingPanel(container, viewData, options = {}) {
-    const sourceLabel = buildTrainingSourceLabel(options.source);
-    const statusLabel = buildTrainingStatusLabel(options.status);
-    const qualityScore = Number(options.qualityScore || 0);
-    const coverageScore = Number(options.coverageScore || 0);
-    const canRegenerate = Number(options.generationId || 0) > 0;
-    const updatedAt = options.updatedAt ? formatDate(options.updatedAt) : '';
-    const warningText = Array.isArray(options.validationErrors) && options.validationErrors.length
-        ? options.validationErrors.slice(0, 3).join('；')
-        : '';
-
-    container.innerHTML = `
-      <div class="card-training-wrap" data-testid="train-wrap">
-        <div class="card-training-head">
-            <div class="card-training-title" data-testid="train-title">搭配与语块训练</div>
-            <div class="card-training-meta" data-testid="train-meta">
-                <span class="card-training-chip source" data-testid="train-source">${escapeHtml(sourceLabel)}</span>
-                <span class="card-training-chip status" data-testid="train-status">${escapeHtml(statusLabel)}</span>
-                <span class="card-training-chip" data-testid="train-quality">Quality ${qualityScore.toFixed(1)}</span>
-                <span class="card-training-chip" data-testid="train-coverage">Coverage ${Math.round(coverageScore * 100)}%</span>
-                ${updatedAt ? `<span class="card-training-chip" data-testid="train-updated">更新 ${escapeHtml(updatedAt)}</span>` : ''}
-            </div>
-            <div class="card-training-tags" data-testid="train-counts">
-                <span class="tag">EN units ${viewData.enItems.length}</span>
-                <span class="tag">JA units ${viewData.jaItems.length}</span>
-                <span class="tag">Quiz ${viewData.quizzes.length}</span>
-                ${canRegenerate ? '<button type="button" class="card-training-regenerate-btn" data-action="regenerate-training" data-testid="train-regenerate-btn">重新生成训练包</button>' : ''}
-            </div>
-            ${warningText ? `<div class="card-training-warning">校验提示：${escapeHtml(warningText)}</div>` : ''}
-        </div>
-        <div class="card-training-grid">
-            <section class="card-training-section">
-                <div class="card-training-section-title">英文搭配</div>
-                <div class="card-training-list">
-                    ${renderTrainingItems(viewData.enItems, '未识别到英文搭配，可先生成带英文例句的卡片。')}
-                </div>
-            </section>
-            <section class="card-training-section">
-                <div class="card-training-section-title">日语语块</div>
-                <div class="card-training-list">
-                    ${renderTrainingItems(viewData.jaItems, '未识别到日语语块，可先生成带日语例句的卡片。')}
-                </div>
-            </section>
-        </div>
-        <section class="card-training-section">
-            <div class="card-training-section-title">训练题</div>
-            <div class="card-training-quiz-list">
-                ${renderTrainingQuizzes(viewData.quizzes)}
-            </div>
-        </section>
-      </div>
-    `;
-}
-
-function buildTrainingHighlightSourceHash(trainingAsset, viewData) {
-    if (trainingAsset?.payload) {
-        return computeTextHash(JSON.stringify(trainingAsset.payload || {}));
-    }
-    return computeTextHash(JSON.stringify({
-        enItems: viewData?.enItems || [],
-        jaItems: viewData?.jaItems || [],
-        quizzes: viewData?.quizzes || []
-    }));
-}
-
-async function fetchTrainingAssetForCard({ generationId, folder, baseName }) {
-    if (generationId) {
-        try {
-            const data = await api.getTrainingByGeneration(generationId);
-            if (data?.training) return data.training;
-        } catch (err) {
-            if (Number(err?.status) !== 404) {
-                console.warn('[TRAIN] fetch by generation failed:', err.message);
-            }
-        }
-    }
-    if (folder && baseName) {
-        try {
-            const data = await api.getTrainingByFile(folder, baseName);
-            if (data?.training) return data.training;
-        } catch (err) {
-            if (Number(err?.status) !== 404) {
-                console.warn('[TRAIN] fetch by file failed:', err.message);
-            }
-        }
-    }
-    return null;
-}
-
-async function loadCardTrainingPanel({ container, markdown, title, cardType, generationId = 0, folder = '', baseName = '', forceRefresh = false }) {
-    if (!container) return;
-    if (!forceRefresh && container.dataset.loaded === '1') return;
-
-    container.dataset.loaded = 'loading';
-    container.innerHTML = '<div class="card-training-empty">TRAIN 数据加载中...</div>';
-
-    let training = null;
-    try {
-        training = await fetchTrainingAssetForCard({ generationId, folder, baseName });
-    } catch (err) {
-        console.warn('[TRAIN] load training asset failed:', err.message);
-    }
-
-    const bindContext = { container, generationId, folder, baseName, markdown, title, cardType };
-    const viewData = training?.payload
-        ? mapTrainingPayloadToViewData(training.payload || {})
-        : buildCardTrainingData(markdown, title, cardType);
-    const renderOptions = training?.payload
-        ? {
-            source: training.source,
-            status: training.status,
-            qualityScore: training.qualityScore,
-            coverageScore: training.coverageScore,
-            validationErrors: training.validationErrors,
-            updatedAt: training.updatedAt,
-            generationId
-        }
-        : {
-            source: 'heuristic',
-            status: 'fallback',
-            qualityScore: 0,
-            coverageScore: 0,
-            validationErrors: ['后端训练包不存在，使用前端临时提取'],
-            updatedAt: null,
-            generationId
-        };
-    const trainingHighlightContext = buildCardHighlightContext({
-        folder,
-        baseName,
-        generationId,
-        title,
-        scope: HIGHLIGHT_SCOPE_TRAIN,
-        sourceHash: buildTrainingHighlightSourceHash(training, viewData)
-    });
-    if (activeCardContext) {
-        activeCardContext.trainingHighlightContext = trainingHighlightContext;
-    }
-
-    const persistedHtml = trainingHighlightContext
-        ? loadPersistedCardHighlights(
-            trainingHighlightContext.highlightStorageKey,
-            trainingHighlightContext.highlightSourceHash
-        )
-        : null;
-
-    if (persistedHtml) {
-        container.innerHTML = persistedHtml;
-        bindCardTrainingPanel(container, bindContext);
-        if (trainingHighlightContext) {
-            backfillCardHighlightsToServer(trainingHighlightContext, persistedHtml);
-        }
-    } else {
-        renderTrainingPanel(container, viewData, renderOptions);
-        bindCardTrainingPanel(container, bindContext);
-    }
-
-    if (trainingHighlightContext) {
-        await hydrateCardHighlightsFromServer(container, trainingHighlightContext, {
-            onHydrated: () => bindCardTrainingPanel(container, bindContext)
-        });
-    }
-    container.dataset.loaded = '1';
-}
-
 // ==========================================
 // 后台生成队列（静默串行，不打断浏览）
 // ==========================================
@@ -2294,17 +1734,6 @@ function normalizeSelectionPhrase(text) {
     return cleaned;
 }
 
-function normalizeTrainingSelectionPhrase(text) {
-    let cleaned = normalizeSelectionPhrase(text);
-    cleaned = cleaned
-        .replace(/^(EN|JA)\s+/i, '')
-        .replace(/^(释义|用法|读音|语法标签|干扰项|选项|答案)\s*[：:]\s*/i, '')
-        .replace(/^(填空训练|选择训练)\s+/i, '')
-        .replace(/^(英文搭配|日语语块|训练题)\s+/i, '')
-        .trim();
-    return cleaned;
-}
-
 const OCR_NOISE_LINE_RE = /^[\s|¦•◆◇■□●○★☆※_=~\-—–·・]+$/u;
 const OCR_EDGE_NOISE_RE = /^[\s|¦•◆◇■□●○★☆※_=~]+|[\s|¦•◆◇■□●○★☆※_=~]+$/gu;
 const OCR_KANA_CLASS = '\u3040-\u30FFー';
@@ -2808,11 +2237,9 @@ function buildCardHighlightContext({
     };
 }
 
-function getActiveHighlightContext(scope = HIGHLIGHT_SCOPE_CONTENT) {
+function getActiveHighlightContext() {
     if (!activeCardContext) return null;
-    return scope === HIGHLIGHT_SCOPE_TRAIN
-        ? (activeCardContext.trainingHighlightContext || null)
-        : (activeCardContext.contentHighlightContext || null);
+    return activeCardContext.contentHighlightContext || null;
 }
 
 function computeTextHash(input) {
@@ -2907,7 +2334,7 @@ function backfillCardHighlightsToServer(context, html) {
         html,
         generationId: context.generationId || null,
         version: 1,
-        updatedBy: reviewState.reviewer || 'owner'
+        updatedBy: cardEditorName
     }).catch((err) => {
         console.warn('[Highlight] backfill to server failed:', err.message);
     });
@@ -2937,7 +2364,7 @@ function persistCurrentCardHighlights(container, context = null) {
             html: container.innerHTML,
             generationId,
             version: 1,
-            updatedBy: reviewState.reviewer || 'owner'
+            updatedBy: cardEditorName
         }).catch((err) => {
             console.warn('[Highlight] persist to server failed:', err.message);
         });
@@ -2963,258 +2390,6 @@ function clearPersistedCardHighlights(storageKey, options = {}) {
     } catch (err) {
         console.warn('[Highlight] clear failed:', err.message);
     }
-}
-
-async function ensureActiveReviewCampaign(force = false) {
-    if (!force && reviewState.activeCampaign) return reviewState.activeCampaign;
-    try {
-        const res = await api.getActiveReviewCampaign();
-        reviewState.activeCampaign = res.campaign || null;
-        return reviewState.activeCampaign;
-    } catch (err) {
-        console.warn('Load active review campaign failed:', err.message);
-        return null;
-    }
-}
-
-async function loadReviewPanel(options = {}) {
-    const generationId = Number(options.generationId || 0);
-    const container = document.getElementById('cardReview');
-    if (!container) return;
-    if (!generationId) {
-        container.innerHTML = '<div class="review-empty">当前记录缺少 generationId，无法评审。</div>';
-        return;
-    }
-
-    container.innerHTML = '<div class="review-empty">加载评审数据中...</div>';
-    const campaign = await ensureActiveReviewCampaign();
-    let campaignId = campaign?.id || null;
-    let progress = null;
-    if (campaignId) {
-        try {
-            const progressRes = await api.getReviewCampaignProgress(campaignId);
-            progress = progressRes.progress || null;
-            if (progress) reviewState.activeCampaign = progress;
-        } catch (err) {
-            console.warn('Load review progress failed:', err.message);
-        }
-    }
-
-    let examples = [];
-    try {
-        const data = await api.getGenerationReviewExamples(generationId, {
-            campaignId: campaignId || '',
-            reviewer: reviewState.reviewer
-        });
-        examples = data.examples || [];
-    } catch (err) {
-        container.innerHTML = `<div class="review-empty">加载例句失败: ${escapeHtml(err.message)}</div>`;
-        return;
-    }
-
-    const progressText = progress
-        ? `${progress.reviewed_examples || 0}/${progress.total_examples || 0} (${progress.completion_rate || 0}%)`
-        : '未创建评审批次';
-    const hasPending = Number(progress?.pending_examples || 0) > 0;
-    const isFinalized = progress?.status === 'finalized';
-
-    container.innerHTML = `
-      <div class="review-toolbar">
-        <div class="review-meta">
-          <div class="review-campaign-name">批次: ${escapeHtml(campaign?.name || '未创建')}${isFinalized ? ' <span class="review-badge finalized">已完成</span>' : ''}</div>
-          <div class="review-campaign-progress">进度: ${escapeHtml(progressText)}</div>
-        </div>
-        <div class="review-actions">
-          ${campaignId && !isFinalized
-            ? `<button class="btn-secondary" id="reviewFinalizeBtn" ${hasPending ? 'disabled title="请先完成全部评分后再统一处理"' : ''}>统一处理并入池</button>
-               <button class="btn-sampling" id="reviewSamplingBtn">采样处理</button>`
-            : ''}
-          ${campaignId && isFinalized
-            ? `<button class="btn-rollback" id="reviewRollbackBtn">回滚</button>`
-            : ''}
-          ${!campaignId
-            ? `<button class="btn-secondary" id="reviewCreateBtn">创建评审批次</button>`
-            : ''}
-          <button class="btn-text" id="reviewRefreshBtn">刷新</button>
-        </div>
-      </div>
-      ${campaignId && hasPending && !isFinalized ? `<div class="review-hint">请先完成全部评分后再执行统一处理（剩余 ${progress.pending_examples} 条）。可使用"采样处理"跳过未评审样本。</div>` : ''}
-      <div class="review-list" id="reviewExampleList">
-        ${examples.length ? examples.map((ex) => renderReviewExampleCard(ex, campaignId)).join('') : '<div class="review-empty">当前卡片没有可评审例句。</div>'}
-      </div>
-    `;
-
-    const createBtn = document.getElementById('reviewCreateBtn');
-    if (createBtn) {
-        createBtn.onclick = async () => {
-            createBtn.disabled = true;
-            try {
-                await api.createReviewCampaign({
-                    name: `campaign_${new Date().toISOString().slice(0, 10)}`,
-                    createdBy: reviewState.reviewer
-                });
-                reviewState.activeCampaign = null;
-                await loadReviewPanel({ generationId });
-            } catch (err) {
-                alert(`创建批次失败: ${err.message}`);
-                createBtn.disabled = false;
-            }
-        };
-    }
-
-    const finalizeBtn = document.getElementById('reviewFinalizeBtn');
-    if (finalizeBtn && campaignId) {
-        finalizeBtn.onclick = async () => {
-            if (hasPending) {
-                alert(`当前批次仍有 ${progress.pending_examples} 条未评审，请先完成全部评分。`);
-                return;
-            }
-            if (!confirm('确认对当前批次执行统一处理并更新注入资格？')) return;
-            finalizeBtn.disabled = true;
-            try {
-                await api.finalizeReviewCampaign(campaignId);
-                reviewState.activeCampaign = null;
-                await loadReviewPanel({ generationId });
-            } catch (err) {
-                alert(`统一处理失败: ${err.message}`);
-                finalizeBtn.disabled = false;
-            }
-        };
-    }
-
-    const samplingBtn = document.getElementById('reviewSamplingBtn');
-    if (samplingBtn && campaignId) {
-        samplingBtn.onclick = async () => {
-            if (!confirm('采样处理将跳过未评审的样本，仅处理已评审部分。确认继续？')) return;
-            samplingBtn.disabled = true;
-            try {
-                await api.finalizeReviewCampaign(campaignId, { allowPartial: true, minReviewRate: 0.3 });
-                reviewState.activeCampaign = null;
-                await loadReviewPanel({ generationId });
-            } catch (err) {
-                alert(`采样处理失败: ${err.message}`);
-                samplingBtn.disabled = false;
-            }
-        };
-    }
-
-    const rollbackBtn = document.getElementById('reviewRollbackBtn');
-    if (rollbackBtn && campaignId) {
-        rollbackBtn.onclick = async () => {
-            if (!confirm('回滚将重置所有注入资格为 pending，但保留原始评分数据。确认回滚？')) return;
-            rollbackBtn.disabled = true;
-            try {
-                await api.rollbackReviewCampaign(campaignId);
-                reviewState.activeCampaign = null;
-                await loadReviewPanel({ generationId });
-            } catch (err) {
-                alert(`回滚失败: ${err.message}`);
-                rollbackBtn.disabled = false;
-            }
-        };
-    }
-
-    const refreshBtn = document.getElementById('reviewRefreshBtn');
-    if (refreshBtn) {
-        refreshBtn.onclick = () => loadReviewPanel({ generationId });
-    }
-
-    container.querySelectorAll('.review-save-btn').forEach((btn) => {
-        btn.onclick = async () => {
-            const exampleId = Number(btn.dataset.exampleId || 0);
-            if (!exampleId) return;
-
-            const sentenceInput = container.querySelector(`input[name="sentence-${exampleId}"]:checked`);
-            const translationInput = container.querySelector(`input[name="translation-${exampleId}"]:checked`);
-            const ttsInput = container.querySelector(`input[name="tts-${exampleId}"]:checked`);
-            const decisionSelect = container.querySelector(`select[name="decision-${exampleId}"]`);
-            const commentInput = container.querySelector(`textarea[name="comment-${exampleId}"]`);
-
-            if (!sentenceInput || !translationInput || !ttsInput) {
-                alert('请先完成三项评分');
-                return;
-            }
-
-            btn.disabled = true;
-            const originalText = btn.textContent;
-            btn.textContent = '保存中...';
-
-            try {
-                await api.submitExampleReview(exampleId, {
-                    campaignId: campaignId || null,
-                    reviewer: reviewState.reviewer,
-                    scoreSentence: Number(sentenceInput.value),
-                    scoreTranslation: Number(translationInput.value),
-                    scoreTts: Number(ttsInput.value),
-                    decision: decisionSelect?.value || 'neutral',
-                    comment: commentInput?.value || ''
-                });
-                btn.textContent = '已保存';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                }, 900);
-            } catch (err) {
-                alert(`保存失败: ${err.message}`);
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
-        };
-    });
-}
-
-function renderScoreChoices(name, selectedValue = '') {
-    const selected = String(selectedValue || '');
-    return [1, 2, 3, 4, 5].map((score) => `
-      <label class="review-score-item">
-        <input type="radio" name="${name}" value="${score}" ${selected === String(score) ? 'checked' : ''} />
-        <span>${score}</span>
-      </label>
-    `).join('');
-}
-
-function renderReviewExampleCard(example, campaignId) {
-    const eligibility = example.eligibility || 'pending';
-    const badgeClass = eligibility === 'approved'
-        ? 'review-badge approved'
-        : eligibility === 'rejected'
-            ? 'review-badge rejected'
-            : 'review-badge pending';
-    return `
-      <div class="review-item" data-example-id="${example.id}">
-        <div class="review-item-head">
-          <div>
-            <div class="review-slot">${escapeHtml(example.sourceSlot || '')} · ${escapeHtml((example.lang || '').toUpperCase())}</div>
-            <div class="review-text">${escapeHtml(example.sentenceText || '')}</div>
-            <div class="review-translation">${escapeHtml(example.translationText || '')}</div>
-          </div>
-          <div class="${badgeClass}">${escapeHtml(eligibility)}</div>
-        </div>
-        <div class="review-score-grid">
-          <div class="review-score-row">
-            <span>原句</span>
-            <div class="review-score-choices">${renderScoreChoices(`sentence-${example.id}`, example.scoreSentence)}</div>
-          </div>
-          <div class="review-score-row">
-            <span>翻译</span>
-            <div class="review-score-choices">${renderScoreChoices(`translation-${example.id}`, example.scoreTranslation)}</div>
-          </div>
-          <div class="review-score-row">
-            <span>TTS</span>
-            <div class="review-score-choices">${renderScoreChoices(`tts-${example.id}`, example.scoreTts)}</div>
-          </div>
-        </div>
-        <div class="review-footer">
-          <select name="decision-${example.id}" class="review-decision">
-            <option value="neutral" ${example.decision === 'neutral' ? 'selected' : ''}>中立</option>
-            <option value="approve" ${example.decision === 'approve' ? 'selected' : ''}>推荐注入</option>
-            <option value="reject" ${example.decision === 'reject' ? 'selected' : ''}>不推荐注入</option>
-          </select>
-          <textarea name="comment-${example.id}" class="review-comment" placeholder="评论（可选）">${escapeHtml(example.comment || '')}</textarea>
-          <button class="btn-secondary review-save-btn" data-example-id="${example.id}" ${campaignId ? '' : 'disabled'}>保存评分</button>
-        </div>
-      </div>
-    `;
 }
 
 async function loadCardKnowledgePanel(options = {}) {
@@ -3245,7 +2420,6 @@ async function loadCardKnowledgePanel(options = {}) {
         }
 
         const term = relations.term || null;
-        const examples = Array.isArray(relations.examples) ? relations.examples : [];
         const grammarHits = Array.isArray(relations.grammarHits) ? relations.grammarHits : [];
         const clusters = Array.isArray(relations.clusters) ? relations.clusters : [];
         const issues = Array.isArray(relations.issues) ? relations.issues : [];
@@ -3262,7 +2436,6 @@ async function loadCardKnowledgePanel(options = {}) {
                     <div class="card-knowledge-tags">
                         <span class="tag">provider ${escapeHtml(provider)}</span>
                         <span class="tag">model ${escapeHtml(model)}</span>
-                        <span class="tag">examples ${examples.length}</span>
                         <span class="tag">patterns ${grammarHits.length}</span>
                         <span class="tag">clusters ${clusters.length}</span>
                         <span class="tag">issues ${issues.length}</span>
@@ -3275,12 +2448,6 @@ async function loadCardKnowledgePanel(options = {}) {
                         <strong>${escapeHtml(item.phrase || '-')}</strong>
                         <span class="mono">score ${Number(item.score || 0)} · ${escapeHtml(item.langProfile || '-')}</span>
                         <span class="mono">EN ${escapeHtml(item.enHeadword || '-')} · JA ${escapeHtml(item.jaHeadword || '-')} · ZH ${escapeHtml(item.zhHeadword || '-')}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Example Units', examples, (item) => `
-                        <strong>${escapeHtml(item.sourceSlot || '-')} · ${escapeHtml((item.lang || '').toUpperCase())}</strong>
-                        <span>${escapeHtml(item.sentence || '-')}</span>
-                        <span class="mono">${escapeHtml(item.translation || '-')}</span>
                     `)}
 
                     ${renderCardKnowledgeSection('Grammar Hits', grammarHits, (item) => `
@@ -3597,7 +2764,6 @@ function renderCardModal(markdown, title, options = {}) {
         generationId,
         cardType,
         contentHighlightContext,
-        trainingHighlightContext: null,
         activeHighlightScope: HIGHLIGHT_SCOPE_CONTENT
     };
 
@@ -3712,10 +2878,8 @@ function renderCardModal(markdown, title, options = {}) {
 
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" data-testid="tab-content" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
-                    <button class="tab-btn" data-target="cardTraining" data-testid="tab-train" style="font-size:12px; padding: 4px 12px; color: #0369a1;">TRAIN</button>
                     <button class="tab-btn" data-target="cardIntel" data-testid="tab-intel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
                     ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" data-testid="tab-knowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
-                    ${generationId ? '<button class="tab-btn" data-target="cardReview" data-testid="tab-review" style="font-size:12px; padding: 4px 12px; color: #0f766e;">REVIEW</button>' : ''}
                 </div>
             </div>
 
@@ -3724,8 +2888,6 @@ function renderCardModal(markdown, title, options = {}) {
                 <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeTabLabel}</div>
                 ${cardContentHtml}
             </div>
-
-            <div id="cardTraining" class="mc-body" style="display:none;" data-testid="card-training-panel"></div>
 
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
@@ -3867,7 +3029,6 @@ function renderCardModal(markdown, title, options = {}) {
             </div>
 
             ${generationId ? '<div id="cardKnowledge" class="mc-body" style="display:none;"></div>' : ''}
-            ${generationId ? '<div id="cardReview" class="mc-body" style="display:none;"></div>' : ''}
         </div>
     `;
 
@@ -3911,17 +3072,10 @@ function renderCardModal(markdown, title, options = {}) {
                 throw new Error('Cannot identify record to delete');
             }
             const contentCtx = activeCardContext?.contentHighlightContext || null;
-            const trainCtx = activeCardContext?.trainingHighlightContext || null;
             if (contentCtx) {
                 clearPersistedCardHighlights(contentCtx.highlightStorageKey || '', {
                     removeAllVersions: true,
                     context: contentCtx
-                });
-            }
-            if (trainCtx) {
-                clearPersistedCardHighlights(trainCtx.highlightStorageKey || '', {
-                    removeAllVersions: true,
-                    context: trainCtx
                 });
             }
             closeModal();
@@ -3952,22 +3106,12 @@ function renderCardModal(markdown, title, options = {}) {
     const tabs = els.modalContainer.querySelectorAll('.tab-btn');
     const activateModalSelection = (targetId) => {
         const cardContent = els.modalContainer.querySelector('#cardContent');
-        const cardTraining = els.modalContainer.querySelector('#cardTraining');
         if (targetId === 'cardContent' && cardContent) {
             activeCardContext && (activeCardContext.activeHighlightScope = HIGHLIGHT_SCOPE_CONTENT);
             initSelectionToGenerate(cardContent, {
                 highlightContext: activeCardContext?.contentHighlightContext || null,
                 selectionOriginTab: HIGHLIGHT_SCOPE_CONTENT,
                 normalizer: normalizeSelectionPhrase
-            });
-            return;
-        }
-        if (targetId === 'cardTraining' && cardTraining) {
-            activeCardContext && (activeCardContext.activeHighlightScope = HIGHLIGHT_SCOPE_TRAIN);
-            initSelectionToGenerate(cardTraining, {
-                highlightContext: activeCardContext?.trainingHighlightContext || null,
-                selectionOriginTab: HIGHLIGHT_SCOPE_TRAIN,
-                normalizer: normalizeTrainingSelectionPhrase
             });
             return;
         }
@@ -3982,30 +3126,12 @@ function renderCardModal(markdown, title, options = {}) {
         btn.onclick = async () => {
             tabs.forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
-            
+
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
-            const trainingTab = els.modalContainer.querySelector('#cardTraining');
             const intelTab = els.modalContainer.querySelector('#cardIntel');
             const knowledgeTab = els.modalContainer.querySelector('#cardKnowledge');
-            const reviewTab = els.modalContainer.querySelector('#cardReview');
 
-            if (targetId === 'cardTraining') {
-                trainingTab.style.display = 'block';
-                await loadCardTrainingPanel({
-                    container: trainingTab,
-                    markdown,
-                    title: displayTitle,
-                    cardType,
-                    generationId,
-                    folder,
-                    baseName: options.baseName || ''
-                });
-                activateModalSelection('cardTraining');
-            } else {
-                trainingTab.style.display = 'none';
-            }
-            
             if (targetId === 'cardIntel') {
                 intelTab.style.display = 'grid';
                 requestAnimationFrame(() => renderIntelCharts(metrics));
@@ -4022,18 +3148,7 @@ function renderCardModal(markdown, title, options = {}) {
                 }
             }
 
-            if (reviewTab) {
-                if (targetId === 'cardReview') {
-                    reviewTab.style.display = 'block';
-                    loadReviewPanel({ generationId });
-                } else {
-                    reviewTab.style.display = 'none';
-                }
-            }
-
-            if (targetId !== 'cardTraining') {
-                activateModalSelection(targetId);
-            }
+            activateModalSelection(targetId);
         };
     });
 
@@ -4053,10 +3168,6 @@ function renderCardModal(markdown, title, options = {}) {
         bindInfoButtons(els.modalContainer);
         bindIntelViewers(els.modalContainer);
     }, 10);
-
-    if (generationId) {
-        loadReviewPanel({ generationId });
-    }
 }
 
 function bindIntelViewers(container) {

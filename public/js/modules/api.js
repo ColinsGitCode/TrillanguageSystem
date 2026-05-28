@@ -52,14 +52,6 @@ class ApiService {
         if (options.targetFolder) payload.target_folder = options.targetFolder;
         if (options.cardType) payload.card_type = options.cardType;
         if (options.sourceMode) payload.source_mode = options.sourceMode;
-        if (options.experimentId) payload.experiment_id = options.experimentId;
-        if (options.experimentRound !== undefined) payload.experiment_round = options.experimentRound;
-        if (options.roundName) payload.round_name = options.roundName;
-        if (options.variant) payload.variant = options.variant;
-        if (options.isTeacherReference !== undefined) payload.is_teacher_reference = Boolean(options.isTeacherReference);
-        if (options.fewshotOptions && typeof options.fewshotOptions === 'object') {
-            payload.fewshot_options = options.fewshotOptions;
-        }
 
         return this.fetchJson('/api/generate', {
             method: 'POST',
@@ -202,58 +194,6 @@ class ApiService {
         return this.fetchJson('/api/gemini/auth/cancel', { method: 'POST' });
     }
 
-    async getActiveReviewCampaign() {
-        return this.fetchJson('/api/review/campaigns/active');
-    }
-
-    async createReviewCampaign(payload = {}) {
-        return this.fetchJson('/api/review/campaigns', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-    }
-
-    async getReviewCampaignProgress(campaignId) {
-        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/progress`);
-    }
-
-    async finalizeReviewCampaign(campaignId, payload = {}) {
-        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/finalize`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-    }
-
-    async rollbackReviewCampaign(campaignId) {
-        return this.fetchJson(`/api/review/campaigns/${encodeURIComponent(campaignId)}/rollback`, {
-            method: 'POST'
-        });
-    }
-
-    async getGenerationReviewExamples(generationId, params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const suffix = query ? `?${query}` : '';
-        return this.fetchJson(`/api/review/generations/${encodeURIComponent(generationId)}/examples${suffix}`);
-    }
-
-    async submitExampleReview(exampleId, payload = {}) {
-        return this.fetchJson(`/api/review/examples/${encodeURIComponent(exampleId)}/reviews`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-    }
-
-    async backfillReviewExamples(limit = 0) {
-        return this.fetchJson('/api/review/backfill', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit })
-        });
-    }
-
     async startKnowledgeJob(payload = {}) {
         return this.fetchJson('/api/knowledge/jobs/start', {
             method: 'POST',
@@ -366,23 +306,6 @@ class ApiService {
         const params = new URLSearchParams();
         params.set('limit', String(limit));
         return this.fetchJson(`/api/knowledge/clusters/${encodeURIComponent(clusterKey)}/relations?${params.toString()}`);
-    }
-
-    async getTrainingByGeneration(generationId) {
-        return this.fetchJson(`/api/training/by-generation/${encodeURIComponent(generationId)}`);
-    }
-
-    async getTrainingByFile(folder, base) {
-        const params = new URLSearchParams();
-        params.set('folder', String(folder || ''));
-        params.set('base', String(base || ''));
-        return this.fetchJson(`/api/training/by-file?${params.toString()}`);
-    }
-
-    async regenerateTrainingByGeneration(generationId) {
-        return this.fetchJson(`/api/training/by-generation/${encodeURIComponent(generationId)}/regenerate`, {
-            method: 'POST'
-        });
     }
 }
 

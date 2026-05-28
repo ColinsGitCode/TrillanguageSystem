@@ -73,7 +73,7 @@ export const METRIC_DEFINITIONS = {
     },
     "PROMPT_TEXT": {
         title: "Prompt 文本",
-        content: "<p>实际发送给 AI 模型的完整提示词内容。包含角色设定、任务指令、输出格式要求以及少样本示例 (Few-Shot Examples)。点击可展开查看或复制。</p>"
+        content: "<p>实际发送给 AI 模型的完整提示词内容。包含角色设定、任务指令与输出格式要求。点击可展开查看或复制。</p>"
     },
     "LLM_OUTPUT": {
         title: "LLM 原始输出",
@@ -100,31 +100,6 @@ export const METRIC_DEFINITIONS = {
     "DATA_CORE": {
         title: "数据核心 (Data Core)",
         content: "<p>本地文件系统存储占用统计。包含所有生成的 Markdown 文档、HTML 页面以及 WAV/MP3 音频文件。</p>"
-    },
-    "REVIEW_PIPELINE": {
-        title: "评审管线 (Review Pipeline)",
-        content: `
-            <p>例句级人工评审与样本池管理，是 few-shot 注入的质量门控。</p>
-            <ul>
-                <li><strong>Approved (已通过)</strong>: 三维评分（原句/翻译/TTS）达标且拒绝率低于阈值，可注入 few-shot。</li>
-                <li><strong>Pending (待审)</strong>: 已入池但尚未评审或未达到最低投票数。</li>
-                <li><strong>Rejected (已拒绝)</strong>: 评分不达标或拒绝率过高，不会被注入。</li>
-            </ul>
-            <p>Eligibility 计算：overall = 0.45*sentence + 0.45*translation + 0.1*tts，需同时满足 overall≥4.2、sentence≥4.0、translation≥4.0、tts≥3.0。</p>
-        `
-    },
-    "FEWSHOT_EFFECT": {
-        title: "Few-shot 效果 (Few-shot Effectiveness)",
-        content: `
-            <p>对比 baseline（无注入）与 fewshot（注入高质量样本）两种生成策略的效果。</p>
-            <ul>
-                <li><strong>Quality</strong>: 模板合规评分均值对比。</li>
-                <li><strong>Tokens</strong>: prompt token 消耗对比（fewshot 会增加 token 开销）。</li>
-                <li><strong>Latency</strong>: 端到端延迟对比。</li>
-                <li><strong>Injection Rate</strong>: 成功启用 fewshot 注入的生成占比。</li>
-                <li><strong>Fallback Reasons</strong>: 未能成功注入的原因分布（如样本池不足、token 预算超限等）。</li>
-            </ul>
-        `
     },
     "QUALITY_SIGNAL": {
         title: "模板合规分 (Quality Signal)",
