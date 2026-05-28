@@ -190,8 +190,7 @@ class GenerationJobService {
         providerUsed: result?.provider_used || result?.providerUsed || '',
         modelUsed: result?.observability?.metadata?.model || result?.modelUsed || '',
         cardType: result?.card_type || nextJob.jobType,
-        sourceMode: result?.source_mode || nextJob.sourceMode || null,
-        training: result?.training || null
+        sourceMode: result?.source_mode || nextJob.sourceMode || null
       };
 
       dbService.updateGenerationJob(nextJob.id, {

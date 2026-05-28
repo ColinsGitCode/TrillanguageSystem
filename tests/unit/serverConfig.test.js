@@ -108,15 +108,4 @@ test.describe('serverConfig misc helpers', () => {
   test.it('normalizeLlmProvider always returns gemini', () => {
     assert.equal(cfg.normalizeLlmProvider(), 'gemini');
   });
-
-  test.it('resolveTrackingModel matches the default gemini model', () => {
-    assert.equal(cfg.resolveTrackingModel(), cfg.DEFAULT_GEMINI_MODEL);
-  });
-
-  test.it('createExperimentId is well-formed and unique', () => {
-    const a = cfg.createExperimentId();
-    const b = cfg.createExperimentId();
-    assert.match(a, /^exp_\d+_[0-9a-f]{6}$/);
-    assert.notEqual(a, b);
-  });
 });

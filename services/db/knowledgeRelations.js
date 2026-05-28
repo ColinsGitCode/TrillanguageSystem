@@ -2,8 +2,8 @@
 
 // Final knowledge_* slice: knowledge_outputs_raw write + the read-only
 // aggregation/relations/summary layer. Methods here cross many knowledge_*
-// tables (and generations / observability_metrics / example_units), so they
-// land in one module rather than splitting by reader-side table.
+// tables (and generations / observability_metrics), so they land in one
+// module rather than splitting by reader-side table.
 //
 // Functions take `db` first. `aggregateByGenerationIds` is exported so the
 // term/pattern/cluster relation getters can share it.
@@ -278,32 +278,6 @@ function getCardRelations(db, generationId, { limit = 12 } = {}) {
     updatedAt: row.updated_at
   }));
 
-  const examples = db.prepare(`
-    SELECT
-      eu.id AS example_id,
-      eu.lang,
-      eu.sentence_text,
-      eu.translation_text,
-      eu.eligibility,
-      eu.review_score_overall,
-      eu.review_votes,
-      eus.source_slot
-    FROM example_unit_sources eus
-    JOIN example_units eu ON eu.id = eus.example_id
-    WHERE eus.generation_id = ?
-    ORDER BY eus.source_slot ASC
-    LIMIT ?
-  `).all(id, normalizedLimit).map((row) => ({
-    exampleId: Number(row.example_id || 0),
-    lang: row.lang || '',
-    sourceSlot: row.source_slot || '',
-    sentence: row.sentence_text || '',
-    translation: row.translation_text || '',
-    eligibility: row.eligibility || 'pending',
-    reviewScoreOverall: row.review_score_overall == null ? null : Number(row.review_score_overall),
-    reviewVotes: Number(row.review_votes || 0)
-  }));
-
   const synonymRows = db.prepare(`
     SELECT
       g.id AS group_id,
@@ -431,7 +405,6 @@ function getCardRelations(db, generationId, { limit = 12 } = {}) {
       tags: safeJsonParse(termRow.tags_json, []),
       score: Number(termRow.score || 0)
     } : null,
-    examples,
     grammarHits,
     clusters,
     issues,

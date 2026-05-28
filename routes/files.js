@@ -6,7 +6,6 @@ const fs = require('fs');
 const {
   deleteRecordFiles,
   dbService,
-  buildTrainingSidecarPath,
 } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'routes/files' });
 
@@ -174,9 +173,6 @@ router.delete('/api/records/by-file', (req, res) => {
                 recordDetail?.html_file_path,
                 recordDetail?.meta_file_path,
             ].filter(Boolean);
-            if (recordDetail?.md_file_path && recordDetail?.base_filename) {
-                recordFiles.push(buildTrainingSidecarPath(path.dirname(recordDetail.md_file_path), recordDetail.base_filename));
-            }
 
             if (recordDetail?.audioFiles?.length) {
                 recordDetail.audioFiles.forEach((audio) => {
@@ -207,17 +203,12 @@ router.delete('/api/records/by-file', (req, res) => {
         baseCandidates.forEach((candidate) => {
             highlightDeleted += dbService.deleteCardHighlightByFile(folder, candidate);
         });
-        let trainingDeleted = 0;
-        baseCandidates.forEach((candidate) => {
-            trainingDeleted += dbService.deleteCardTrainingAssetByFile(folder, candidate);
-        });
 
         res.json({
             success: true,
             deletedFiles: deletedPaths.size,
             recordDeleted: Boolean(record),
-            highlightDeleted,
-            trainingDeleted
+            highlightDeleted
         });
     } catch (err) {
         log.error({ err, route: req.originalUrl }, 'route handler error');

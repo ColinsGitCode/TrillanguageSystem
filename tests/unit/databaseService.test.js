@@ -248,51 +248,6 @@ test.describe('databaseService — card highlights CRUD', () => {
   });
 });
 
-test.describe('databaseService — card training assets', () => {
-  test.it('upsertCardTrainingAsset + getCardTrainingAssetByGenerationId round-trip', () => {
-    const db = freshDb();
-    try {
-      const id = db.insertGeneration(buildGenerationFixture());
-      const saved = db.upsertCardTrainingAsset({
-        generationId: id,
-        folderName: '20260101',
-        baseFilename: 'hello',
-        cardType: 'trilingual',
-        status: 'ready',
-        source: 'llm',
-        providerUsed: 'gemini',
-        modelUsed: 'gemini-test',
-        promptVersion: 'v1',
-        schemaVersion: 'training_pack_v1',
-        qualityScore: 80,
-        selfConfidence: 0.9,
-        coverageScore: 0.8,
-        validationErrors: [],
-        fallbackReason: null,
-        tokensInput: 100, tokensOutput: 200, tokensTotal: 300,
-        costTotal: 0,
-        latencyMs: 500,
-        payload: { hello: 'world' },
-        sidecarFilePath: '/tmp/hello.training.v1.json',
-      });
-      assert.ok(saved);
-      const got = db.getCardTrainingAssetByGenerationId(id);
-      assert.ok(got);
-      assert.equal(got.status, 'ready');
-      assert.equal(got.qualityScore, 80);
-      // The payload JSON should round-trip through the mapper.
-      assert.deepEqual(got.payload, { hello: 'world' });
-    } finally { db.close(); }
-  });
-
-  test.it('getCardTrainingAssetByGenerationId returns null when absent', () => {
-    const db = freshDb();
-    try {
-      assert.equal(db.getCardTrainingAssetByGenerationId(99999), null);
-    } finally { db.close(); }
-  });
-});
-
 // -- generation_jobs ---------------------------------------------------------
 
 function buildJobPayload(overrides = {}) {
@@ -552,127 +507,6 @@ test.describe('databaseService — knowledge_jobs lifecycle', () => {
       const other = db.createKnowledgeJob({ jobType: 'index', scope: {} });
       const otherRow = db.getKnowledgeJobById(other.id);
       assert.equal(otherRow.synonymMeta, null);
-    } finally { db.close(); }
-  });
-});
-
-// -- experiments / few-shot --------------------------------------------------
-
-test.describe('databaseService — experiments + few-shot', () => {
-  test.it('getFewShotRuns + getFewShotExamples return [] for unknown experiment', () => {
-    const db = freshDb();
-    try {
-      assert.deepEqual(db.getFewShotRuns('exp_missing'), []);
-      assert.deepEqual(db.getFewShotExamples([]), []);
-    } finally { db.close(); }
-  });
-
-  test.it('upsertExperimentRound inserts then updates on conflict (experiment_id, round_number)', () => {
-    const db = freshDb();
-    try {
-      db.upsertExperimentRound({
-        experimentId: 'exp_a',
-        roundNumber: 1,
-        roundName: 'first',
-        variant: 'A',
-        llmModel: 'gemini-test',
-        fewshotEnabled: true,
-        fewshotCount: 3,
-      });
-      // Re-upsert the same (experimentId, roundNumber) with a different name.
-      db.upsertExperimentRound({
-        experimentId: 'exp_a',
-        roundNumber: 1,
-        roundName: 'first-updated',
-        variant: 'A',
-        llmModel: 'gemini-test',
-        fewshotEnabled: true,
-        fewshotCount: 5,
-      });
-      const trend = db.getExperimentRoundTrend('exp_a');
-      assert.equal(trend.length, 1);
-      assert.equal(trend[0].roundName, 'first-updated');
-      assert.equal(trend[0].fewshotCount, 5);
-    } finally { db.close(); }
-  });
-
-  test.it('insertExperimentSample returns an id and getExperimentSamples roundtrips qualityDimensions JSON', () => {
-    const db = freshDb();
-    try {
-      db.upsertExperimentRound({ experimentId: 'exp_b', roundNumber: 0, roundName: 'baseline' });
-      const id = db.insertExperimentSample({
-        experimentId: 'exp_b',
-        roundNumber: 0,
-        phrase: 'hello',
-        provider: 'gemini',
-        variant: 'A',
-        qualityScore: 88,
-        qualityDimensions: { authenticity: 5, length: 4 },
-        tokensTotal: 1500,
-        latencyMs: 800,
-      });
-      assert.ok(id > 0);
-      const samples = db.getExperimentSamples('exp_b');
-      assert.equal(samples.length, 1);
-      assert.deepEqual(samples[0].qualityDimensions, { authenticity: 5, length: 4 });
-      assert.equal(samples[0].success, 1);
-    } finally { db.close(); }
-  });
-
-  test.it('upsertTeacherReference deduplicates on (experiment_id, round_number, phrase)', () => {
-    const db = freshDb();
-    try {
-      db.upsertExperimentRound({ experimentId: 'exp_c', roundNumber: 0 });
-      db.upsertTeacherReference({
-        experimentId: 'exp_c', roundNumber: 0, phrase: 'hello',
-        provider: 'gemini', qualityScore: 90, outputText: 'first',
-      });
-      db.upsertTeacherReference({
-        experimentId: 'exp_c', roundNumber: 0, phrase: 'hello',
-        provider: 'gemini', qualityScore: 95, outputText: 'second',
-      });
-      const refs = db.getTeacherReferences('exp_c');
-      assert.equal(refs.length, 1);
-      assert.equal(refs[0].qualityScore, 95);
-      assert.equal(refs[0].outputText, 'second');
-    } finally { db.close(); }
-  });
-
-  test.it('recomputeExperimentRoundStats rolls up sample averages onto the round row', () => {
-    const db = freshDb();
-    try {
-      db.upsertExperimentRound({ experimentId: 'exp_d', roundNumber: 0 });
-      db.insertExperimentSample({ experimentId: 'exp_d', roundNumber: 0, phrase: 'a', qualityScore: 80, tokensTotal: 1000, latencyMs: 500 });
-      db.insertExperimentSample({ experimentId: 'exp_d', roundNumber: 0, phrase: 'b', qualityScore: 90, tokensTotal: 2000, latencyMs: 700 });
-      db.recomputeExperimentRoundStats('exp_d', 0);
-      const trend = db.getExperimentRoundTrend('exp_d');
-      assert.equal(trend.length, 1);
-      assert.equal(trend[0].sampleCount, 2);
-      assert.equal(trend[0].avgQualityScore, 85);
-      assert.equal(trend[0].avgTokensTotal, 1500);
-    } finally { db.close(); }
-  });
-
-  test.it('getExperimentSamples / getTeacherReferences return [] for empty experiment id', () => {
-    const db = freshDb();
-    try {
-      assert.deepEqual(db.getExperimentSamples(''), []);
-      assert.deepEqual(db.getTeacherReferences(''), []);
-      assert.deepEqual(db.getExperimentRoundTrend(''), []);
-    } finally { db.close(); }
-  });
-
-  test.it('teacher samples (isTeacher=1) are excluded from round average', () => {
-    const db = freshDb();
-    try {
-      db.upsertExperimentRound({ experimentId: 'exp_e', roundNumber: 0 });
-      // Teacher-flagged sample should not contribute to avg_quality_score.
-      db.insertExperimentSample({ experimentId: 'exp_e', roundNumber: 0, phrase: 't', qualityScore: 100, isTeacher: true });
-      db.insertExperimentSample({ experimentId: 'exp_e', roundNumber: 0, phrase: 'a', qualityScore: 80 });
-      db.recomputeExperimentRoundStats('exp_e', 0);
-      const [round] = db.getExperimentRoundTrend('exp_e');
-      assert.equal(round.sampleCount, 1);
-      assert.equal(round.avgQualityScore, 80);
     } finally { db.close(); }
   });
 });
@@ -1623,7 +1457,7 @@ test.describe('databaseService — truncateAllForTests', () => {
     } finally { db.close(); }
   });
 
-  test.it('wipes knowledge_* + experiments + jobs tables', () => {
+  test.it('wipes knowledge_* + jobs tables', () => {
     const db = freshDb();
     try {
       // Touch a representative row in each domain so the truncate has work to do.
@@ -1635,8 +1469,6 @@ test.describe('databaseService — truncateAllForTests', () => {
       db.replaceKnowledgeClusterData([{ clusterKey: 'k', label: 'L', confidence: 0.1 }], job);
       db.replaceKnowledgeSynonymData([{ pairKey: 'a||b', termA: 'a', termB: 'b' }], job);
       db.insertKnowledgeRawOutput(job, 1, { input: {}, output: {} });
-      db.upsertExperimentRound({ experimentId: 'e1', roundNumber: 0 });
-      db.insertExperimentSample({ experimentId: 'e1', roundNumber: 0, phrase: 'p', qualityScore: 0 });
 
       // sanity: at least one row in each
       const cnt = (t) => db.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
@@ -1645,8 +1477,6 @@ test.describe('databaseService — truncateAllForTests', () => {
       assert.ok(cnt('knowledge_issues') > 0);
       assert.ok(cnt('knowledge_synonym_groups') > 0);
       assert.ok(cnt('knowledge_outputs_raw') > 0);
-      assert.ok(cnt('experiment_rounds') > 0);
-      assert.ok(cnt('experiment_samples') > 0);
 
       db.truncateAllForTests();
 
@@ -1654,7 +1484,7 @@ test.describe('databaseService — truncateAllForTests', () => {
         'knowledge_jobs', 'knowledge_terms_index', 'knowledge_issues',
         'knowledge_grammar_patterns', 'knowledge_clusters',
         'knowledge_synonym_groups', 'knowledge_synonym_members',
-        'knowledge_outputs_raw', 'experiment_rounds', 'experiment_samples',
+        'knowledge_outputs_raw',
         'generations'
       ]) {
         assert.equal(cnt(t), 0, `expected ${t} to be empty after truncate`);

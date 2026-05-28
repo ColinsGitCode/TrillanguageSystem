@@ -13,10 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const log = require('../lib/logger').child({ module: 'svc/database' });
 const generationJobsDomain = require('./db/generationJobs');
-const experimentsDomain = require('./db/experiments');
 const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
-const trainingAssetsDomain = require('./db/trainingAssets');
 const knowledgeJobsDomain = require('./db/knowledgeJobs');
 const knowledgeIssuesDomain = require('./db/knowledgeIssues');
 const knowledgeGrammarDomain = require('./db/knowledgeGrammar');
@@ -85,9 +83,44 @@ class DatabaseService {
 
     const schema = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schema);
+    this.dropDeprecatedTables();
     this.ensureSchemaMigrations();
 
     log.info('database tables initialized');
+  }
+
+  // One-shot cleanup of the retired training / few-shot / review subsystem.
+  // These tables are no longer created by schema.sql; this drops them from
+  // databases provisioned before the removal. Child tables are dropped before
+  // their parents; foreign_keys is toggled off for the duration so dangling
+  // references can't block the drops.
+  dropDeprecatedTables() {
+    const deprecated = [
+      'few_shot_examples',
+      'few_shot_runs',
+      'experiment_rounds',
+      'teacher_references',
+      'experiment_samples',
+      'example_unit_sources',
+      'example_reviews',
+      'review_campaign_items',
+      'review_campaigns',
+      'example_units',
+      'card_training_assets',
+    ];
+    try {
+      this.db.pragma('foreign_keys = OFF');
+      const tx = this.db.transaction(() => {
+        deprecated.forEach((table) => {
+          this.db.exec(`DROP TABLE IF EXISTS ${table};`);
+        });
+      });
+      tx();
+    } catch (err) {
+      log.warn({ err }, 'dropping deprecated tables failed');
+    } finally {
+      this.db.pragma('foreign_keys = ON');
+    }
   }
 
   ensureSchemaMigrations() {
@@ -131,41 +164,6 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_ch_generation ON card_highlights(generation_id);
       CREATE INDEX IF NOT EXISTS idx_ch_file ON card_highlights(folder_name, base_filename);
       CREATE INDEX IF NOT EXISTS idx_ch_updated_at ON card_highlights(updated_at DESC);
-    `);
-
-    // card_training_assets: TRAIN 训练包持久化（schema 18）
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS card_training_assets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        generation_id INTEGER NOT NULL UNIQUE,
-        folder_name TEXT NOT NULL,
-        base_filename TEXT NOT NULL,
-        card_type TEXT NOT NULL DEFAULT 'trilingual',
-        status TEXT NOT NULL DEFAULT 'failed',
-        source TEXT NOT NULL DEFAULT 'heuristic',
-        provider_used TEXT,
-        model_used TEXT,
-        prompt_version TEXT,
-        schema_version TEXT NOT NULL DEFAULT 'training_pack_v1',
-        quality_score REAL DEFAULT 0,
-        self_confidence REAL DEFAULT 0,
-        coverage_score REAL DEFAULT 0,
-        validation_errors_json TEXT,
-        fallback_reason TEXT,
-        tokens_input INTEGER DEFAULT 0,
-        tokens_output INTEGER DEFAULT 0,
-        tokens_total INTEGER DEFAULT 0,
-        cost_total REAL DEFAULT 0,
-        latency_ms INTEGER DEFAULT 0,
-        payload_json TEXT,
-        sidecar_file_path TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_cta_file ON card_training_assets(folder_name, base_filename);
-      CREATE INDEX IF NOT EXISTS idx_cta_updated ON card_training_assets(updated_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_cta_status ON card_training_assets(status, updated_at DESC);
     `);
 
     this.db.exec(`
@@ -472,29 +470,6 @@ class DatabaseService {
       'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
     ]);
 
-    ensureTableColumns(this.db, 'card_training_assets', [
-      "card_type TEXT NOT NULL DEFAULT 'trilingual'",
-      "status TEXT NOT NULL DEFAULT 'failed'",
-      "source TEXT NOT NULL DEFAULT 'heuristic'",
-      'provider_used TEXT',
-      'model_used TEXT',
-      'prompt_version TEXT',
-      "schema_version TEXT NOT NULL DEFAULT 'training_pack_v1'",
-      'quality_score REAL DEFAULT 0',
-      'self_confidence REAL DEFAULT 0',
-      'coverage_score REAL DEFAULT 0',
-      'validation_errors_json TEXT',
-      'fallback_reason TEXT',
-      'tokens_input INTEGER DEFAULT 0',
-      'tokens_output INTEGER DEFAULT 0',
-      'tokens_total INTEGER DEFAULT 0',
-      'cost_total REAL DEFAULT 0',
-      'latency_ms INTEGER DEFAULT 0',
-      'payload_json TEXT',
-      'sidecar_file_path TEXT',
-      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
-    ]);
-
     ensureTableColumns(this.db, 'generation_jobs', [
       "job_type TEXT NOT NULL DEFAULT 'trilingual'",
       'phrase_raw TEXT',
@@ -570,75 +545,6 @@ class DatabaseService {
 
   getHighlightStats(filters = {}) {
     return highlightsDomain.getStats(this.db, filters);
-  }
-
-  mapTrainingAssetRow(row) {
-    return trainingAssetsDomain.mapRow(row);
-  }
-
-  getCardTrainingAssetByGenerationId(generationId) {
-    return trainingAssetsDomain.getByGenerationId(this.db, generationId);
-  }
-
-  getCardTrainingAssetByFile(folderName, baseFilename) {
-    return trainingAssetsDomain.getByFile(this.db, folderName, baseFilename);
-  }
-
-  getTrainingBackfillSummary(filters = {}) {
-    return trainingAssetsDomain.getBackfillSummary(this.db, filters);
-  }
-
-  listTrainingBackfillCandidates(filters = {}) {
-    return trainingAssetsDomain.listBackfillCandidates(this.db, filters);
-  }
-
-  upsertCardTrainingAsset(payload = {}) {
-    return trainingAssetsDomain.upsert(this.db, payload);
-  }
-
-  deleteCardTrainingAssetByFile(folderName, baseFilename) {
-    return trainingAssetsDomain.deleteByFile(this.db, folderName, baseFilename);
-  }
-
-  // ========== Experiments + few-shot ==========
-  // Domain extracted to services/db/experiments.js. These are thin
-  // delegations so external callers (scripts/run_fewshot_rounds.js,
-  // experimentTrackingService, etc.) keep the dbService.METHOD(...) shape.
-
-  getFewShotRuns(experimentId) {
-    return experimentsDomain.getFewShotRuns(this.db, experimentId);
-  }
-
-  getFewShotExamples(runIds = []) {
-    return experimentsDomain.getFewShotExamples(this.db, runIds);
-  }
-
-  upsertExperimentRound(roundData) {
-    return experimentsDomain.upsertRound(this.db, roundData);
-  }
-
-  insertExperimentSample(sample) {
-    return experimentsDomain.insertSample(this.db, sample);
-  }
-
-  upsertTeacherReference(ref) {
-    return experimentsDomain.upsertTeacherReference(this.db, ref);
-  }
-
-  recomputeExperimentRoundStats(experimentId, roundNumber) {
-    return experimentsDomain.recomputeRoundStats(this.db, experimentId, roundNumber);
-  }
-
-  getExperimentRoundTrend(experimentId) {
-    return experimentsDomain.getRoundTrend(this.db, experimentId);
-  }
-
-  getExperimentSamples(experimentId) {
-    return experimentsDomain.getSamples(this.db, experimentId);
-  }
-
-  getTeacherReferences(experimentId) {
-    return experimentsDomain.getTeacherReferences(this.db, experimentId);
   }
 
   /**
@@ -835,83 +741,6 @@ class DatabaseService {
 
   deleteGeneration(id) {
     return generationsDomain.remove(this.db, id);
-  }
-
-  /**
-   * 评审管线统计（Dashboard 用）
-   */
-  getReviewStats() {
-    const eligibility = this.db.prepare(`
-      SELECT eligibility, COUNT(*) as count
-      FROM example_units
-      GROUP BY eligibility
-    `).all();
-
-    const byLang = this.db.prepare(`
-      SELECT lang, eligibility, COUNT(*) as count
-      FROM example_units
-      GROUP BY lang, eligibility
-    `).all();
-
-    const recentActivity = this.db.prepare(`
-      SELECT date(updated_at) as day, COUNT(*) as reviews
-      FROM example_reviews
-      WHERE updated_at >= date('now', '-30 days')
-      GROUP BY day
-      ORDER BY day
-    `).all();
-
-    const avgScores = this.db.prepare(`
-      SELECT
-        AVG(score_sentence) as avgSentence,
-        AVG(score_translation) as avgTranslation,
-        AVG(score_tts) as avgTts,
-        COUNT(*) as totalReviews
-      FROM example_reviews
-    `).get();
-
-    return { eligibility, byLang, recentActivity, avgScores };
-  }
-
-  /**
-   * Few-shot 效果统计（Dashboard 用）
-   */
-  getFewShotStats() {
-    const byVariant = this.db.prepare(`
-      SELECT
-        variant,
-        COUNT(*) as runs,
-        AVG(quality_score) as avgQuality,
-        AVG(total_prompt_tokens_est) as avgTokens,
-        AVG(latency_total_ms) as avgLatency
-      FROM few_shot_runs
-      GROUP BY variant
-    `).all();
-
-    const fallbackReasons = this.db.prepare(`
-      SELECT fallback_reason, COUNT(*) as count
-      FROM few_shot_runs
-      WHERE fallback_reason IS NOT NULL AND fallback_reason != ''
-      GROUP BY fallback_reason
-      ORDER BY count DESC
-    `).all();
-
-    const injectionRate = this.db.prepare(`
-      SELECT
-        SUM(fewshot_enabled) as enabled,
-        COUNT(*) as total
-      FROM few_shot_runs
-    `).get();
-
-    const qualityTrend = this.db.prepare(`
-      SELECT date(created_at) as day, variant, AVG(quality_score) as avgQuality
-      FROM few_shot_runs
-      WHERE created_at >= date('now', '-30 days')
-      GROUP BY day, variant
-      ORDER BY day
-    `).all();
-
-    return { byVariant, fallbackReasons, injectionRate, qualityTrend };
   }
 
   // ========== Generation jobs ==========
