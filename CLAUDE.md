@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~244 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~238 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all 5 specs, hermetic via resetServerState)
@@ -69,57 +69,55 @@ routes/                Each file = one express.Router() for a domain
 ├── knowledge.js       /api/knowledge/*  (17 routes)
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            DELETE /api/records/:id
-services/              Business logic
-├── databaseService.js ~1100 lines — schema setup, additive migrations
-│                       (ensureTableColumns), and thin delegations to
-│                       services/db/<domain>.js (see below)
-├── db/                Per-domain SQL modules each backed by direct unit tests
-│   ├── helpers.js               safeJsonParse
-│   ├── generations.js           generations + observability_metrics +
-│   │                            audio_files insert txn + query/FTS/recent
-│   ├── highlights.js            card_highlights CRUD + stats
-│   ├── generationJobs.js        generation_jobs lifecycle + events + retry
-│   ├── knowledgeJobs.js         knowledge_jobs lifecycle + synonym meta
-│   ├── knowledgeIssues.js       knowledge_issues replace + filtered list
-│   ├── knowledgeGrammar.js      knowledge_grammar_patterns + refs
-│   ├── knowledgeClusters.js     knowledge_clusters + cluster_cards
-│   ├── knowledgeTermsIndex.js   knowledge_terms_index upsert + search
-│   ├── knowledgeSynonyms.js     candidates + groups + members + boundary
-│   │                            detail; owns the pair-key helpers
-│   └── knowledgeRelations.js    knowledge_outputs_raw write + overview /
-│                                aggregateByGenerationIds / card/term/
-│                                pattern/cluster relations / latest summary
-├── cardGenerationService.js  Core generation pipeline (generateWithProvider):
-│                             prompt build → provider call → response
-│                             normalize → tokens / cost / quality / metadata.
-│                             No DB, no fs, no TTS.
-├── databaseHelpers.js
-├── geminiTimeouts.js  Single-knob timeout hierarchy (client > gateway > exec)
-├── geminiErrors.js    Structured error codes (EXECUTOR_TIMEOUT, RATE_LIMITED…)
-├── geminiProcessUtils.js  CLI spawn + process-tree kill (shared)
-├── geminiProxyService.js  HTTP client for the gemini proxy chain
-├── geminiGatewayServer.js  Docker gateway (:18888) — runs in container
-├── geminiCliService.js     In-process CLI transport
-├── geminiService.js        Legacy Gemini API native client (OCR fallback)
-├── geminiAuthService.js    OAuth flow (CLI mode only)
-├── localLlmService.js
-├── observabilityService.js
-├── healthCheckService.js
-├── htmlRenderer.js / contentPostProcessor.js / audioFormat.js
-├── ttsService.js / japaneseFurigana.js
-├── promptEngine.js
-├── generationJobService.js / knowledgeJobService.js
-├── knowledgeAnalysisEngine.js  Thin dispatcher — runTask(type, cards, opts).
-│                               Per-task logic under services/knowledge/:
-│                               textUtils.js (shared helpers) + tasks/
-│                               {summary, cardIndex, grammarLink, cluster,
-│                               issuesAudit, synonymBoundary}.js
-├── tesseractOcrService.js
-├── markdownParser.js
-├── statisticsService.js
-└── e2eFixtureService.js / fileManager.js
+services/              Business logic, grouped by domain subdirectory
+├── llm/               LLM providers + gemini transport chain
+│   ├── geminiService.js        Legacy Gemini API native client (OCR fallback)
+│   ├── geminiCliService.js     In-process CLI transport
+│   ├── geminiProxyService.js   HTTP client for the gemini proxy chain
+│   ├── geminiGatewayServer.js  Docker gateway (:18888) — runs in container
+│   ├── geminiAuthService.js    OAuth flow (CLI mode only)
+│   ├── geminiProcessUtils.js   CLI spawn + process-tree kill (shared)
+│   ├── geminiErrors.js         Structured error codes (EXECUTOR_TIMEOUT…)
+│   ├── geminiTimeouts.js       Single-knob timeout hierarchy (client>gateway>exec)
+│   └── localLlmService.js
+├── generation/        Card generation pipeline + content processing
+│   ├── cardGenerationService.js  Core pipeline (generateWithProvider): prompt
+│   │                             build → provider call → normalize → tokens /
+│   │                             cost / quality / metadata. No DB, no fs, no TTS.
+│   ├── promptEngine.js / contentPostProcessor.js
+│   ├── htmlRenderer.js / markdownParser.js / japaneseFurigana.js
+│   ├── audioFormat.js / ttsService.js
+│   └── generationJobService.js
+├── knowledge/         Knowledge analysis engine + jobs + per-task logic
+│   ├── knowledgeAnalysisEngine.js  Thin dispatcher — runTask(type, cards, opts)
+│   ├── knowledgeJobService.js
+│   ├── textUtils.js            shared helpers
+│   └── tasks/                  {summary, cardIndex, grammarLink, cluster,
+│                                issuesAudit, synonymBoundary}.js
+├── observability/     observabilityService.js, healthCheckService.js,
+│                      statisticsService.js
+├── storage/           DB + filesystem
+│   ├── databaseService.js ~1100 lines — schema setup, additive migrations
+│   │                       (ensureTableColumns) + thin delegations to db/
+│   ├── databaseHelpers.js / fileManager.js
+│   └── db/             Per-domain SQL modules each backed by direct unit tests
+│       ├── helpers.js               safeJsonParse
+│       ├── generations.js           generations + observability_metrics +
+│       │                            audio_files insert txn + query/FTS/recent
+│       ├── highlights.js            card_highlights CRUD + stats
+│       ├── generationJobs.js        generation_jobs lifecycle + events + retry
+│       ├── knowledgeJobs.js         knowledge_jobs lifecycle + synonym meta
+│       ├── knowledgeIssues.js       knowledge_issues replace + filtered list
+│       ├── knowledgeGrammar.js      knowledge_grammar_patterns + refs
+│       ├── knowledgeClusters.js     knowledge_clusters + cluster_cards
+│       ├── knowledgeTermsIndex.js   knowledge_terms_index upsert + search
+│       ├── knowledgeSynonyms.js     candidates + groups + members + boundary
+│       └── knowledgeRelations.js    knowledge_outputs_raw write + overview /
+│                                    relations / latest summary
+├── ocr/               tesseractOcrService.js
+└── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~244 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~238 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (~14 tables, FTS5 virtual table)
 ```
@@ -133,10 +131,10 @@ User Input → promptEngine (CoT) → LLM provider → JSON → htmlRenderer →
 
 ### LLM provider chain
 
-[services/cardGenerationService.js](services/cardGenerationService.js) picks a provider per request:
-- **`provider === 'local'`** → `services/localLlmService.js` (OpenAI-compatible local endpoint, `LLM_BASE_URL`)
-- **`provider === 'gemini'`** with **`GEMINI_MODE=host-proxy`** (default, production path) → `services/geminiProxyService.js`
-- **`provider === 'gemini'`** with **`GEMINI_MODE=cli`** → `services/geminiCliService.js` (also enables `/api/gemini/auth/*`)
+[services/generation/cardGenerationService.js](services/generation/cardGenerationService.js) picks a provider per request:
+- **`provider === 'local'`** → `services/llm/localLlmService.js` (OpenAI-compatible local endpoint, `LLM_BASE_URL`)
+- **`provider === 'gemini'`** with **`GEMINI_MODE=host-proxy`** (default, production path) → `services/llm/geminiProxyService.js`
+- **`provider === 'gemini'`** with **`GEMINI_MODE=cli`** → `services/llm/geminiCliService.js` (also enables `/api/gemini/auth/*`)
 
 The host-proxy path is a **3-hop chain** because the `gemini` CLI must run on the host, not in Docker:
 ```
@@ -144,18 +142,18 @@ viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
         → host executor (scripts/infra/gemini-host-proxy.js :13210, spawns `gemini` CLI)
 ```
 
-**Timeout hierarchy** is derived from a single base in [services/geminiTimeouts.js](services/geminiTimeouts.js):
+**Timeout hierarchy** is derived from a single base in [services/llm/geminiTimeouts.js](services/llm/geminiTimeouts.js):
 - `GEMINI_EXECUTION_BUDGET_MS` (default 90s) = max CLI run for an interactive call
 - `GEMINI_MAX_EXECUTION_BUDGET_MS` (default 240s) = hard ceiling for long single calls
 - `GEMINI_HOP_BUFFER_MS` (default 15s) added per transport hop so the executor times out first with a clean error
 
-**Error code convention** is in [services/geminiErrors.js](services/geminiErrors.js). Each layer raises `Error` objects with `.code`, `.status`, and `.payload`. `geminiProxyService` propagates these even through wrapped errors so `generationJobService` can classify (`isTransientCapacityError` reads `.payload.code`). Don't regex-match error messages — use the `code` field.
+**Error code convention** is in [services/llm/geminiErrors.js](services/llm/geminiErrors.js). Each layer raises `Error` objects with `.code`, `.status`, and `.payload`. `geminiProxyService` propagates these even through wrapped errors so `generationJobService` can classify (`isTransientCapacityError` reads `.payload.code`). Don't regex-match error messages — use the `code` field.
 
 **Concurrency**: the host executor enforces `GEMINI_MAX_CONCURRENT` (default 2) — concurrent callers above the limit wait `GEMINI_QUEUE_WAIT_MS` for a slot then receive `429 EXECUTOR_BUSY`.
 
 ### Persistence
 
-- **SQLite** via `better-sqlite3`. [services/databaseService.js](services/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/db/](services/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
+- **SQLite** via `better-sqlite3`. [services/storage/databaseService.js](services/storage/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/storage/db/](services/storage/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/storage/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
 - Schema in `database/schema.sql` (~14 tables: `generations`, `audio_files`, `observability_metrics`, `generation_errors`, `model_statistics`, `system_health`, `generation_jobs`/`_events`, `knowledge_*`, `card_highlights`). FTS5 virtual table backs full-text search.
 - **Migrations are additive and automatic** via `ensureTableColumns(...)` on startup. Add columns there, not as separate migration files.
 - Generated card files live on disk under `RECORDS_PATH`, `YYYYMMDD` folders, `(2)`/`(3)` suffixes on conflicts (`fileManager.js`).
@@ -164,8 +162,8 @@ viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
 ### Background jobs
 
 DB-backed queues with `pending → running → completed/failed`, retry/backoff, stale-job recovery on startup:
-- [services/generationJobService.js](services/generationJobService.js) — async card generation (`/api/generation-jobs/*`)
-- [services/knowledgeJobService.js](services/knowledgeJobService.js) — knowledge tasks (`/api/knowledge/jobs/*`)
+- [services/generation/generationJobService.js](services/generation/generationJobService.js) — async card generation (`/api/generation-jobs/*`)
+- [services/knowledge/knowledgeJobService.js](services/knowledge/knowledgeJobService.js) — knowledge tasks (`/api/knowledge/jobs/*`)
 
 ### Subsystems
 
@@ -193,7 +191,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~244 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~238 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
@@ -208,10 +206,10 @@ ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only 
 
 ## Key Conventions
 
-- **Prompt engineering** (`services/promptEngine.js`): CoT 5-step reasoning, polysemy disambiguation, built-in self-check. Current prompts are generated programmatically; `prompts/phrase_3LANS_markdown.md` is deprecated legacy.
+- **Prompt engineering** (`services/generation/promptEngine.js`): CoT 5-step reasoning, polysemy disambiguation, built-in self-check. Current prompts are generated programmatically; `prompts/phrase_3LANS_markdown.md` is deprecated legacy.
 - **LLM response structure**: `{ markdown_content, html_content, audio_tasks: [{ text, lang, filename_suffix }] }`.
-- **Audio file extensions**: English → `.mp3` (Safari compat), Japanese → `.wav` ([services/audioFormat.js](services/audioFormat.js)).
-- **Japanese ruby**: `kanji(hiragana)` in markdown → `<ruby>` tags via Kuroshiro ([services/japaneseFurigana.js](services/japaneseFurigana.js)).
+- **Audio file extensions**: English → `.mp3` (Safari compat), Japanese → `.wav` ([services/generation/audioFormat.js](services/generation/audioFormat.js)).
+- **Japanese ruby**: `kanji(hiragana)` in markdown → `<ruby>` tags via Kuroshiro ([services/generation/japaneseFurigana.js](services/generation/japaneseFurigana.js)).
 - **File naming**: safe chars only (alphanumeric, space, dash); `(2)`/`(3)` suffixes on conflicts.
 - **Card highlight persistence**: `card_highlights` keyed on `(folder, base, sourceHash)` with `ON CONFLICT` update. UI persists `<mark class="study-highlight-red">` HTML.
 - **Security**: HTML validation forbids `script`/`iframe`/`object`/`embed`; CSP headers on HTML responses; no static-served data directory.

@@ -1,6 +1,6 @@
 require('dotenv').config();
-const { parseTrilingualMarkdown } = require('./markdownParser');
-const log = require('../lib/logger').child({ module: 'svc/observability' });
+const { parseTrilingualMarkdown } = require('../generation/markdownParser');
+const log = require('../../lib/logger').child({ module: 'svc/observability' });
 
 /**
  * 可观测性服务 - 统一管理 Token、性能、质量等指标

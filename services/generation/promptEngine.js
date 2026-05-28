@@ -111,8 +111,8 @@ function buildMarkdownPrompt(args) {
     const phrase = args.phrase || '';
     const cardType = String(args.cardType || 'trilingual').toLowerCase();
     const templatePath = cardType === 'grammar_ja'
-        ? (process.env.GRAMMAR_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_ja_grammar_markdown.md'))
-        : (process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', 'prompts', 'phrase_3LANS_markdown.md'));
+        ? (process.env.GRAMMAR_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_ja_grammar_markdown.md'))
+        : (process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_3LANS_markdown.md'));
     let template = '';
     try {
         template = fs.readFileSync(templatePath, 'utf8');

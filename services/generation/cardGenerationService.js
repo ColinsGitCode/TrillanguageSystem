@@ -17,23 +17,23 @@
 const path = require('path');
 
 const { buildPrompt, buildMarkdownPrompt } = require('./promptEngine');
-const geminiService = require('./geminiService');
-const { runGeminiCli } = require('./geminiCliService');
-const { runGeminiProxy } = require('./geminiProxyService');
-const localLlmService = require('./localLlmService');
-const { buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('./fileManager');
+const geminiService = require('../llm/geminiService');
+const { runGeminiCli } = require('../llm/geminiCliService');
+const { runGeminiProxy } = require('../llm/geminiProxyService');
+const localLlmService = require('../llm/localLlmService');
+const { buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('../storage/fileManager');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./htmlRenderer');
-const { TokenCounter, QualityChecker, PromptParser } = require('./observabilityService');
+const { TokenCounter, QualityChecker, PromptParser } = require('../observability/observabilityService');
 
 const {
   RECORDS_PATH,
   normalizeCardType,
   normalizeSourceMode,
   resolveGeminiModel,
-} = require('../lib/serverConfig');
+} = require('../../lib/serverConfig');
 const {
   validateSanitizedGeminiCardResponse,
-} = require('../lib/generationHelpers');
+} = require('../../lib/generationHelpers');
 
 async function generateWithProvider(phrase, provider, perf, options = {}) {
   let llmService;

@@ -4,30 +4,30 @@
 // Each route file destructures just the names it uses. Centralising the
 // requires here keeps the route modules to a single, uniform import line.
 
-const { buildPrompt, buildMarkdownPrompt } = require('../services/promptEngine');
-const geminiService = require('../services/geminiService');
-const { runGeminiCli } = require('../services/geminiCliService');
-const { runGeminiProxy } = require('../services/geminiProxyService');
-const localLlmService = require('../services/localLlmService');
-const tesseractOcrService = require('../services/tesseractOcrService');
+const { buildPrompt, buildMarkdownPrompt } = require('../services/generation/promptEngine');
+const geminiService = require('../services/llm/geminiService');
+const { runGeminiCli } = require('../services/llm/geminiCliService');
+const { runGeminiProxy } = require('../services/llm/geminiProxyService');
+const localLlmService = require('../services/llm/localLlmService');
+const tesseractOcrService = require('../services/ocr/tesseractOcrService');
 const {
   saveGeneratedFiles,
   buildBaseName,
   ensureTodayDirectory,
   ensureFolderDirectory,
   deleteRecordFiles,
-} = require('../services/fileManager');
-const { generateAudioBatch } = require('../services/ttsService');
-const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('../services/htmlRenderer');
-const { postProcessGeneratedContent } = require('../services/contentPostProcessor');
-const geminiAuthService = require('../services/geminiAuthService');
-const knowledgeJobService = require('../services/knowledgeJobService');
-const generationJobService = require('../services/generationJobService');
-const { normalizeAudioExtension, stripKnownAudioExtension } = require('../services/audioFormat');
-const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('../services/observabilityService');
-const { HealthCheckService } = require('../services/healthCheckService');
-const dbService = require('../services/databaseService');
-const { prepareInsertData } = require('../services/databaseHelpers');
+} = require('../services/storage/fileManager');
+const { generateAudioBatch } = require('../services/generation/ttsService');
+const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('../services/generation/htmlRenderer');
+const { postProcessGeneratedContent } = require('../services/generation/contentPostProcessor');
+const geminiAuthService = require('../services/llm/geminiAuthService');
+const knowledgeJobService = require('../services/knowledge/knowledgeJobService');
+const generationJobService = require('../services/generation/generationJobService');
+const { normalizeAudioExtension, stripKnownAudioExtension } = require('../services/generation/audioFormat');
+const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('../services/observability/observabilityService');
+const { HealthCheckService } = require('../services/observability/healthCheckService');
+const dbService = require('../services/storage/databaseService');
+const { prepareInsertData } = require('../services/storage/databaseHelpers');
 const serverConfig = require('../lib/serverConfig');
 const { checkGenerateThrottle } = require('../lib/throttle');
 const {
@@ -40,7 +40,7 @@ const {
 const {
   generateWithProvider,
   generateWithAutoFallback,
-} = require('../services/cardGenerationService');
+} = require('../services/generation/cardGenerationService');
 const { validateGeneratedContent, normalizeAudioTasks } = require('../lib/generationHelpers');
 
 module.exports = {

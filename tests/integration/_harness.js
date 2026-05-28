@@ -36,8 +36,8 @@ process.env.RECORDS_PATH = tmpRecords;
 // Require AFTER env is pinned. server.js calls app.listen(PORT, cb)
 // synchronously; the bound port is only known once 'listening' fires.
 const { serverInstance } = require('../../server.js');
-const dbService = require('../../services/databaseService');
-const generationJobService = require('../../services/generationJobService');
+const dbService = require('../../services/storage/databaseService');
+const generationJobService = require('../../services/generation/generationJobService');
 
 // Stop the generation-jobs worker from racing tests.
 // Two reinforcing moves:

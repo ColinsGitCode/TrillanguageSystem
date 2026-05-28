@@ -10,8 +10,8 @@
 // 4. roll up groups + candidates + stats (latency p95, parse rate)
 
 const crypto = require('crypto');
-const { runGeminiCli } = require('../../geminiCliService');
-const { runGeminiProxy } = require('../../geminiProxyService');
+const { runGeminiCli } = require('../../llm/geminiCliService');
+const { runGeminiProxy } = require('../../llm/geminiProxyService');
 const {
   normalizeText,
   profileLang,

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const log = require('../lib/logger').child({ module: 'svc/local-llm' });
+const log = require('../../lib/logger').child({ module: 'svc/local-llm' });
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || 'http://localhost:11434/v1'; // Default to Ollama port
 const LLM_API_KEY = process.env.LLM_API_KEY || 'EMPTY';

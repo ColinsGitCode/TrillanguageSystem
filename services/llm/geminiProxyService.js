@@ -4,7 +4,7 @@ const {
   clientTimeoutFor,
 } = require('./geminiTimeouts');
 const { CODES, isRetriableCode, errorCodeOf } = require('./geminiErrors');
-const log = require('../lib/logger').child({ module: 'gemini-proxy' });
+const log = require('../../lib/logger').child({ module: 'gemini-proxy' });
 
 function toNumberOr(value, fallback) {
   const num = Number(value);

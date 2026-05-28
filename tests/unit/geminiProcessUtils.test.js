@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { stripFence, collectDescendantPids, signalProcessTree } = require('../../services/geminiProcessUtils');
+const { stripFence, collectDescendantPids, signalProcessTree } = require('../../services/llm/geminiProcessUtils');
 
 test.describe('geminiProcessUtils.stripFence', () => {
   test.it('returns empty string for falsy input', () => {

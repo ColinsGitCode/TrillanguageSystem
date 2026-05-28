@@ -1,7 +1,7 @@
 const http = require('http');
 const { test, expect } = require('@playwright/test');
-const { runGeminiProxy } = require('../../services/geminiProxyService');
-const { runTask } = require('../../services/knowledgeAnalysisEngine');
+const { runGeminiProxy } = require('../../services/llm/geminiProxyService');
+const { runTask } = require('../../services/knowledge/knowledgeAnalysisEngine');
 
 function withJsonServer(resolver) {
   const state = { hits: 0 };

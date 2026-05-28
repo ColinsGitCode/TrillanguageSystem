@@ -1,11 +1,11 @@
 // server.js — Express bootstrap. The full generation pipeline lives in
-// services/cardGenerationService.js; per-route logic lives in routes/*.
+// services/generation/cardGenerationService.js; per-route logic lives in routes/*.
 // What stays here: middleware, the generation_jobs worker executor wiring,
 // route mounting, the error middleware, and listen().
 const express = require('express');
 require('dotenv').config();
 
-const generationJobService = require('./services/generationJobService');
+const generationJobService = require('./services/generation/generationJobService');
 
 const app = express();
 const {

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildAudioTasksFromMarkdown } = require('../../services/htmlRenderer');
+const { buildAudioTasksFromMarkdown } = require('../../services/generation/htmlRenderer');
 
 test.describe('buildAudioTasksFromMarkdown', () => {
   test.it('returns [] for falsy input', () => {

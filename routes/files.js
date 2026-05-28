@@ -12,7 +12,7 @@ const log = require('../lib/logger').child({ module: 'routes/files' });
 const router = express.Router();
 
 router.get('/api/folders', (req, res) => {
-    const listFoldersWithHtml = require('../services/fileManager').listFoldersWithHtml; // Lazy require
+    const listFoldersWithHtml = require('../services/storage/fileManager').listFoldersWithHtml; // Lazy require
     try {
         const folders = listFoldersWithHtml();
         res.json({ folders });
@@ -20,7 +20,7 @@ router.get('/api/folders', (req, res) => {
 });
 
 router.get('/api/folders/:folder/files', (req, res) => {
-    const listHtmlFilesInFolder = require('../services/fileManager').listHtmlFilesInFolder;
+    const listHtmlFilesInFolder = require('../services/storage/fileManager').listHtmlFilesInFolder;
     try {
         const files = listHtmlFilesInFolder(req.params.folder);
         res.json({ files });
@@ -28,7 +28,7 @@ router.get('/api/folders/:folder/files', (req, res) => {
 });
 
 router.get('/api/folders/:folder/files/:file', (req, res) => {
-    const readFileInFolder = require('../services/fileManager').readFileInFolder;
+    const readFileInFolder = require('../services/storage/fileManager').readFileInFolder;
     try {
         const content = readFileInFolder(req.params.folder, req.params.file);
         const ext = path.extname(req.params.file || '').toLowerCase();

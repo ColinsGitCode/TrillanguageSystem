@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const generationJobService = require('../services/generationJobService');
+const generationJobService = require('../services/generation/generationJobService');
 const { DEFAULT_GEMINI_MODEL, normalizeCardType, normalizeSourceMode } = require('../lib/serverConfig');
 
 const router = express.Router();

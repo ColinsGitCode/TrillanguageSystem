@@ -11,7 +11,7 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
-const log = require('../lib/logger').child({ module: 'svc/database' });
+const log = require('../../lib/logger').child({ module: 'svc/database' });
 const generationJobsDomain = require('./db/generationJobs');
 const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
@@ -74,7 +74,7 @@ class DatabaseService {
    * 初始化数据库表
    */
   initializeTables() {
-    const schemaPath = path.join(__dirname, '../database/schema.sql');
+    const schemaPath = path.join(__dirname, '../../database/schema.sql');
 
     if (!fs.existsSync(schemaPath)) {
       log.warn({ schemaPath }, 'schema file not found');

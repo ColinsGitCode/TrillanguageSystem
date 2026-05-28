@@ -4,12 +4,12 @@
 // and the shared text utilities are in services/knowledge/textUtils.js.
 // `runTask` is the public entry point used by knowledgeJobService.
 
-const summaryTask = require('./knowledge/tasks/summary');
-const cardIndexTask = require('./knowledge/tasks/cardIndex');
-const synonymBoundaryTask = require('./knowledge/tasks/synonymBoundary');
-const grammarLinkTask = require('./knowledge/tasks/grammarLink');
-const clusterTask = require('./knowledge/tasks/cluster');
-const issuesAuditTask = require('./knowledge/tasks/issuesAudit');
+const summaryTask = require('./tasks/summary');
+const cardIndexTask = require('./tasks/cardIndex');
+const synonymBoundaryTask = require('./tasks/synonymBoundary');
+const grammarLinkTask = require('./tasks/grammarLink');
+const clusterTask = require('./tasks/cluster');
+const issuesAuditTask = require('./tasks/issuesAudit');
 
 function wrapResult(task, result, inputCount) {
   const hasPayload = result && Object.keys(result).length > 0;

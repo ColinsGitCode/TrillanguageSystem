@@ -1,7 +1,7 @@
 'use strict';
 
 // /api/generate — the request-side orchestration around
-// services/cardGenerationService.generateWithProvider. Handles throttle,
+// services/generation/cardGenerationService.generateWithProvider. Handles throttle,
 // validation, post-processing, file save, TTS, and DB insert.
 
 const express = require('express');

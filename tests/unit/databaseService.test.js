@@ -10,7 +10,7 @@ process.env.LOG_SILENT = '1';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { DatabaseService } = require('../../services/databaseService');
+const { DatabaseService } = require('../../services/storage/databaseService');
 
 function freshDb() {
   return new DatabaseService(':memory:');

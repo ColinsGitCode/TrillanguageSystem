@@ -15,7 +15,7 @@ const grammarLink = require('../../services/knowledge/tasks/grammarLink');
 const cluster = require('../../services/knowledge/tasks/cluster');
 const issuesAudit = require('../../services/knowledge/tasks/issuesAudit');
 const synonymBoundary = require('../../services/knowledge/tasks/synonymBoundary');
-const engine = require('../../services/knowledgeAnalysisEngine');
+const engine = require('../../services/knowledge/knowledgeAnalysisEngine');
 
 function buildCard(overrides = {}) {
   return {

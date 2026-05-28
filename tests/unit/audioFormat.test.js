@@ -8,7 +8,7 @@ const {
   normalizeAudioExtension,
   stripKnownAudioExtension,
   rewriteLegacyAudioTagExtensions,
-} = require('../../services/audioFormat');
+} = require('../../services/generation/audioFormat');
 
 test.describe('audioFormat.getPreferredAudioExtension', () => {
   test.it('prefers mp3 for English, wav for everything else', () => {

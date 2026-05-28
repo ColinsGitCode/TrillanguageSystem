@@ -1,6 +1,6 @@
-const dbService = require('./databaseService');
+const dbService = require('../storage/databaseService');
 const { runTask } = require('./knowledgeAnalysisEngine');
-const log = require('../lib/logger').child({ module: 'svc/knowledge-jobs' });
+const log = require('../../lib/logger').child({ module: 'svc/knowledge-jobs' });
 
 const SUPPORTED_TASKS = new Set([
   'summary',

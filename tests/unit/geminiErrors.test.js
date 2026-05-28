@@ -9,7 +9,7 @@ const {
   isRetriableCode,
   codedError,
   errorCodeOf,
-} = require('../../services/geminiErrors');
+} = require('../../services/llm/geminiErrors');
 
 test.describe('geminiErrors', () => {
   test.it('reuses the rate-limit code string the job queue understands', () => {

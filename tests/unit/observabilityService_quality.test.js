@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 process.env.LOG_SILENT = '1';
 
-const { QualityChecker } = require('../../services/observabilityService');
+const { QualityChecker } = require('../../services/observability/observabilityService');
 
 // A "good" trilingual card. The markdown structure matches services/
 // markdownParser.js conventions: `## 1. 英文` / `## 2. 日本語` / `## 3. 中文`

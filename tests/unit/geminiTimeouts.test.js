@@ -10,7 +10,7 @@ const {
   clampExecutionBudget,
   gatewayTimeoutFor,
   clientTimeoutFor,
-} = require('../../services/geminiTimeouts');
+} = require('../../services/llm/geminiTimeouts');
 
 test.describe('geminiTimeouts', () => {
   test.it('exposes sane defaults with executor < max', () => {

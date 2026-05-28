@@ -1,4 +1,4 @@
-const dbService = require('./databaseService');
+const dbService = require('../storage/databaseService');
 
 class GenerationJobService {
   constructor() {

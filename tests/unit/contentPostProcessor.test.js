@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { postProcessGeneratedContent } = require('../../services/contentPostProcessor');
+const { postProcessGeneratedContent } = require('../../services/generation/contentPostProcessor');
 
 // Drive the pipeline through its single public entry point. Each test seeds a
 // minimal `content` and asserts on one specific transformation.

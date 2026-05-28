@@ -6,7 +6,7 @@
 // Functions take `db` first; databaseService.js wraps these as class methods.
 
 const { safeJsonParse } = require('./helpers');
-const log = require('../../lib/logger').child({ module: 'svc/db/generations' });
+const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 
 function insertGeneration(db, data) {
   const transaction = db.transaction((genData, obsData, audioData) => {

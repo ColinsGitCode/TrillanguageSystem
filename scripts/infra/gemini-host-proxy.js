@@ -3,9 +3,9 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { MAX_EXECUTION_BUDGET_MS } = require('../../services/geminiTimeouts');
-const { stripFence, signalProcessTree } = require('../../services/geminiProcessUtils');
-const { CODES, statusForCode, codedError } = require('../../services/geminiErrors');
+const { MAX_EXECUTION_BUDGET_MS } = require('../../services/llm/geminiTimeouts');
+const { stripFence, signalProcessTree } = require('../../services/llm/geminiProcessUtils');
+const { CODES, statusForCode, codedError } = require('../../services/llm/geminiErrors');
 const log = require('../../lib/logger').child({ module: 'gemini-executor' });
 
 const PORT = Number(process.env.GEMINI_PROXY_PORT || 13210);
@@ -16,7 +16,7 @@ const GEMINI_BIN_CANDIDATES = [
   '/usr/local/bin/gemini'
 ].filter(Boolean);
 // Hard ceiling on any single CLI run. Per-request budgets can be shorter but
-// never longer than this — see services/geminiTimeouts.js.
+// never longer than this — see services/llm/geminiTimeouts.js.
 const TIMEOUT_MS = MAX_EXECUTION_BUDGET_MS;
 const OUTPUT_DIR = process.env.GEMINI_PROXY_OUTPUT_DIR || '';
 const DEFAULT_MODEL = process.env.GEMINI_PROXY_MODEL || '';

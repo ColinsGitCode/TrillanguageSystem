@@ -25,7 +25,7 @@ services:
       - GEMINI_PROXY_PROJECT=${GEMINI_PROXY_PROJECT:-tri-lang-learning-system}
       - GEMINI_PROXY_MODEL=${GEMINI_PROXY_MODEL:-gemini-3-flash-preview}
       - GEMINI_HOST_EXECUTOR_URL=${GEMINI_HOST_EXECUTOR_URL:-http://host.docker.internal:13210}
-      # Chain timeouts derive from a single budget — see services/geminiTimeouts.js
+      # Chain timeouts derive from a single budget — see services/llm/geminiTimeouts.js
       - GEMINI_EXECUTION_BUDGET_MS=${GEMINI_EXECUTION_BUDGET_MS:-234000}
       - GEMINI_MAX_EXECUTION_BUDGET_MS=${GEMINI_MAX_EXECUTION_BUDGET_MS:-240000}
       - GEMINI_HOP_BUFFER_MS=${GEMINI_HOP_BUFFER_MS:-15000}

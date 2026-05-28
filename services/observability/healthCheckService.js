@@ -10,7 +10,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const log = require('../lib/logger').child({ module: 'svc/health' });
+const log = require('../../lib/logger').child({ module: 'svc/health' });
 
 class HealthCheckService {
   static buildGatewayHealthUrl() {

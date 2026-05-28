@@ -5,8 +5,8 @@
 
 const crypto = require('crypto');
 const path = require('path');
-const { normalizeAudioExtension } = require('./audioFormat');
-const log = require('../lib/logger').child({ module: 'svc/db-helpers' });
+const { normalizeAudioExtension } = require('../generation/audioFormat');
+const log = require('../../lib/logger').child({ module: 'svc/db-helpers' });
 
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const RESOLVED_RECORDS_PATH = path.resolve(RECORDS_PATH);

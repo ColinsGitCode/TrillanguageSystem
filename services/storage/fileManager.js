@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const log = require('../lib/logger').child({ module: 'svc/file-manager' });
+const log = require('../../lib/logger').child({ module: 'svc/file-manager' });
 
 // Inherit the base path from server.js logic (or environment variable)
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';

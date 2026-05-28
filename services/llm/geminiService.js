@@ -9,7 +9,7 @@
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
-const log = require('../lib/logger').child({ module: 'svc/gemini-api' });
+const log = require('../../lib/logger').child({ module: 'svc/gemini-api' });
 
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL_NAME = process.env.GEMINI_MODEL || "gemini-1.5-flash"; // updated default

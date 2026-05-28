@@ -4,12 +4,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const { postProcessGeneratedContent } = require('../../services/contentPostProcessor');
+const { postProcessGeneratedContent } = require('../../services/generation/contentPostProcessor');
 const {
   buildAudioTasksFromMarkdown,
   prepareMarkdownForCard,
   renderHtmlFromMarkdown,
-} = require('../../services/htmlRenderer');
+} = require('../../services/generation/htmlRenderer');
 
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const APPLY = process.argv.includes('--apply');

@@ -10,7 +10,7 @@ const {
   TokenCounter,
   PerformanceMonitor,
   PromptParser
-} = require('../../services/observabilityService');
+} = require('../../services/observability/observabilityService');
 
 test.describe('TokenCounter.estimate', () => {
   test.it('returns 0 for null / empty / non-string input', () => {
