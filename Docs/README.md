@@ -31,13 +31,13 @@
 - `Docs/Architecture/Knowledge/Knowledge_Local_Analysis_System_Design.md`
 - `Docs/Architecture/Knowledge/Knowledge_System_Upgrade_Strategy.md`
 - `Docs/Architecture/Knowledge/Smart_Knowledge_Base_Upgrade.md`
-- `Docs/Operations/Knowledge/Knowledge_Local_Analysis_Development_Execution.md`
+- `Docs/Operations/Knowledge_Local_Analysis_Development_Execution.md`
 
 ### 3. Gemini / 运行与调用
 
 - `Docs/Operations/Gemini/GEMINI_CLI_调用方式详解.md`
 - `Docs/Operations/Gemini/GEMINI_CLI_知识分析任务执行规范.md`
-- `Docs/Operations/Models/vLLM_Recommended_Config.md`
+- `Docs/Operations/vLLM_Recommended_Config.md`
 
 ### 4. Code as Prompt / Few-shot / 质量评估
 
@@ -51,7 +51,7 @@
 
 ### 5. UI / Card 功能
 
-- `Docs/Features/Cards/Modern_Card_UI_Design.md`
+- `Docs/Features/Modern_Card_UI_Design.md`
 
 ### 6. 测试与验收
 
@@ -63,8 +63,6 @@
 
 ### 7. 历史与归档
 
-- `Docs/Archive/Milestones/`
-- `Docs/Archive/RetiredFeatures/`
 - `Docs/Archive/Milestones/`
 - `Docs/Archive/RetiredFeatures/`
 - `Docs/Archive/HistoricalTests/`
