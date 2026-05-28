@@ -20,12 +20,14 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 npm test                        # node:test unit suite (tests/unit/*.test.js, ~238 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
-npm run test:e2e:smoke          # Happy-path generation/OCR/history (per file — see note below)
+npm run test:e2e                # Full directory (all 5 specs, hermetic via resetServerState)
+npm run test:e2e:smoke          # Happy-path generation/OCR/history
 npm run test:e2e:pages          # Page navigation/routing
 npm run test:e2e:gemini-sanitize # MCP diagnostic stripping regression
 npm run test:e2e:real           # Hits real Gemini (needs RUN_REAL_GEMINI_E2E=1)
+# frontend-regression.spec.js has no dedicated script — runs as part of test:e2e
 ```
-**E2E pre-existing flake**: the three e2e files share one server + DB in the Playwright run, so running `playwright test` over the whole `tests/e2e/` directory cross-pollutes state. Run them one file at a time when verifying changes. Single test: `npx playwright test tests/e2e/<file>.spec.js -g "<name>"`.
+Specs share one server + DB but each spec's `test.beforeAll` calls `resetServerState(request)` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits `POST /api/_test/reset` (mounted only under `E2E_TEST_MODE=1`) to wipe all tables + the records dir. New specs MUST add this hook or they'll see leftover state from earlier files. Single test: `npx playwright test tests/e2e/<file>.spec.js -g "<name>"`.
 
 **Lint:**
 ```bash
@@ -217,7 +219,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 
 **E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
 
-`POST /api/_test/reset` is mounted only under `E2E_TEST_MODE=1` and wipes every project table (via `dbService.truncateAllForTests()`) plus the records dir, so each spec file can run hermetic. New spec files MUST call `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)). With this in place `playwright test tests/e2e/` over the whole directory now works without per-file isolation.
+Per-spec hermetic state is enforced via `resetServerState(request)` in `test.beforeAll` — see the Tests section above for details.
 
 ## Lint
 
@@ -265,10 +267,6 @@ See `.env.example` for the full set. Key knobs:
 - **50021** — VOICEVOX (Japanese)
 
 The `gemini` CLI binary + [scripts/gemini-host-proxy.js](scripts/gemini-host-proxy.js) run on the **host**, not in Docker. Install as a macOS LaunchAgent via [scripts/install_host_executor_launchd.sh](scripts/install_host_executor_launchd.sh).
-
-## Known unfinished work
-
-- **E2E full-directory run is now supported**: each spec calls `resetServerState(request)` in `test.beforeAll` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits the `POST /api/_test/reset` endpoint mounted only under `E2E_TEST_MODE=1`. Running `playwright test tests/e2e/` over the whole directory works without per-file teardown. New specs MUST add the beforeAll reset hook or they'll see leftover DB rows from earlier files.
 
 ## Docs
 
