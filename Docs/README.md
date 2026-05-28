@@ -18,6 +18,17 @@
 
 历史上的 `Docs/Status/` 目录（IMPLEMENTATION_STATUS / BACKEND / FRONTEND / API / repo_status 等）已于 2026-05-28 归档到 `Archive/StaleStatus/` 与 `Archive/Milestones/`，不再代表当前状态。
 
+## 已移除子系统（2026-05-28）
+
+**训练包（training pack）、few-shot / golden examples、实验追踪（experiment tracking）、人工评审（review）** 子系统已整体删除。相关代码（`trainingPackService`、`goldenExamplesService`、`exampleReviewService`、`fewShotMetricsService`、`experimentTrackingService`、`/api/training`、`/api/review`、`/api/experiments`、卡片 TRAIN/REVIEW 页）、数据库表（`few_shot_*`、`experiment_*`、`teacher_references`、`example_*`、`review_*`、`card_training_assets`）均已移除，启动时会自动 DROP 旧库中的这些表。
+
+下列历史文档中关于这些子系统的章节**仅作历史参考，不代表当前实现**：
+
+- `Docs/Architecture/数据库设计方案.md`（含已删除的 few_shot / experiment / review / training 表）
+- `Docs/Architecture/Observability/AI_Observability_Roadmap.md`（few-shot 效果面板）
+- `Docs/Architecture/GEMINI_PROXY_AND_SERVER_QUEUE_REDESIGN.md`
+- `Docs/TestReports/`（TRAIN / review_scoring 相关报告与图表）
+
 ## 主题导航
 
 ### 1. 系统主架构
