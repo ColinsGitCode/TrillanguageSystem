@@ -5,7 +5,8 @@ server.log
 .env
 logs/
 
-CLAUDE.md
+# Personal scratch files (codex resume cmds, ad-hoc shell snippets)
+cmds
 
 # Generated data
 trilingual_records/
@@ -14,20 +15,11 @@ data/
 *.db-shm
 *.db-wal
 
-# Allow tracked test datasets & charts
-!Docs/TestDocs/data/
-!Docs/TestDocs/data/**
-!Docs/TestDocs/charts/
-!Docs/TestDocs/charts/**
-
 # Temporary documentation files
 Docs/**/*.bak
 Docs/**/*_backup.md
 Docs/**/*_ja.md
 Docs/**/*_with_d3.md
-Docs/diagram_tools/
-Docs/visualizations/
-Docs/assets/
 
 # UI build leftovers
 public/*.bak
