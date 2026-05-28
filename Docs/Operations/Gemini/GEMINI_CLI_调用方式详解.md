@@ -26,7 +26,7 @@
   2. 调用 `services/geminiProxyService.js` 的 `runGeminiProxy()`
   3. `runGeminiProxy()` 发 HTTP 到 Gateway（固定端口 `18888`）
   4. Gateway 鉴权、参数校验、队列调度、熔断与转发
-  5. 宿主机 Host Executor (`scripts/gemini-host-proxy.js`) 接收 `/api/gemini`
+  5. 宿主机 Host Executor (`scripts/infra/gemini-host-proxy.js`) 接收 `/api/gemini`
   6. 执行器内部 `spawn('gemini', ['--model', '<model>', '-p', '<prompt>'])`
   7. 返回 `{ markdown, rawOutput, model }`
   8. 后端将 markdown 渲染为 html，生成音频任务并落库/落盘
@@ -55,9 +55,9 @@
 - Host Proxy HTTP 客户端：`services/geminiProxyService.js`
 - Gateway 对接地址：`GEMINI_PROXY_URL`（应指向 `:18888`）
 - CLI 直连客户端：`services/geminiCliService.js`
-- Host Proxy 服务端：`scripts/gemini-host-proxy.js`
+- Host Proxy 服务端：`scripts/infra/gemini-host-proxy.js`
 - 默认认证目录策略：优先使用宿主机 `~/.gemini`；仅在显式配置 `GEMINI_PROXY_HOME` 或项目内 `.runtime/.gemini` 已具备认证文件时才切换到隔离目录
-- Host Proxy 管理脚本：`scripts/start-gemini-proxy.sh`
+- Host Proxy 管理脚本：`scripts/infra/start-gemini-proxy.sh`
 
 ---
 
@@ -146,19 +146,19 @@
 宿主机执行器启动/停止/状态：
 
 ```bash
-bash scripts/start-gemini-proxy.sh start
-bash scripts/start-gemini-proxy.sh status
-bash scripts/start-gemini-proxy.sh reset
-bash scripts/start-gemini-proxy.sh stop
+bash scripts/infra/start-gemini-proxy.sh start
+bash scripts/infra/start-gemini-proxy.sh status
+bash scripts/infra/start-gemini-proxy.sh reset
+bash scripts/infra/start-gemini-proxy.sh stop
 ```
 
 推荐改为使用 `launchd` 守护宿主机执行器：
 
 ```bash
-bash scripts/install_host_executor_launchd.sh install
-bash scripts/install_host_executor_launchd.sh status
-bash scripts/install_host_executor_launchd.sh restart
-bash scripts/install_host_executor_launchd.sh uninstall
+bash scripts/infra/install_host_executor_launchd.sh install
+bash scripts/infra/install_host_executor_launchd.sh status
+bash scripts/infra/install_host_executor_launchd.sh restart
+bash scripts/infra/install_host_executor_launchd.sh uninstall
 ```
 
 说明：
@@ -275,7 +275,7 @@ launchctl disable gui/$(id -u)/com.fintechsystem.gemini-proxy
 
 排查：
 1. `curl http://localhost:18888/health`
-2. `bash scripts/start-gemini-proxy.sh status`
+2. `bash scripts/infra/start-gemini-proxy.sh status`
 3. `curl http://localhost:3210/health`
 4. 检查 `GEMINI_PROXY_URL` 是否为 `http://host.docker.internal:18888/api/gemini`
 5. 检查是否携带 `X-API-Key` 或 `Authorization: Bearer`
@@ -437,7 +437,7 @@ flowchart LR
 docker network create ai-shared-net
 
 # 2) 启动宿主机执行层
-bash scripts/start-gemini-proxy.sh start
+bash scripts/infra/start-gemini-proxy.sh start
 
 # 3) 启动网关容器（加入 ai-shared-net，内部转发到 host.docker.internal:13210）
 # 4) 每个业务项目容器加入同一 external network: ai-shared-net

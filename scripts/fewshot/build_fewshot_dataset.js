@@ -61,7 +61,7 @@ const enhancedFile = process.argv[3];
 const outDir = process.argv[4] || path.join('Docs', 'TestDocs', 'data');
 
 if (!baselineFile || !enhancedFile) {
-  console.error('Usage: node scripts/build_fewshot_dataset.js <baseline.jsonl> <enhanced.jsonl> [outDir]');
+  console.error('Usage: node scripts/fewshot/build_fewshot_dataset.js <baseline.jsonl> <enhanced.jsonl> [outDir]');
   process.exit(1);
 }
 

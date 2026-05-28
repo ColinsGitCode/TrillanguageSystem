@@ -3,15 +3,15 @@
  * 数据迁移脚本：将现有的trilingual_records文件导入数据库
  *
  * 使用方法:
- * node scripts/migrateRecords.js [--dry-run] [--limit=N]
+ * node scripts/migrations/migrateRecords.js [--dry-run] [--limit=N]
  */
 
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const RECORDS_PATH = process.env.RECORDS_PATH || path.join(__dirname, '../trilingual_records');
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../data/trilingual_records.db');
+const RECORDS_PATH = process.env.RECORDS_PATH || path.join(__dirname, '../../trilingual_records');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/trilingual_records.db');
 
 // 命令行参数
 const args = process.argv.slice(2);
@@ -160,7 +160,7 @@ function migrateToDatabase(records) {
       console.log('');
     });
     console.log(`\n总计: ${records.length} 条记录\n`);
-    console.log('💡 使用 `node scripts/migrateRecords.js` (不带 --dry-run) 来实际导入\n');
+    console.log('💡 使用 `node scripts/migrations/migrateRecords.js` (不带 --dry-run) 来实际导入\n');
     return;
   }
 

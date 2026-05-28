@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 批量翻译脚本（使用宿主机 Gemini CLI）
-# 用法: ./scripts/batch-translate.sh input.txt
+# 用法: ./scripts/batch/batch-translate.sh input.txt
 
 INPUT_FILE="$1"
 GEMINI_GATEWAY_URL="${GEMINI_GATEWAY_URL:-http://localhost:18888/api/gemini}"

@@ -3,10 +3,10 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { MAX_EXECUTION_BUDGET_MS } = require('../services/geminiTimeouts');
-const { stripFence, signalProcessTree } = require('../services/geminiProcessUtils');
-const { CODES, statusForCode, codedError } = require('../services/geminiErrors');
-const log = require('../lib/logger').child({ module: 'gemini-executor' });
+const { MAX_EXECUTION_BUDGET_MS } = require('../../services/geminiTimeouts');
+const { stripFence, signalProcessTree } = require('../../services/geminiProcessUtils');
+const { CODES, statusForCode, codedError } = require('../../services/geminiErrors');
+const log = require('../../lib/logger').child({ module: 'gemini-executor' });
 
 const PORT = Number(process.env.GEMINI_PROXY_PORT || 13210);
 const GEMINI_BIN_CANDIDATES = [

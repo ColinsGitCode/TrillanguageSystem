@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # L5 启动冒烟：拉起 server → /api/health + 几个核心 GET 端点 → exit 0
-# 用法: ./scripts/smoke.sh
+# 用法: ./scripts/tests/smoke.sh
 # 用途: post-deploy / 本地变更后快速回归
 #
 # 完全自隔离：临时 DB_PATH / RECORDS_PATH / 端口，不写真实数据目录。

@@ -136,7 +136,7 @@ services/              Business logic
 ├── markdownParser.js
 ├── statisticsService.js
 └── e2eFixtureService.js / fileManager.js
-scripts/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
+scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
 tests/unit/            node:test, ~238 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (25+ tables, FTS5 virtual table)
@@ -159,7 +159,7 @@ User Input → promptEngine (CoT + few-shot) → LLM provider → JSON → htmlR
 The host-proxy path is a **3-hop chain** because the `gemini` CLI must run on the host, not in Docker:
 ```
 viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
-        → host executor (scripts/gemini-host-proxy.js :13210, spawns `gemini` CLI)
+        → host executor (scripts/infra/gemini-host-proxy.js :13210, spawns `gemini` CLI)
 ```
 
 **Timeout hierarchy** is derived from a single base in [services/geminiTimeouts.js](services/geminiTimeouts.js):
@@ -217,7 +217,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 - Pure helpers in `geminiProxyService` / `goldenExamplesService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
 
-**E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
+**E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/tests/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
 
 Per-spec hermetic state is enforced via `resetServerState(request)` in `test.beforeAll` — see the Tests section above for details.
 
@@ -266,7 +266,7 @@ See `.env.example` for the full set. Key knobs:
 - **8000** — Kokoro TTS (English)
 - **50021** — VOICEVOX (Japanese)
 
-The `gemini` CLI binary + [scripts/gemini-host-proxy.js](scripts/gemini-host-proxy.js) run on the **host**, not in Docker. Install as a macOS LaunchAgent via [scripts/install_host_executor_launchd.sh](scripts/install_host_executor_launchd.sh).
+The `gemini` CLI binary + [scripts/infra/gemini-host-proxy.js](scripts/infra/gemini-host-proxy.js) run on the **host**, not in Docker. Install as a macOS LaunchAgent via [scripts/infra/install_host_executor_launchd.sh](scripts/infra/install_host_executor_launchd.sh).
 
 ## Docs
 

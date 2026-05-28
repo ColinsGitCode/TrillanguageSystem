@@ -82,7 +82,7 @@ function main() {
   const outputPathArg = process.argv[3];
 
   if (!experimentId) {
-    console.error('Usage: node scripts/generate_round_kpi_report.js <experimentId> [outputPath]');
+    console.error('Usage: node scripts/fewshot/generate_round_kpi_report.js <experimentId> [outputPath]');
     process.exit(1);
   }
 

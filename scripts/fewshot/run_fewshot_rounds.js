@@ -102,7 +102,7 @@ async function run() {
   const requestIntervalMs = Number(process.env.ROUND_REQUEST_INTERVAL_MS || 4200);
 
   if (!phrasesFile) {
-    console.error('Usage: node scripts/run_fewshot_rounds.js <phrases.txt> [experimentId] [rounds.json] [apiBase]');
+    console.error('Usage: node scripts/fewshot/run_fewshot_rounds.js <phrases.txt> [experimentId] [rounds.json] [apiBase]');
     process.exit(1);
   }
 

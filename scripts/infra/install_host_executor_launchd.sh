@@ -2,11 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LABEL="${GEMINI_PROXY_LAUNCHD_LABEL:-com.three-lans.gemini-host-proxy}"
 PLIST_PATH="$HOME/Library/LaunchAgents/${LABEL}.plist"
 NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || true)}"
-EXECUTOR_SCRIPT="$PROJECT_ROOT/scripts/gemini-host-proxy.js"
+EXECUTOR_SCRIPT="$PROJECT_ROOT/scripts/infra/gemini-host-proxy.js"
 LOG_DIR="$PROJECT_ROOT/logs/launchd"
 STDOUT_PATH="$LOG_DIR/gemini-host-proxy.stdout.log"
 STDERR_PATH="$LOG_DIR/gemini-host-proxy.stderr.log"

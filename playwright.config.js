@@ -21,7 +21,7 @@ module.exports = defineConfig({
     viewport: { width: 1440, height: 1100 }
   },
   webServer: {
-    command: 'bash ./scripts/startE2EServer.sh',
+    command: 'bash ./scripts/tests/startE2EServer.sh',
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const dbService = require('../services/databaseService');
-const { runPairedTests } = require('../services/statisticsService');
+const dbService = require('../../services/databaseService');
+const { runPairedTests } = require('../../services/statisticsService');
 
 function writeCsv(filePath, rows, columns) {
   const header = columns.join(',');
@@ -233,7 +233,7 @@ function main() {
   const outDir = process.argv[3] || path.join('Docs', 'TestDocs', 'data');
 
   if (!experimentId) {
-    console.error('Usage: node scripts/export_round_trend_dataset.js <experimentId> [outDir]');
+    console.error('Usage: node scripts/fewshot/export_round_trend_dataset.js <experimentId> [outDir]');
     process.exit(1);
   }
 

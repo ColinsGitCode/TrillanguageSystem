@@ -30,7 +30,7 @@
 - 配置文件：
   - `playwright.config.js`
 - 启动脚本：
-- `scripts/startE2EServer.sh`
+- `scripts/tests/startE2EServer.sh`
 - NPM scripts：
   - `npm run e2e:server`
   - `npm run test:e2e`
@@ -40,7 +40,7 @@
   - `npm run test:e2e:pages`
   - `npm run test:e2e:real`
   - `npm run test:e2e:real:nightly`
-  - 对应封装脚本：`scripts/runRealNightlyE2E.sh`
+  - 对应封装脚本：`scripts/tests/runRealNightlyE2E.sh`
 
 ### 3.2 E2E_TEST_MODE
 

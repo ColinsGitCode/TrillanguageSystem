@@ -39,7 +39,7 @@ function summarize(records) {
 
 const [baselineFile, enhancedFile] = process.argv.slice(2);
 if (!baselineFile || !enhancedFile) {
-  console.error('Usage: node scripts/compare-results.js <baseline.jsonl> <enhanced.jsonl>');
+  console.error('Usage: node scripts/fewshot/compare-results.js <baseline.jsonl> <enhanced.jsonl>');
   process.exit(1);
 }
 

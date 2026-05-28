@@ -4,7 +4,7 @@
 # 作用：在宿主机上运行 Gemini CLI 代理，供 Docker 容器调用
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROXY_SCRIPT="$SCRIPT_DIR/gemini-host-proxy.js"
 PID_FILE="/tmp/gemini-proxy.pid"
 LOG_FILE="/tmp/gemini-proxy.log"
