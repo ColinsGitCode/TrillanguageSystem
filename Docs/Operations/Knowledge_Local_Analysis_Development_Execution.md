@@ -128,8 +128,8 @@
 6. `public/js/modules/dashboard.js`
 7. `public/js/modules/app.js`（卡片详情 API 消费）
 8. `scripts/knowledge_backfill.js`（新）
-9. `Docs/Archive/StaleStatus/API_v1.4_20260402.md`（历史快照，当前 API 见 `routes/`）
-10. `Docs/Archive/StaleStatus/BACKEND_v3.8.2_20260313.md`（历史快照，当前后端见 `CLAUDE.md` + `services/`）
+
+> 当前 API 见 `routes/`，当前后端见 `CLAUDE.md` + `services/`（旧版 API/BACKEND 历史快照已随 `Docs/Archive/` 删除，可从 git 历史恢复）。
 
 ---
 

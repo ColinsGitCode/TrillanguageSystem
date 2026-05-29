@@ -1,12 +1,11 @@
 # Docs 文档入口
 
-当前文档按用途分为 5 类：
+当前文档按用途分为 4 类：
 
 - `Docs/Architecture/`：系统架构、数据库、Observability、测试架构
 - `Docs/Features/`：仍在使用的功能设计
 - `Docs/Operations/`：运行、Gemini、知识任务、模型配置与排障
 - `Docs/TestReports/`：测试报告与验收产物
-- `Docs/Archive/`：里程碑、退役功能、历史归档（含已过期的现状快照 `Archive/StaleStatus/`）
 
 ## 现状以何处为准
 
@@ -16,7 +15,7 @@
 - **代码本身**：`routes/`、`services/`、`services/db/`、`services/knowledge/`、`lib/`、`public/js/modules/`
 - **`database/schema.sql`**：数据库结构
 
-历史上的 `Docs/Status/` 目录（IMPLEMENTATION_STATUS / BACKEND / FRONTEND / API / repo_status 等）已于 2026-05-28 归档到 `Archive/StaleStatus/` 与 `Archive/Milestones/`，不再代表当前状态。
+历史上的 `Docs/Status/` 目录（IMPLEMENTATION_STATUS / BACKEND / FRONTEND / API / repo_status 等）已废弃并删除，不再代表当前状态；如需查阅可从 git 历史恢复。
 
 ## 已移除子系统（2026-05-28）
 
@@ -64,10 +63,4 @@
 - `Docs/TestReports/TEST_PLAN_20260518.md`
 - `Docs/TestReports/TEST_RUN_20260518.md`
 
-### 6. 历史与归档
-
-- `Docs/Archive/Milestones/`：版本里程碑日志与重构记录
-- `Docs/Archive/RetiredFeatures/`：已退役能力的设计文档
-- `Docs/Archive/HistoricalTests/`：历史测试报告
-- `Docs/Archive/StaleStatus/`：已过期的现状快照（BACKEND / FRONTEND / API / repo_status）
-- `Docs/Archive/Assets/`：历史资源资产
+> 历史归档（里程碑日志、退役功能设计、历史测试报告、过期现状快照、历史资源资产）已于 2026-05-29 整体删除，如需查阅可从 git 历史恢复。

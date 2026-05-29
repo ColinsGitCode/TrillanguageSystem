@@ -247,4 +247,4 @@ The `gemini` CLI binary + [scripts/infra/gemini-host-proxy.js](scripts/infra/gem
 
 ## Docs
 
-`Docs/` holds longer-form material: `Architecture/`, `Features/`, `Operations/`, `TestReports/`, `Archive/`. Check there for deployment / ops details.
+`Docs/` holds longer-form material: `Architecture/`, `Features/`, `Operations/`, `TestReports/`. Check there for deployment / ops details.
