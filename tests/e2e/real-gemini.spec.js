@@ -93,6 +93,9 @@ test.describe('Real Gemini acceptance', () => {
     const pairLabel = `${item.termA} ↔ ${item.termB}`;
 
     await page.goto(`${realBaseUrl}/knowledge-hub.html`);
+    // Synonym boundaries now live behind the "洞察 / Insights" entry in the
+    // three-pane explorer — open it before asserting the list.
+    await page.getByTestId('kh-insights').getByRole('button', { name: '同义边界' }).click();
     const synonymCard = page.getByTestId('knowledge-hub-synonyms');
     await expect(synonymCard).toBeVisible();
 

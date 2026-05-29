@@ -35,7 +35,13 @@ const state = {
         tag: '',
         sort: 'recent',
         category: '',
-        categories: []
+        categories: [],
+        axis: 'function',
+        cardType: 'grammar_ja',
+        navMode: 'browse',
+        insightType: 'synonym',
+        insightsOverview: null,
+        insightsSynonyms: null
     },
     knowledgeBaseToken: 0,
     knowledgeBaseSearchTimer: null
@@ -69,6 +75,10 @@ function initDashboard() {
 }
 
 function initQueueTelemetry() {
+    // Task-queue telemetry only lives on Mission Control + Knowledge OPS. The
+    // Knowledge Hub explorer dropped this panel, so skip the poll there.
+    if (!document.getElementById('taskQueueDetails')) return;
+
     refreshQueueTelemetry().catch((err) => {
         console.warn('[Dashboard] queue telemetry init failed:', err.message);
         renderTaskQueueDetails(null);
@@ -517,16 +527,17 @@ function initKnowledgeOps() {
         document.getElementById('knowledgeHubClusters'),
         document.getElementById('knowledgeHubIssues')
     ];
-    const hasAnyKnowledgeView = Boolean(
+    // OPS-specific gate: the Knowledge Hub page no longer hosts the job
+    // controls or the legacy analysis grid — its browse explorer
+    // (initKnowledgeBaseBrowse) owns counts + inspector independently. Only
+    // run the OPS job poll where the OPS job widgets actually exist.
+    const hasOpsView = Boolean(
         startBtn
         || jobsList
         || document.getElementById('knowledgeJobDetail')
         || document.getElementById('knowledgeSummaryBrief')
-        || document.getElementById('knowledgeHubCounts')
-        || document.getElementById('knowledgeRelationInspector')
-        || hubContainers.some(Boolean)
     );
-    if (!hasAnyKnowledgeView) return;
+    if (!hasOpsView) return;
 
     if (startBtn) {
         startBtn.addEventListener('click', async () => {
@@ -1200,25 +1211,203 @@ function initKnowledgeBaseBrowse() {
             const key = String(chip.dataset.clusterKey || '');
             state.knowledgeBase.category = (state.knowledgeBase.category === key) ? '' : key;
             state.knowledgeBase.page = 1;
+            setKhMode('browse');
             renderKnowledgeBaseCategories(state.knowledgeBase.categories);
             refreshKnowledgeBaseTerms();
         });
     }
+
+    // Axis toggle: 句式功能 (function) / 主题领域 (topic) / 全部. Switching axis
+    // resets the category filter and snaps card-type to the axis default.
+    const axisToggle = document.getElementById('khAxisToggle');
+    if (axisToggle) {
+        axisToggle.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-axis]');
+            if (!btn) return;
+            const axis = String(btn.dataset.axis || 'all');
+            state.knowledgeBase.axis = axis;
+            state.knowledgeBase.category = '';
+            state.knowledgeBase.cardType = KH_AXIS_CARDTYPE[axis] || 'all';
+            state.knowledgeBase.page = 1;
+            if (cardTypeSelect) cardTypeSelect.value = state.knowledgeBase.cardType;
+            axisToggle.querySelectorAll('[data-axis]').forEach((b) => b.classList.toggle('active', b === btn));
+            setKhMode('browse');
+            renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+            refreshKnowledgeBaseTerms();
+        });
+    }
+
+    // Insights entries: swap the centre pane to an aggregate list.
+    const insightsBox = document.getElementById('khInsights');
+    if (insightsBox) {
+        insightsBox.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-insight]');
+            if (!btn) return;
+            const type = String(btn.dataset.insight || 'synonym');
+            insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.toggle('active', b === btn));
+            setKhMode('insight', type);
+        });
+    }
+
     list.addEventListener('click', async (event) => {
         const item = event.target.closest('.knowledge-hub-item');
         if (!item) return;
         const key = String(item.dataset.key || '').trim();
         if (!key) return;
-        // `pinned` keeps the periodic refresh from clobbering a term that is
+        // `pinned` keeps any periodic refresh from clobbering a term that is
         // not in the top-N overview.
         state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
         renderKnowledgeBaseTerms();
         await renderKnowledgeRelationInspector();
     });
 
+    // Insight list selection → relation inspector (reuses the shared renderer).
+    const insightList = document.getElementById('khInsightList');
+    if (insightList) {
+        insightList.addEventListener('click', async (event) => {
+            const item = event.target.closest('.knowledge-hub-item');
+            if (!item) return;
+            const entityType = String(item.dataset.entityType || '').trim();
+            const key = String(item.dataset.key || '').trim();
+            if (!entityType || !key) return;
+            state.knowledgeHubSelection = {
+                entityType,
+                key,
+                severity: item.dataset.severity || '',
+                jobId: item.dataset.jobId ? Number(item.dataset.jobId) : undefined,
+                pinned: true
+            };
+            renderKhInsightList();
+            await renderKnowledgeRelationInspector();
+        });
+    }
+
+    // Sync controls to the default axis/card-type before first load.
+    if (cardTypeSelect) cardTypeSelect.value = state.knowledgeBase.cardType;
+
+    refreshKhStats();
     refreshKnowledgeBaseOverview();
     refreshKnowledgeBaseCategories();
     refreshKnowledgeBaseTerms();
+}
+
+const KH_AXIS_CARDTYPE = { function: 'grammar_ja', topic: 'trilingual', all: 'all' };
+const KH_INSIGHT_LABEL = {
+    synonym: '同义边界 · Synonym Boundaries',
+    pattern: '语法模式 · Grammar Patterns',
+    cluster: '聚类 · Clusters',
+    issue: '问题 · Issues'
+};
+
+// Toggle the centre pane between term browse and an insight aggregate list.
+function setKhMode(mode, insightType) {
+    state.knowledgeBase.navMode = mode;
+    if (insightType) state.knowledgeBase.insightType = insightType;
+    const browse = document.getElementById('khBrowsePane');
+    const insight = document.getElementById('khInsightPane');
+    const crumb = document.getElementById('khListCrumb');
+    if (mode === 'insight') {
+        if (browse) browse.hidden = true;
+        if (insight) insight.hidden = false;
+        if (crumb) crumb.textContent = KH_INSIGHT_LABEL[state.knowledgeBase.insightType] || '洞察 Insights';
+        renderKhInsightList();
+    } else {
+        if (insight) insight.hidden = true;
+        if (browse) browse.hidden = false;
+        const insightsBox = document.getElementById('khInsights');
+        if (insightsBox) insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
+        if (crumb) crumb.textContent = '词条 · Terms';
+    }
+}
+
+// Fetch the aggregate overview + synonym boundaries that power the stats strip
+// and the insight lists. Hub-owned (the OPS poll does not run here).
+async function refreshKhStats() {
+    if (!document.getElementById('knowledgeHubCounts')) return;
+    try {
+        const [overviewRes, synonymRes] = await Promise.all([
+            api.getKnowledgeOverview(8),
+            api.listKnowledgeSynonymBoundaries({ page: 1, pageSize: 12 })
+        ]);
+        state.knowledgeBase.insightsOverview = overviewRes?.overview || null;
+        state.knowledgeBase.insightsSynonyms = synonymRes || { items: [], total: 0 };
+        renderKhStats();
+        if (state.knowledgeBase.navMode === 'insight') renderKhInsightList();
+    } catch (err) {
+        console.warn('[KnowledgeHub] stats failed:', err.message);
+    }
+}
+
+function renderKhStats() {
+    const node = document.getElementById('knowledgeHubCounts');
+    if (!node) return;
+    const counts = (state.knowledgeBase.insightsOverview || {}).counts || {};
+    const synTotal = Number(state.knowledgeBase.insightsSynonyms?.total || 0);
+    node.innerHTML = `
+        <span class="tag">terms ${Number(counts.termCount || 0)}</span>
+        <span class="tag">grammar ${Number(counts.grammarPatternCount || 0)}</span>
+        <span class="tag">clusters ${Number(counts.clusterCount || 0)}</span>
+        <span class="tag">synonyms ${synTotal}</span>
+        <span class="tag">open issues ${Number(counts.openIssueCount || 0)}</span>
+    `;
+}
+
+// Render the chosen insight aggregate as knowledge-hub-item rows that drive the
+// shared relation inspector on click.
+function renderKhInsightList() {
+    const node = document.getElementById('khInsightList');
+    if (!node) return;
+    const type = state.knowledgeBase.insightType || 'synonym';
+    const overview = state.knowledgeBase.insightsOverview || {};
+    let items = [];
+    let name = (it) => String(it);
+    let meta = () => '';
+    let getKey = (it) => String(it);
+    let extra = () => '';
+
+    if (type === 'synonym') {
+        items = Array.isArray(state.knowledgeBase.insightsSynonyms?.items) ? state.knowledgeBase.insightsSynonyms.items : [];
+        name = (it) => `${it.termA || '?'} ↔ ${it.termB || '?'}`;
+        meta = (it) => `risk ${it.riskLevel || '-'} · conf ${formatNumber(it.confidence, 2)}`;
+        getKey = (it) => it.pairKey || '';
+        extra = (it) => `data-severity="${escapeHtml(it.riskLevel || 'medium')}" data-job-id="${Number(it.versionJobId || 0)}"`;
+    } else if (type === 'pattern') {
+        items = Array.isArray(overview.topPatterns) ? overview.topPatterns : [];
+        name = (it) => it.pattern || '-';
+        meta = (it) => `confidence ${formatNumber(it.confidence, 2)}`;
+        getKey = (it) => it.pattern || '';
+    } else if (type === 'cluster') {
+        items = Array.isArray(overview.topClusters) ? overview.topClusters : [];
+        name = (it) => it.label || it.clusterKey || '-';
+        meta = (it) => `${it.clusterKey || '-'} · cards ${Number(it.cardCount || 0)}`;
+        getKey = (it) => it.clusterKey || '';
+    } else {
+        items = Array.isArray(overview.topIssues) ? overview.topIssues : [];
+        name = (it) => it.issueType || '-';
+        meta = (it) => `${it.severity || 'medium'} · ${Number(it.count || 0)}`;
+        getKey = (it) => `${String(it.issueType || '')}::${String(it.severity || '')}`;
+        extra = (it) => `data-severity="${escapeHtml(it.severity || 'medium')}"`;
+    }
+
+    if (!items.length) {
+        node.innerHTML = '<div class="empty-hint">No data</div>';
+        return;
+    }
+    const selection = state.knowledgeHubSelection;
+    node.innerHTML = items.map((it) => {
+        const key = String(getKey(it) || '').trim();
+        const isActive = Boolean(selection && selection.entityType === type && selection.key === key);
+        return `
+            <div class="knowledge-hub-item ${isActive ? 'active' : ''}"
+                 data-entity-type="${type}"
+                 data-key="${escapeHtml(key)}"
+                 data-testid="knowledge-hub-item-${type}"
+                 ${extra(it)}>
+                <div class="name">${escapeHtml(name(it))}</div>
+                <div class="meta">${escapeHtml(meta(it))}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 async function refreshKnowledgeBaseCategories() {
@@ -1291,39 +1480,37 @@ function renderKnowledgeBaseTags(overview) {
     }).join('');
 }
 
-// Semantic-classification category nav. Renders two axis groups — 句式功能
-// (function axis) and 主题领域 (topic axis) — each a row of clickable chips.
-// Clicking a chip filters the term list to that cluster; clicking the active
-// chip clears the filter.
+// Semantic-classification category nav (left rail). Rendered as a vertical
+// list of clickable categories, scoped to the active axis — 句式功能
+// (function) / 主题领域 (topic) / 全部 (both). Clicking a category filters the
+// term list to that cluster; clicking the active one clears it.
 function renderKnowledgeBaseCategories(categories) {
     const node = document.getElementById('knowledgeBaseCategories');
     if (!node) return;
     const rows = Array.isArray(categories) ? categories : [];
-    if (!rows.length) { node.innerHTML = ''; return; }
-
+    const axis = state.knowledgeBase.axis || 'all';
     const active = state.knowledgeBase.category;
+
     const groups = [
         { axis: 'function', title: '句式功能' },
         { axis: 'topic', title: '主题领域' }
-    ];
-    const chip = (cat) => {
+    ].filter((group) => axis === 'all' || group.axis === axis);
+
+    const item = (cat) => {
         const isActive = active && active === cat.clusterKey;
-        const style = `cursor:pointer;${isActive ? 'background:#3b82f6;color:#fff;border-color:#3b82f6;' : ''}`;
         const title = cat.description ? ` title="${escapeHtml(cat.description)}"` : '';
-        return `<span class="tag" data-cluster-key="${escapeHtml(cat.clusterKey)}" style="${style}"${title}>${escapeHtml(cat.label)} ${Number(cat.cardCount || 0)}</span>`;
+        return `<button type="button" class="kh-cat ${isActive ? 'active' : ''}" data-cluster-key="${escapeHtml(cat.clusterKey)}"${title}><span class="kh-cat-label">${escapeHtml(cat.label)}</span><span class="kh-cat-count">${Number(cat.cardCount || 0)}</span></button>`;
     };
 
     const sections = groups.map((group) => {
         const groupRows = rows.filter((row) => String(row.taxonomy || '') === group.axis);
-        if (!groupRows.length) return '';
-        return `
-            <div class="knowledge-base-category-group">
-                <span class="knowledge-base-category-title">${escapeHtml(group.title)}</span>
-                <div class="knowledge-hub-counts">${groupRows.map(chip).join('')}</div>
-            </div>
-        `;
+        const header = axis === 'all' ? `<div class="kh-nav-subtitle">${escapeHtml(group.title)}</div>` : '';
+        if (!groupRows.length) {
+            return `${header}<div class="empty-hint">该轴暂无分类（待 cluster 分析）</div>`;
+        }
+        return `${header}<div class="kh-cat-list">${groupRows.map(item).join('')}</div>`;
     }).join('');
-    node.innerHTML = sections;
+    node.innerHTML = sections || '<div class="empty-hint">暂无分类</div>';
 }
 
 function renderKnowledgeBaseTerms() {
