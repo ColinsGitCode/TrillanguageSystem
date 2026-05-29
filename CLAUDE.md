@@ -206,7 +206,7 @@ ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only 
 
 ## Key Conventions
 
-- **Prompt engineering** (`services/generation/promptEngine.js`): CoT 5-step reasoning, polysemy disambiguation, built-in self-check. Current prompts are generated programmatically; `prompts/phrase_3LANS_markdown.md` is deprecated legacy.
+- **Prompt engineering** (`services/generation/promptEngine.js`): two builders. `buildPrompt` generates a programmatic CoT/JSON prompt (used only on the non-markdown JSON path). `buildMarkdownPrompt` is the default production path (Gemini host-proxy / CLI / local-markdown): it loads a template file from `prompts/` and substitutes the `{{ phrase }}` placeholder — `prompts/phrase_3LANS_markdown.md` for trilingual cards, `prompts/phrase_ja_grammar_markdown.md` for `grammar_ja`. Override paths via `MARKDOWN_PROMPT_PATH` / `GRAMMAR_MARKDOWN_PROMPT_PATH`; if a template is missing the code falls back to a minimal inline prompt. These template files are live inputs — don't delete them.
 - **LLM response structure**: `{ markdown_content, html_content, audio_tasks: [{ text, lang, filename_suffix }] }`.
 - **Audio file extensions**: English → `.mp3` (Safari compat), Japanese → `.wav` ([services/generation/audioFormat.js](services/generation/audioFormat.js)).
 - **Japanese ruby**: `kanji(hiragana)` in markdown → `<ruby>` tags via Kuroshiro ([services/generation/japaneseFurigana.js](services/generation/japaneseFurigana.js)).
