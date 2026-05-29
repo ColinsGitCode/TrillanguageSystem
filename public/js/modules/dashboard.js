@@ -54,6 +54,26 @@ function getDashboardPageType() {
     return String(document.body?.dataset.dashboardPage || DASHBOARD_PAGE_MISSION).trim().toLowerCase();
 }
 
+// Polling guard: skip background polls while the tab is hidden, and fire one
+// immediate refresh when it becomes visible again so data isn't stale.
+function isPageHidden() {
+    return typeof document !== 'undefined' && document.hidden === true;
+}
+
+function initVisibilityRefresh() {
+    if (typeof document === 'undefined') return;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        fetchInfrastructureStatus().catch(() => {});
+        if (state.queueTimerId) {
+            refreshQueueTelemetry().catch(() => {});
+        }
+        if (state.knowledgeTimerId) {
+            refreshKnowledgeOps().catch(() => {});
+        }
+    });
+}
+
 function initDashboard() {
     const pageType = getDashboardPageType();
     const isMissionPage = pageType === DASHBOARD_PAGE_MISSION;
@@ -66,7 +86,8 @@ function initDashboard() {
     initKnowledgeBaseBrowse();
 
     fetchInfrastructureStatus();
-    setInterval(fetchInfrastructureStatus, 30000);
+    setInterval(() => { if (!isPageHidden()) fetchInfrastructureStatus(); }, 30000);
+    initVisibilityRefresh();
 
     if (isMissionPage) {
         loadDashboard(state.days);
@@ -86,6 +107,7 @@ function initQueueTelemetry() {
 
     if (state.queueTimerId) clearInterval(state.queueTimerId);
     state.queueTimerId = setInterval(() => {
+        if (isPageHidden()) return;
         refreshQueueTelemetry().catch((err) => {
             console.warn('[Dashboard] queue telemetry poll failed:', err.message);
         });
@@ -609,7 +631,10 @@ function initKnowledgeOps() {
 
     refreshKnowledgeOps();
     if (state.knowledgeTimerId) clearInterval(state.knowledgeTimerId);
-    state.knowledgeTimerId = setInterval(refreshKnowledgeOps, KNOWLEDGE_POLL_INTERVAL_MS);
+    state.knowledgeTimerId = setInterval(() => {
+        if (isPageHidden()) return;
+        refreshKnowledgeOps();
+    }, KNOWLEDGE_POLL_INTERVAL_MS);
 }
 
 function collectKnowledgeJobPayload() {
@@ -1433,16 +1458,33 @@ function openKhCard(generationId) {
     if (!id) return;
     const modal = document.getElementById('khCardModal');
     const frame = document.getElementById('khCardFrame');
+    const spinner = document.getElementById('khCardSpinner');
+    const closeBtn = document.getElementById('khCardClose');
     if (!modal || !frame) return;
+
+    // Remember focus so it can be restored on close (a11y).
+    state.khCardReturnFocus = document.activeElement;
+    if (spinner) {
+        spinner.classList.remove('hidden');
+        frame.addEventListener('load', () => spinner.classList.add('hidden'), { once: true });
+    }
     frame.src = `/?card=${id}&embed=1`;
     modal.classList.add('open');
+    if (closeBtn) closeBtn.focus();
 }
 
 function closeKhCard() {
     const modal = document.getElementById('khCardModal');
     const frame = document.getElementById('khCardFrame');
-    if (modal) modal.classList.remove('open');
+    const spinner = document.getElementById('khCardSpinner');
+    if (!modal || !modal.classList.contains('open')) return;
+    modal.classList.remove('open');
     if (frame) frame.removeAttribute('src');
+    if (spinner) spinner.classList.remove('hidden');
+    // Restore focus to the element that opened the modal.
+    const ret = state.khCardReturnFocus;
+    if (ret && typeof ret.focus === 'function') ret.focus();
+    state.khCardReturnFocus = null;
 }
 
 async function refreshKnowledgeBaseCategories() {

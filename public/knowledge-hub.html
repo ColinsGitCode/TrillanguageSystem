@@ -162,9 +162,11 @@
 
     <!-- Card preview modal: clicking a term embeds the main app's native card
          modal via /?card=<id>&embed=1 so the format matches the phrase list. -->
-    <div id="khCardModal" class="kh-card-modal" data-testid="kh-card-modal">
+    <div id="khCardModal" class="kh-card-modal" data-testid="kh-card-modal"
+         role="dialog" aria-modal="true" aria-label="卡片预览 Card preview">
         <div class="kh-card-dialog">
-            <button id="khCardClose" class="kh-card-close" type="button" aria-label="Close">✕</button>
+            <button id="khCardClose" class="kh-card-close" type="button" aria-label="关闭卡片预览">✕</button>
+            <div id="khCardSpinner" class="kh-card-spinner" aria-hidden="true"><div class="kh-spin"></div></div>
             <iframe id="khCardFrame" class="kh-card-frame" title="card preview"></iframe>
         </div>
     </div>
