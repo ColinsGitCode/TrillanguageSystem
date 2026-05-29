@@ -433,6 +433,12 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
     `);
 
+    // 'function' (japanese grammar axis) | 'topic' (vocab axis) — see
+    // services/knowledge/taxonomy.js. Additive: legacy rows stay NULL.
+    ensureTableColumns(this.db, 'knowledge_clusters', [
+      'taxonomy TEXT'
+    ]);
+
     ensureTableColumns(this.db, 'knowledge_synonym_groups', [
       'pair_key TEXT',
       'term_a TEXT',
@@ -932,6 +938,10 @@ class DatabaseService {
 
   getKnowledgeClusters(limit = 20) {
     return knowledgeClustersDomain.listClusters(this.db, limit);
+  }
+
+  getKnowledgeCategories(filters = {}) {
+    return knowledgeClustersDomain.listCategories(this.db, filters);
   }
 
   getKnowledgeIssues(filters = {}) {

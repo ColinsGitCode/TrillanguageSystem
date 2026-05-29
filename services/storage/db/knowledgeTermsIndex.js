@@ -102,7 +102,7 @@ function search(db, { query = '', limit = 50 } = {}) {
 // legacy capped lookup used elsewhere) — kept separate to avoid changing that
 // contract.
 function list(db, {
-  query = '', langProfile = '', cardType = '', tag = '',
+  query = '', langProfile = '', cardType = '', tag = '', clusterKey = '',
   sort = 'recent', limit = 20, offset = 0
 } = {}) {
   const where = [];
@@ -129,6 +129,19 @@ function list(db, {
     // does not match "general".
     where.push('tags_json LIKE @tag');
     params.tag = `%"${tg}"%`;
+  }
+  const ck = String(clusterKey || '').trim();
+  if (ck && ck !== 'all') {
+    // Restrict to terms whose card is mapped to this active cluster (the
+    // semantic-classification category nav). Subquery keeps the FROM clause
+    // unchanged.
+    where.push(`generation_id IN (
+      SELECT cc.generation_id
+      FROM knowledge_cluster_cards cc
+      JOIN knowledge_clusters c ON c.id = cc.cluster_id
+      WHERE c.is_active = 1 AND c.cluster_key = @clusterKey
+    )`);
+    params.clusterKey = ck;
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';

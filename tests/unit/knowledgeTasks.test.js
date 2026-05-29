@@ -101,9 +101,10 @@ test.describe('knowledge task: grammarLink', () => {
 });
 
 test.describe('knowledge task: cluster', () => {
-  test.it('puts api/docker phrases into engineering and falls back to general for unmatched', () => {
+  test.it('routes engineering phrases to tp_engineering on the topic axis; falls back to tp_general (llm off)', async () => {
     // markdown_content is empty so the second card doesn't pick up unrelated
-    // keywords from the default fixture body.
+    // keywords from the default fixture body. llmEnabled:false isolates the
+    // rule pass — no network.
     const blankCard = (id, phrase, en) => buildCard({
       id,
       phrase,
@@ -112,16 +113,73 @@ test.describe('knowledge task: cluster', () => {
       zh_translation: '',
       markdown_content: ''
     });
-    const out = cluster.run([
+    const out = await cluster.run([
       blankCard(1, 'docker proxy', 'docker proxy api retry'),
       blankCard(2, 'random phrase', 'random phrase')
-    ]);
-    const engCluster = out.clusters.find((c) => c.clusterKey === 'engineering');
-    assert.ok(engCluster, 'engineering cluster missing');
+    ], { llmEnabled: false });
+    const engCluster = out.clusters.find((c) => c.clusterKey === 'tp_engineering');
+    assert.ok(engCluster, 'tp_engineering cluster missing');
+    assert.equal(engCluster.taxonomy, 'topic');
     assert.ok(engCluster.cards.some((c) => c.generationId === 1));
-    const generalCluster = out.clusters.find((c) => c.clusterKey === 'general');
-    assert.ok(generalCluster, 'general cluster missing');
+    const generalCluster = out.clusters.find((c) => c.clusterKey === 'tp_general');
+    assert.ok(generalCluster, 'tp_general cluster missing');
     assert.ok(generalCluster.cards.some((c) => c.generationId === 2));
+  });
+
+  test.it('places grammar_ja cards on the function axis via keyword rules', async () => {
+    const grammarCard = (id, phrase) => buildCard({
+      id,
+      phrase,
+      card_type: 'grammar_ja',
+      en_translation: '',
+      ja_translation: '',
+      zh_translation: '',
+      markdown_content: ''
+    });
+    const out = await cluster.run([
+      grammarCard(1, '〜たほうがいい'),
+      grammarCard(2, '〜より〜のほうが')
+    ], { llmEnabled: false });
+    const advice = out.clusters.find((c) => c.clusterKey === 'fn_advice');
+    assert.ok(advice, 'fn_advice cluster missing');
+    assert.equal(advice.taxonomy, 'function');
+    assert.ok(advice.cards.some((c) => c.generationId === 1));
+    const comparison = out.clusters.find((c) => c.clusterKey === 'fn_comparison');
+    assert.ok(comparison, 'fn_comparison cluster missing');
+    assert.ok(comparison.cards.some((c) => c.generationId === 2));
+  });
+
+  test.it('uses the LLM fallback for rule-misses and honors injected transport', async () => {
+    const blankCard = (id, phrase) => buildCard({
+      id, phrase, en_translation: phrase, ja_translation: '', zh_translation: '', markdown_content: ''
+    });
+    let invoked = 0;
+    const llmInvoke = async () => {
+      invoked += 1;
+      // Model places the unmatched card into tp_business.
+      return JSON.stringify({ assignments: [{ id: 7, categoryKey: 'tp_business', confidence: 0.8 }] });
+    };
+    const out = await cluster.run([
+      blankCard(7, 'quarterly synergy alignment')
+    ], { llmEnabled: true, llmInvoke });
+    assert.equal(invoked, 1, 'llm transport should be invoked once');
+    const business = out.clusters.find((c) => c.clusterKey === 'tp_business');
+    assert.ok(business, 'tp_business cluster missing');
+    assert.ok(business.cards.some((c) => c.generationId === 7));
+    assert.equal(out.meta.stats.llmMatched, 1);
+  });
+
+  test.it('falls back to tp_general when the LLM returns an unknown key', async () => {
+    const blankCard = (id, phrase) => buildCard({
+      id, phrase, en_translation: phrase, ja_translation: '', zh_translation: '', markdown_content: ''
+    });
+    const llmInvoke = async () => JSON.stringify({ assignments: [{ id: 9, categoryKey: 'not_a_real_key' }] });
+    const out = await cluster.run([
+      blankCard(9, 'qqq wibble xyzzy')
+    ], { llmEnabled: true, llmInvoke });
+    const general = out.clusters.find((c) => c.clusterKey === 'tp_general');
+    assert.ok(general, 'tp_general cluster missing');
+    assert.ok(general.cards.some((c) => c.generationId === 9));
   });
 });
 

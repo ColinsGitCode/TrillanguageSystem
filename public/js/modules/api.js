@@ -248,10 +248,17 @@ class ApiService {
         if (params.langProfile && params.langProfile !== 'all') query.set('langProfile', String(params.langProfile));
         if (params.cardType && params.cardType !== 'all') query.set('cardType', String(params.cardType));
         if (params.tag) query.set('tag', String(params.tag));
+        if (params.category && params.category !== 'all') query.set('category', String(params.category));
         if (params.sort) query.set('sort', String(params.sort));
         query.set('page', String(params.page || 1));
         query.set('pageSize', String(params.pageSize || 20));
         return this.fetchJson(`/api/knowledge/base/terms?${query.toString()}`);
+    }
+
+    async getKnowledgeBaseCategories(taxonomy = 'all') {
+        const query = new URLSearchParams();
+        query.set('taxonomy', String(taxonomy || 'all'));
+        return this.fetchJson(`/api/knowledge/base/categories?${query.toString()}`);
     }
 
     async getKnowledgeSynonyms(phrase, limit = 20) {

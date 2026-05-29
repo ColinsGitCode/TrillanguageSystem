@@ -504,6 +504,7 @@ CREATE TABLE IF NOT EXISTS knowledge_clusters (
   label TEXT NOT NULL,
   description TEXT,
   keywords_json TEXT,                         -- JSON array
+  taxonomy TEXT,                              -- function (grammar) / topic (vocab)
   confidence REAL DEFAULT 0,
   version_job_id INTEGER NOT NULL,
   is_active INTEGER DEFAULT 1,

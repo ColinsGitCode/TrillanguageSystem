@@ -33,7 +33,9 @@ const state = {
         langProfile: 'all',
         cardType: 'all',
         tag: '',
-        sort: 'recent'
+        sort: 'recent',
+        category: '',
+        categories: []
     },
     knowledgeBaseToken: 0,
     knowledgeBaseSearchTimer: null
@@ -1190,6 +1192,18 @@ function initKnowledgeBaseBrowse() {
             refreshKnowledgeBaseTerms();
         });
     }
+    const categoriesBox = document.getElementById('knowledgeBaseCategories');
+    if (categoriesBox) {
+        categoriesBox.addEventListener('click', (event) => {
+            const chip = event.target.closest('[data-cluster-key]');
+            if (!chip) return;
+            const key = String(chip.dataset.clusterKey || '');
+            state.knowledgeBase.category = (state.knowledgeBase.category === key) ? '' : key;
+            state.knowledgeBase.page = 1;
+            renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+            refreshKnowledgeBaseTerms();
+        });
+    }
     list.addEventListener('click', async (event) => {
         const item = event.target.closest('.knowledge-hub-item');
         if (!item) return;
@@ -1203,7 +1217,18 @@ function initKnowledgeBaseBrowse() {
     });
 
     refreshKnowledgeBaseOverview();
+    refreshKnowledgeBaseCategories();
     refreshKnowledgeBaseTerms();
+}
+
+async function refreshKnowledgeBaseCategories() {
+    try {
+        const res = await api.getKnowledgeBaseCategories('all');
+        state.knowledgeBase.categories = Array.isArray(res?.categories) ? res.categories : [];
+        renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+    } catch (err) {
+        console.warn('[KnowledgeBase] categories failed:', err.message);
+    }
 }
 
 async function refreshKnowledgeBaseOverview() {
@@ -1226,6 +1251,7 @@ async function refreshKnowledgeBaseTerms() {
             langProfile: kb.langProfile,
             cardType: kb.cardType,
             tag: kb.tag,
+            category: kb.category,
             sort: kb.sort,
             page: kb.page,
             pageSize: kb.pageSize
@@ -1263,6 +1289,41 @@ function renderKnowledgeBaseTags(overview) {
         const style = `cursor:pointer;${isActive ? 'background:#3b82f6;color:#fff;' : ''}`;
         return `<span class="tag" data-tag="${escapeHtml(row.tag)}" style="${style}">${escapeHtml(row.tag)} ${Number(row.count || 0)}</span>`;
     }).join('');
+}
+
+// Semantic-classification category nav. Renders two axis groups — 句式功能
+// (function axis) and 主题领域 (topic axis) — each a row of clickable chips.
+// Clicking a chip filters the term list to that cluster; clicking the active
+// chip clears the filter.
+function renderKnowledgeBaseCategories(categories) {
+    const node = document.getElementById('knowledgeBaseCategories');
+    if (!node) return;
+    const rows = Array.isArray(categories) ? categories : [];
+    if (!rows.length) { node.innerHTML = ''; return; }
+
+    const active = state.knowledgeBase.category;
+    const groups = [
+        { axis: 'function', title: '句式功能' },
+        { axis: 'topic', title: '主题领域' }
+    ];
+    const chip = (cat) => {
+        const isActive = active && active === cat.clusterKey;
+        const style = `cursor:pointer;${isActive ? 'background:#3b82f6;color:#fff;border-color:#3b82f6;' : ''}`;
+        const title = cat.description ? ` title="${escapeHtml(cat.description)}"` : '';
+        return `<span class="tag" data-cluster-key="${escapeHtml(cat.clusterKey)}" style="${style}"${title}>${escapeHtml(cat.label)} ${Number(cat.cardCount || 0)}</span>`;
+    };
+
+    const sections = groups.map((group) => {
+        const groupRows = rows.filter((row) => String(row.taxonomy || '') === group.axis);
+        if (!groupRows.length) return '';
+        return `
+            <div class="knowledge-base-category-group">
+                <span class="knowledge-base-category-title">${escapeHtml(group.title)}</span>
+                <div class="knowledge-hub-counts">${groupRows.map(chip).join('')}</div>
+            </div>
+        `;
+    }).join('');
+    node.innerHTML = sections;
 }
 
 function renderKnowledgeBaseTerms() {

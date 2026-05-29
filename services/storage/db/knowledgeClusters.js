@@ -15,9 +15,9 @@ function replaceData(db, clusters = [], jobId) {
 
     const insertCluster = db.prepare(`
       INSERT INTO knowledge_clusters (
-        cluster_key, label, description, keywords_json, confidence, version_job_id, is_active
+        cluster_key, label, description, keywords_json, taxonomy, confidence, version_job_id, is_active
       ) VALUES (
-        @clusterKey, @label, @description, @keywordsJson, @confidence, @versionJobId, 1
+        @clusterKey, @label, @description, @keywordsJson, @taxonomy, @confidence, @versionJobId, 1
       )
     `);
     const insertCard = db.prepare(`
@@ -35,6 +35,7 @@ function replaceData(db, clusters = [], jobId) {
         label: String(cluster.label || 'Unknown'),
         description: String(cluster.description || ''),
         keywordsJson: JSON.stringify(cluster.keywords || []),
+        taxonomy: cluster.taxonomy ? String(cluster.taxonomy) : null,
         confidence: Number(cluster.confidence || 0),
         versionJobId: Number(versionJobId)
       });
@@ -92,13 +93,48 @@ function listClusters(db, limit = 20) {
     label: row.label,
     description: row.description,
     keywords: safeJsonParse(row.keywords_json, []),
+    taxonomy: row.taxonomy || null,
     confidence: row.confidence,
     cards: cardMap.get(row.id) || [],
     updatedAt: row.updated_at
   }));
 }
 
+// Category navigation for the knowledge-base browse panel: one row per active
+// cluster with its card count, optionally filtered to a single taxonomy axis
+// ('function' | 'topic'). Empty categories are omitted (no card_count > 0).
+function listCategories(db, { taxonomy = '' } = {}) {
+  const axis = String(taxonomy || '').trim().toLowerCase();
+  const where = ['c.is_active = 1'];
+  const params = {};
+  if (axis && axis !== 'all') {
+    where.push('lower(c.taxonomy) = @axis');
+    params.axis = axis;
+  }
+  const rows = db.prepare(`
+    SELECT
+      c.cluster_key, c.label, c.description, c.taxonomy, c.confidence,
+      COUNT(cc.generation_id) AS card_count
+    FROM knowledge_clusters c
+    LEFT JOIN knowledge_cluster_cards cc ON cc.cluster_id = c.id
+    WHERE ${where.join(' AND ')}
+    GROUP BY c.id
+    HAVING card_count > 0
+    ORDER BY c.taxonomy ASC, card_count DESC, c.confidence DESC
+  `).all(params);
+
+  return rows.map((row) => ({
+    clusterKey: row.cluster_key,
+    label: row.label,
+    description: row.description || '',
+    taxonomy: row.taxonomy || null,
+    confidence: Number(row.confidence || 0),
+    cardCount: Number(row.card_count || 0)
+  }));
+}
+
 module.exports = {
   replaceData,
   listClusters,
+  listCategories,
 };

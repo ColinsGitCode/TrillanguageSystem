@@ -901,6 +901,44 @@ test.describe('databaseService — knowledge_clusters', () => {
       assert.equal(row.cards[1].score, 0.3);
     } finally { db.close(); }
   });
+
+  test.it('replaceKnowledgeClusterData persists taxonomy and getKnowledgeCategories filters by axis', () => {
+    const db = freshDb();
+    try {
+      const j = newJobId(db);
+      const g1 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'one', baseFilename: 'one', requestId: 'rid_cat_1' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      const g2 = db.insertGeneration({
+        generation: buildGenerationFixture({ generation: { phrase: 'two', baseFilename: 'two', requestId: 'rid_cat_2' } }).generation,
+        observability: buildGenerationFixture().observability,
+        audioFiles: []
+      });
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'tp_engineering', label: '工程技术', taxonomy: 'topic', confidence: 0.8, cards: [{ generationId: g1, score: 0.9 }] },
+        { clusterKey: 'fn_question', label: '疑问', taxonomy: 'function', confidence: 0.7, cards: [{ generationId: g2, score: 0.8 }] },
+        // Empty category must be omitted from the nav (no cards).
+        { clusterKey: 'tp_general', label: '通用/其他', taxonomy: 'topic', confidence: 0.3 }
+      ], j);
+
+      const [eng] = db.getKnowledgeClusters().filter((r) => r.clusterKey === 'tp_engineering');
+      assert.equal(eng.taxonomy, 'topic');
+
+      const all = db.getKnowledgeCategories({ taxonomy: 'all' });
+      assert.deepEqual(all.map((c) => c.clusterKey).sort(), ['fn_question', 'tp_engineering']);
+
+      const topic = db.getKnowledgeCategories({ taxonomy: 'topic' });
+      assert.equal(topic.length, 1);
+      assert.equal(topic[0].clusterKey, 'tp_engineering');
+      assert.equal(topic[0].cardCount, 1);
+
+      const fn = db.getKnowledgeCategories({ taxonomy: 'function' });
+      assert.equal(fn.length, 1);
+      assert.equal(fn[0].clusterKey, 'fn_question');
+    } finally { db.close(); }
+  });
 });
 
 // -- knowledge_terms_index ---------------------------------------------------
@@ -1091,6 +1129,29 @@ test.describe('databaseService — knowledge-base browse', () => {
       assert.equal(verbs.total, 2); // たべる + run
       // "ver" must not match "verb"
       assert.equal(db.listKnowledgeBaseTerms({ tag: 'ver', limit: 50 }).total, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeBaseTerms clusterKey filter restricts to mapped cards', () => {
+    const db = freshDb();
+    try {
+      const g1 = newGenId(db, { phrase: 'alpha', baseFilename: 'a', requestId: 'rid_ck_1' });
+      const g2 = newGenId(db, { phrase: 'beta', baseFilename: 'b', requestId: 'rid_ck_2' });
+      const job = newJobId(db);
+      db.upsertKnowledgeTermsIndex([
+        { generationId: g1, phrase: 'alpha', langProfile: 'en', cardType: 'trilingual', score: 0.5 },
+        { generationId: g2, phrase: 'beta', langProfile: 'en', cardType: 'trilingual', score: 0.5 }
+      ], job);
+      const clusterJob = db.createKnowledgeJob({ jobType: 'cluster' }).id;
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'tp_engineering', label: '工程技术', taxonomy: 'topic', confidence: 0.8, cards: [{ generationId: g1, score: 0.9 }] }
+      ], clusterJob);
+
+      const filtered = db.listKnowledgeBaseTerms({ clusterKey: 'tp_engineering', limit: 50 });
+      assert.equal(filtered.total, 1);
+      assert.equal(filtered.items[0].generationId, g1);
+      // Unknown / empty category does not constrain results.
+      assert.equal(db.listKnowledgeBaseTerms({ clusterKey: 'all', limit: 50 }).total, 2);
     } finally { db.close(); }
   });
 

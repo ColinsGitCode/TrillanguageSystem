@@ -133,11 +133,25 @@ router.get('/api/knowledge/base/terms', (req, res) => {
       langProfile: String(req.query.langProfile || ''),
       cardType: String(req.query.cardType || ''),
       tag: String(req.query.tag || ''),
+      clusterKey: String(req.query.category || req.query.clusterKey || ''),
       sort: String(req.query.sort || 'recent'),
       limit: pageSize,
       offset: (page - 1) * pageSize
     });
     res.json({ success: true, ...result, page, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Semantic-classification category navigation for the knowledge-base browse
+// panel. taxonomy = function (grammar axis) | topic (vocab axis) | all.
+router.get('/api/knowledge/base/categories', (req, res) => {
+  try {
+    const categories = dbService.getKnowledgeCategories({
+      taxonomy: String(req.query.taxonomy || 'all')
+    });
+    res.json({ success: true, categories });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

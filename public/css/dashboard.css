@@ -1434,6 +1434,28 @@ button[onclick^="navigator.clipboard"]:hover {
     align-items: flex-end;
 }
 
+.knowledge-base-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+
+.knowledge-base-category-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.knowledge-base-category-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    min-width: 56px;
+}
+
 .knowledge-base-body {
     display: grid;
     grid-template-columns: 1fr 1.3fr;

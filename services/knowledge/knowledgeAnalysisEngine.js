@@ -38,7 +38,7 @@ async function runTask(taskType, cards = [], taskOptions = {}) {
     case 'grammar_link':
       return wrapResult('grammar_link', grammarLinkTask.run(cards), cards.length);
     case 'cluster':
-      return wrapResult('cluster', clusterTask.run(cards), cards.length);
+      return wrapResult('cluster', await clusterTask.run(cards, taskOptions), cards.length);
     case 'issues_audit':
       return wrapResult('issues_audit', issuesAuditTask.run(cards), cards.length);
     default:
