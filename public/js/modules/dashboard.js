@@ -1254,11 +1254,26 @@ function initKnowledgeBaseBrowse() {
         if (!item) return;
         const key = String(item.dataset.key || '').trim();
         if (!key) return;
+        const genId = Number(item.dataset.generationId || 0);
         // `pinned` keeps any periodic refresh from clobbering a term that is
         // not in the top-N overview.
         state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
         renderKnowledgeBaseTerms();
+        if (genId) openKhCard(genId);
         await renderKnowledgeRelationInspector();
+    });
+
+    // Card preview modal close wiring (button / backdrop / Esc).
+    const cardModal = document.getElementById('khCardModal');
+    const cardClose = document.getElementById('khCardClose');
+    if (cardClose) cardClose.addEventListener('click', closeKhCard);
+    if (cardModal) {
+        cardModal.addEventListener('click', (event) => {
+            if (event.target === cardModal) closeKhCard();
+        });
+    }
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeKhCard();
     });
 
     // Insight list selection → relation inspector (reuses the shared renderer).
@@ -1410,6 +1425,26 @@ function renderKhInsightList() {
     }).join('');
 }
 
+// Pop out a term's card using the main app's native card modal, embedded via
+// /?card=<id>&embed=1 — guarantees the same CONTENT/INTEL/KNOWLEDGE format as
+// clicking a phrase in the main interface.
+function openKhCard(generationId) {
+    const id = Number(generationId);
+    if (!id) return;
+    const modal = document.getElementById('khCardModal');
+    const frame = document.getElementById('khCardFrame');
+    if (!modal || !frame) return;
+    frame.src = `/?card=${id}&embed=1`;
+    modal.classList.add('open');
+}
+
+function closeKhCard() {
+    const modal = document.getElementById('khCardModal');
+    const frame = document.getElementById('khCardFrame');
+    if (modal) modal.classList.remove('open');
+    if (frame) frame.removeAttribute('src');
+}
+
 async function refreshKnowledgeBaseCategories() {
     try {
         const res = await api.getKnowledgeBaseCategories('all');
@@ -1533,6 +1568,7 @@ function renderKnowledgeBaseTerms() {
                 <div class="knowledge-hub-item ${isActive ? 'active' : ''}"
                      data-entity-type="term"
                      data-key="${escapeHtml(key)}"
+                     data-generation-id="${Number(term.generationId || 0)}"
                      data-testid="knowledge-base-term">
                     <div class="name">${escapeHtml(term.phrase || '-')} <span class="mono" style="color:#9ca3af;">${escapeHtml(term.langProfile || '')}</span></div>
                     <div class="meta">${escapeHtml(heads || '—')}${tags ? ` · ${escapeHtml(tags)}` : ''}</div>

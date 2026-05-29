@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trilingual Records Viewer</title>
+    <!-- Embedded card-only mode (Knowledge Hub card-preview iframe): flag the
+         document before paint so the chrome is hidden with no flash. -->
+    <script>try{if(new URLSearchParams(location.search).get('embed')==='1')document.documentElement.classList.add('kh-embed');}catch(e){}</script>
     <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
     <link rel="shortcut icon" href="/favicon-lan.svg" />
     <link

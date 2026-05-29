@@ -2943,3 +2943,27 @@ h1 {
   background: rgba(59, 130, 246, 0.2);
   color: inherit;
 }
+
+/* ===== Embedded card-only mode (Knowledge Hub card-preview iframe) =====
+   Loaded via /?card=<id>&embed=1. The main chrome (.page) is hidden and the
+   card modal overlay — reparented to <body> by app.js — fills the iframe with
+   an opaque backdrop. The modal's own close/delete are hidden; the Knowledge
+   Hub wrapper provides the close affordance. */
+html.kh-embed,
+html.kh-embed body {
+  background: #fff;
+  margin: 0;
+  overflow: hidden;
+}
+/* Hide every body-level element (.page chrome, the queue float, context menus,
+   etc.) except the card modal overlay, which app.js reparents to <body>. */
+html.kh-embed body > *:not(#modalOverlay) { display: none !important; }
+html.kh-embed #modalOverlay.modal {
+  background: #fff;
+  padding: 10px 14px;
+  align-items: flex-start;
+}
+html.kh-embed #modalOverlay .mc-close,
+html.kh-embed #modalOverlay .mc-delete {
+  display: none !important;
+}

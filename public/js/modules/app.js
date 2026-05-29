@@ -140,11 +140,35 @@ function init() {
     ensureFileListState();
     initGeminiSetup();
     initInfrastructureHealthMonitor();
+    // Deep-link: open a single card directly (used by the Knowledge Hub
+    // card-preview iframe via /?card=<id>&embed=1). In embed mode the chrome is
+    // hidden and the modal overlay is reparented to <body> so it stays visible.
+    const deepLinkCardId = handleDeepLinkCard();
+    if (deepLinkCardId) return;
+
     // 加载初始数据
     loadFolders();
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
+}
+
+function handleDeepLinkCard() {
+    let params;
+    try { params = new URLSearchParams(location.search); } catch (e) { return 0; }
+    const cardId = Number(params.get('card') || 0);
+    if (!cardId) return 0;
+    const embed = params.get('embed') === '1';
+    if (embed) {
+        document.documentElement.classList.add('kh-embed');
+        document.body.classList.add('kh-embed');
+        // Reparent the overlay to <body> so hiding .page doesn't hide it.
+        if (els.modalOverlay && els.modalOverlay.parentElement !== document.body) {
+            document.body.appendChild(els.modalOverlay);
+        }
+    }
+    openRelationCardFromKnowledge({ generationId: cardId });
+    return cardId;
 }
 
 function initInfrastructureHealthMonitor() {
