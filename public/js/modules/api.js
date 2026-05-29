@@ -236,6 +236,24 @@ class ApiService {
         return this.fetchJson(`/api/knowledge/index${suffix ? `?${suffix}` : ''}`);
     }
 
+    async getKnowledgeBaseOverview(topTagLimit = 20) {
+        const params = new URLSearchParams();
+        params.set('topTagLimit', String(topTagLimit));
+        return this.fetchJson(`/api/knowledge/base/overview?${params.toString()}`);
+    }
+
+    async listKnowledgeBaseTerms(params = {}) {
+        const query = new URLSearchParams();
+        if (params.query) query.set('query', String(params.query));
+        if (params.langProfile && params.langProfile !== 'all') query.set('langProfile', String(params.langProfile));
+        if (params.cardType && params.cardType !== 'all') query.set('cardType', String(params.cardType));
+        if (params.tag) query.set('tag', String(params.tag));
+        if (params.sort) query.set('sort', String(params.sort));
+        query.set('page', String(params.page || 1));
+        query.set('pageSize', String(params.pageSize || 20));
+        return this.fetchJson(`/api/knowledge/base/terms?${query.toString()}`);
+    }
+
     async getKnowledgeSynonyms(phrase, limit = 20) {
         const query = new URLSearchParams();
         query.set('phrase', String(phrase || ''));

@@ -22,7 +22,21 @@ const state = {
     knowledgeRelationToken: 0,
     knowledgeOverview: null,
     knowledgeSynonymBoundaries: null,
-    knowledgeHubSelection: null
+    knowledgeHubSelection: null,
+    knowledgeBase: {
+        overview: null,
+        terms: [],
+        total: 0,
+        page: 1,
+        pageSize: 12,
+        query: '',
+        langProfile: 'all',
+        cardType: 'all',
+        tag: '',
+        sort: 'recent'
+    },
+    knowledgeBaseToken: 0,
+    knowledgeBaseSearchTimer: null
 };
 const QUEUE_POLL_INTERVAL_MS = 1500;
 const KNOWLEDGE_POLL_INTERVAL_MS = 3000;
@@ -41,6 +55,7 @@ function initDashboard() {
     bindInfoButtons();
     initQueueTelemetry();
     initKnowledgeOps();
+    initKnowledgeBaseBrowse();
 
     fetchInfrastructureStatus();
     setInterval(fetchInfrastructureStatus, 30000);
@@ -772,6 +787,10 @@ function ensureKnowledgeHubSelection(overview, synonymData) {
         return false;
     };
 
+    // A selection the user explicitly pinned (e.g. picked a term from the
+    // knowledge-base library that is not in the top-N overview) must survive
+    // the periodic refresh — don't auto-replace it with a default.
+    if (state.knowledgeHubSelection && state.knowledgeHubSelection.pinned) return;
     if (exists(state.knowledgeHubSelection)) return;
     if (synonyms.length) {
         state.knowledgeHubSelection = {
@@ -1093,6 +1112,197 @@ function renderRelSection(title, items, rowRenderer) {
                 : '<div class="empty-hint">No data</div>'}
         </section>
     `;
+}
+
+// ========== Knowledge Base (learner browse) ==========
+// Drives the rebuilt knowledge-hub.html term library: overview chips, tag
+// chips, a filterable/paginated term list, and term selection that feeds the
+// shared relation inspector. Guarded so it no-ops on pages without the markup.
+
+function initKnowledgeBaseBrowse() {
+    const list = document.getElementById('knowledgeBaseTermList');
+    if (!list) return;
+
+    const searchInput = document.getElementById('knowledgeBaseSearch');
+    const langSelect = document.getElementById('knowledgeBaseLang');
+    const cardTypeSelect = document.getElementById('knowledgeBaseCardType');
+    const sortSelect = document.getElementById('knowledgeBaseSort');
+    const prevBtn = document.getElementById('knowledgeBasePrev');
+    const nextBtn = document.getElementById('knowledgeBaseNext');
+    const tagsBox = document.getElementById('knowledgeBaseTags');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            if (state.knowledgeBaseSearchTimer) clearTimeout(state.knowledgeBaseSearchTimer);
+            state.knowledgeBaseSearchTimer = setTimeout(() => {
+                state.knowledgeBase.query = searchInput.value.trim();
+                state.knowledgeBase.page = 1;
+                refreshKnowledgeBaseTerms();
+            }, 250);
+        });
+    }
+    if (langSelect) {
+        langSelect.addEventListener('change', () => {
+            state.knowledgeBase.langProfile = langSelect.value || 'all';
+            state.knowledgeBase.page = 1;
+            refreshKnowledgeBaseTerms();
+        });
+    }
+    if (cardTypeSelect) {
+        cardTypeSelect.addEventListener('change', () => {
+            state.knowledgeBase.cardType = cardTypeSelect.value || 'all';
+            state.knowledgeBase.page = 1;
+            refreshKnowledgeBaseTerms();
+        });
+    }
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            state.knowledgeBase.sort = sortSelect.value || 'recent';
+            state.knowledgeBase.page = 1;
+            refreshKnowledgeBaseTerms();
+        });
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (state.knowledgeBase.page > 1) {
+                state.knowledgeBase.page -= 1;
+                refreshKnowledgeBaseTerms();
+            }
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            const maxPage = Math.max(1, Math.ceil(state.knowledgeBase.total / state.knowledgeBase.pageSize));
+            if (state.knowledgeBase.page < maxPage) {
+                state.knowledgeBase.page += 1;
+                refreshKnowledgeBaseTerms();
+            }
+        });
+    }
+    if (tagsBox) {
+        tagsBox.addEventListener('click', (event) => {
+            const chip = event.target.closest('[data-tag]');
+            if (!chip) return;
+            const tag = String(chip.dataset.tag || '');
+            state.knowledgeBase.tag = (state.knowledgeBase.tag === tag) ? '' : tag;
+            state.knowledgeBase.page = 1;
+            renderKnowledgeBaseTags(state.knowledgeBase.overview);
+            refreshKnowledgeBaseTerms();
+        });
+    }
+    list.addEventListener('click', async (event) => {
+        const item = event.target.closest('.knowledge-hub-item');
+        if (!item) return;
+        const key = String(item.dataset.key || '').trim();
+        if (!key) return;
+        // `pinned` keeps the periodic refresh from clobbering a term that is
+        // not in the top-N overview.
+        state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
+        renderKnowledgeBaseTerms();
+        await renderKnowledgeRelationInspector();
+    });
+
+    refreshKnowledgeBaseOverview();
+    refreshKnowledgeBaseTerms();
+}
+
+async function refreshKnowledgeBaseOverview() {
+    try {
+        const res = await api.getKnowledgeBaseOverview(20);
+        state.knowledgeBase.overview = res?.overview || null;
+        renderKnowledgeBaseOverview(state.knowledgeBase.overview);
+        renderKnowledgeBaseTags(state.knowledgeBase.overview);
+    } catch (err) {
+        console.warn('[KnowledgeBase] overview failed:', err.message);
+    }
+}
+
+async function refreshKnowledgeBaseTerms() {
+    const token = ++state.knowledgeBaseToken;
+    const kb = state.knowledgeBase;
+    try {
+        const res = await api.listKnowledgeBaseTerms({
+            query: kb.query,
+            langProfile: kb.langProfile,
+            cardType: kb.cardType,
+            tag: kb.tag,
+            sort: kb.sort,
+            page: kb.page,
+            pageSize: kb.pageSize
+        });
+        if (token !== state.knowledgeBaseToken) return;
+        kb.terms = Array.isArray(res?.items) ? res.items : [];
+        kb.total = Number(res?.total || 0);
+        renderKnowledgeBaseTerms();
+    } catch (err) {
+        if (token !== state.knowledgeBaseToken) return;
+        const list = document.getElementById('knowledgeBaseTermList');
+        if (list) list.innerHTML = `<div class="empty-hint">Load failed: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderKnowledgeBaseOverview(overview) {
+    const node = document.getElementById('knowledgeBaseOverview');
+    if (!node) return;
+    const data = overview || {};
+    const byLang = Array.isArray(data.byLang) ? data.byLang : [];
+    const langChips = byLang
+        .map((row) => `<span class="tag">${escapeHtml(row.langProfile)} ${Number(row.count || 0)}</span>`)
+        .join('');
+    node.innerHTML = `<span class="tag">terms ${Number(data.total || 0)}</span>${langChips}`;
+}
+
+function renderKnowledgeBaseTags(overview) {
+    const node = document.getElementById('knowledgeBaseTags');
+    if (!node) return;
+    const tags = Array.isArray(overview?.topTags) ? overview.topTags : [];
+    if (!tags.length) { node.innerHTML = ''; return; }
+    const active = state.knowledgeBase.tag;
+    node.innerHTML = tags.map((row) => {
+        const isActive = active && active === row.tag;
+        const style = `cursor:pointer;${isActive ? 'background:#3b82f6;color:#fff;' : ''}`;
+        return `<span class="tag" data-tag="${escapeHtml(row.tag)}" style="${style}">${escapeHtml(row.tag)} ${Number(row.count || 0)}</span>`;
+    }).join('');
+}
+
+function renderKnowledgeBaseTerms() {
+    const list = document.getElementById('knowledgeBaseTermList');
+    if (!list) return;
+    const kb = state.knowledgeBase;
+    const terms = Array.isArray(kb.terms) ? kb.terms : [];
+
+    if (!terms.length) {
+        list.innerHTML = '<div class="empty-hint">No terms</div>';
+    } else {
+        const selectedKey = (state.knowledgeHubSelection && state.knowledgeHubSelection.entityType === 'term')
+            ? state.knowledgeHubSelection.key : '';
+        list.innerHTML = terms.map((term) => {
+            const key = String(term.phrase || '').trim();
+            const isActive = selectedKey && selectedKey === key;
+            const heads = [term.zhHeadword, term.enHeadword, term.jaHeadword].filter(Boolean).join(' · ');
+            const tags = Array.isArray(term.tags) ? term.tags.slice(0, 4).join(' / ') : '';
+            return `
+                <div class="knowledge-hub-item ${isActive ? 'active' : ''}"
+                     data-entity-type="term"
+                     data-key="${escapeHtml(key)}"
+                     data-testid="knowledge-base-term">
+                    <div class="name">${escapeHtml(term.phrase || '-')} <span class="mono" style="color:#9ca3af;">${escapeHtml(term.langProfile || '')}</span></div>
+                    <div class="meta">${escapeHtml(heads || '—')}${tags ? ` · ${escapeHtml(tags)}` : ''}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const pageInfo = document.getElementById('knowledgeBasePageInfo');
+    const prevBtn = document.getElementById('knowledgeBasePrev');
+    const nextBtn = document.getElementById('knowledgeBaseNext');
+    const total = kb.total;
+    const from = total === 0 ? 0 : (kb.page - 1) * kb.pageSize + 1;
+    const to = Math.min(total, kb.page * kb.pageSize);
+    const maxPage = Math.max(1, Math.ceil(total / kb.pageSize));
+    if (pageInfo) pageInfo.textContent = `${from} - ${to} / ${total}`;
+    if (prevBtn) prevBtn.disabled = kb.page <= 1;
+    if (nextBtn) nextBtn.disabled = kb.page >= maxPage;
 }
 
 async function loadKnowledgePreview(job) {

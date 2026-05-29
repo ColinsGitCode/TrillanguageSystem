@@ -67,9 +67,73 @@
             </div>
         </section>
 
+        <section class="glass-panel knowledge-ops-panel" data-testid="knowledge-base-panel">
+            <div class="knowledge-hub-header" style="margin-top: 0;">
+                <div class="knowledge-card-title">知识库 · Knowledge Base</div>
+                <div id="knowledgeBaseOverview" class="knowledge-hub-counts" data-testid="knowledge-base-overview">
+                    <span class="tag">terms 0</span>
+                </div>
+            </div>
+
+            <div class="knowledge-base-toolbar">
+                <label class="ko-field" style="flex: 2 1 240px;">
+                    <span>Search</span>
+                    <input id="knowledgeBaseSearch" type="search" placeholder="phrase / 词头 / alias…" data-testid="knowledge-base-search" />
+                </label>
+                <label class="ko-field">
+                    <span>Language</span>
+                    <select id="knowledgeBaseLang">
+                        <option value="all">all</option>
+                        <option value="ja">ja</option>
+                        <option value="en">en</option>
+                        <option value="zh">zh</option>
+                        <option value="mixed">mixed</option>
+                    </select>
+                </label>
+                <label class="ko-field">
+                    <span>Card Type</span>
+                    <select id="knowledgeBaseCardType">
+                        <option value="all">all</option>
+                        <option value="trilingual">trilingual</option>
+                        <option value="grammar_ja">grammar_ja</option>
+                    </select>
+                </label>
+                <label class="ko-field">
+                    <span>Sort</span>
+                    <select id="knowledgeBaseSort">
+                        <option value="recent">recent</option>
+                        <option value="score">score</option>
+                        <option value="phrase">phrase</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="knowledgeBaseTags" class="knowledge-hub-counts" data-testid="knowledge-base-tags" style="margin: 10px 0;"></div>
+
+            <div class="knowledge-base-body">
+                <div class="knowledge-card knowledge-base-list-card">
+                    <div class="knowledge-card-title">词条 · Terms</div>
+                    <div id="knowledgeBaseTermList" class="knowledge-jobs-list" data-testid="knowledge-base-term-list">
+                        <div class="empty-hint">Loading terms…</div>
+                    </div>
+                    <div class="knowledge-base-pager" data-testid="knowledge-base-pager">
+                        <button id="knowledgeBasePrev" class="ko-start-btn" type="button" disabled>← Prev</button>
+                        <span id="knowledgeBasePageInfo" class="mono">0 - 0 / 0</span>
+                        <button id="knowledgeBaseNext" class="ko-start-btn" type="button" disabled>Next →</button>
+                    </div>
+                </div>
+                <div class="knowledge-card knowledge-base-inspector-card">
+                    <div class="knowledge-card-title">Relation Inspector</div>
+                    <div id="knowledgeRelationInspector" class="knowledge-summary-body" data-testid="knowledge-relation-inspector">
+                        <div class="empty-hint">Click a term or hub item to inspect relations</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="glass-panel knowledge-ops-panel">
             <div class="knowledge-hub-header" style="margin-top: 0;">
-                <div class="knowledge-card-title">Knowledge Hub</div>
+                <div class="knowledge-card-title">分析视图 · Analysis Hub</div>
                 <div id="knowledgeHubCounts" class="knowledge-hub-counts" data-testid="knowledge-hub-counts">
                     <span class="tag">terms 0</span>
                     <span class="tag">patterns 0</span>
@@ -107,13 +171,6 @@
                     <div id="knowledgeHubIssues" class="knowledge-jobs-list">
                         <div class="empty-hint">No issues</div>
                     </div>
-                </div>
-            </div>
-
-            <div class="knowledge-card">
-                <div class="knowledge-card-title">Relation Inspector</div>
-                <div id="knowledgeRelationInspector" class="knowledge-summary-body" data-testid="knowledge-relation-inspector">
-                    <div class="empty-hint">Click item in Knowledge Hub to inspect relations</div>
                 </div>
             </div>
         </section>

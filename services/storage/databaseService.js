@@ -906,6 +906,14 @@ class DatabaseService {
     return knowledgeTermsIndexDomain.search(this.db, filters);
   }
 
+  listKnowledgeBaseTerms(filters = {}) {
+    return knowledgeTermsIndexDomain.list(this.db, filters);
+  }
+
+  getKnowledgeBaseOverview(filters = {}) {
+    return knowledgeTermsIndexDomain.overview(this.db, filters);
+  }
+
   getKnowledgeSynonymsByPhrase(phrase, limit = 20) {
     return knowledgeSynonymsDomain.findByPhrase(this.db, phrase, limit);
   }

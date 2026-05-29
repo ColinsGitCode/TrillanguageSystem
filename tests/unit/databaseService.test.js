@@ -1022,6 +1022,122 @@ test.describe('databaseService — knowledge_terms_index', () => {
   });
 });
 
+// -- knowledge-base browse (list + overview) ---------------------------------
+
+test.describe('databaseService — knowledge-base browse', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+  function newJobId(db) {
+    return db.createKnowledgeJob({ jobType: 'index' }).id;
+  }
+  // Seed a small mixed corpus so filters/pagination have something to bite on.
+  function seed(db) {
+    const job = newJobId(db);
+    const rows = [
+      { phrase: 'apple', langProfile: 'en', cardType: 'trilingual', tags: ['food', 'noun'], score: 0.9 },
+      { phrase: 'りんご', langProfile: 'ja', cardType: 'trilingual', tags: ['food'], score: 0.5 },
+      { phrase: 'たべる', langProfile: 'ja', cardType: 'grammar_ja', tags: ['verb', 'grammar'], score: 0.7 },
+      { phrase: 'run', langProfile: 'en', cardType: 'trilingual', tags: ['verb'], score: 0.3 },
+      { phrase: '混合', langProfile: 'mixed', cardType: 'trilingual', tags: [], score: 0.1 }
+    ];
+    db.upsertKnowledgeTermsIndex(rows.map((r, i) => ({
+      generationId: newGenId(db, { phrase: r.phrase, baseFilename: `kb${i}`, requestId: `rid_kb_${i}` }),
+      ...r
+    })), job);
+    return rows.length;
+  }
+
+  test.it('listKnowledgeBaseTerms returns items + total with pagination', () => {
+    const db = freshDb();
+    try {
+      const n = seed(db);
+      const page1 = db.listKnowledgeBaseTerms({ limit: 2, offset: 0 });
+      assert.equal(page1.total, n);
+      assert.equal(page1.items.length, 2);
+      assert.equal(page1.limit, 2);
+      const page2 = db.listKnowledgeBaseTerms({ limit: 2, offset: 2 });
+      assert.equal(page2.total, n);
+      assert.equal(page2.items.length, 2);
+      // pages do not overlap
+      const ids1 = new Set(page1.items.map((it) => it.generationId));
+      assert.ok(page2.items.every((it) => !ids1.has(it.generationId)));
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeBaseTerms filters by langProfile and cardType', () => {
+    const db = freshDb();
+    try {
+      seed(db);
+      const ja = db.listKnowledgeBaseTerms({ langProfile: 'ja', limit: 50 });
+      assert.equal(ja.total, 2);
+      assert.ok(ja.items.every((it) => it.langProfile === 'ja'));
+
+      const grammar = db.listKnowledgeBaseTerms({ cardType: 'grammar_ja', limit: 50 });
+      assert.equal(grammar.total, 1);
+      assert.equal(grammar.items[0].phrase, 'たべる');
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeBaseTerms tag filter matches whole tokens only', () => {
+    const db = freshDb();
+    try {
+      seed(db);
+      const verbs = db.listKnowledgeBaseTerms({ tag: 'verb', limit: 50 });
+      assert.equal(verbs.total, 2); // たべる + run
+      // "ver" must not match "verb"
+      assert.equal(db.listKnowledgeBaseTerms({ tag: 'ver', limit: 50 }).total, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('listKnowledgeBaseTerms sort=score orders by score desc', () => {
+    const db = freshDb();
+    try {
+      seed(db);
+      const byScore = db.listKnowledgeBaseTerms({ sort: 'score', limit: 50 });
+      const scores = byScore.items.map((it) => it.score);
+      const sorted = [...scores].sort((a, b) => b - a);
+      assert.deepEqual(scores, sorted);
+      assert.equal(byScore.items[0].phrase, 'apple');
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeBaseOverview aggregates totals, languages, card types, tags', () => {
+    const db = freshDb();
+    try {
+      const n = seed(db);
+      const ov = db.getKnowledgeBaseOverview();
+      assert.equal(ov.total, n);
+
+      const langMap = Object.fromEntries(ov.byLang.map((r) => [r.langProfile, r.count]));
+      assert.equal(langMap.ja, 2);
+      assert.equal(langMap.en, 2);
+      assert.equal(langMap.mixed, 1);
+
+      const tagMap = Object.fromEntries(ov.topTags.map((r) => [r.tag, r.count]));
+      assert.equal(tagMap.food, 2);
+      assert.equal(tagMap.verb, 2);
+      // topTags sorted by count desc
+      assert.ok(ov.topTags[0].count >= ov.topTags[ov.topTags.length - 1].count);
+    } finally { db.close(); }
+  });
+
+  test.it('getKnowledgeBaseOverview on empty corpus returns zeroed shape', () => {
+    const db = freshDb();
+    try {
+      const ov = db.getKnowledgeBaseOverview();
+      assert.equal(ov.total, 0);
+      assert.deepEqual(ov.byLang, []);
+      assert.deepEqual(ov.byCardType, []);
+      assert.deepEqual(ov.topTags, []);
+    } finally { db.close(); }
+  });
+});
+
 // -- knowledge_synonyms ------------------------------------------------------
 
 test.describe('databaseService — knowledge_synonyms', () => {

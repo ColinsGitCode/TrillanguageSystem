@@ -123,6 +123,39 @@ router.get('/api/knowledge/index', (req, res) => {
   }
 });
 
+// Knowledge-base learner browse: paginated/filterable term library.
+router.get('/api/knowledge/base/terms', (req, res) => {
+  try {
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize || 20)));
+    const page = Math.max(1, Number(req.query.page || 1));
+    const result = dbService.listKnowledgeBaseTerms({
+      query: String(req.query.query || ''),
+      langProfile: String(req.query.langProfile || ''),
+      cardType: String(req.query.cardType || ''),
+      tag: String(req.query.tag || ''),
+      sort: String(req.query.sort || 'recent'),
+      limit: pageSize,
+      offset: (page - 1) * pageSize
+    });
+    res.json({ success: true, ...result, page, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Knowledge-base landing aggregate: totals + breakdowns by language / card
+// type / top tags.
+router.get('/api/knowledge/base/overview', (req, res) => {
+  try {
+    const overview = dbService.getKnowledgeBaseOverview({
+      topTagLimit: Number(req.query.topTagLimit || 20)
+    });
+    res.json({ success: true, overview });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/knowledge/synonyms', (req, res) => {
   try {
     const phrase = String(req.query.phrase || '');

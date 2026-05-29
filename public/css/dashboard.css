@@ -1427,6 +1427,54 @@ button[onclick^="navigator.clipboard"]:hover {
     gap: 10px;
 }
 
+.knowledge-base-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.knowledge-base-body {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.knowledge-base-list-card .knowledge-jobs-list {
+    max-height: 460px;
+}
+
+.knowledge-base-inspector-card .knowledge-summary-body {
+    max-height: 520px;
+    overflow-y: auto;
+}
+
+.knowledge-base-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 8px;
+}
+
+.knowledge-base-pager .mono {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.knowledge-base-pager button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+    .knowledge-base-body {
+        grid-template-columns: 1fr;
+    }
+}
+
 .knowledge-card {
     border: 1px solid var(--border-color);
     border-radius: 10px;
