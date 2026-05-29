@@ -16,7 +16,6 @@ module.exports = [
       'node_modules/**',
       'public/**',         // browser code, different globals
       'tests/e2e/**',      // covered by Playwright
-      'd3/**',             // visualization output
       'Docs/**',           // archived diagrams + visualization mjs
       'output/**',
       'data/**',

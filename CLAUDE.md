@@ -202,7 +202,7 @@ Per-spec hermetic state is enforced via `resetServerState(request)` in `test.bef
 
 ## Lint
 
-ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only — `public/`, `tests/e2e/`, `Docs/`, `d3/` are ignored. Conservative ruleset built on `eslint:recommended`; stylistic checks downgraded to warnings. **Current baseline: 0 errors, 0 warnings.** Keep it there.
+ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only — `public/`, `tests/e2e/`, `Docs/` are ignored. Conservative ruleset built on `eslint:recommended`; stylistic checks downgraded to warnings. **Current baseline: 0 errors, 0 warnings.** Keep it there.
 
 ## Key Conventions
 
