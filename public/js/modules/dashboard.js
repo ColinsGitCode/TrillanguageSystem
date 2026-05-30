@@ -3,6 +3,7 @@
  * 从通用 LLM 监控转型为"评审→注入→效果→调参"业务仪表盘
  */
 import { formatDate } from './utils.js';
+import { escapeHtml, escapeHtmlAttr, formatNumber, formatQueueTime, formatDuration } from './dashboard-format.js';
 import { initInfoModal, bindInfoButtons } from './info-modal.js';
 import { api } from './api.js';
 import { openGenerationJobDetailModal } from './generation-job-detail.js';
@@ -196,14 +197,6 @@ function renderServiceMatrix(services) {
         `;
         container.appendChild(el);
     });
-}
-
-function escapeHtmlAttr(text) {
-    return String(text || '')
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
 }
 
 function renderStorage(storage) {
@@ -526,17 +519,6 @@ function renderTaskQueueDetails(snapshot) {
             console.warn('[Dashboard] queue focus switch failed:', err.message);
         });
     };
-}
-
-function formatQueueTime(value) {
-    const ts = Number(value || 0);
-    if (!Number.isFinite(ts) || ts <= 0) return '-';
-    const delta = Date.now() - ts;
-    if (delta < 1000) return 'just now';
-    if (delta < 60000) return `${Math.floor(delta / 1000)}s ago`;
-    if (delta < 3600000) return `${Math.floor(delta / 60000)}m ago`;
-    if (delta < 86400000) return `${Math.floor(delta / 3600000)}h ago`;
-    return `${Math.floor(delta / 86400000)}d ago`;
 }
 
 // ========== Knowledge Ops ==========
@@ -1888,19 +1870,6 @@ function formatJobProgress(job) {
     return { percent, text: `${done}/${total} batches (${percent}%)` };
 }
 
-function formatDuration(startedAt, finishedAt) {
-    if (!startedAt) return '-';
-    const startTs = Date.parse(startedAt);
-    if (Number.isNaN(startTs)) return '-';
-    const endTs = finishedAt ? Date.parse(finishedAt) : Date.now();
-    if (Number.isNaN(endTs) || endTs <= startTs) return '-';
-    const delta = endTs - startTs;
-    if (delta < 1000) return `${delta}ms`;
-    if (delta < 60000) return `${Math.round(delta / 1000)}s`;
-    if (delta < 3600000) return `${Math.round(delta / 60000)}m`;
-    return `${Math.round(delta / 3600000)}h`;
-}
-
 function setKnowledgeToast(message, tone = '') {
     const el = document.getElementById('knowledgeOpsToast');
     if (!el) return;
@@ -2143,20 +2112,3 @@ function renderLineChart(containerId, data, color) {
 
 // ========== Utilities ==========
 
-function formatNumber(value, digits = 0) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) return '-';
-    return num.toFixed(digits);
-}
-
-function escapeHtml(value) {
-    if (value === null || value === undefined) return '-';
-    return String(value).replace(/[&<>"']/g, (ch) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    }[ch]));
-}
