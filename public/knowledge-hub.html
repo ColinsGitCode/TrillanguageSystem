@@ -59,6 +59,11 @@
                     <button class="kh-axis-btn" type="button" data-axis="all">全部</button>
                 </div>
 
+                <button id="khReviewBtn" class="kh-review-entry" type="button" data-testid="kh-review-btn">
+                    <span class="kh-review-entry-label">复习 Review</span>
+                    <span id="khReviewBadge" class="kh-review-badge">due 0 · new 0</span>
+                </button>
+
                 <label class="ko-field kh-search">
                     <span>Search</span>
                     <input id="knowledgeBaseSearch" type="search" placeholder="phrase / 词头 / alias…" data-testid="knowledge-base-search" />
@@ -132,6 +137,12 @@
                 <div id="khInsightPane" class="kh-pane" hidden>
                     <div id="khInsightList" class="knowledge-jobs-list kh-scroll" data-testid="knowledge-hub-synonyms">
                         <div class="empty-hint">选择左侧「洞察」类型</div>
+                    </div>
+                </div>
+
+                <div id="khReviewPane" class="kh-pane" hidden data-testid="kh-review-pane">
+                    <div id="khReviewBody" class="kh-review-body">
+                        <div class="empty-hint">加载复习队列…</div>
                     </div>
                 </div>
             </div>

@@ -533,6 +533,42 @@ CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id
 CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
 
 -- ========================================
+-- 表 26: card_srs / card_reviews（间隔复习）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS card_srs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL UNIQUE,
+  ease_factor REAL NOT NULL DEFAULT 2.5,
+  interval_days INTEGER NOT NULL DEFAULT 0,
+  repetitions INTEGER NOT NULL DEFAULT 0,
+  lapses INTEGER NOT NULL DEFAULT 0,
+  due_date TEXT,                              -- YYYY-MM-DD (UTC, vs date('now'))
+  last_grade TEXT,                            -- again/hard/good/easy
+  last_reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_srs_due ON card_srs(due_date);
+
+CREATE TABLE IF NOT EXISTS card_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL,
+  grade TEXT NOT NULL,
+  interval_before INTEGER DEFAULT 0,
+  interval_after INTEGER DEFAULT 0,
+  ease_after REAL DEFAULT 0,
+  reviewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_reviews_at ON card_reviews(reviewed_at);
+
+-- ========================================
 -- 表 25: generation_jobs（服务端共享生成队列）
 -- ========================================
 

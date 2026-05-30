@@ -262,6 +262,25 @@ class ApiService {
         return this.fetchJson(`/api/knowledge/base/categories?${query.toString()}`);
     }
 
+    async getSrsQueue(params = {}) {
+        const query = new URLSearchParams();
+        query.set('limit', String(params.limit || 20));
+        if (params.cardType && params.cardType !== 'all') query.set('cardType', String(params.cardType));
+        return this.fetchJson(`/api/srs/queue?${query.toString()}`);
+    }
+
+    async getSrsStats() {
+        return this.fetchJson('/api/srs/stats');
+    }
+
+    async reviewSrs(generationId, grade) {
+        return this.fetchJson('/api/srs/review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ generationId: Number(generationId), grade: String(grade) })
+        });
+    }
+
     async getKnowledgeSynonyms(phrase, limit = 20) {
         const query = new URLSearchParams();
         query.set('phrase', String(phrase || ''));

@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~249 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~261 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
@@ -68,6 +68,7 @@ routes/                Each file = one express.Router() for a domain
 ├── dashboard.js       /api/dashboard/*
 ├── knowledge.js       /api/knowledge/*  (20 routes — jobs, base browse +
 │                       categories, synonyms, grammar, clusters, relations)
+├── srs.js             /api/srs/*  (spaced-repetition: queue, review, stats)
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            DELETE /api/records/:id
 services/              Business logic, grouped by domain subdirectory
@@ -98,6 +99,8 @@ services/              Business logic, grouped by domain subdirectory
 │   └── tasks/                  {summary, cardIndex, grammarLink, cluster,
 │                                issuesAudit, synonymBoundary}.js
 │                              (cluster = rules-first + LLM-fallback classifier)
+├── srs/               srsScheduler.js — SM-2 spaced-repetition engine (pure,
+│                      grade in → next interval/ease/due out; unit-tested)
 ├── observability/     observabilityService.js, healthCheckService.js,
 │                      statisticsService.js
 ├── storage/           DB + filesystem
@@ -116,14 +119,16 @@ services/              Business logic, grouped by domain subdirectory
 │       ├── knowledgeClusters.js     knowledge_clusters + cluster_cards
 │       ├── knowledgeTermsIndex.js   knowledge_terms_index upsert + search
 │       ├── knowledgeSynonyms.js     candidates + groups + members + boundary
-│       └── knowledgeRelations.js    knowledge_outputs_raw write + overview /
-│                                    relations / latest summary
+│       ├── knowledgeRelations.js    knowledge_outputs_raw write + overview /
+│       │                            relations / latest summary
+│       └── cardSrs.js               card_srs + card_reviews (SM-2 state, review
+│                                    log, due queue, stats)
 ├── ocr/               tesseractOcrService.js
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~249 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~261 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
-database/schema.sql    SQLite schema (~14 tables, FTS5 virtual table)
+database/schema.sql    SQLite schema (~16 tables, FTS5 virtual table)
 ```
 
 ### Generation data flow
@@ -158,7 +163,7 @@ viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
 ### Persistence
 
 - **SQLite** via `better-sqlite3`. [services/storage/databaseService.js](services/storage/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/storage/db/](services/storage/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/storage/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
-- Schema in `database/schema.sql` (~14 tables: `generations`, `audio_files`, `observability_metrics`, `generation_errors`, `model_statistics`, `system_health`, `generation_jobs`/`_events`, `knowledge_*`, `card_highlights`). FTS5 virtual table backs full-text search.
+- Schema in `database/schema.sql` (~16 tables: `generations`, `audio_files`, `observability_metrics`, `generation_errors`, `model_statistics`, `system_health`, `generation_jobs`/`_events`, `knowledge_*`, `card_highlights`). FTS5 virtual table backs full-text search.
 - **Migrations are additive and automatic** via `ensureTableColumns(...)` on startup. Add columns there, not as separate migration files.
 - Generated card files live on disk under `RECORDS_PATH`, `YYYYMMDD` folders, `(2)`/`(3)` suffixes on conflicts (`fileManager.js`).
 - **Security note**: `RECORDS_PATH` is NOT mounted as static. In the docker layout `DB_PATH` lives inside `RECORDS_PATH`, so a static mount used to expose the DB (and WAL) at `/data/trilingual_records.db` — see the comment in server.js. All file reads go through `/api/folders/:folder/files/:file`.
@@ -175,6 +180,7 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
   - **Semantic classification** — the `cluster` task ([services/knowledge/tasks/cluster.js](services/knowledge/tasks/cluster.js)) classifies cards into a **curated two-axis taxonomy** ([services/knowledge/taxonomy.js](services/knowledge/taxonomy.js)): grammar cards (`card_type === 'grammar_ja'`) onto a **`function`** axis (communicative function — 疑问 / 因果 / 假设 …, modeled on the Feishu「日语句式索引」base), everything else onto a **`topic`** axis (subject domain). It is **rules-first + LLM-fallback**: keyword rules place most cards, unmatched cards are batched to Gemini (default on, `KNOWLEDGE_CLUSTER_LLM_ENABLED`), residue lands in the axis fallback bucket. Results write `knowledge_clusters` (with an additive `taxonomy` column) + `knowledge_cluster_cards`. Categories are exposed via `GET /api/knowledge/base/categories?taxonomy=function|topic|all`; `/api/knowledge/base/terms` supports `category=<clusterKey>` and `uncategorized=1` filters.
   - **Knowledge Hub explorer** — `knowledge-hub.html` is a three-pane "knowledge explorer" (driven by `initKnowledgeBaseBrowse()` in `dashboard.js`): left nav (axis toggle + semantic-category tree + tags + Insights entries), centre term/insight list, right Relation Inspector. Data actions (refresh / rebuild-index / rebuild-cluster) start knowledge jobs from the Hub; clicking a term opens the **main app's native card modal embedded** via `/?card=<id>&embed=1` (see "Card embed mode" below). See [Docs/Features/Knowledge_Hub_and_Semantic_Classification.md](Docs/Features/Knowledge_Hub_and_Semantic_Classification.md).
 - **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
+- **Spaced repetition (SRS)** — per-card review scheduling via an SM-2 variant ([services/srs/srsScheduler.js](services/srs/srsScheduler.js), pure + unit-tested) over `card_srs` + `card_reviews` ([services/storage/db/cardSrs.js](services/storage/db/cardSrs.js)). 4-button grading (Again/Hard/Good/Easy). `GET /api/srs/queue` returns due (tracked + overdue) plus new (untracked) cards; `POST /api/srs/review {generationId, grade}` advances the schedule; `GET /api/srs/stats`. UI: the Knowledge Hub's「复习 Review」mode (a third centre-pane mode in `dashboard.js`) — due queue + grade buttons, with「查看卡片」reusing the embedded card modal.
 
 ### Frontend (public/)
 
@@ -203,7 +209,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~249 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~261 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.

@@ -20,6 +20,10 @@ const TABLES_IN_DELETE_ORDER = [
   // highlight sidecars
   'card_highlights',
 
+  // spaced-repetition (children of generations)
+  'card_reviews',
+  'card_srs',
+
   // knowledge_* (children before parents)
   'knowledge_grammar_refs',
   'knowledge_grammar_patterns',

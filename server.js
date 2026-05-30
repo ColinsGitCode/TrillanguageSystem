@@ -69,6 +69,7 @@ app.use(require('./routes/health'));
 app.use(require('./routes/history'));
 app.use(require('./routes/dashboard'));
 app.use(require('./routes/knowledge'));
+app.use(require('./routes/srs'));
 app.use(require('./routes/files'));
 app.use(require('./routes/misc'));
 

@@ -22,6 +22,7 @@ const knowledgeClustersDomain = require('./db/knowledgeClusters');
 const knowledgeTermsIndexDomain = require('./db/knowledgeTermsIndex');
 const knowledgeSynonymsDomain = require('./db/knowledgeSynonyms');
 const knowledgeRelationsDomain = require('./db/knowledgeRelations');
+const cardSrsDomain = require('./db/cardSrs');
 const testResetDomain = require('./db/testReset');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
@@ -431,6 +432,34 @@ class DatabaseService {
       );
       CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id);
       CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
+
+      CREATE TABLE IF NOT EXISTS card_srs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation_id INTEGER NOT NULL UNIQUE,
+        ease_factor REAL NOT NULL DEFAULT 2.5,
+        interval_days INTEGER NOT NULL DEFAULT 0,
+        repetitions INTEGER NOT NULL DEFAULT 0,
+        lapses INTEGER NOT NULL DEFAULT 0,
+        due_date TEXT,
+        last_grade TEXT,
+        last_reviewed_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_card_srs_due ON card_srs(due_date);
+
+      CREATE TABLE IF NOT EXISTS card_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation_id INTEGER NOT NULL,
+        grade TEXT NOT NULL,
+        interval_before INTEGER DEFAULT 0,
+        interval_after INTEGER DEFAULT 0,
+        ease_after REAL DEFAULT 0,
+        reviewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_card_reviews_at ON card_reviews(reviewed_at);
     `);
 
     // 'function' (japanese grammar axis) | 'topic' (vocab axis) — see
@@ -938,6 +967,24 @@ class DatabaseService {
 
   getKnowledgeClusters(limit = 20) {
     return knowledgeClustersDomain.listClusters(this.db, limit);
+  }
+
+  // ========== Spaced repetition (card_srs / card_reviews) ==========
+
+  reviewCardSrs(generationId, grade) {
+    return cardSrsDomain.review(this.db, generationId, grade);
+  }
+
+  getCardSrsState(generationId) {
+    return cardSrsDomain.getState(this.db, generationId);
+  }
+
+  getSrsQueue(filters = {}) {
+    return cardSrsDomain.getQueue(this.db, filters);
+  }
+
+  getSrsStats() {
+    return cardSrsDomain.getStats(this.db);
   }
 
   getKnowledgeCategories(filters = {}) {

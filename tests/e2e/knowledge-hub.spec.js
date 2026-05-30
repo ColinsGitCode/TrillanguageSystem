@@ -98,4 +98,20 @@ test.describe('Knowledge Hub explorer', () => {
     await page.locator('#khCardClose').click();
     await expect(modal).toBeHidden();
   });
+
+  test('06 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
+    await page.goto('/knowledge-hub.html');
+
+    await page.getByTestId('kh-review-btn').click();
+    await expect(page.getByTestId('kh-review-pane')).toBeVisible();
+    await expect(page.getByTestId('kh-review-card')).toBeVisible();
+
+    // The 4 seeded cards are all "new" → grade through them until the queue clears.
+    for (let i = 0; i < 8; i += 1) {
+      if (await page.getByTestId('kh-review-done').isVisible().catch(() => false)) break;
+      await page.getByTestId('kh-grade-good').click();
+      await page.waitForTimeout(200);
+    }
+    await expect(page.getByTestId('kh-review-done')).toBeVisible({ timeout: 5000 });
+  });
 });

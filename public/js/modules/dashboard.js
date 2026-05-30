@@ -44,7 +44,11 @@ const state = {
         insightsOverview: null,
         insightsSynonyms: null,
         uncategorizedCount: 0,
-        rebuilding: false
+        rebuilding: false,
+        reviewQueue: [],
+        reviewCursor: 0,
+        reviewStats: null,
+        reviewBusy: false
     },
     knowledgeBaseToken: 0,
     knowledgeBaseSearchTimer: null
@@ -1260,6 +1264,21 @@ function initKnowledgeBaseBrowse() {
         });
     }
 
+    // Spaced-repetition review: enter review mode + grade / view actions.
+    const reviewBtn = document.getElementById('khReviewBtn');
+    if (reviewBtn) reviewBtn.addEventListener('click', () => enterKhReview());
+    const reviewPane = document.getElementById('khReviewPane');
+    if (reviewPane) {
+        reviewPane.addEventListener('click', (event) => {
+            const gradeBtn = event.target.closest('[data-grade]');
+            if (gradeBtn) { gradeKhReviewCard(gradeBtn.dataset.grade); return; }
+            const viewBtn = event.target.closest('[data-review-action="view"]');
+            if (viewBtn) { openKhCard(Number(viewBtn.dataset.generationId || 0)); return; }
+            const exitBtn = event.target.closest('[data-review-action="exit"]');
+            if (exitBtn) { setKhMode('browse'); }
+        });
+    }
+
     list.addEventListener('click', async (event) => {
         const item = event.target.closest('.knowledge-hub-item');
         if (!item) return;
@@ -1334,9 +1353,109 @@ function initKnowledgeBaseBrowse() {
     if (cardTypeSelect) cardTypeSelect.value = state.knowledgeBase.cardType;
 
     refreshKhStats();
+    refreshKhReviewStats();
     refreshKnowledgeBaseOverview();
     refreshKnowledgeBaseCategories();
     refreshKnowledgeBaseTerms();
+}
+
+// ===== Spaced-repetition review =====
+
+async function refreshKhReviewStats() {
+    const badge = document.getElementById('khReviewBadge');
+    if (!badge) return;
+    try {
+        const res = await api.getSrsStats();
+        const s = res?.stats || {};
+        state.knowledgeBase.reviewStats = s;
+        badge.textContent = `due ${Number(s.dueCount || 0)} · new ${Number(s.newCount || 0)}`;
+    } catch (err) {
+        badge.textContent = 'due – · new –';
+    }
+}
+
+async function enterKhReview() {
+    setKhMode('review');
+    const body = document.getElementById('khReviewBody');
+    if (body) body.innerHTML = '<div class="empty-hint">加载复习队列…</div>';
+    try {
+        const res = await api.getSrsQueue({ limit: 30 });
+        state.knowledgeBase.reviewQueue = Array.isArray(res?.queue) ? res.queue : [];
+        state.knowledgeBase.reviewCursor = 0;
+        state.knowledgeBase.reviewStats = res?.stats || state.knowledgeBase.reviewStats;
+        renderKhReview();
+    } catch (err) {
+        if (body) body.innerHTML = `<div class="empty-hint">复习队列加载失败：${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderKhReview() {
+    const body = document.getElementById('khReviewBody');
+    if (!body) return;
+    const kb = state.knowledgeBase;
+    const queue = Array.isArray(kb.reviewQueue) ? kb.reviewQueue : [];
+    const card = queue[kb.reviewCursor];
+    const stats = kb.reviewStats || {};
+
+    if (!card) {
+        body.innerHTML = `
+            <div class="kh-review-done" data-testid="kh-review-done">
+                <div class="kh-review-done-emoji">🎉</div>
+                <div class="kh-review-done-title">今日复习完成</div>
+                <div class="kh-review-done-meta">已复习 ${Number(stats.reviewedToday || 0)} · 待复习 ${Number(stats.dueCount || 0)} · 新卡 ${Number(stats.newCount || 0)}</div>
+                <button class="ko-start-btn" type="button" data-review-action="exit">← 返回浏览</button>
+            </div>`;
+        return;
+    }
+
+    const remaining = queue.length - kb.reviewCursor;
+    const tag = card.isNew ? '<span class="kh-review-tag is-new">NEW</span>' : `<span class="kh-review-tag">rep ${card.repetitions}</span>`;
+    const grades = [
+        { g: 'again', label: 'Again', cls: 'again' },
+        { g: 'hard', label: 'Hard', cls: 'hard' },
+        { g: 'good', label: 'Good', cls: 'good' },
+        { g: 'easy', label: 'Easy', cls: 'easy' }
+    ];
+    body.innerHTML = `
+        <div class="kh-review-progress">剩 ${remaining} 张 · 今日已复习 ${Number(stats.reviewedToday || 0)}</div>
+        <div class="kh-review-card" data-testid="kh-review-card">
+            <div class="kh-review-phrase">${escapeHtml(card.phrase || '-')}</div>
+            <div class="kh-review-meta">${escapeHtml(card.cardType || '')} ${tag} · ${escapeHtml(card.folderName || '')}</div>
+            <button class="ko-start-btn kh-review-view" type="button" data-review-action="view" data-generation-id="${Number(card.generationId || 0)}">查看卡片 ↗</button>
+        </div>
+        <div class="kh-review-grades" ${kb.reviewBusy ? 'style="pointer-events:none;opacity:.5"' : ''}>
+            ${grades.map((x) => `<button class="kh-grade-btn ${x.cls}" type="button" data-grade="${x.g}" data-testid="kh-grade-${x.g}">${x.label}</button>`).join('')}
+        </div>`;
+}
+
+async function gradeKhReviewCard(grade) {
+    const kb = state.knowledgeBase;
+    if (kb.reviewBusy) return;
+    const card = (kb.reviewQueue || [])[kb.reviewCursor];
+    if (!card) return;
+    kb.reviewBusy = true;
+    try {
+        const res = await api.reviewSrs(card.generationId, grade);
+        kb.reviewStats = res?.stats || kb.reviewStats;
+    } catch (err) {
+        setKhActionStatus(`复习提交失败: ${err.message}`, 4000);
+    } finally {
+        kb.reviewBusy = false;
+    }
+    kb.reviewCursor += 1;
+    // Re-fetch a fresh queue when the local batch is exhausted.
+    if (kb.reviewCursor >= (kb.reviewQueue || []).length) {
+        try {
+            const res = await api.getSrsQueue({ limit: 30 });
+            kb.reviewQueue = Array.isArray(res?.queue) ? res.queue : [];
+            kb.reviewCursor = 0;
+            kb.reviewStats = res?.stats || kb.reviewStats;
+        } catch (err) {
+            kb.reviewQueue = [];
+        }
+    }
+    renderKhReview();
+    refreshKhReviewStats();
 }
 
 function setKhActionStatus(message, clearAfterMs = 0) {
@@ -1408,18 +1527,24 @@ function setKhMode(mode, insightType) {
     if (insightType) state.knowledgeBase.insightType = insightType;
     const browse = document.getElementById('khBrowsePane');
     const insight = document.getElementById('khInsightPane');
+    const review = document.getElementById('khReviewPane');
     const crumb = document.getElementById('khListCrumb');
+    const insightsBox = document.getElementById('khInsights');
+
+    const show = (el, on) => { if (el) el.hidden = !on; };
+    show(browse, mode === 'browse');
+    show(insight, mode === 'insight');
+    show(review, mode === 'review');
+
     if (mode === 'insight') {
-        if (browse) browse.hidden = true;
-        if (insight) insight.hidden = false;
         if (crumb) crumb.textContent = KH_INSIGHT_LABEL[state.knowledgeBase.insightType] || '洞察 Insights';
         renderKhInsightList();
-    } else {
-        if (insight) insight.hidden = true;
-        if (browse) browse.hidden = false;
-        const insightsBox = document.getElementById('khInsights');
+    } else if (mode === 'review') {
+        if (crumb) crumb.textContent = '复习 · Review';
         if (insightsBox) insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
+    } else {
         if (crumb) crumb.textContent = '词条 · Terms';
+        if (insightsBox) insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
     }
 }
 

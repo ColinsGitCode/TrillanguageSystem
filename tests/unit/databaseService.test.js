@@ -1651,6 +1651,7 @@ test.describe('databaseService — truncateAllForTests', () => {
       db.replaceKnowledgeClusterData([{ clusterKey: 'k', label: 'L', confidence: 0.1 }], job);
       db.replaceKnowledgeSynonymData([{ pairKey: 'a||b', termA: 'a', termB: 'b' }], job);
       db.insertKnowledgeRawOutput(job, 1, { input: {}, output: {} });
+      db.reviewCardSrs(g, 'good');
 
       // sanity: at least one row in each
       const cnt = (t) => db.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
@@ -1667,6 +1668,7 @@ test.describe('databaseService — truncateAllForTests', () => {
         'knowledge_grammar_patterns', 'knowledge_clusters',
         'knowledge_synonym_groups', 'knowledge_synonym_members',
         'knowledge_outputs_raw',
+        'card_srs', 'card_reviews',
         'generations'
       ]) {
         assert.equal(cnt(t), 0, `expected ${t} to be empty after truncate`);
@@ -1682,6 +1684,75 @@ test.describe('databaseService — truncateAllForTests', () => {
       db.truncateAllForTests();
       const id2 = db.insertGeneration(buildGenerationFixture());
       assert.equal(id2, 1);
+    } finally { db.close(); }
+  });
+});
+
+// -- card_srs / card_reviews -------------------------------------------------
+
+test.describe('databaseService — card_srs (spaced repetition)', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+
+  test.it('reviewCardSrs creates state + a review log row; returns null for missing card', () => {
+    const db = freshDb();
+    try {
+      const g = newGenId(db, { phrase: 'srs', baseFilename: 'srs', requestId: 'rid_srs_1' });
+      const state = db.reviewCardSrs(g, 'good');
+      assert.equal(state.generationId, g);
+      assert.equal(state.repetitions, 1);
+      assert.equal(state.intervalDays, 1);
+      assert.equal(state.lastGrade, 'good');
+      assert.ok(state.dueDate, 'due date set');
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM card_reviews WHERE generation_id = ?').get(g).c, 1);
+
+      // second review advances repetitions + logs again
+      const state2 = db.reviewCardSrs(g, 'good');
+      assert.equal(state2.repetitions, 2);
+      assert.equal(state2.intervalDays, 6);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM card_reviews WHERE generation_id = ?').get(g).c, 2);
+
+      assert.equal(db.reviewCardSrs(999999, 'good'), null);
+    } finally { db.close(); }
+  });
+
+  test.it('getSrsQueue surfaces new (untracked) cards, ordered after due ones', () => {
+    const db = freshDb();
+    try {
+      const g1 = newGenId(db, { phrase: 'a', baseFilename: 'a', requestId: 'rid_q_1' });
+      const g2 = newGenId(db, { phrase: 'b', baseFilename: 'b', requestId: 'rid_q_2' });
+      // both untracked → both "new" and in the queue
+      const queue = db.getSrsQueue({ limit: 50 });
+      assert.equal(queue.length, 2);
+      assert.ok(queue.every((c) => c.isNew));
+
+      // reviewing g1 with Good pushes its due date to tomorrow → out of the queue
+      db.reviewCardSrs(g1, 'good');
+      const queue2 = db.getSrsQueue({ limit: 50 });
+      assert.deepEqual(queue2.map((c) => c.generationId), [g2]);
+    } finally { db.close(); }
+  });
+
+  test.it('getSrsStats counts due / new / reviewed-today / tracked', () => {
+    const db = freshDb();
+    try {
+      const g1 = newGenId(db, { phrase: 'a', baseFilename: 'a', requestId: 'rid_s_1' });
+      newGenId(db, { phrase: 'b', baseFilename: 'b', requestId: 'rid_s_2' });
+      let stats = db.getSrsStats();
+      assert.equal(stats.newCount, 2);
+      assert.equal(stats.trackedTotal, 0);
+
+      db.reviewCardSrs(g1, 'good');
+      stats = db.getSrsStats();
+      assert.equal(stats.trackedTotal, 1);
+      assert.equal(stats.newCount, 1);
+      assert.equal(stats.reviewedToday, 1);
+      assert.equal(stats.dueCount, 0); // g1 now due tomorrow
     } finally { db.close(); }
   });
 });

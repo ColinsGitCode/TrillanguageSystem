@@ -76,3 +76,36 @@ CSS 隐藏其余 body 子节点。Hub 侧提供浮动 ✕ 关闭。
 - `cluster` 的 LLM 兜底**默认开**，会消耗 Gemini 配额；规则能覆盖的卡不调用 LLM。配额耗尽时
   兜底失败的卡安全落兜底桶（不报错），补配额后重跑即可归类。
 - 分类是**按 job 版本化**的：每次 `cluster` 重建会停用旧版、以本次结果为准。
+
+## 9. 间隔复习（SRS）
+
+把卡片库变成可复习的学习系统。每张卡有一份间隔重复调度状态，Knowledge Hub 提供每日复习队列。
+
+### 9.1 算法 (`services/srs/srsScheduler.js`)
+
+SM-2 变体，纯函数 `schedule(state, grade) → nextState`（无 DB / 无 Date 副作用，便于单测）。
+4 键评分映射到 SM-2 质量分：`again`(q2，未达通过线→lapse)、`hard`(q3)、`good`(q4)、`easy`(q5)。
+- 通过：interval 基数按 repetitions 走（0→1、1→6、其后 `round(interval×ease)`），再乘一个档位系数
+  `hard×0.6 / good×1 / easy×1.3`，使同一次复习 hard < good < easy。
+- lapse（again）：repetitions 归零、interval=1、lapses+1。
+- ease 按 SM-2 公式调整，下限 1.3。
+
+### 9.2 数据 (`services/storage/db/cardSrs.js`)
+
+- `card_srs`（`generation_id` UNIQUE）：ease_factor / interval_days / repetitions / lapses / due_date /
+  last_grade / last_reviewed_at。`due_date` 用 `date('now', '+N days')` 计算、与队列的 `due_date <= date('now')`
+  比较同走 SQLite UTC，避免时区错配。
+- `card_reviews`：复习日志（grade / interval_before / interval_after / ease_after / reviewed_at），供「今日已复习」统计。
+- `review()` 事务内：跑调度 → upsert card_srs → 追加 card_reviews。
+
+### 9.3 API (`routes/srs.js`)
+
+- `GET /api/srs/queue?limit&cardType` —— 到期（已跟踪且 due 过期）+ 新卡（未跟踪）队列，到期优先。
+- `POST /api/srs/review { generationId, grade }` —— 推进调度，返回新状态 + stats。
+- `GET /api/srs/stats` —— dueCount / newCount / reviewedToday / trackedTotal。
+
+### 9.4 UI
+
+Knowledge Hub 左栏「复习 Review」入口（带 `due N · new M` 徽标）→ 中栏切到第三种模式（browse / insight / review）：
+进度行 + 当前卡（phrase / 卡型 / NEW 标记 / 「查看卡片」复用嵌入弹窗）+ 4 个评分按钮。评分后推进下一张，
+本地队列耗尽自动再拉；队列清空显示「今日复习完成」。

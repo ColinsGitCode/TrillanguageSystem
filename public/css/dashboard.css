@@ -1742,6 +1742,96 @@ details.kh-nav-section > summary.kh-nav-title {
     color: #fff;
 }
 
+/* ===== Spaced-repetition review ===== */
+.kh-review-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    border: 1px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: 9px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #1d4ed8;
+}
+.kh-review-entry:hover { background: rgba(59, 130, 246, 0.16); }
+
+.kh-review-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+}
+
+.kh-review-body { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
+
+.kh-review-progress { font-size: 0.8rem; color: var(--text-secondary); }
+
+.kh-review-card {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    background: var(--bg-elevated, #fff);
+}
+
+.kh-review-phrase {
+    font-family: 'Space Grotesk', 'Noto Serif SC', serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.kh-review-meta { font-size: 0.82rem; color: var(--text-secondary); }
+
+.kh-review-tag {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 0.7rem;
+}
+.kh-review-tag.is-new { background: #10b981; border-color: #10b981; color: #fff; }
+
+.kh-review-view { margin-top: 4px; }
+
+.kh-review-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+.kh-grade-btn {
+    border: 0;
+    border-radius: 9px;
+    padding: 11px 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+.kh-grade-btn:hover { filter: brightness(1.07); }
+.kh-grade-btn.again { background: #ef4444; }
+.kh-grade-btn.hard { background: #f59e0b; }
+.kh-grade-btn.good { background: #3b82f6; }
+.kh-grade-btn.easy { background: #10b981; }
+
+.kh-review-done {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 16px;
+    text-align: center;
+}
+.kh-review-done-emoji { font-size: 40px; }
+.kh-review-done-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.1rem; color: var(--text-primary); }
+.kh-review-done-meta { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 6px; }
+
 .kh-list-crumb {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 600;
