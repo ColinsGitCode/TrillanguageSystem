@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "dompurify": "^3.0.9",
     "eslint": "^9.39.4",
     "globals": "^15.15.0"
   }
