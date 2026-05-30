@@ -248,7 +248,8 @@ class ApiService {
         if (params.langProfile && params.langProfile !== 'all') query.set('langProfile', String(params.langProfile));
         if (params.cardType && params.cardType !== 'all') query.set('cardType', String(params.cardType));
         if (params.tag) query.set('tag', String(params.tag));
-        if (params.category && params.category !== 'all') query.set('category', String(params.category));
+        if (params.uncategorized) query.set('uncategorized', '1');
+        else if (params.category && params.category !== 'all') query.set('category', String(params.category));
         if (params.sort) query.set('sort', String(params.sort));
         query.set('page', String(params.page || 1));
         query.set('pageSize', String(params.pageSize || 20));

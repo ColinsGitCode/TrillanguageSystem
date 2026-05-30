@@ -134,6 +134,7 @@ router.get('/api/knowledge/base/terms', (req, res) => {
       cardType: String(req.query.cardType || ''),
       tag: String(req.query.tag || ''),
       clusterKey: String(req.query.category || req.query.clusterKey || ''),
+      uncategorized: ['1', 'true', 'yes'].includes(String(req.query.uncategorized || '').toLowerCase()),
       sort: String(req.query.sort || 'recent'),
       limit: pageSize,
       offset: (page - 1) * pageSize

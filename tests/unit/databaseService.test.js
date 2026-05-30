@@ -1152,6 +1152,11 @@ test.describe('databaseService — knowledge-base browse', () => {
       assert.equal(filtered.items[0].generationId, g1);
       // Unknown / empty category does not constrain results.
       assert.equal(db.listKnowledgeBaseTerms({ clusterKey: 'all', limit: 50 }).total, 2);
+
+      // uncategorized = terms whose card is in no active cluster (g2 here).
+      const uncat = db.listKnowledgeBaseTerms({ uncategorized: true, limit: 50 });
+      assert.equal(uncat.total, 1);
+      assert.equal(uncat.items[0].generationId, g2);
     } finally { db.close(); }
   });
 

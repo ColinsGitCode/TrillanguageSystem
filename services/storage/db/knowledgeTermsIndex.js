@@ -103,7 +103,7 @@ function search(db, { query = '', limit = 50 } = {}) {
 // contract.
 function list(db, {
   query = '', langProfile = '', cardType = '', tag = '', clusterKey = '',
-  sort = 'recent', limit = 20, offset = 0
+  uncategorized = false, sort = 'recent', limit = 20, offset = 0
 } = {}) {
   const where = [];
   const params = {};
@@ -142,6 +142,15 @@ function list(db, {
       WHERE c.is_active = 1 AND c.cluster_key = @clusterKey
     )`);
     params.clusterKey = ck;
+  } else if (uncategorized) {
+    // Terms whose card is NOT mapped to any active cluster — i.e. not yet
+    // classified (scoped by the cardType filter the caller passes for the axis).
+    where.push(`generation_id NOT IN (
+      SELECT cc.generation_id
+      FROM knowledge_cluster_cards cc
+      JOIN knowledge_clusters c ON c.id = cc.cluster_id
+      WHERE c.is_active = 1
+    )`);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';

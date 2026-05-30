@@ -1515,6 +1515,51 @@ button[onclick^="navigator.clipboard"]:hover {
     color: var(--text-primary);
 }
 
+.kh-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.kh-action-btn {
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated, #fff);
+    border-radius: 8px;
+    padding: 6px 11px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.kh-action-btn:hover { background: rgba(59, 130, 246, 0.08); border-color: #3b82f6; }
+.kh-action-btn:disabled { opacity: 0.5; cursor: progress; }
+
+.kh-action-status {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.kh-stale-hint {
+    font-size: 0.76rem;
+    color: var(--color-amber, #b45309);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 999px;
+    padding: 3px 10px;
+}
+
+/* Uncategorized bucket in the category nav */
+.kh-cat.kh-cat-uncat {
+    border-style: dashed;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+.kh-cat.kh-cat-uncat.active { color: #fff; }
+
 .kh-explorer {
     display: grid;
     /* nav · narrow term list · wide inspector */

@@ -172,7 +172,7 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
 
 ### Frontend (public/)
 
-Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `knowledge-hub.html`, `knowledge-ops.html`. ES modules in `public/js/modules/` (`app.js`, `api.js`, `store.js`, `audio-player.js`, `dashboard.js`, `generation-job-detail.js`, `virtual-list.js`). marked.js + DOMPurify.
+Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `knowledge-hub.html`, `knowledge-ops.html`. ES modules in `public/js/modules/` (`app.js`, `api.js`, `store.js`, `audio-player.js`, `dashboard.js`, `generation-job-detail.js`). marked.js + DOMPurify.
 
 **Text Selection → Generate**: select text in a card's content; floating "✦ Generate Card" button enqueues a background generation task — does NOT close the modal. See `initSelectionToGenerate()` / `checkSelection()` in `app.js`.
 

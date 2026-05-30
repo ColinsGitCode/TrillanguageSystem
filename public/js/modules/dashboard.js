@@ -41,7 +41,9 @@ const state = {
         navMode: 'browse',
         insightType: 'synonym',
         insightsOverview: null,
-        insightsSynonyms: null
+        insightsSynonyms: null,
+        uncategorizedCount: 0,
+        rebuilding: false
     },
     knowledgeBaseToken: 0,
     knowledgeBaseSearchTimer: null
@@ -1190,6 +1192,7 @@ function initKnowledgeBaseBrowse() {
         cardTypeSelect.addEventListener('change', () => {
             state.knowledgeBase.cardType = cardTypeSelect.value || 'all';
             state.knowledgeBase.page = 1;
+            refreshKhUncategorized();
             refreshKnowledgeBaseTerms();
         });
     }
@@ -1258,6 +1261,7 @@ function initKnowledgeBaseBrowse() {
             axisToggle.querySelectorAll('[data-axis]').forEach((b) => b.classList.toggle('active', b === btn));
             setKhMode('browse');
             renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+            refreshKhUncategorized();
             refreshKnowledgeBaseTerms();
         });
     }
@@ -1322,6 +1326,28 @@ function initKnowledgeBaseBrowse() {
         });
     }
 
+    // Data actions: refresh + rebuild index / cluster jobs.
+    const refreshBtn = document.getElementById('khRefreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            setKhActionStatus('刷新中…');
+            Promise.all([
+                refreshKhStats(),
+                refreshKnowledgeBaseOverview(),
+                refreshKnowledgeBaseCategories(),
+                refreshKnowledgeBaseTerms()
+            ]).then(() => setKhActionStatus('已刷新', 1500));
+        });
+    }
+    const rebuildIndexBtn = document.getElementById('khRebuildIndexBtn');
+    if (rebuildIndexBtn) {
+        rebuildIndexBtn.addEventListener('click', () => runKnowledgeRebuild('index', '索引'));
+    }
+    const rebuildClusterBtn = document.getElementById('khRebuildClusterBtn');
+    if (rebuildClusterBtn) {
+        rebuildClusterBtn.addEventListener('click', () => runKnowledgeRebuild('cluster', '分类'));
+    }
+
     // Sync controls to the default axis/card-type before first load.
     if (cardTypeSelect) cardTypeSelect.value = state.knowledgeBase.cardType;
 
@@ -1329,6 +1355,61 @@ function initKnowledgeBaseBrowse() {
     refreshKnowledgeBaseOverview();
     refreshKnowledgeBaseCategories();
     refreshKnowledgeBaseTerms();
+}
+
+function setKhActionStatus(message, clearAfterMs = 0) {
+    const node = document.getElementById('khActionStatus');
+    if (!node) return;
+    node.textContent = message || '';
+    if (clearAfterMs > 0) {
+        setTimeout(() => { if (node.textContent === message) node.textContent = ''; }, clearAfterMs);
+    }
+}
+
+function setKhRebuildDisabled(disabled) {
+    state.knowledgeBase.rebuilding = disabled;
+    ['khRebuildIndexBtn', 'khRebuildClusterBtn', 'khRefreshBtn'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = disabled;
+    });
+}
+
+// Start an `index` / `cluster` knowledge job from the Hub, poll to completion,
+// then refresh the browse data so new cards/classification show up without a
+// trip to Knowledge OPS.
+async function runKnowledgeRebuild(jobType, label) {
+    if (state.knowledgeBase.rebuilding) return;
+    setKhRebuildDisabled(true);
+    setKhActionStatus(`重建${label}中…`);
+    try {
+        const startRes = await api.startKnowledgeJob({ jobType, scope: {}, batchSize: 400, triggeredBy: 'knowledge-hub' });
+        const jobId = Number(startRes?.job?.id || 0);
+        if (!jobId) throw new Error('job not created');
+
+        const terminal = new Set(['success', 'partial', 'failed', 'cancelled']);
+        let status = 'running';
+        for (let i = 0; i < 80; i += 1) {
+            await new Promise((r) => setTimeout(r, 2500));
+            const jobRes = await api.getKnowledgeJob(jobId);
+            status = String(jobRes?.job?.status || '').toLowerCase();
+            if (terminal.has(status)) break;
+        }
+        if (status === 'failed') {
+            setKhActionStatus(`重建${label}失败`, 4000);
+        } else {
+            setKhActionStatus(`重建${label}完成`, 2500);
+        }
+        await Promise.all([
+            refreshKhStats(),
+            refreshKnowledgeBaseOverview(),
+            refreshKnowledgeBaseCategories(),
+            refreshKnowledgeBaseTerms()
+        ]);
+    } catch (err) {
+        setKhActionStatus(`重建${label}出错: ${err.message}`, 5000);
+    } finally {
+        setKhRebuildDisabled(false);
+    }
 }
 
 const KH_AXIS_CARDTYPE = { function: 'grammar_ja', topic: 'trilingual', all: 'all' };
@@ -1374,7 +1455,8 @@ async function refreshKhStats() {
         renderKhStats();
         if (state.knowledgeBase.navMode === 'insight') renderKhInsightList();
     } catch (err) {
-        console.warn('[KnowledgeHub] stats failed:', err.message);
+        const node = document.getElementById('knowledgeHubCounts');
+        if (node) node.innerHTML = `<span class="empty-hint">统计加载失败：${escapeHtml(err.message)}</span>`;
     }
 }
 
@@ -1488,12 +1570,51 @@ function closeKhCard() {
 }
 
 async function refreshKnowledgeBaseCategories() {
+    const node = document.getElementById('knowledgeBaseCategories');
     try {
         const res = await api.getKnowledgeBaseCategories('all');
         state.knowledgeBase.categories = Array.isArray(res?.categories) ? res.categories : [];
-        renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+        await refreshKhUncategorized();
     } catch (err) {
-        console.warn('[KnowledgeBase] categories failed:', err.message);
+        if (node) node.innerHTML = `<div class="empty-hint">分类加载失败：${escapeHtml(err.message)}（点「刷新」重试）</div>`;
+    }
+}
+
+// Count of indexed terms on the current axis whose card is in no active
+// cluster (the "未分类" bucket). Axis-dependent via the card-type filter.
+async function refreshKhUncategorized() {
+    try {
+        const res = await api.listKnowledgeBaseTerms({
+            uncategorized: true,
+            cardType: state.knowledgeBase.cardType,
+            pageSize: 1
+        });
+        state.knowledgeBase.uncategorizedCount = Number(res?.total || 0);
+    } catch (err) {
+        state.knowledgeBase.uncategorizedCount = 0;
+    }
+    renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+}
+
+// Staleness badge: show how many generated cards are not yet in the term index
+// (i.e. a `index` rebuild is due).
+async function refreshKhStaleness() {
+    const node = document.getElementById('khStaleHint');
+    if (!node) return;
+    try {
+        const res = await api.getHistory({ page: 1, pageSize: 1 });
+        const genTotal = Number(res?.pagination?.total || 0);
+        const indexed = Number(state.knowledgeBase.overview?.total || 0);
+        const behind = genTotal - indexed;
+        if (indexed > 0 && behind > 0) {
+            node.hidden = false;
+            node.textContent = `${behind} 张卡未入索引 · 点「重建索引」`;
+        } else {
+            node.hidden = true;
+            node.textContent = '';
+        }
+    } catch (err) {
+        node.hidden = true;
     }
 }
 
@@ -1503,6 +1624,7 @@ async function refreshKnowledgeBaseOverview() {
         state.knowledgeBase.overview = res?.overview || null;
         renderKnowledgeBaseOverview(state.knowledgeBase.overview);
         renderKnowledgeBaseTags(state.knowledgeBase.overview);
+        refreshKhStaleness();
     } catch (err) {
         console.warn('[KnowledgeBase] overview failed:', err.message);
     }
@@ -1512,12 +1634,14 @@ async function refreshKnowledgeBaseTerms() {
     const token = ++state.knowledgeBaseToken;
     const kb = state.knowledgeBase;
     try {
+        const isUncategorized = kb.category === '__uncategorized__';
         const res = await api.listKnowledgeBaseTerms({
             query: kb.query,
             langProfile: kb.langProfile,
             cardType: kb.cardType,
             tag: kb.tag,
-            category: kb.category,
+            category: isUncategorized ? '' : kb.category,
+            uncategorized: isUncategorized,
             sort: kb.sort,
             page: kb.page,
             pageSize: kb.pageSize
@@ -1587,7 +1711,14 @@ function renderKnowledgeBaseCategories(categories) {
         }
         return `${header}<div class="kh-cat-list">${groupRows.map(item).join('')}</div>`;
     }).join('');
-    node.innerHTML = sections || '<div class="empty-hint">暂无分类</div>';
+
+    const uncatCount = Number(state.knowledgeBase.uncategorizedCount || 0);
+    const uncatActive = active === '__uncategorized__';
+    const uncatHtml = uncatCount > 0
+        ? `<button type="button" class="kh-cat kh-cat-uncat ${uncatActive ? 'active' : ''}" data-cluster-key="__uncategorized__" title="未归入任何语义分类的卡片（跑「重建分类」可归类）"><span class="kh-cat-label">未分类</span><span class="kh-cat-count">${uncatCount}</span></button>`
+        : '';
+
+    node.innerHTML = (sections || '') + uncatHtml || '<div class="empty-hint">暂无分类</div>';
 }
 
 function renderKnowledgeBaseTerms() {
