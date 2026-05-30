@@ -161,6 +161,29 @@ h1 {
     color: var(--text-secondary);
 }
 
+/* Dashboard-family page theme (Mission Control / Knowledge OPS / Knowledge Hub).
+   Previously this block was duplicated inline in each of the three HTML files;
+   it is attribute-scoped here so it overrides the base rules above without
+   touching index.html (which doesn't carry data-dashboard-page). */
+body[data-dashboard-page] {
+    background-color: #f8f9fa;
+    background-image:
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+    color: #1f2937;
+}
+
+body[data-dashboard-page] .dashboard-container {
+    max-width: 1600px;
+    padding: 24px;
+}
+
+body[data-dashboard-page] .card-header h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    color: #6b7280;
+}
+
 /* Card Sizes */
 .card-sm { grid-column: span 1; } /* 1 unit wide */
 .card-md { grid-column: span 1; } /* 1 unit wide (same as sm for now, but conceptual) */
