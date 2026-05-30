@@ -20,12 +20,12 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 npm test                        # node:test unit suite (tests/unit/*.test.js, ~249 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
-npm run test:e2e                # Full directory (all 5 specs, hermetic via resetServerState)
+npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
 npm run test:e2e:smoke          # Happy-path generation/OCR/history
 npm run test:e2e:pages          # Page navigation/routing
 npm run test:e2e:gemini-sanitize # MCP diagnostic stripping regression
 npm run test:e2e:real           # Hits real Gemini (needs RUN_REAL_GEMINI_E2E=1)
-# frontend-regression.spec.js has no dedicated script — runs as part of test:e2e
+# frontend-regression.spec.js + knowledge-hub.spec.js have no dedicated script — run as part of test:e2e
 ```
 Specs share one server + DB but each spec's `test.beforeAll` calls `resetServerState(request)` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits `POST /api/_test/reset` (mounted only under `E2E_TEST_MODE=1`) to wipe all tables + the records dir. New specs MUST add this hook or they'll see leftover state from earlier files. Single test: `npx playwright test tests/e2e/<file>.spec.js -g "<name>"`.
 
@@ -211,6 +211,8 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 **E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/tests/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
 
 Per-spec hermetic state is enforced via `resetServerState(request)` in `test.beforeAll` — see the Tests section above for details.
+
+`knowledge-hub.spec.js` covers the three-pane explorer (panes, axis toggle, category + uncategorized filtering, insights swap, relation inspector, embedded card modal). Because knowledge jobs are stubbed under E2E_TEST_MODE, it seeds a deterministic mini corpus via the test-only `POST /api/_test/seed-knowledge` (in [routes/testReset.js](routes/testReset.js), gated on `E2E_TEST_MODE=1` like `/api/_test/reset`).
 
 ## Lint
 
