@@ -52,6 +52,7 @@
 ### 4. UI / Card 功能
 
 - `Docs/Features/Modern_Card_UI_Design.md`
+- `Docs/Features/Knowledge_Hub_and_Semantic_Classification.md`（语义分类两轴分类法 + Knowledge Hub 三栏浏览器 + 卡片嵌入弹窗）
 
 ### 5. 测试与验收
 

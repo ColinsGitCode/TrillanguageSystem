@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~238 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~249 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all 5 specs, hermetic via resetServerState)
@@ -66,7 +66,8 @@ routes/                Each file = one express.Router() for a domain
 ├── health.js          /api/health + /api/gemini/auth/*
 ├── history.js         /api/history /statistics /search /recent
 ├── dashboard.js       /api/dashboard/*
-├── knowledge.js       /api/knowledge/*  (17 routes)
+├── knowledge.js       /api/knowledge/*  (20 routes — jobs, base browse +
+│                       categories, synonyms, grammar, clusters, relations)
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            DELETE /api/records/:id
 services/              Business logic, grouped by domain subdirectory
@@ -92,8 +93,11 @@ services/              Business logic, grouped by domain subdirectory
 │   ├── knowledgeAnalysisEngine.js  Thin dispatcher — runTask(type, cards, opts)
 │   ├── knowledgeJobService.js
 │   ├── textUtils.js            shared helpers
+│   ├── taxonomy.js            curated two-axis semantic taxonomy (function /
+│   │                          topic) consumed by the cluster task
 │   └── tasks/                  {summary, cardIndex, grammarLink, cluster,
 │                                issuesAudit, synonymBoundary}.js
+│                              (cluster = rules-first + LLM-fallback classifier)
 ├── observability/     observabilityService.js, healthCheckService.js,
 │                      statisticsService.js
 ├── storage/           DB + filesystem
@@ -117,7 +121,7 @@ services/              Business logic, grouped by domain subdirectory
 ├── ocr/               tesseractOcrService.js
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~238 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~249 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (~14 tables, FTS5 virtual table)
 ```
@@ -168,13 +172,21 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
 ### Subsystems
 
 - **Knowledge analysis** — `knowledgeAnalysisEngine.js` runs 6 task types (summary, index, synonym_boundary, grammar_link, cluster, issues_audit). UI: `knowledge-hub.html` (viewer), `knowledge-ops.html` (job mgmt).
+  - **Semantic classification** — the `cluster` task ([services/knowledge/tasks/cluster.js](services/knowledge/tasks/cluster.js)) classifies cards into a **curated two-axis taxonomy** ([services/knowledge/taxonomy.js](services/knowledge/taxonomy.js)): grammar cards (`card_type === 'grammar_ja'`) onto a **`function`** axis (communicative function — 疑问 / 因果 / 假设 …, modeled on the Feishu「日语句式索引」base), everything else onto a **`topic`** axis (subject domain). It is **rules-first + LLM-fallback**: keyword rules place most cards, unmatched cards are batched to Gemini (default on, `KNOWLEDGE_CLUSTER_LLM_ENABLED`), residue lands in the axis fallback bucket. Results write `knowledge_clusters` (with an additive `taxonomy` column) + `knowledge_cluster_cards`. Categories are exposed via `GET /api/knowledge/base/categories?taxonomy=function|topic|all`; `/api/knowledge/base/terms` supports `category=<clusterKey>` and `uncategorized=1` filters.
+  - **Knowledge Hub explorer** — `knowledge-hub.html` is a three-pane "knowledge explorer" (driven by `initKnowledgeBaseBrowse()` in `dashboard.js`): left nav (axis toggle + semantic-category tree + tags + Insights entries), centre term/insight list, right Relation Inspector. Data actions (refresh / rebuild-index / rebuild-cluster) start knowledge jobs from the Hub; clicking a term opens the **main app's native card modal embedded** via `/?card=<id>&embed=1` (see "Card embed mode" below). See [Docs/Features/Knowledge_Hub_and_Semantic_Classification.md](Docs/Features/Knowledge_Hub_and_Semantic_Classification.md).
 - **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
 
 ### Frontend (public/)
 
-Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `knowledge-hub.html`, `knowledge-ops.html`. ES modules in `public/js/modules/` (`app.js`, `api.js`, `store.js`, `audio-player.js`, `dashboard.js`, `generation-job-detail.js`). marked.js + DOMPurify.
+Vanilla JS, no framework. Pages: `index.html` (main app), `dashboard.html`, `knowledge-hub.html`, `knowledge-ops.html`. ES modules in `public/js/modules/` (`app.js`, `api.js`, `store.js`, `audio-player.js`, `dashboard.js`, `generation-job-detail.js`, `info-modal.js`, `utils.js`, `dashboard-format.js`). `dashboard.js` serves all three dashboard-family pages (branch on `body[data-dashboard-page]`).
+
+**Vendored libs**: marked, DOMPurify and d3 are self-hosted under `public/vendor/` (served by `express.static('public')`), not loaded from a CDN — DOMPurify is security-critical so it must always load. Google Fonts is still CDN (degrades gracefully). `eslint` ignores `public/`, so frontend JS is only validated by the Playwright e2e suite.
+
+**Card embed mode**: `index.html` accepts `/?card=<generationId>&embed=1` — `init()` → `initEmbeddedCard()` mounts only the card modal (skips folder loading + the queue/health pollers), adds `kh-embed` to `<html>` (a pre-paint inline script does this to avoid a flash), reparents the modal overlay to `<body>` and hides every other body-level node via CSS. The Knowledge Hub embeds this in an iframe so a clicked term shows the exact main-app card modal (CONTENT/INTEL/KNOWLEDGE tabs, furigana, audio).
 
 **Text Selection → Generate**: select text in a card's content; floating "✦ Generate Card" button enqueues a background generation task — does NOT close the modal. See `initSelectionToGenerate()` / `checkSelection()` in `app.js`.
+
+**Dashboard polling** pauses while the tab is hidden (`isPageHidden()` guard on the health/queue/knowledge intervals) and refreshes once on `visibilitychange`.
 
 ## Logging
 
@@ -191,7 +203,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~238 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~249 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
