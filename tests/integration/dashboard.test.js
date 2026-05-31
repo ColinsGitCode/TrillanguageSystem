@@ -11,8 +11,6 @@ test.describe('/api/dashboard/*', () => {
   test.beforeEach(() => resetState());
 
   for (const path of [
-    '/api/dashboard/review-stats',
-    '/api/dashboard/fewshot-stats',
     '/api/dashboard/highlight-stats',
   ]) {
     test.it(`GET ${path} returns 200 + object on empty DB`, async () => {

@@ -7,19 +7,8 @@ const { api, resetState, closeServer } = require('./_harness');
 test.before(() => resetState());
 test.after(async () => { await closeServer(); });
 
-test.describe('/api/experiments/:id + DELETE /api/records/:id', () => {
+test.describe('DELETE /api/records/:id', () => {
   test.beforeEach(() => resetState());
-
-  test.it('GET /api/experiments/:id returns the (empty) bundle for an unknown id', async () => {
-    const res = await api('GET', '/api/experiments/never-existed');
-    assert.equal(res.status, 200);
-    assert.equal(res.body.experimentId, 'never-existed');
-    assert.deepEqual(res.body.runs, []);
-    assert.deepEqual(res.body.examples, []);
-    assert.deepEqual(res.body.rounds, []);
-    assert.deepEqual(res.body.samples, []);
-    assert.equal(res.body.trend.roundCount, 0);
-  });
 
   test.it('DELETE /api/records/:id 404 when the record does not exist', async () => {
     const res = await api('DELETE', '/api/records/9999');

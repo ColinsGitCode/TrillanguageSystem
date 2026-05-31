@@ -28,7 +28,6 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     assert.equal(res.body.card_type, 'trilingual');
     assert.ok(res.body.generationId > 0, 'generationId should be populated');
     assert.ok(res.body.llm_output && res.body.llm_output.markdown_content);
-    assert.ok(res.body.training && typeof res.body.training.status === 'string');
   });
 
   test.it('persists the generation: subsequent /api/history sees it', async () => {

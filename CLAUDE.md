@@ -19,6 +19,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 ```bash
 npm test                        # node:test unit suite (tests/unit/*.test.js, ~272 tests, ~1s)
 npm run test:unit               # Alias for the above
+npm run test:integration        # node:test L2 route tests (tests/integration/*.test.js, boots real Express on :memory:)
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
 npm run test:e2e:smoke          # Happy-path generation/OCR/history
@@ -132,6 +133,7 @@ services/              Business logic, grouped by domain subdirectory
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
 tests/unit/            node:test, ~272 tests, in-memory SQLite for DB tests
+tests/integration/     node:test L2 route tests — boot real Express on :memory: + E2E_TEST_MODE
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (~21 tables, FTS5 virtual table)
 ```
@@ -220,6 +222,8 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
+
+**Integration** ([tests/integration/](tests/integration/), node:test — the "L2" route tier): `npm run test:integration`. A shared boot harness ([tests/integration/_harness.js](tests/integration/_harness.js)) pins env (`DB_PATH=:memory:`, `E2E_TEST_MODE=1`, `PORT=0`, blank TTS) then requires `server.js` to boot the **real Express stack** on a random port, and exposes a zero-dep `api(method, route, {body, headers})` fetch helper + `resetState()` (`truncateAllForTests`). Unlike unit tests (mocked DB) this exercises the actual route → service → DB path; unlike e2e it has no browser. Each test file runs in its own subprocess. Like e2e it's under `E2E_TEST_MODE`, so `/api/generate` uses the fixture branch. ~47 tests.
 
 **E2E** ([tests/e2e/](tests/e2e/), Playwright): runs against an isolated server via `scripts/tests/startE2EServer.sh` (port 3310, temp DB+records, `E2E_TEST_MODE=1`). E2E mode **bypasses `generateWithProvider`** — `/api/generate` calls `buildE2EGenerateResult` (fixture). Don't rely on e2e to catch regressions in the real generation pipeline. Specific phrase prefixes trigger deterministic behaviours (`__E2E_FAIL_ONCE__`, `__E2E_AUTO_BACKOFF__`, `__E2E_ALWAYS_FAIL__`).
 
