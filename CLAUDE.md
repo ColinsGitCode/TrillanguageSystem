@@ -262,6 +262,8 @@ See `.env.example` for the full set. Key knobs:
 
 **OCR:** `OCR_PROVIDER=tesseract` (recommended), `OCR_TESSERACT_ENDPOINT`, `OCR_LANGS`.
 
+**Knowledge analysis (LLM fallback, all optional):** `KNOWLEDGE_CLUSTER_LLM_ENABLED` (default on — the cluster task's LLM fallback) + `KNOWLEDGE_CLUSTER_{LLM_TRANSPORT,MAX_LLM_CARDS,LLM_BATCH_SIZE,LLM_TIMEOUT_MS,MODEL,PROXY_*}`; `KNOWLEDGE_SYNONYM_LLM_ENABLED` (default off) + `KNOWLEDGE_SYNONYM_{...}`. Proxy/model knobs fall back to the `GEMINI_PROXY_*` values. See `.env.example` for the full list. SRS / difficulty / learning-plan read no env (deterministic).
+
 ## Docker services
 
 - **3010** — viewer (Express)
