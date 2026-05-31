@@ -5,6 +5,7 @@
 // Functions take `db` first.
 
 const { safeJsonParse } = require('./helpers');
+const { buildDifficultyScoreSql, difficultyBand, levelFromScore, gradeDifficulty } = require('../../srs/difficulty');
 
 function upsert(db, entries = [], jobId = null) {
   if (!Array.isArray(entries) || entries.length === 0) return 0;
@@ -57,6 +58,18 @@ function upsert(db, entries = [], jobId = null) {
 }
 
 function mapRow(row) {
+  // `difficulty_score` is present on the joined list() query; the simpler
+  // search() reader has no SRS join, so fall back to a heuristic grade.
+  let difficultyScore;
+  let difficulty;
+  if (row.difficulty_score != null) {
+    difficultyScore = Number(row.difficulty_score);
+    difficulty = levelFromScore(difficultyScore);
+  } else {
+    const g = gradeDifficulty({ cardType: row.card_type, langProfile: row.lang_profile, phrase: row.phrase });
+    difficultyScore = g.score;
+    difficulty = g.level;
+  }
   return {
     generationId: row.generation_id,
     phrase: row.phrase,
@@ -69,6 +82,8 @@ function mapRow(row) {
     aliases: safeJsonParse(row.aliases_json, []),
     tags: safeJsonParse(row.tags_json, []),
     score: row.score,
+    difficulty,
+    difficultyScore,
     updatedAt: row.updated_at
   };
 }
@@ -103,39 +118,41 @@ function search(db, { query = '', limit = 50 } = {}) {
 // contract.
 function list(db, {
   query = '', langProfile = '', cardType = '', tag = '', clusterKey = '',
-  uncategorized = false, sort = 'recent', limit = 20, offset = 0
+  uncategorized = false, difficulty = '', sort = 'recent', limit = 20, offset = 0
 } = {}) {
   const where = [];
   const params = {};
+  // Difficulty is derived from a LEFT JOIN to card_srs (empirical) + heuristics.
+  const scoreSql = buildDifficultyScoreSql('t', 's');
+  const fromSql = 'knowledge_terms_index t LEFT JOIN card_srs s ON s.generation_id = t.generation_id';
 
   const q = String(query || '').trim();
   if (q) {
-    where.push('(phrase LIKE @q OR en_headword LIKE @q OR ja_headword LIKE @q OR zh_headword LIKE @q OR aliases_json LIKE @q)');
+    where.push('(t.phrase LIKE @q OR t.en_headword LIKE @q OR t.ja_headword LIKE @q OR t.zh_headword LIKE @q OR t.aliases_json LIKE @q)');
     params.q = `%${q}%`;
   }
   const lp = String(langProfile || '').trim().toLowerCase();
   if (lp && lp !== 'all') {
-    where.push('lower(lang_profile) = @lp');
+    where.push('lower(t.lang_profile) = @lp');
     params.lp = lp;
   }
   const ct = String(cardType || '').trim().toLowerCase();
   if (ct && ct !== 'all') {
-    where.push('lower(card_type) = @ct');
+    where.push('lower(t.card_type) = @ct');
     params.ct = ct;
   }
   const tg = String(tag || '').trim();
   if (tg) {
     // tags_json stores a JSON array string; match the quoted token so "ge"
     // does not match "general".
-    where.push('tags_json LIKE @tag');
+    where.push('t.tags_json LIKE @tag');
     params.tag = `%"${tg}"%`;
   }
   const ck = String(clusterKey || '').trim();
   if (ck && ck !== 'all') {
     // Restrict to terms whose card is mapped to this active cluster (the
-    // semantic-classification category nav). Subquery keeps the FROM clause
-    // unchanged.
-    where.push(`generation_id IN (
+    // semantic-classification category nav).
+    where.push(`t.generation_id IN (
       SELECT cc.generation_id
       FROM knowledge_cluster_cards cc
       JOIN knowledge_clusters c ON c.id = cc.cluster_id
@@ -145,26 +162,34 @@ function list(db, {
   } else if (uncategorized) {
     // Terms whose card is NOT mapped to any active cluster — i.e. not yet
     // classified (scoped by the cardType filter the caller passes for the axis).
-    where.push(`generation_id NOT IN (
+    where.push(`t.generation_id NOT IN (
       SELECT cc.generation_id
       FROM knowledge_cluster_cards cc
       JOIN knowledge_clusters c ON c.id = cc.cluster_id
       WHERE c.is_active = 1
     )`);
   }
+  const band = difficultyBand(difficulty);
+  if (band) {
+    where.push(`(${scoreSql}) >= @diffLo AND (${scoreSql}) < @diffHi`);
+    params.diffLo = band.lo;
+    params.diffHi = band.hi;
+  }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   let orderSql;
-  if (sort === 'score') orderSql = 'ORDER BY score DESC, updated_at DESC';
-  else if (sort === 'phrase') orderSql = 'ORDER BY phrase COLLATE NOCASE ASC';
-  else orderSql = 'ORDER BY updated_at DESC';
+  if (sort === 'score') orderSql = 'ORDER BY t.score DESC, t.updated_at DESC';
+  else if (sort === 'phrase') orderSql = 'ORDER BY t.phrase COLLATE NOCASE ASC';
+  else if (sort === 'difficulty') orderSql = `ORDER BY (${scoreSql}) DESC, t.updated_at DESC`;
+  else if (sort === 'difficulty_asc') orderSql = `ORDER BY (${scoreSql}) ASC, t.updated_at DESC`;
+  else orderSql = 'ORDER BY t.updated_at DESC';
 
   const safeLimit = Math.min(200, Math.max(1, Number(limit) || 20));
   const safeOffset = Math.max(0, Number(offset) || 0);
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM knowledge_terms_index ${whereSql}`).get(params).n;
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM ${fromSql} ${whereSql}`).get(params).n;
   const rows = db.prepare(
-    `SELECT * FROM knowledge_terms_index ${whereSql} ${orderSql} LIMIT @limit OFFSET @offset`
+    `SELECT t.*, (${scoreSql}) AS difficulty_score FROM ${fromSql} ${whereSql} ${orderSql} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: safeLimit, offset: safeOffset });
 
   return { items: rows.map(mapRow), total: Number(total || 0), limit: safeLimit, offset: safeOffset };

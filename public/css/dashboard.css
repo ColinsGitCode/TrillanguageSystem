@@ -1637,9 +1637,23 @@ button[onclick^="navigator.clipboard"]:hover {
 
 .kh-filter-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
 }
+
+/* Difficulty badge on term rows */
+.kh-diff {
+    display: inline-block;
+    font-size: 0.66rem;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 999px;
+    line-height: 1.5;
+    vertical-align: middle;
+}
+.kh-diff.easy { background: rgba(16, 185, 129, 0.14); color: #047857; }
+.kh-diff.medium { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.kh-diff.hard { background: rgba(239, 68, 68, 0.14); color: #b91c1c; }
 
 .kh-filter-row .ko-field { min-width: 0; }
 .kh-filter-row select { width: 100%; }

@@ -109,3 +109,27 @@ SM-2 变体，纯函数 `schedule(state, grade) → nextState`（无 DB / 无 Da
 Knowledge Hub 左栏「复习 Review」入口（带 `due N · new M` 徽标）→ 中栏切到第三种模式（browse / insight / review）：
 进度行 + 当前卡（phrase / 卡型 / NEW 标记 / 「查看卡片」复用嵌入弹窗）+ 4 个评分按钮。评分后推进下一张，
 本地队列耗尽自动再拉；队列清空显示「今日复习完成」。
+
+## 10. 难度分级（`services/srs/difficulty.js`）
+
+给每张卡评 `easy / medium / hard`（0–100 分分桶），用于 Hub 浏览的筛选/排序/徽标。
+
+### 10.1 信号
+
+- **SRS 实证**（已复习卡）：ease_factor 越低、lapses 越多 = 越难。score = ease 部分（ease 2.6→1.3 映射 0→78）
+  + lapses 部分（每次 +11，封顶 22）。
+- **启发式**（未复习卡）：base 28 + grammar_ja(+22) + 语言画像(ja +16 / mixed +8) + 短语长度(≥12 +12 / ≥6 +6)。
+- 分桶：`<34 easy / <67 medium / 否则 hard`。
+
+### 10.2 单一来源、零漂移
+
+打分常量只定义一份，被两处共用：
+- 纯 JS `gradeDifficulty(card)` —— 逐行打分（如 search() 路径、SRS 卡）。
+- `buildDifficultyScoreSql(t, s)` —— 生成等价 SQLite 表达式，供 `knowledgeTermsIndex.list` 在
+  `card_srs` LEFT JOIN 上做**分页正确**的筛选/排序。单测断言两者在样例行上一致。
+
+### 10.3 集成
+
+- `GET /api/knowledge/base/terms` 每条返回 `difficulty` + `difficultyScore`；支持 `difficulty=easy|medium|hard`
+  过滤与 `sort=difficulty`（最难优先）。
+- Hub 工具条加「Diff」筛选 + 「难度↓」排序；词条行 phrase 前显示难度徽标（简单/中等/困难，绿/黄/红）。

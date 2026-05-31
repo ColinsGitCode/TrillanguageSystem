@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~261 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~271 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
@@ -100,7 +100,9 @@ services/              Business logic, grouped by domain subdirectory
 │                                issuesAudit, synonymBoundary}.js
 │                              (cluster = rules-first + LLM-fallback classifier)
 ├── srs/               srsScheduler.js — SM-2 spaced-repetition engine (pure,
-│                      grade in → next interval/ease/due out; unit-tested)
+│                      grade in → next interval/ease/due out; unit-tested) +
+│                      difficulty.js — card difficulty grading (SRS-empirical +
+│                      heuristic; JS fn + matching SQL fragment, one constant set)
 ├── observability/     observabilityService.js, healthCheckService.js,
 │                      statisticsService.js
 ├── storage/           DB + filesystem
@@ -126,7 +128,7 @@ services/              Business logic, grouped by domain subdirectory
 ├── ocr/               tesseractOcrService.js
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~261 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~271 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (~16 tables, FTS5 virtual table)
 ```
@@ -181,6 +183,7 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
   - **Knowledge Hub explorer** — `knowledge-hub.html` is a three-pane "knowledge explorer" (driven by `initKnowledgeBaseBrowse()` in `dashboard.js`): left nav (axis toggle + semantic-category tree + tags + Insights entries), centre term/insight list, right Relation Inspector. Data actions (refresh / rebuild-index / rebuild-cluster) start knowledge jobs from the Hub; clicking a term opens the **main app's native card modal embedded** via `/?card=<id>&embed=1` (see "Card embed mode" below). See [Docs/Features/Knowledge_Hub_and_Semantic_Classification.md](Docs/Features/Knowledge_Hub_and_Semantic_Classification.md).
 - **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
 - **Spaced repetition (SRS)** — per-card review scheduling via an SM-2 variant ([services/srs/srsScheduler.js](services/srs/srsScheduler.js), pure + unit-tested) over `card_srs` + `card_reviews` ([services/storage/db/cardSrs.js](services/storage/db/cardSrs.js)). 4-button grading (Again/Hard/Good/Easy). `GET /api/srs/queue` returns due (tracked + overdue) plus new (untracked) cards; `POST /api/srs/review {generationId, grade}` advances the schedule; `GET /api/srs/stats`. UI: the Knowledge Hub's「复习 Review」mode (a third centre-pane mode in `dashboard.js`) — due queue + grade buttons, with「查看卡片」reusing the embedded card modal.
+- **Difficulty grading** — [services/srs/difficulty.js](services/srs/difficulty.js) grades each card easy/medium/hard from SRS signals (low ease / high lapses ⇒ hard) when reviewed, else a heuristic prior (card type / language profile / phrase length). The scoring constants are defined once and consumed by both the pure JS `gradeDifficulty` and a matching SQL fragment (`buildDifficultyScoreSql`) so `/api/knowledge/base/terms` can filter (`difficulty=easy|medium|hard`) and sort (`sort=difficulty`) with correct pagination; every term row returns `difficulty` + `difficultyScore`. UI: a difficulty filter + colored badge in the Hub term list.
 
 ### Frontend (public/)
 
@@ -209,7 +212,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~261 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~271 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.

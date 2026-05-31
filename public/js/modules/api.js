@@ -250,6 +250,7 @@ class ApiService {
         if (params.tag) query.set('tag', String(params.tag));
         if (params.uncategorized) query.set('uncategorized', '1');
         else if (params.category && params.category !== 'all') query.set('category', String(params.category));
+        if (params.difficulty && params.difficulty !== 'all') query.set('difficulty', String(params.difficulty));
         if (params.sort) query.set('sort', String(params.sort));
         query.set('page', String(params.page || 1));
         query.set('pageSize', String(params.pageSize || 20));

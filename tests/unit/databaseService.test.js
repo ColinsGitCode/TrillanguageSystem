@@ -1132,6 +1132,44 @@ test.describe('databaseService — knowledge-base browse', () => {
     } finally { db.close(); }
   });
 
+  test.it('listKnowledgeBaseTerms grades difficulty (heuristic + SRS) and filters/sorts by it', () => {
+    const difficulty = require('../../services/srs/difficulty');
+    const db = freshDb();
+    try {
+      // easy: short trilingual en. hard: long grammar_ja ja. medium: SRS low-ease.
+      const gEasy = newGenId(db, { phrase: 'api', baseFilename: 'd1', requestId: 'rid_d_1' });
+      const gHard = newGenId(db, { phrase: '〜わけだ、〜という訳だよ', baseFilename: 'd2', requestId: 'rid_d_2' });
+      const gMed = newGenId(db, { phrase: 'handoff', baseFilename: 'd3', requestId: 'rid_d_3' });
+      const job = newJobId(db);
+      db.upsertKnowledgeTermsIndex([
+        { generationId: gEasy, phrase: 'api', cardType: 'trilingual', langProfile: 'en', score: 0.5 },
+        { generationId: gHard, phrase: '〜わけだ、〜という訳だよ', cardType: 'grammar_ja', langProfile: 'ja', score: 0.5 },
+        { generationId: gMed, phrase: 'handoff', cardType: 'trilingual', langProfile: 'mixed', score: 0.5 }
+      ], job);
+
+      const all = db.listKnowledgeBaseTerms({ limit: 50 });
+      const byId = Object.fromEntries(all.items.map((it) => [it.generationId, it]));
+      // SQL score must agree with the JS heuristic grade.
+      assert.equal(byId[gEasy].difficulty, 'easy');
+      assert.equal(byId[gEasy].difficultyScore, difficulty.gradeDifficulty({ cardType: 'trilingual', langProfile: 'en', phrase: 'api' }).score);
+      assert.equal(byId[gHard].difficulty, 'hard');
+      assert.equal(byId[gMed].difficulty, 'medium');
+
+      // filter by level
+      assert.equal(db.listKnowledgeBaseTerms({ difficulty: 'hard', limit: 50 }).total, 1);
+      assert.equal(db.listKnowledgeBaseTerms({ difficulty: 'easy', limit: 50 }).items[0].generationId, gEasy);
+
+      // sort hardest first
+      const sorted = db.listKnowledgeBaseTerms({ sort: 'difficulty', limit: 50 });
+      assert.equal(sorted.items[0].generationId, gHard);
+
+      // SRS empirical overrides heuristic: drive gEasy to low ease → hard.
+      for (let i = 0; i < 5; i += 1) db.reviewCardSrs(gEasy, 'again');
+      const after = db.listKnowledgeBaseTerms({ difficulty: 'hard', limit: 50 });
+      assert.ok(after.items.some((it) => it.generationId === gEasy), 'lapsed card becomes hard');
+    } finally { db.close(); }
+  });
+
   test.it('listKnowledgeBaseTerms clusterKey filter restricts to mapped cards', () => {
     const db = freshDb();
     try {

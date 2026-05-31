@@ -135,6 +135,7 @@ router.get('/api/knowledge/base/terms', (req, res) => {
       tag: String(req.query.tag || ''),
       clusterKey: String(req.query.category || req.query.clusterKey || ''),
       uncategorized: ['1', 'true', 'yes'].includes(String(req.query.uncategorized || '').toLowerCase()),
+      difficulty: String(req.query.difficulty || ''),
       sort: String(req.query.sort || 'recent'),
       limit: pageSize,
       offset: (page - 1) * pageSize

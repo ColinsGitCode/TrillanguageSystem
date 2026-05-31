@@ -35,6 +35,7 @@ const state = {
         cardType: 'all',
         tag: '',
         sort: 'recent',
+        difficulty: 'all',
         category: '',
         categories: [],
         axis: 'function',
@@ -1189,6 +1190,14 @@ function initKnowledgeBaseBrowse() {
             refreshKnowledgeBaseTerms();
         });
     }
+    const difficultySelect = document.getElementById('knowledgeBaseDifficulty');
+    if (difficultySelect) {
+        difficultySelect.addEventListener('change', () => {
+            state.knowledgeBase.difficulty = difficultySelect.value || 'all';
+            state.knowledgeBase.page = 1;
+            refreshKnowledgeBaseTerms();
+        });
+    }
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             if (state.knowledgeBase.page > 1) {
@@ -1749,6 +1758,7 @@ async function refreshKnowledgeBaseTerms() {
             tag: kb.tag,
             category: isUncategorized ? '' : kb.category,
             uncategorized: isUncategorized,
+            difficulty: kb.difficulty,
             sort: kb.sort,
             page: kb.page,
             pageSize: kb.pageSize
@@ -1844,13 +1854,17 @@ function renderKnowledgeBaseTerms() {
             const isActive = selectedKey && selectedKey === key;
             const heads = [term.zhHeadword, term.enHeadword, term.jaHeadword].filter(Boolean).join(' · ');
             const tags = Array.isArray(term.tags) ? term.tags.slice(0, 4).join(' / ') : '';
+            const diff = String(term.difficulty || '');
+            const diffLabel = { easy: '简单', medium: '中等', hard: '困难' }[diff] || '';
+            const diffBadge = diffLabel ? `<span class="kh-diff ${diff}" title="难度 ${diffLabel}">${diffLabel}</span> ` : '';
             return `
                 <div class="knowledge-hub-item ${isActive ? 'active' : ''}"
                      data-entity-type="term"
                      data-key="${escapeHtml(key)}"
                      data-generation-id="${Number(term.generationId || 0)}"
+                     data-difficulty="${escapeHtml(diff)}"
                      data-testid="knowledge-base-term">
-                    <div class="name">${escapeHtml(term.phrase || '-')} <span class="mono" style="color:#9ca3af;">${escapeHtml(term.langProfile || '')}</span></div>
+                    <div class="name">${diffBadge}${escapeHtml(term.phrase || '-')} <span class="mono" style="color:#9ca3af;">${escapeHtml(term.langProfile || '')}</span></div>
                     <div class="meta">${escapeHtml(heads || '—')}${tags ? ` · ${escapeHtml(tags)}` : ''}</div>
                 </div>
             `;

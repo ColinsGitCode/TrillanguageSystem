@@ -99,7 +99,18 @@ test.describe('Knowledge Hub explorer', () => {
     await expect(modal).toBeHidden();
   });
 
-  test('06 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
+  test('06 难度徽标与按难度筛选', async ({ page }) => {
+    await page.goto('/knowledge-hub.html');
+    // grammar terms (default function axis) carry a difficulty badge
+    await expect(page.getByTestId('knowledge-base-term-list').locator('.kh-diff').first()).toBeVisible();
+    // switch to 全部 axis (card-type all) then filter to 简单 → only the trilingual 'api'
+    await page.getByTestId('kh-axis-toggle').getByRole('button', { name: '全部' }).click();
+    await page.getByTestId('knowledge-base-difficulty').selectOption('easy');
+    await expect(page.locator('#knowledgeBasePageInfo')).toContainText('1 - 1 / 1');
+    await expect(page.getByTestId('knowledge-base-term-list')).toContainText('api');
+  });
+
+  test('07 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
 
     await page.getByTestId('kh-review-btn').click();
