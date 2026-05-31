@@ -274,6 +274,12 @@ class ApiService {
         return this.fetchJson('/api/srs/stats');
     }
 
+    async getLearningPlan(axis = 'all') {
+        const query = new URLSearchParams();
+        query.set('axis', String(axis || 'all'));
+        return this.fetchJson(`/api/srs/plan?${query.toString()}`);
+    }
+
     async reviewSrs(generationId, grade) {
         return this.fetchJson('/api/srs/review', {
             method: 'POST',

@@ -941,6 +941,59 @@ test.describe('databaseService — knowledge_clusters', () => {
   });
 });
 
+// -- learning plan -----------------------------------------------------------
+
+test.describe('databaseService — getLearningPlan', () => {
+  function newGenId(db, overrides = {}) {
+    return db.insertGeneration({
+      generation: buildGenerationFixture({ generation: overrides }).generation,
+      observability: buildGenerationFixture().observability,
+      audioFiles: []
+    });
+  }
+
+  test.it('builds easy→hard stages from clusters with SRS progress', () => {
+    const db = freshDb();
+    try {
+      const gEasy = newGenId(db, { phrase: 'api', baseFilename: 'lp1', requestId: 'rid_lp_1' });
+      const gHard = newGenId(db, { phrase: '〜わけだ、〜という訳だよ', baseFilename: 'lp2', requestId: 'rid_lp_2' });
+      const idxJob = db.createKnowledgeJob({ jobType: 'index' }).id;
+      db.upsertKnowledgeTermsIndex([
+        { generationId: gEasy, phrase: 'api', cardType: 'trilingual', langProfile: 'en', score: 0.5 },
+        { generationId: gHard, phrase: '〜わけだ、〜という訳だよ', cardType: 'grammar_ja', langProfile: 'ja', score: 0.5 }
+      ], idxJob);
+      const clJob = db.createKnowledgeJob({ jobType: 'cluster' }).id;
+      db.replaceKnowledgeClusterData([
+        { clusterKey: 'tp_engineering', label: '工程技术', taxonomy: 'topic', confidence: 0.8, cards: [{ generationId: gEasy, score: 0.9 }] },
+        { clusterKey: 'fn_causation', label: '因果关系', taxonomy: 'function', confidence: 0.8, cards: [{ generationId: gHard, score: 0.9 }] }
+      ], clJob);
+      // master the easy card (repetitions >= 2)
+      db.reviewCardSrs(gEasy, 'good');
+      db.reviewCardSrs(gEasy, 'good');
+
+      const plan = db.getLearningPlan({ axis: 'all' });
+      // ordered easy → hard
+      assert.deepEqual(plan.stages.map((s) => s.clusterKey), ['tp_engineering', 'fn_causation']);
+      const easyStage = plan.stages[0];
+      assert.equal(easyStage.total, 1);
+      assert.equal(easyStage.learned, 1);
+      assert.equal(easyStage.difficultyLevel, 'easy');
+      const hardStage = plan.stages[1];
+      assert.equal(hardStage.newCount, 1);
+      assert.equal(hardStage.difficultyLevel, 'hard');
+
+      assert.equal(plan.summary.total, 2);
+      assert.equal(plan.summary.learned, 1);
+      // recommended = easiest incomplete stage → the hard one (easy one is done)
+      assert.equal(plan.summary.recommendedStage, 'fn_causation');
+
+      // axis filter scopes to one taxonomy
+      assert.deepEqual(db.getLearningPlan({ axis: 'function' }).stages.map((s) => s.clusterKey), ['fn_causation']);
+      assert.deepEqual(db.getLearningPlan({ axis: 'topic' }).stages.map((s) => s.clusterKey), ['tp_engineering']);
+    } finally { db.close(); }
+  });
+});
+
 // -- knowledge_terms_index ---------------------------------------------------
 
 test.describe('databaseService — knowledge_terms_index', () => {

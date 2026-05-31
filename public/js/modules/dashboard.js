@@ -1273,6 +1273,31 @@ function initKnowledgeBaseBrowse() {
         });
     }
 
+    // Learning plan: staged study path. "学这组" jumps to that category browse.
+    const planBtn = document.getElementById('khPlanBtn');
+    if (planBtn) planBtn.addEventListener('click', () => enterKhPlan());
+    const planPane = document.getElementById('khPlanPane');
+    if (planPane) {
+        planPane.addEventListener('click', (event) => {
+            const studyBtn = event.target.closest('[data-plan-cluster]');
+            if (!studyBtn) return;
+            const key = String(studyBtn.dataset.planCluster || '');
+            const axis = String(studyBtn.dataset.planAxis || 'all');
+            if (axisToggle) {
+                state.knowledgeBase.axis = axis;
+                state.knowledgeBase.cardType = KH_AXIS_CARDTYPE[axis] || 'all';
+                if (cardTypeSelect) cardTypeSelect.value = state.knowledgeBase.cardType;
+                axisToggle.querySelectorAll('[data-axis]').forEach((b) => b.classList.toggle('active', b.dataset.axis === axis));
+            }
+            state.knowledgeBase.category = key;
+            state.knowledgeBase.page = 1;
+            setKhMode('browse');
+            renderKnowledgeBaseCategories(state.knowledgeBase.categories);
+            refreshKhUncategorized();
+            refreshKnowledgeBaseTerms();
+        });
+    }
+
     // Spaced-repetition review: enter review mode + grade / view actions.
     const reviewBtn = document.getElementById('khReviewBtn');
     if (reviewBtn) reviewBtn.addEventListener('click', () => enterKhReview());
@@ -1467,6 +1492,65 @@ async function gradeKhReviewCard(grade) {
     refreshKhReviewStats();
 }
 
+// ===== Learning plan =====
+
+async function enterKhPlan() {
+    setKhMode('plan');
+    const body = document.getElementById('khPlanBody');
+    if (body) body.innerHTML = '<div class="empty-hint">加载学习计划…</div>';
+    try {
+        const axis = state.knowledgeBase.axis || 'all';
+        const res = await api.getLearningPlan(axis);
+        renderKhPlan(res, axis);
+    } catch (err) {
+        if (body) body.innerHTML = `<div class="empty-hint">学习计划加载失败：${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderKhPlan(plan, axis) {
+    const body = document.getElementById('khPlanBody');
+    if (!body) return;
+    const stages = Array.isArray(plan?.stages) ? plan.stages : [];
+    const summary = plan?.summary || {};
+
+    if (!stages.length) {
+        body.innerHTML = '<div class="empty-hint">该轴暂无学习模块（先跑「重建分类」生成语义分类）</div>';
+        return;
+    }
+
+    const learnedTotal = Number(summary.learned || 0);
+    const total = Number(summary.total || 0);
+    const pct = total ? Math.round((learnedTotal / total) * 100) : 0;
+    const head = `
+        <div class="kh-plan-summary">
+            <div class="kh-plan-summary-title">学习进度 ${learnedTotal}/${total}（${pct}%）· ${stages.length} 个模块</div>
+            <div class="kh-plan-summary-meta">今日到期 ${Number(summary.due || 0)} · 新卡 ${Number(summary.newCount || 0)}</div>
+        </div>`;
+
+    const diffLabel = { easy: '易', medium: '中', hard: '难' };
+    const stageHtml = stages.map((st) => {
+        const sp = st.total ? Math.round((st.learned / st.total) * 100) : 0;
+        const isRec = summary.recommendedStage && summary.recommendedStage === st.clusterKey;
+        const b = st.breakdown || {};
+        const seg = (n, cls) => (Number(n || 0) > 0 ? `<span class="kh-plan-seg ${cls}" style="flex:${Number(n)}"></span>` : '');
+        return `
+            <div class="kh-plan-stage ${isRec ? 'recommended' : ''}" data-testid="kh-plan-stage">
+                <div class="kh-plan-stage-head">
+                    <span class="kh-plan-stage-order">${st.order}</span>
+                    <span class="kh-plan-stage-label">${escapeHtml(st.label || st.clusterKey)}</span>
+                    <span class="kh-diff ${st.difficultyLevel}">${diffLabel[st.difficultyLevel] || ''}</span>
+                    ${isRec ? '<span class="kh-plan-rec">建议</span>' : ''}
+                </div>
+                <div class="kh-plan-progress"><div class="kh-plan-progress-bar" style="width:${sp}%"></div></div>
+                <div class="kh-plan-stage-meta">已掌握 ${st.learned}/${st.total} · 到期 ${st.due} · 新 ${st.newCount}</div>
+                <div class="kh-plan-mix">${seg(b.easy, 'easy')}${seg(b.medium, 'medium')}${seg(b.hard, 'hard')}</div>
+                <button class="ko-start-btn kh-plan-study" type="button" data-plan-cluster="${escapeHtml(st.clusterKey)}" data-plan-axis="${escapeHtml(st.taxonomy || axis || 'all')}">学这组 →</button>
+            </div>`;
+    }).join('');
+
+    body.innerHTML = head + `<div class="kh-plan-stages">${stageHtml}</div>`;
+}
+
 function setKhActionStatus(message, clearAfterMs = 0) {
     const node = document.getElementById('khActionStatus');
     if (!node) return;
@@ -1537,6 +1621,7 @@ function setKhMode(mode, insightType) {
     const browse = document.getElementById('khBrowsePane');
     const insight = document.getElementById('khInsightPane');
     const review = document.getElementById('khReviewPane');
+    const plan = document.getElementById('khPlanPane');
     const crumb = document.getElementById('khListCrumb');
     const insightsBox = document.getElementById('khInsights');
 
@@ -1544,16 +1629,20 @@ function setKhMode(mode, insightType) {
     show(browse, mode === 'browse');
     show(insight, mode === 'insight');
     show(review, mode === 'review');
+    show(plan, mode === 'plan');
 
+    if (mode !== 'insight' && insightsBox) {
+        insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
+    }
     if (mode === 'insight') {
         if (crumb) crumb.textContent = KH_INSIGHT_LABEL[state.knowledgeBase.insightType] || '洞察 Insights';
         renderKhInsightList();
     } else if (mode === 'review') {
         if (crumb) crumb.textContent = '复习 · Review';
-        if (insightsBox) insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
+    } else if (mode === 'plan') {
+        if (crumb) crumb.textContent = '学习计划 · Plan';
     } else {
         if (crumb) crumb.textContent = '词条 · Terms';
-        if (insightsBox) insightsBox.querySelectorAll('[data-insight]').forEach((b) => b.classList.remove('active'));
     }
 }
 

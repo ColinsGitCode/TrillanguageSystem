@@ -17,7 +17,7 @@ npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate 
 
 **Tests:**
 ```bash
-npm test                        # node:test unit suite (tests/unit/*.test.js, ~271 tests, ~1s)
+npm test                        # node:test unit suite (tests/unit/*.test.js, ~272 tests, ~1s)
 npm run test:unit               # Alias for the above
 npm run e2e:server              # Start isolated e2e server (:3310, temp DB/records, E2E_TEST_MODE=1)
 npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
@@ -68,7 +68,8 @@ routes/                Each file = one express.Router() for a domain
 ├── dashboard.js       /api/dashboard/*
 ├── knowledge.js       /api/knowledge/*  (20 routes — jobs, base browse +
 │                       categories, synonyms, grammar, clusters, relations)
-├── srs.js             /api/srs/*  (spaced-repetition: queue, review, stats)
+├── srs.js             /api/srs/*  (spaced-repetition: queue, review, stats,
+│                       plan — staged learning path)
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            DELETE /api/records/:id
 services/              Business logic, grouped by domain subdirectory
@@ -123,12 +124,14 @@ services/              Business logic, grouped by domain subdirectory
 │       ├── knowledgeSynonyms.js     candidates + groups + members + boundary
 │       ├── knowledgeRelations.js    knowledge_outputs_raw write + overview /
 │       │                            relations / latest summary
-│       └── cardSrs.js               card_srs + card_reviews (SM-2 state, review
-│                                    log, due queue, stats)
+│       ├── cardSrs.js               card_srs + card_reviews (SM-2 state, review
+│       │                            log, due queue, stats)
+│       └── learningPlan.js          staged learning path (cluster → stage +
+│                                    SRS progress + difficulty mix)
 ├── ocr/               tesseractOcrService.js
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
-tests/unit/            node:test, ~271 tests, in-memory SQLite for DB tests
+tests/unit/            node:test, ~272 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
 database/schema.sql    SQLite schema (~16 tables, FTS5 virtual table)
 ```
@@ -184,6 +187,7 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
 - **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
 - **Spaced repetition (SRS)** — per-card review scheduling via an SM-2 variant ([services/srs/srsScheduler.js](services/srs/srsScheduler.js), pure + unit-tested) over `card_srs` + `card_reviews` ([services/storage/db/cardSrs.js](services/storage/db/cardSrs.js)). 4-button grading (Again/Hard/Good/Easy). `GET /api/srs/queue` returns due (tracked + overdue) plus new (untracked) cards; `POST /api/srs/review {generationId, grade}` advances the schedule; `GET /api/srs/stats`. UI: the Knowledge Hub's「复习 Review」mode (a third centre-pane mode in `dashboard.js`) — due queue + grade buttons, with「查看卡片」reusing the embedded card modal.
 - **Difficulty grading** — [services/srs/difficulty.js](services/srs/difficulty.js) grades each card easy/medium/hard from SRS signals (low ease / high lapses ⇒ hard) when reviewed, else a heuristic prior (card type / language profile / phrase length). The scoring constants are defined once and consumed by both the pure JS `gradeDifficulty` and a matching SQL fragment (`buildDifficultyScoreSql`) so `/api/knowledge/base/terms` can filter (`difficulty=easy|medium|hard`) and sort (`sort=difficulty`) with correct pagination; every term row returns `difficulty` + `difficultyScore`. UI: a difficulty filter + colored badge in the Hub term list.
+- **Learning plan** — [services/storage/db/learningPlan.js](services/storage/db/learningPlan.js) assembles a deterministic staged study path (no LLM): one stage per active semantic cluster (axis-scoped), ordered easy→hard by average card difficulty, each with SRS progress (learned/due/new) + a difficulty mix + a recommended-next stage. `GET /api/srs/plan?axis=function|topic|all`. UI: the Knowledge Hub's「学习计划 Plan」mode (a fourth centre-pane mode) — stage cards with progress bars + a「学这组」action that jumps to that category's filtered browse.
 
 ### Frontend (public/)
 
@@ -212,7 +216,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 ## Testing
 
 **Unit** ([tests/unit/](tests/unit/), node:test):
-- Run with `npm test`. ~271 tests across ~25 modules in ~1s.
+- Run with `npm test`. ~272 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
 - Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.

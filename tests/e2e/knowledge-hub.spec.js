@@ -110,7 +110,18 @@ test.describe('Knowledge Hub explorer', () => {
     await expect(page.getByTestId('knowledge-base-term-list')).toContainText('api');
   });
 
-  test('07 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
+  test('07 学习计划：阶段列表与「学这组」跳转', async ({ page }) => {
+    await page.goto('/knowledge-hub.html');
+    await page.getByTestId('kh-plan-btn').click();
+    await expect(page.getByTestId('kh-plan-pane')).toBeVisible();
+    await expect(page.getByTestId('kh-plan-stage').first()).toBeVisible();
+    // 「学这组」jumps to that category's filtered browse
+    await page.getByTestId('kh-plan-stage').first().getByRole('button', { name: /学这组/ }).click();
+    await expect(page.getByTestId('knowledge-base-term-list')).toBeVisible();
+    await expect(page.getByTestId('knowledge-base-categories').locator('.kh-cat.active')).toHaveCount(1);
+  });
+
+  test('08 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
 
     await page.getByTestId('kh-review-btn').click();

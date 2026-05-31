@@ -64,6 +64,11 @@
                     <span id="khReviewBadge" class="kh-review-badge">due 0 · new 0</span>
                 </button>
 
+                <button id="khPlanBtn" class="kh-plan-entry" type="button" data-testid="kh-plan-btn">
+                    <span class="kh-plan-entry-label">学习计划 Plan</span>
+                    <span class="kh-plan-entry-arrow">›</span>
+                </button>
+
                 <label class="ko-field kh-search">
                     <span>Search</span>
                     <input id="knowledgeBaseSearch" type="search" placeholder="phrase / 词头 / alias…" data-testid="knowledge-base-search" />
@@ -153,6 +158,12 @@
                 <div id="khReviewPane" class="kh-pane" hidden data-testid="kh-review-pane">
                     <div id="khReviewBody" class="kh-review-body">
                         <div class="empty-hint">加载复习队列…</div>
+                    </div>
+                </div>
+
+                <div id="khPlanPane" class="kh-pane kh-scroll" hidden data-testid="kh-plan-pane">
+                    <div id="khPlanBody" class="kh-plan-body">
+                        <div class="empty-hint">加载学习计划…</div>
                     </div>
                 </div>
             </div>

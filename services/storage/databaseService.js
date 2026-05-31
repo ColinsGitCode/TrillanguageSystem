@@ -23,6 +23,7 @@ const knowledgeTermsIndexDomain = require('./db/knowledgeTermsIndex');
 const knowledgeSynonymsDomain = require('./db/knowledgeSynonyms');
 const knowledgeRelationsDomain = require('./db/knowledgeRelations');
 const cardSrsDomain = require('./db/cardSrs');
+const learningPlanDomain = require('./db/learningPlan');
 const testResetDomain = require('./db/testReset');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
@@ -985,6 +986,10 @@ class DatabaseService {
 
   getSrsStats() {
     return cardSrsDomain.getStats(this.db);
+  }
+
+  getLearningPlan(filters = {}) {
+    return learningPlanDomain.getLearningPlan(this.db, filters);
   }
 
   getKnowledgeCategories(filters = {}) {

@@ -31,6 +31,17 @@ router.get('/api/srs/stats', (req, res) => {
   }
 });
 
+// Staged learning path: one stage per active semantic cluster (axis-scoped),
+// ordered easy → hard, with SRS progress + difficulty mix.
+router.get('/api/srs/plan', (req, res) => {
+  try {
+    const plan = dbService.getLearningPlan({ axis: String(req.query.axis || 'all') });
+    res.json({ success: true, ...plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Grade a card (again / hard / good / easy) → advance its schedule.
 router.post('/api/srs/review', (req, res) => {
   try {

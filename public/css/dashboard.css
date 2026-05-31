@@ -1846,6 +1846,73 @@ details.kh-nav-section > summary.kh-nav-title {
 .kh-review-done-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.1rem; color: var(--text-primary); }
 .kh-review-done-meta { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 6px; }
 
+/* ===== Learning plan ===== */
+.kh-plan-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated, #fff);
+    border-radius: 9px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.kh-plan-entry:hover { background: rgba(59, 130, 246, 0.07); border-color: #3b82f6; }
+.kh-plan-entry-arrow { color: var(--text-secondary); }
+
+.kh-plan-body { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+
+.kh-plan-summary {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: rgba(59, 130, 246, 0.05);
+}
+.kh-plan-summary-title { font-weight: 600; color: var(--text-primary); }
+.kh-plan-summary-meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+
+.kh-plan-stages { display: flex; flex-direction: column; gap: 10px; }
+
+.kh-plan-stage {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.kh-plan-stage.recommended { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3); }
+
+.kh-plan-stage-head { display: flex; align-items: center; gap: 8px; }
+.kh-plan-stage-order {
+    width: 22px; height: 22px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: rgba(148, 163, 184, 0.18);
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 700;
+    color: var(--text-secondary);
+}
+.kh-plan-stage-label { font-weight: 600; color: var(--text-primary); flex: 1; }
+.kh-plan-rec {
+    font-size: 0.66rem; font-weight: 600; color: #fff; background: #3b82f6;
+    border-radius: 999px; padding: 1px 7px;
+}
+
+.kh-plan-progress { height: 7px; border-radius: 999px; background: rgba(148, 163, 184, 0.22); overflow: hidden; }
+.kh-plan-progress-bar { height: 100%; background: #10b981; border-radius: 999px; }
+
+.kh-plan-stage-meta { font-size: 0.78rem; color: var(--text-secondary); }
+
+.kh-plan-mix { display: flex; height: 5px; border-radius: 999px; overflow: hidden; gap: 1px; }
+.kh-plan-seg.easy { background: #10b981; }
+.kh-plan-seg.medium { background: #f59e0b; }
+.kh-plan-seg.hard { background: #ef4444; }
+
+.kh-plan-study { align-self: flex-start; }
+
 .kh-list-crumb {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 600;
