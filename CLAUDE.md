@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via an LLM and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), and a knowledge analysis subsystem (synonym groups, grammar patterns, semantic clusters).
+Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via an LLM and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a knowledge analysis subsystem (synonym groups, grammar patterns, two-axis semantic classification), and a learner-facing study layer on top of it (Knowledge Hub semantic browse, SM-2 spaced-repetition review, difficulty grading, staged learning plans).
 
 ## Commands
 
@@ -133,7 +133,7 @@ services/              Business logic, grouped by domain subdirectory
 scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
 tests/unit/            node:test, ~272 tests, in-memory SQLite for DB tests
 tests/e2e/             Playwright
-database/schema.sql    SQLite schema (~16 tables, FTS5 virtual table)
+database/schema.sql    SQLite schema (~21 tables, FTS5 virtual table)
 ```
 
 ### Generation data flow
@@ -168,7 +168,7 @@ viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
 ### Persistence
 
 - **SQLite** via `better-sqlite3`. [services/storage/databaseService.js](services/storage/databaseService.js) is now a thin class (~1100 lines) that owns schema setup + `ensureTableColumns` migrations and delegates each table family to a module under [services/storage/db/](services/storage/db/). Each domain module takes `db` as its first argument and is backed by direct unit tests. Add new tables by creating a new `services/storage/db/<domain>.js` and a delegation wrapper on the class — don't inline new SQL in databaseService.js. The `DatabaseService` class is exposed alongside the singleton so unit tests can use `new DatabaseService(':memory:')`.
-- Schema in `database/schema.sql` (~16 tables: `generations`, `audio_files`, `observability_metrics`, `generation_errors`, `model_statistics`, `system_health`, `generation_jobs`/`_events`, `knowledge_*`, `card_highlights`). FTS5 virtual table backs full-text search.
+- Schema in `database/schema.sql` (~21 tables: `generations`, `audio_files`, `observability_metrics`, `generation_errors`, `model_statistics`, `system_health`, `generation_jobs`/`_events`, `knowledge_*`, `card_highlights`, `card_srs`/`card_reviews`). FTS5 virtual table backs full-text search.
 - **Migrations are additive and automatic** via `ensureTableColumns(...)` on startup. Add columns there, not as separate migration files.
 - Generated card files live on disk under `RECORDS_PATH`, `YYYYMMDD` folders, `(2)`/`(3)` suffixes on conflicts (`fileManager.js`).
 - **Security note**: `RECORDS_PATH` is NOT mounted as static. In the docker layout `DB_PATH` lives inside `RECORDS_PATH`, so a static mount used to expose the DB (and WAL) at `/data/trilingual_records.db` — see the comment in server.js. All file reads go through `/api/folders/:folder/files/:file`.
