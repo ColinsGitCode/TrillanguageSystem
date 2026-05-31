@@ -322,6 +322,29 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .hero-topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .hero-brand {
+    display: none;
+  }
+
+  .dashboard-links {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .dashboard-link {
+    flex: 0 1 auto;
+    font-size: 0.9rem;
+    padding: 7px 12px;
+  }
 }
 
 @keyframes queuePulse {

@@ -247,7 +247,7 @@ function takeNextQueued(db) {
       FROM generation_jobs
       WHERE cleared_at IS NULL
         AND status = 'queued'
-        AND (retry_after_ts IS NULL OR retry_after_ts <= CAST(strftime('%s','now') AS INTEGER) * 1000)
+        AND (retry_after_ts IS NULL OR retry_after_ts <= CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
       ORDER BY id ASC
       LIMIT 1
     `).get();
@@ -316,7 +316,7 @@ function getNextQueuedRetryTs(db) {
     WHERE cleared_at IS NULL
       AND status = 'queued'
       AND retry_after_ts IS NOT NULL
-      AND retry_after_ts > CAST(strftime('%s','now') AS INTEGER) * 1000
+      AND retry_after_ts > CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
   `).get();
   const ts = Number(row?.retry_after_ts || 0);
   return Number.isFinite(ts) && ts > 0 ? ts : null;
