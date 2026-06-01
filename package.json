@@ -21,7 +21,8 @@
     "test:e2e:gemini-sanitize": "playwright test tests/e2e/gemini-sanitize.spec.js",
     "test:e2e:real": "RUN_REAL_GEMINI_E2E=1 playwright test tests/e2e/real-gemini.spec.js",
     "test:e2e:real:nightly": "bash ./scripts/tests/runRealNightlyE2E.sh",
-    "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply"
+    "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
+    "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
