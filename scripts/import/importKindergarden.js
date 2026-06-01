@@ -68,7 +68,7 @@ const APPLY      = process.argv.includes('--apply');
 const serverArg  = process.argv.find((a) => a.startsWith('--server='));
 const SERVER     = serverArg ? serverArg.slice('--server='.length).replace(/\/$/, '') : 'http://localhost:3010';
 const DELAY_MS   = 600;   // 每次入队之间的延迟，避免超速
-const TARGET_FOLDER = '保育园联络簿';
+const TARGET_FOLDER = 'kindergarden';
 
 // ─── 入队逻辑 ─────────────────────────────────────────────────────────────────
 
