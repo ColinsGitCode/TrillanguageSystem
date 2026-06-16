@@ -23,8 +23,9 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     });
     assert.equal(res.status, 200);
     assert.equal(res.body.success, true);
-    // E2E fixture leaves provider_used === 'gemini' but doesn't call it.
-    assert.equal(res.body.provider_used, 'gemini');
+    assert.equal(res.body.provider_requested, 'deepseek');
+    assert.equal(res.body.provider_used, 'deepseek');
+    assert.equal(res.body.observability.metadata.model, 'e2e-fixture');
     assert.equal(res.body.card_type, 'trilingual');
     assert.ok(res.body.generationId > 0, 'generationId should be populated');
     assert.ok(res.body.llm_output && res.body.llm_output.markdown_content);

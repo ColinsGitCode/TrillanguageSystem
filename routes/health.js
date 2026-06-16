@@ -2,10 +2,10 @@
 
 const express = require('express');
 const {
-  geminiAuthService,
   HealthCheckService,
   E2E_TEST_MODE,
 } = require('./_shared');
+const geminiAuthService = require('../services/llm/geminiAuthService');
 
 const router = express.Router();
 

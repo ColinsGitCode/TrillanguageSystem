@@ -12,7 +12,7 @@ const {
   postProcessGeneratedContent,
   saveGeneratedFiles,
   generateAudioBatch,
-  generateWithAutoFallback,
+  generateWithProvider,
   validateGeneratedContent,
   normalizeAudioTasks,
   resolveCardAudioTasks,
@@ -23,11 +23,12 @@ const {
   normalizeCardType,
   normalizeSourceMode,
   E2E_TEST_MODE,
+  DEFAULT_DEEPSEEK_MODEL,
 } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'route/generate' });
 
 const router = express.Router();
-const TRANSITIONAL_GENERATE_PROVIDER = 'gemini';
+const ACTIVE_GENERATE_PROVIDER = 'deepseek';
 
 router.post('/api/generate', async (req, res) => {
   const perf = new PerformanceMonitor().start();
@@ -49,16 +50,17 @@ router.post('/api/generate', async (req, res) => {
       target_folder = '',
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
-    const requestedProvider = TRANSITIONAL_GENERATE_PROVIDER;
+    const requestedProvider = ACTIVE_GENERATE_PROVIDER;
     const cardType = normalizeCardType(card_type);
     const sourceMode = normalizeSourceMode(source_mode);
 
     const genResult = E2E_TEST_MODE
       ? buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMode })
-      : await generateWithAutoFallback(phrase, requestedProvider, perf, {
+      : await generateWithProvider(phrase, requestedProvider, perf, {
           targetFolder: target_folder || '',
           cardType,
-          sourceMode
+          sourceMode,
+          modelOverride: DEFAULT_DEEPSEEK_MODEL
         });
     const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
     const providerUsed = observability?.metadata?.provider || requestedProvider;
@@ -142,7 +144,7 @@ router.post('/api/generate', async (req, res) => {
     try {
       dbService.insertError({
         phrase: req.body?.phrase || 'unknown',
-        llmProvider: TRANSITIONAL_GENERATE_PROVIDER,
+        llmProvider: ACTIVE_GENERATE_PROVIDER,
         requestId: null,
         errorType: err.name || 'UnknownError',
         errorMessage: err.message,

@@ -3,9 +3,9 @@
 const express = require('express');
 const {
   tesseractOcrService,
-  localLlmService,
   E2E_TEST_MODE,
 } = require('./_shared');
+const localLlmService = require('../services/llm/localLlmService');
 const log = require('../lib/logger').child({ module: 'route/ocr' });
 
 const router = express.Router();

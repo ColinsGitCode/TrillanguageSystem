@@ -7,8 +7,8 @@ const {
   normalizeAudioTasks,
   resolveCardAudioTasks,
   validateGeneratedContent,
-  extractGeminiMarkdownResponse,
-  validateSanitizedGeminiCardResponse,
+  extractMarkdownProviderResponse,
+  validateSanitizedCardResponse,
 } = require('../../lib/generationHelpers');
 
 test.describe('normalizeAudioTasks', () => {
@@ -261,26 +261,30 @@ test.describe('resolveCardAudioTasks', () => {
   });
 });
 
-test.describe('extractGeminiMarkdownResponse', () => {
+test.describe('extractMarkdownProviderResponse', () => {
   test.it('returns "" for non-object input', () => {
-    assert.equal(extractGeminiMarkdownResponse(null), '');
-    assert.equal(extractGeminiMarkdownResponse('str'), '');
-    assert.equal(extractGeminiMarkdownResponse(undefined), '');
+    assert.equal(extractMarkdownProviderResponse(null), '');
+    assert.equal(extractMarkdownProviderResponse('str'), '');
+    assert.equal(extractMarkdownProviderResponse(undefined), '');
   });
 
   test.it('prefers the markdown field over rawOutput', () => {
     assert.equal(
-      extractGeminiMarkdownResponse({ markdown: 'A', rawOutput: 'B' }),
+      extractMarkdownProviderResponse({ markdown: 'A', rawOutput: 'B' }),
       'A'
     );
   });
 
   test.it('falls back to rawOutput when markdown is missing', () => {
-    assert.equal(extractGeminiMarkdownResponse({ rawOutput: '  B  ' }), 'B');
+    assert.equal(extractMarkdownProviderResponse({ rawOutput: '  B  ' }), 'B');
+  });
+
+  test.it('falls back to text when markdown and rawOutput are missing', () => {
+    assert.equal(extractMarkdownProviderResponse({ text: '  C  ' }), 'C');
   });
 });
 
-test.describe('validateSanitizedGeminiCardResponse', () => {
+test.describe('validateSanitizedCardResponse', () => {
   function scenarioCard(count = 12, options = {}) {
     const lines = [
       '# 空港で道を尋ねる',
@@ -356,40 +360,40 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
   }
 
   test.it('returns false when response yields no markdown', () => {
-    assert.equal(validateSanitizedGeminiCardResponse(null), false);
-    assert.equal(validateSanitizedGeminiCardResponse({}), false);
+    assert.equal(validateSanitizedCardResponse(null), false);
+    assert.equal(validateSanitizedCardResponse({}), false);
   });
 
   test.it('rejects markdown containing MCP diagnostic noise', () => {
     const md = `${trilingualCard()}\n\nMCP issues detected — Run /mcp list for status`;
-    assert.equal(validateSanitizedGeminiCardResponse({ markdown: md }), false);
+    assert.equal(validateSanitizedCardResponse({ markdown: md }), false);
   });
 
   test.it('requires the trilingual section trio by default', () => {
     const missing = trilingualCard().replace('## 3. 中文', '## 3. CHINESE');
-    assert.equal(validateSanitizedGeminiCardResponse({ markdown: missing }), false);
+    assert.equal(validateSanitizedCardResponse({ markdown: missing }), false);
   });
 
   test.it('accepts a well-formed trilingual card with enough audio tasks', () => {
-    assert.equal(validateSanitizedGeminiCardResponse({ markdown: trilingualCard() }), true);
+    assert.equal(validateSanitizedCardResponse({ markdown: trilingualCard() }), true);
   });
 
   test.it('requires the grammar_ja section trio when cardType is grammar_ja', () => {
-    assert.equal(validateSanitizedGeminiCardResponse({ markdown: grammarCard() }, 'grammar_ja'), true);
+    assert.equal(validateSanitizedCardResponse({ markdown: grammarCard() }, 'grammar_ja'), true);
     // A trilingual card lacks the grammar headings.
-    assert.equal(validateSanitizedGeminiCardResponse({ markdown: trilingualCard() }, 'grammar_ja'), false);
+    assert.equal(validateSanitizedCardResponse({ markdown: trilingualCard() }, 'grammar_ja'), false);
   });
 
   test.it('accepts well-formed scenario card', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse({ markdown: scenarioCard() }, 'scenario_phrase'),
+      validateSanitizedCardResponse({ markdown: scenarioCard() }, 'scenario_phrase'),
       true
     );
   });
 
   test.it('rejects scenario markdown with missing expression audio lines', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { missingAudioLines: true }) },
         'scenario_phrase'
       ),
@@ -399,7 +403,7 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   test.it('rejects scenario markdown without 12 English and 12 Japanese audio lines', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
         'scenario_phrase'
       ),
@@ -409,7 +413,7 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   test.it('rejects scenario markdown with expression blocks outside section two', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCardWithExpressionsInSectionThree() },
         'scenario_phrase'
       ),
@@ -419,7 +423,7 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   test.it('rejects scenario markdown without one English audio line per expression index', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCardWithDuplicateAndMissingEnglishIndex() },
         'scenario_phrase'
       ),
@@ -429,14 +433,14 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   test.it('rejects scenario markdown missing Chinese or usage hint lines', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { missingChinese: true }) },
         'scenario_phrase'
       ),
       false
     );
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { missingUsageHint: true }) },
         'scenario_phrase'
       ),
@@ -446,14 +450,14 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   test.it('rejects scenario markdown with empty Chinese or usage hint values', () => {
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { emptyChinese: true }) },
         'scenario_phrase'
       ),
       false
     );
     assert.equal(
-      validateSanitizedGeminiCardResponse(
+      validateSanitizedCardResponse(
         { markdown: scenarioCard(12, { emptyUsageHint: true }) },
         'scenario_phrase'
       ),

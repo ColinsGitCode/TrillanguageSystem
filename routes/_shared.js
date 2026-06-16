@@ -5,10 +5,6 @@
 // requires here keeps the route modules to a single, uniform import line.
 
 const { buildPrompt, buildMarkdownPrompt } = require('../services/generation/promptEngine');
-const geminiService = require('../services/llm/geminiService');
-const { runGeminiCli } = require('../services/llm/geminiCliService');
-const { runGeminiProxy } = require('../services/llm/geminiProxyService');
-const localLlmService = require('../services/llm/localLlmService');
 const tesseractOcrService = require('../services/ocr/tesseractOcrService');
 const {
   saveGeneratedFiles,
@@ -20,7 +16,6 @@ const {
 const { generateAudioBatch } = require('../services/generation/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('../services/generation/htmlRenderer');
 const { postProcessGeneratedContent } = require('../services/generation/contentPostProcessor');
-const geminiAuthService = require('../services/llm/geminiAuthService');
 const knowledgeJobService = require('../services/knowledge/knowledgeJobService');
 const generationJobService = require('../services/generation/generationJobService');
 const { normalizeAudioExtension, stripKnownAudioExtension } = require('../services/generation/audioFormat');
@@ -39,17 +34,12 @@ const {
 } = require('../lib/e2eFixtures');
 const {
   generateWithProvider,
-  generateWithAutoFallback,
 } = require('../services/generation/cardGenerationService');
 const { validateGeneratedContent, normalizeAudioTasks, resolveCardAudioTasks } = require('../lib/generationHelpers');
 
 module.exports = {
   buildPrompt,
   buildMarkdownPrompt,
-  geminiService,
-  runGeminiCli,
-  runGeminiProxy,
-  localLlmService,
   tesseractOcrService,
   saveGeneratedFiles,
   buildBaseName,
@@ -61,7 +51,6 @@ module.exports = {
   buildAudioTasksFromMarkdown,
   prepareMarkdownForCard,
   postProcessGeneratedContent,
-  geminiAuthService,
   knowledgeJobService,
   generationJobService,
   normalizeAudioExtension,
@@ -97,7 +86,6 @@ module.exports = {
   createE2EKnowledgeJob,
   cancelE2EKnowledgeJob,
   generateWithProvider,
-  generateWithAutoFallback,
   validateGeneratedContent,
   normalizeAudioTasks,
   resolveCardAudioTasks,
