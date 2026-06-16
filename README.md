@@ -1,6 +1,6 @@
 # 三语卡片生成系统（Trilingual Records Viewer）
 
-一个基于 Express 的 Web 应用：通过 LLM（Gemini）生成中 / 英 / 日三语学习卡片并合成配音音频。除卡片生成外，还包含 SQLite 支撑的历史记录与可观测性层、两条后台任务队列（生成队列 + 知识分析队列），以及一个知识分析子系统（同义词组、语法模式、语义聚类）。
+一个基于 Express 的 Web 应用：通过 DeepSeek V4 Flash 生成中 / 英 / 日三语学习卡片并合成配音音频。除卡片生成外，还包含 SQLite 支撑的历史记录与可观测性层、两条后台任务队列（生成队列 + 知识分析队列），以及一个知识分析子系统（同义词组、语法模式、语义聚类）。
 
 ## 功能概览
 
@@ -19,17 +19,14 @@
 ```bash
 npm install
 npm start                 # 服务监听 3010 端口
-npm run gemini-proxy      # 宿主机侧 Gemini 执行器，监听 :13210（独立进程）
 ```
 
 ### Docker（推荐，完整栈）
 
 ```bash
-docker compose up -d --build   # viewer + gemini-proxy + ocr + tts-en + tts-ja
+docker compose up -d --build   # viewer + ocr + tts-en + tts-ja
 docker compose logs -f
 ```
-
-> `gemini` CLI 二进制与 `scripts/infra/gemini-host-proxy.js` 运行在**宿主机**而非容器内。可用 `scripts/infra/install_host_executor_launchd.sh` 安装为 macOS LaunchAgent。
 
 ## 常用命令
 
@@ -44,7 +41,7 @@ npm run test:e2e:smoke   # happy-path 生成 / OCR / 历史
 ## 架构速览
 
 ```
-用户输入 → promptEngine（CoT）→ LLM provider → JSON/Markdown → htmlRenderer → fileManager → ttsService
+用户输入 → promptEngine（Markdown）→ DeepSeek → Markdown/HTML → htmlRenderer → fileManager → ttsService
                                               ↓
                           databaseService（历史、可观测性、指标）
 ```
@@ -53,11 +50,11 @@ npm run test:e2e:smoke   # happy-path 生成 / OCR / 历史
 
 `services/generation/cardGenerationService.js` 按请求选择 provider：
 
-- `provider=local` → 本地 OpenAI 兼容端点（`LLM_BASE_URL`）
-- `provider=gemini` + `GEMINI_MODE=host-proxy`（默认生产路径）→ 3 跳链：`viewer → gemini-gateway 容器(:18888) → 宿主机执行器(:13210，spawn gemini CLI)`
-- `provider=gemini` + `GEMINI_MODE=cli` → 进程内 CLI 传输
+- 当前主卡片生成路径固定为 DeepSeek（`services/llm/deepseekService.js`），默认模型为 `deepseek-v4-flash`。
+- 请求中的旧 provider 值会被规范化为 DeepSeek，后台生成队列也写入 `llm_provider=deepseek`。
+- `LLM_*` 本地 OpenAI 兼容配置仅用于可选本地 OCR / 开发调试，不是当前主卡片生成路径。
 
-超时层级由 `services/llm/geminiTimeouts.js` 单一基准派生；错误码约定见 `services/llm/geminiErrors.js`（用 `.code` 字段分类，不要正则匹配错误信息）。
+错误码约定见 `services/llm/llmErrors.js`（用 `.code` 字段分类，不要正则匹配错误信息）。
 
 ### 目录结构
 
@@ -66,7 +63,7 @@ server.js        约 100 行：仅 bootstrap（中间件、路由挂载、错误
 lib/             进程级基础设施（logger、serverConfig、throttle、生成辅助函数）
 routes/          每个文件 = 一个领域的 express.Router()
 services/        业务逻辑，按领域分子目录：
-  ├── llm/         LLM provider 与 gemini 传输链
+  ├── llm/         DeepSeek provider、LLM 错误码、本地 OpenAI-compatible OCR/调试客户端
   ├── generation/  卡片生成管线 + 内容处理
   ├── knowledge/   知识分析引擎 + 任务
   ├── observability/  可观测性 / 健康巡检 / 统计
@@ -93,7 +90,6 @@ Docs/            架构 / 功能 / 运维 / 测试报告文档
 | 端口 | 服务 |
 |---|---|
 | 3010 | viewer（Express） |
-| 18888 | gemini-proxy 网关容器（转发至宿主机执行器） |
 | — | ocr（Tesseract sidecar） |
 | 8000 | Kokoro TTS（英文） |
 | 50021 | VOICEVOX（日文） |
@@ -102,7 +98,8 @@ Docs/            架构 / 功能 / 运维 / 测试报告文档
 
 完整集合见 `.env.example`。关键项：
 
-- **LLM**：`GEMINI_MODE`、`GEMINI_PROXY_URL`、`GEMINI_PROXY_MODEL`、`GEMINI_EXECUTION_BUDGET_MS`、`GEMINI_MAX_CONCURRENT`；本地 LLM 用 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`。
+- **DeepSeek**：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`、`DEEPSEEK_TIMEOUT_MS`、`DEEPSEEK_THINKING`；成本估算可用 `DEEPSEEK_INPUT_COST_PER_1M` / `DEEPSEEK_OUTPUT_COST_PER_1M` 覆盖。
+- **本地 LLM/OCR（可选）**：`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`LLM_OCR_MODEL`，主要用于 `OCR_PROVIDER=local|auto` 或开发调试。
 - **存储**：`DB_PATH`、`RECORDS_PATH`、`RECORDS_TIMEZONE`（单元测试用 `DB_PATH=:memory:`）。
 - **TTS**：`TTS_EN_ENDPOINT`（Kokoro）、`TTS_JA_ENDPOINT`（VOICEVOX）。
 - **OCR**：`OCR_PROVIDER=tesseract`、`OCR_TESSERACT_ENDPOINT`、`OCR_LANGS`。

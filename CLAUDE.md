@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via an LLM and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a knowledge analysis subsystem (synonym groups, grammar patterns, two-axis semantic classification), and a learner-facing study layer on top of it (Knowledge Hub semantic browse, SM-2 spaced-repetition review, difficulty grading, staged learning plans).
+Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via DeepSeek V4 Flash and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a knowledge analysis subsystem (synonym groups, grammar patterns, two-axis semantic classification), and a learner-facing study layer on top of it (Knowledge Hub semantic browse, SM-2 spaced-repetition review, difficulty grading, staged learning plans).
 
 ## Commands
 
@@ -12,7 +12,6 @@ Trilingual Records Viewer (三语卡片生成系统) — An Express web app that
 ```bash
 npm install
 npm start                       # Server on port 3010
-npm run gemini-proxy            # Host-side Gemini executor on :13210 (separate process on host)
 ```
 
 **Tests:**
@@ -24,8 +23,6 @@ npm run e2e:server              # Start isolated e2e server (:3310, temp DB/reco
 npm run test:e2e                # Full directory (all specs, hermetic via resetServerState)
 npm run test:e2e:smoke          # Happy-path generation/OCR/history
 npm run test:e2e:pages          # Page navigation/routing
-npm run test:e2e:gemini-sanitize # MCP diagnostic stripping regression
-npm run test:e2e:real           # Hits real Gemini (needs RUN_REAL_GEMINI_E2E=1)
 # frontend-regression.spec.js + knowledge-hub.spec.js have no dedicated script — run as part of test:e2e
 ```
 Specs share one server + DB but each spec's `test.beforeAll` calls `resetServerState(request)` (see [tests/e2e/fixtures/resetServerState.js](tests/e2e/fixtures/resetServerState.js)) which hits `POST /api/_test/reset` (mounted only under `E2E_TEST_MODE=1`) to wipe all tables + the records dir. New specs MUST add this hook or they'll see leftover state from earlier files. Single test: `npx playwright test tests/e2e/<file>.spec.js -g "<name>"`.
@@ -38,7 +35,7 @@ npm run lint:fix                # Auto-fix
 
 **Docker (recommended for full stack):**
 ```bash
-docker compose up -d --build    # viewer + gemini-proxy + ocr + tts-en + tts-ja
+docker compose up -d --build    # viewer + ocr + tts-en + tts-ja
 docker compose logs -f
 ```
 
@@ -57,14 +54,13 @@ lib/                   Process-wide infrastructure
 ├── e2eFixtures.js     E2E test fixtures (knowledge jobs, generate result)
 └── generationHelpers.js  Pure helpers used by the generate pipeline
                           (normalizeAudioTasks, validateGeneratedContent,
-                          validateSanitizedGeminiCardResponse,
-                          extractGeminiMarkdownResponse)
+                          markdown response extraction)
 routes/                Each file = one express.Router() for a domain
 ├── _shared.js         Re-exports services + lib for routes to destructure
 ├── generate.js        /api/generate (the main card-generation endpoint)
 ├── ocr.js             /api/ocr (tesseract / local / auto)
 ├── generationJobs.js  /api/generation-jobs/*  (8 routes)
-├── health.js          /api/health + /api/gemini/auth/*
+├── health.js          /api/health
 ├── history.js         /api/history /statistics /search /recent
 ├── dashboard.js       /api/dashboard/*
 ├── knowledge.js       /api/knowledge/*  (20 routes — jobs, base browse +
@@ -74,16 +70,10 @@ routes/                Each file = one express.Router() for a domain
 ├── files.js           /api/folders + /highlights + /records/by-file
 └── misc.js            DELETE /api/records/:id
 services/              Business logic, grouped by domain subdirectory
-├── llm/               LLM providers + gemini transport chain
-│   ├── geminiService.js        Legacy Gemini API native client (OCR fallback)
-│   ├── geminiCliService.js     In-process CLI transport
-│   ├── geminiProxyService.js   HTTP client for the gemini proxy chain
-│   ├── geminiGatewayServer.js  Docker gateway (:18888) — runs in container
-│   ├── geminiAuthService.js    OAuth flow (CLI mode only)
-│   ├── geminiProcessUtils.js   CLI spawn + process-tree kill (shared)
-│   ├── geminiErrors.js         Structured error codes (EXECUTOR_TIMEOUT…)
-│   ├── geminiTimeouts.js       Single-knob timeout hierarchy (client>gateway>exec)
-│   └── localLlmService.js
+├── llm/               LLM providers and shared error mapping
+│   ├── deepseekService.js      DeepSeek chat-completions client
+│   ├── llmErrors.js           Structured provider error codes
+│   └── localLlmService.js     OpenAI-compatible local endpoint for OCR/dev fallback
 ├── generation/        Card generation pipeline + content processing
 │   ├── cardGenerationService.js  Core pipeline (generateWithProvider): prompt
 │   │                             build → provider call → normalize → tokens /
@@ -131,7 +121,6 @@ services/              Business logic, grouped by domain subdirectory
 │                                    SRS progress + difficulty mix)
 ├── ocr/               tesseractOcrService.js
 └── fixtures/          e2eFixtureService.js (E2E_TEST_MODE deterministic output)
-scripts/infra/gemini-host-proxy.js  HOST process (:13210) spawning the gemini CLI
 tests/unit/            node:test, ~272 tests, in-memory SQLite for DB tests
 tests/integration/     node:test L2 route tests — boot real Express on :memory: + E2E_TEST_MODE
 tests/e2e/             Playwright
@@ -140,32 +129,22 @@ database/schema.sql    SQLite schema (~21 tables, FTS5 virtual table)
 
 ### Generation data flow
 ```
-User Input → promptEngine (CoT) → LLM provider → JSON → htmlRenderer → fileManager → ttsService
-                                                  ↓
-                              databaseService (history, observability, metrics)
+User Input → promptEngine (Markdown) → DeepSeek → Markdown/HTML → htmlRenderer → fileManager → ttsService
+                                                        ↓
+                                    databaseService (history, observability, metrics)
 ```
 
 ### LLM provider chain
 
 [services/generation/cardGenerationService.js](services/generation/cardGenerationService.js) picks a provider per request:
-- **`provider === 'local'`** → `services/llm/localLlmService.js` (OpenAI-compatible local endpoint, `LLM_BASE_URL`)
-- **`provider === 'gemini'`** with **`GEMINI_MODE=host-proxy`** (default, production path) → `services/llm/geminiProxyService.js`
-- **`provider === 'gemini'`** with **`GEMINI_MODE=cli`** → `services/llm/geminiCliService.js` (also enables `/api/gemini/auth/*`)
+- The active card-generation path is always DeepSeek via [services/llm/deepseekService.js](services/llm/deepseekService.js).
+- [lib/serverConfig.js](lib/serverConfig.js) normalizes legacy or caller-supplied provider names to `deepseek`; generation jobs also default to `llm_provider=deepseek`.
+- `DEEPSEEK_MODEL` defaults to `deepseek-v4-flash`; supported runtime model names are sanitized before use.
+- [services/llm/localLlmService.js](services/llm/localLlmService.js) remains for optional OpenAI-compatible local OCR / development fallback, not the primary card-generation route.
 
-The host-proxy path is a **3-hop chain** because the `gemini` CLI must run on the host, not in Docker:
-```
-viewer  → gemini-gateway container (:18888, geminiGatewayServer.js)
-        → host executor (scripts/infra/gemini-host-proxy.js :13210, spawns `gemini` CLI)
-```
+**Timeouts**: DeepSeek calls use `DEEPSEEK_TIMEOUT_MS` (defaulted in service code when unset). Knowledge LLM fallback tasks use their own optional task timeout envs and model overrides, falling back to the DeepSeek model when unset.
 
-**Timeout hierarchy** is derived from a single base in [services/llm/geminiTimeouts.js](services/llm/geminiTimeouts.js):
-- `GEMINI_EXECUTION_BUDGET_MS` (default 90s) = max CLI run for an interactive call
-- `GEMINI_MAX_EXECUTION_BUDGET_MS` (default 240s) = hard ceiling for long single calls
-- `GEMINI_HOP_BUFFER_MS` (default 15s) added per transport hop so the executor times out first with a clean error
-
-**Error code convention** is in [services/llm/geminiErrors.js](services/llm/geminiErrors.js). Each layer raises `Error` objects with `.code`, `.status`, and `.payload`. `geminiProxyService` propagates these even through wrapped errors so `generationJobService` can classify (`isTransientCapacityError` reads `.payload.code`). Don't regex-match error messages — use the `code` field.
-
-**Concurrency**: the host executor enforces `GEMINI_MAX_CONCURRENT` (default 2) — concurrent callers above the limit wait `GEMINI_QUEUE_WAIT_MS` for a slot then receive `429 EXECUTOR_BUSY`.
+**Error code convention** is in [services/llm/llmErrors.js](services/llm/llmErrors.js). Provider layers raise `Error` objects with `.code`, `.status`, and `.payload`; callers should classify by code instead of regex-matching error text.
 
 ### Persistence
 
@@ -184,7 +163,7 @@ DB-backed queues with `pending → running → completed/failed`, retry/backoff,
 ### Subsystems
 
 - **Knowledge analysis** — `knowledgeAnalysisEngine.js` runs 6 task types (summary, index, synonym_boundary, grammar_link, cluster, issues_audit). UI: `knowledge-hub.html` (viewer), `knowledge-ops.html` (job mgmt).
-  - **Semantic classification** — the `cluster` task ([services/knowledge/tasks/cluster.js](services/knowledge/tasks/cluster.js)) classifies cards into a **curated two-axis taxonomy** ([services/knowledge/taxonomy.js](services/knowledge/taxonomy.js)): grammar cards (`card_type === 'grammar_ja'`) onto a **`function`** axis (communicative function — 疑问 / 因果 / 假设 …, modeled on the Feishu「日语句式索引」base), everything else onto a **`topic`** axis (subject domain). It is **rules-first + LLM-fallback**: keyword rules place most cards, unmatched cards are batched to Gemini (default on, `KNOWLEDGE_CLUSTER_LLM_ENABLED`), residue lands in the axis fallback bucket. Results write `knowledge_clusters` (with an additive `taxonomy` column) + `knowledge_cluster_cards`. Categories are exposed via `GET /api/knowledge/base/categories?taxonomy=function|topic|all`; `/api/knowledge/base/terms` supports `category=<clusterKey>` and `uncategorized=1` filters.
+  - **Semantic classification** — the `cluster` task ([services/knowledge/tasks/cluster.js](services/knowledge/tasks/cluster.js)) classifies cards into a **curated two-axis taxonomy** ([services/knowledge/taxonomy.js](services/knowledge/taxonomy.js)): grammar cards (`card_type === 'grammar_ja'`) onto a **`function`** axis (communicative function — 疑问 / 因果 / 假设 …, modeled on the Feishu「日语句式索引」base), everything else onto a **`topic`** axis (subject domain). It is **rules-first + LLM-fallback**: keyword rules place most cards, unmatched cards are batched to DeepSeek (default on, `KNOWLEDGE_CLUSTER_LLM_ENABLED`), residue lands in the axis fallback bucket. Results write `knowledge_clusters` (with an additive `taxonomy` column) + `knowledge_cluster_cards`. Categories are exposed via `GET /api/knowledge/base/categories?taxonomy=function|topic|all`; `/api/knowledge/base/terms` supports `category=<clusterKey>` and `uncategorized=1` filters.
   - **Knowledge Hub explorer** — `knowledge-hub.html` is a three-pane "knowledge explorer" (driven by `initKnowledgeBaseBrowse()` in `dashboard.js`): left nav (axis toggle + semantic-category tree + tags + Insights entries), centre term/insight list, right Relation Inspector. Data actions (refresh / rebuild-index / rebuild-cluster) start knowledge jobs from the Hub; clicking a term opens the **main app's native card modal embedded** via `/?card=<id>&embed=1` (see "Card embed mode" below). See [Docs/Features/Knowledge_Hub_and_Semantic_Classification.md](Docs/Features/Knowledge_Hub_and_Semantic_Classification.md).
 - **Observability** — `observabilityService.js` tracks token counts, phase latencies, quality scores per generation. `healthCheckService.js` polls DB/LLM/TTS health. UI: `dashboard.html`.
 - **Spaced repetition (SRS)** — per-card review scheduling via an SM-2 variant ([services/srs/srsScheduler.js](services/srs/srsScheduler.js), pure + unit-tested) over `card_srs` + `card_reviews` ([services/storage/db/cardSrs.js](services/storage/db/cardSrs.js)). 4-button grading (Again/Hard/Good/Easy). `GET /api/srs/queue` returns due (tracked + overdue) plus new (untracked) cards; `POST /api/srs/review {generationId, grade}` advances the schedule; `GET /api/srs/stats`. UI: the Knowledge Hub's「复习 Review」mode (a third centre-pane mode in `dashboard.js`) — due queue + grade buttons, with「查看卡片」reusing the embedded card modal.
@@ -220,7 +199,7 @@ Config via env: `LOG_LEVEL=error|warn|info|debug`, `LOG_PRETTY=1`, `LOG_SILENT=1
 **Unit** ([tests/unit/](tests/unit/), node:test):
 - Run with `npm test`. ~272 tests across ~25 modules in ~1s.
 - DB tests use `:memory:` SQLite via the exported `DatabaseService` class — hermetic, ~6ms each.
-- Pure helpers in `geminiProxyService` are exposed under `module._internal` for direct unit testing. Production code does not reach for these.
+- DeepSeek provider wiring is covered by dedicated unit tests around `cardGenerationService` and `deepseekService`; production calls should keep using the service boundary rather than reaching into provider internals.
 - Tests with timers use `t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })`. Default mock time of 0 collides with `last || 0` fallbacks; always pass a realistic epoch.
 
 **Integration** ([tests/integration/](tests/integration/), node:test — the "L2" route tier): `npm run test:integration`. A shared boot harness ([tests/integration/_harness.js](tests/integration/_harness.js)) pins env (`DB_PATH=:memory:`, `E2E_TEST_MODE=1`, `PORT=0`, blank TTS) then requires `server.js` to boot the **real Express stack** on a random port, and exposes a zero-dep `api(method, route, {body, headers})` fetch helper + `resetState()` (`truncateAllForTests`). Unlike unit tests (mocked DB) this exercises the actual route → service → DB path; unlike e2e it has no browser. Each test file runs in its own subprocess. Like e2e it's under `E2E_TEST_MODE`, so `/api/generate` uses the fixture branch. ~47 tests.
@@ -237,7 +216,7 @@ ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only 
 
 ## Key Conventions
 
-- **Prompt engineering** (`services/generation/promptEngine.js`): two builders. `buildPrompt` generates a programmatic CoT/JSON prompt (used only on the non-markdown JSON path). `buildMarkdownPrompt` is the default production path (Gemini host-proxy / CLI / local-markdown): it loads a template file from `prompts/` and substitutes the `{{ phrase }}` placeholder — `prompts/phrase_3LANS_markdown.md` for trilingual cards, `prompts/phrase_ja_grammar_markdown.md` for `grammar_ja`. Override paths via `MARKDOWN_PROMPT_PATH` / `GRAMMAR_MARKDOWN_PROMPT_PATH`; if a template is missing the code falls back to a minimal inline prompt. These template files are live inputs — don't delete them.
+- **Prompt engineering** (`services/generation/promptEngine.js`): two builders. `buildPrompt` generates a programmatic CoT/JSON prompt for the non-markdown JSON path. `buildMarkdownPrompt` is the default production path for DeepSeek card generation: it loads a template file from `prompts/` and substitutes the `{{ phrase }}` placeholder — `prompts/phrase_3LANS_markdown.md` for trilingual cards, `prompts/phrase_ja_grammar_markdown.md` for `grammar_ja`. Override paths via `MARKDOWN_PROMPT_PATH` / `GRAMMAR_MARKDOWN_PROMPT_PATH`; if a template is missing the code falls back to a minimal inline prompt. These template files are live inputs — don't delete them.
 - **LLM response structure**: `{ markdown_content, html_content, audio_tasks: [{ text, lang, filename_suffix }] }`.
 - **Audio file extensions**: English → `.mp3` (Safari compat), Japanese → `.wav` ([services/generation/audioFormat.js](services/generation/audioFormat.js)).
 - **Japanese ruby**: `kanji(hiragana)` in markdown → `<ruby>` tags via Kuroshiro ([services/generation/japaneseFurigana.js](services/generation/japaneseFurigana.js)).
@@ -250,13 +229,12 @@ ESLint 9 flat config in [eslint.config.js](eslint.config.js). Backend code only 
 See `.env.example` for the full set. Key knobs:
 
 **LLM provider chain:**
-- `GEMINI_MODE` = `host-proxy` (default) or `cli`
-- `GEMINI_PROXY_URL` — must be the `:18888` gateway (default `http://host.docker.internal:18888/api/gemini`)
-- `GEMINI_EXECUTION_BUDGET_MS` / `GEMINI_MAX_EXECUTION_BUDGET_MS` / `GEMINI_HOP_BUFFER_MS` — single-knob timeout hierarchy
-- `GEMINI_MAX_CONCURRENT` / `GEMINI_QUEUE_WAIT_MS` — host executor concurrency
-- `GEMINI_PROXY_MODEL` — model selection (`TRAINING_TEACHER_MODEL` still honored as a legacy fallback)
-- `GEMINI_PROXY_API_KEY` / `GEMINI_PROXY_BEARER_TOKEN`, `GEMINI_PROXY_AUTH_MODE`
-- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` — local LLM (OpenAI-compatible)
+- `DEEPSEEK_API_KEY` — required outside fixture/test modes; never commit a real value.
+- `DEEPSEEK_BASE_URL` — defaults to `https://api.deepseek.com`.
+- `DEEPSEEK_MODEL` — defaults to `deepseek-v4-flash`; accepted values are sanitized in `lib/serverConfig.js`.
+- `DEEPSEEK_TIMEOUT_MS` and `DEEPSEEK_THINKING` — provider call timeout and thinking-mode flag.
+- `DEEPSEEK_INPUT_COST_PER_1M` / `DEEPSEEK_OUTPUT_COST_PER_1M` — optional observability cost overrides.
+- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_OCR_MODEL` — optional OpenAI-compatible local endpoint for OCR local/auto mode and development fallback only.
 
 **Logging:** `LOG_LEVEL`, `LOG_PRETTY`, `LOG_SILENT`.
 
@@ -266,17 +244,14 @@ See `.env.example` for the full set. Key knobs:
 
 **OCR:** `OCR_PROVIDER=tesseract` (recommended), `OCR_TESSERACT_ENDPOINT`, `OCR_LANGS`.
 
-**Knowledge analysis (LLM fallback, all optional):** `KNOWLEDGE_CLUSTER_LLM_ENABLED` (default on — the cluster task's LLM fallback) + `KNOWLEDGE_CLUSTER_{LLM_TRANSPORT,MAX_LLM_CARDS,LLM_BATCH_SIZE,LLM_TIMEOUT_MS,MODEL,PROXY_*}`; `KNOWLEDGE_SYNONYM_LLM_ENABLED` (default off) + `KNOWLEDGE_SYNONYM_{...}`. Proxy/model knobs fall back to the `GEMINI_PROXY_*` values. See `.env.example` for the full list. SRS / difficulty / learning-plan read no env (deterministic).
+**Knowledge analysis (LLM fallback, all optional):** `KNOWLEDGE_CLUSTER_LLM_ENABLED` (default on — the cluster task's LLM fallback) + `KNOWLEDGE_CLUSTER_{MAX_LLM_CARDS,LLM_BATCH_SIZE,LLM_TIMEOUT_MS,MODEL}`; `KNOWLEDGE_SYNONYM_LLM_ENABLED` (default off) + `KNOWLEDGE_SYNONYM_{LLM_TIMEOUT_MS,MODEL}`. Model knobs fall back to `DEEPSEEK_MODEL`. See `.env.example` for the full list. SRS / difficulty / learning-plan read no env (deterministic).
 
 ## Docker services
 
 - **3010** — viewer (Express)
-- **18888** — gemini-proxy gateway container (forwards to host executor)
 - **ocr** — Tesseract OCR sidecar
 - **8000** — Kokoro TTS (English)
 - **50021** — VOICEVOX (Japanese)
-
-The `gemini` CLI binary + [scripts/infra/gemini-host-proxy.js](scripts/infra/gemini-host-proxy.js) run on the **host**, not in Docker. Install as a macOS LaunchAgent via [scripts/infra/install_host_executor_launchd.sh](scripts/infra/install_host_executor_launchd.sh).
 
 ## Docs
 

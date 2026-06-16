@@ -4,7 +4,7 @@
 
 - `Docs/Architecture/`：系统架构、数据库、Observability、测试架构
 - `Docs/Features/`：仍在使用的功能设计
-- `Docs/Operations/`：运行、Gemini、知识任务、模型配置与排障
+- `Docs/Operations/`：运行、DeepSeek/current LLM runtime、知识任务、模型配置与排障
 - `Docs/TestReports/`：测试报告与验收产物
 
 ## 现状以何处为准
@@ -25,15 +25,16 @@
 
 - `Docs/Architecture/数据库设计方案.md`（含已删除的 few_shot / experiment / review / training 表）
 - `Docs/Architecture/Observability/AI_Observability_Roadmap.md`（few-shot 效果面板）
-- `Docs/Architecture/GEMINI_PROXY_AND_SERVER_QUEUE_REDESIGN.md`
+- 旧 LLM proxy/server queue redesign 架构文档
 - `Docs/TestReports/`（TRAIN / review_scoring 相关报告与图表）
+
+旧 LLM proxy operations 文档已从 active navigation 中移除；当前运行入口以根目录 `CLAUDE.md`、`.env.example` 和本文件的 Operations 导航为准。
 
 ## 主题导航
 
 ### 1. 系统主架构
 
 - `Docs/Architecture/Trilingual_Card_Generation_System.md`
-- `Docs/Architecture/GEMINI_PROXY_AND_SERVER_QUEUE_REDESIGN.md`
 - `Docs/Architecture/数据库设计方案.md`
 
 ### 2. Knowledge / 知识系统
@@ -43,10 +44,10 @@
 - `Docs/Architecture/Knowledge/Smart_Knowledge_Base_Upgrade.md`
 - `Docs/Operations/Knowledge_Local_Analysis_Development_Execution.md`
 
-### 3. Gemini / 运行与调用
+### 3. DeepSeek / 当前 LLM Runtime
 
-- `Docs/Operations/Gemini/GEMINI_CLI_调用方式详解.md`
-- `Docs/Operations/Gemini/GEMINI_CLI_知识分析任务执行规范.md`
+- `CLAUDE.md`（根目录，provider 链、环境变量、Docker 服务）
+- `.env.example`（DeepSeek、可选本地 LLM/OCR、知识 LLM 兜底配置）
 - `Docs/Operations/vLLM_Recommended_Config.md`
 
 ### 4. UI / Card 功能

@@ -10,7 +10,7 @@
 
 本执行计划用于将“总结/归纳/索引/语法关联/聚类/问题审计”能力落地到系统内，且可通过手动任务触发运行。
 
-本次开发不使用 Gemini CLI Proxy。
+本次开发不使用旧 LLM proxy。
 
 ---
 
@@ -235,4 +235,3 @@
 - [ ] 至少 3 类结果在 UI 可见（index/synonym/grammar 或 issues）
 - [ ] 历史全量回填执行一次并产出报告
 - [ ] 关键文档同步更新（API/BACKEND/repo_status）
-
