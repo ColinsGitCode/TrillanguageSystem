@@ -83,6 +83,10 @@ test.describe('validateGeneratedContent', () => {
     return lines.join('\n');
   }
 
+  function scenarioCardWithExpressionsInSectionThree() {
+    return scenarioCard().replace('## 2. 常用表达\n', '## 2. 常用表达\n## 3. 常用表达\n');
+  }
+
   test.it('reports non-object input as invalid JSON', () => {
     assert.deepEqual(validateGeneratedContent(null), ['Response is not a valid JSON object']);
     assert.deepEqual(validateGeneratedContent('text'), ['Response is not a valid JSON object']);
@@ -130,6 +134,16 @@ test.describe('validateGeneratedContent', () => {
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       ['scenario_phrase requires 12 English and 12 Japanese audio lines']
+    );
+  });
+
+  test.it('rejects scenario expression blocks outside section two', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCardWithExpressionsInSectionThree() },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires exactly 12 expression blocks']
     );
   });
 });
@@ -180,6 +194,10 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
       );
     }
     return lines.join('\n');
+  }
+
+  function scenarioCardWithExpressionsInSectionThree() {
+    return scenarioCard().replace('## 2. 常用表达\n', '## 2. 常用表达\n## 3. 常用表达\n');
   }
 
   function trilingualCard() {
@@ -254,6 +272,16 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(
       validateSanitizedGeminiCardResponse(
         { markdown: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
+  });
+
+  test.it('rejects scenario markdown with expression blocks outside section two', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCardWithExpressionsInSectionThree() },
         'scenario_phrase'
       ),
       false

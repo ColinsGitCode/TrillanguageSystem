@@ -30,6 +30,21 @@ function scenarioMarkdown(count = 12) {
   return lines.join('\n');
 }
 
+function scenarioExpressionBlocks(count = 12) {
+  const lines = [];
+  for (let i = 1; i <= count; i += 1) {
+    const padded = String(i).padStart(2, '0');
+    lines.push(
+      `### ${padded}. 表达标题${i}`,
+      `- **中文**: 请问${i}号登机口在哪里？`,
+      `- **英文**: Where is gate ${i}?`,
+      `- **日本語**: 搭乗口${i}はどこですか。`,
+      '- **使用提示**: 确认位置时使用。'
+    );
+  }
+  return lines;
+}
+
 test.describe('buildAudioTasksFromMarkdown', () => {
   test.it('returns [] for falsy input', () => {
     assert.deepEqual(buildAudioTasksFromMarkdown(''), []);
@@ -148,6 +163,19 @@ test.describe('buildAudioTasksFromMarkdown', () => {
         'ja:_ja_1:搭乗口はどこですか。',
       ]
     );
+  });
+
+  test.it('does not extract scenario audio tasks from a later 常用表达 section', () => {
+    const markdown = [
+      '# 空港で道を尋ねる',
+      '## 1. 场景说明',
+      '- **角色**: 旅行者と駅員',
+      '## 2. 常用表达',
+      '## 3. 常用表达',
+      ...scenarioExpressionBlocks(),
+    ].join('\n');
+
+    assert.deepEqual(buildAudioTasksFromMarkdown(markdown), []);
   });
 
   test.it('injects audio tags into scenario English and Japanese lines', async () => {

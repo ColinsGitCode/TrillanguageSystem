@@ -43,6 +43,10 @@ function isScenarioExpressionsHeader(header) {
   );
 }
 
+function isScenarioExpressionsSection(number, header) {
+  return Number(number) === 2 && isScenarioExpressionsHeader(header);
+}
+
 function getScenarioLineMatch(line) {
   const match = String(line || '').match(/^\s*-\s*\*\*(英文|日本語)\*\*\s*[:：]\s*(.+)$/);
   if (!match) return null;
@@ -60,10 +64,10 @@ function buildAudioTasksFromMarkdown(markdown) {
   let inScenarioExpressions = false;
   let currentScenarioIndex = null;
   lines.forEach((line) => {
-    const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
+    const headerMatch = line.match(/^##\s*(\d+)\.\s*(.+)\s*$/);
     if (headerMatch) {
-      const header = headerMatch[1];
-      inScenarioExpressions = isScenarioExpressionsHeader(header);
+      const header = headerMatch[2];
+      inScenarioExpressions = isScenarioExpressionsSection(headerMatch[1], header);
       currentScenarioIndex = null;
       if (/英文/i.test(header)) currentLang = 'en';
       else if (/日本語|日语/i.test(header)) currentLang = 'ja';
@@ -204,10 +208,10 @@ function injectAudioTags(markdown, baseName, audioTasks) {
   const output = [];
 
   lines.forEach((line) => {
-    const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
+    const headerMatch = line.match(/^##\s*(\d+)\.\s*(.+)\s*$/);
     if (headerMatch) {
-      const header = headerMatch[1];
-      inScenarioExpressions = isScenarioExpressionsHeader(header);
+      const header = headerMatch[2];
+      inScenarioExpressions = isScenarioExpressionsSection(headerMatch[1], header);
       currentScenarioIndex = null;
       if (/英文/i.test(header)) currentLang = 'en';
       else if (/日本語|日语/i.test(header)) currentLang = 'ja';
