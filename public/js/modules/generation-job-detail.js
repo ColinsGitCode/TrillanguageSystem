@@ -79,6 +79,14 @@ function renderCopyButton(action, key, label, testId = '') {
     `;
 }
 
+function getCardTypeLabel(cardType) {
+    return {
+        grammar_ja: '语法卡',
+        scenario_phrase: '场景卡',
+        trilingual: '三语卡'
+    }[String(cardType || 'trilingual').trim().toLowerCase()] || '三语卡';
+}
+
 function renderSection(title, bodyHtml, testId = '', extraActionsHtml = '') {
     return `
         <section class="queue-job-modal-section"${testId ? ` data-testid="${escapeHtml(testId)}"` : ''}>
@@ -194,7 +202,7 @@ function renderGenerationJobDetail(data = {}) {
     const job = data.job || {};
     const events = Array.isArray(data.events) ? data.events : [];
     currentDetail = { job, events };
-    const cardTypeLabel = String(job.jobType || '').toLowerCase() === 'grammar_ja' ? '语法卡' : '三语卡';
+    const cardTypeLabel = getCardTypeLabel(job.jobType);
     const statusText = String(job.status || '-').toUpperCase();
     const errorHtml = job.errorMessage
         ? `

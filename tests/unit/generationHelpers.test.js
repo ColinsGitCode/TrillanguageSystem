@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   normalizeAudioTasks,
+  resolveCardAudioTasks,
   validateGeneratedContent,
   extractGeminiMarkdownResponse,
   validateSanitizedGeminiCardResponse,
@@ -77,10 +78,13 @@ test.describe('validateGeneratedContent', () => {
           : options.duplicateEnglishNoJapanese
             ? `- **英文**: Where can I find gate ${i}?`
             : `- **日本語**: 搭乗口${i}はどこですか。`,
-        '- **使用提示**: 确认位置时使用。'
+        options.missingUsageHint ? '' : '- **使用提示**: 确认位置时使用。'
       );
     }
-    return lines.join('\n');
+    const markdown = lines.filter(Boolean).join('\n');
+    return options.missingChinese
+      ? markdown.replace(/^- \*\*中文\*\*: .+$/gm, '')
+      : markdown;
   }
 
   function scenarioCardWithExpressionsInSectionThree() {
@@ -165,6 +169,75 @@ test.describe('validateGeneratedContent', () => {
       ['scenario_phrase requires one English and one Japanese audio line per expression block']
     );
   });
+
+  test.it('rejects scenario expression blocks missing Chinese lines', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(12, { missingChinese: true }) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires every expression block to include Chinese and usage hint lines']
+    );
+  });
+
+  test.it('rejects scenario expression blocks missing usage hints', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(12, { missingUsageHint: true }) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires every expression block to include Chinese and usage hint lines']
+    );
+  });
+});
+
+test.describe('resolveCardAudioTasks', () => {
+  function scenarioCard() {
+    const lines = [
+      '# 空港で道を尋ねる',
+      '## 1. 场景说明',
+      '- 丁寧に場所を確認する。',
+      '## 2. 常用表达',
+    ];
+    for (let i = 1; i <= 12; i += 1) {
+      const padded = String(i).padStart(2, '0');
+      lines.push(
+        `### ${padded}.`,
+        `- **中文**: 请问${i}号登机口在哪里？`,
+        `- **英文**: Where is gate ${i}?`,
+        `- **日本語**: 搭乗口(とうじょうぐち)はどこですか。`,
+        '- **使用提示**: 确认位置时使用。'
+      );
+    }
+    return lines.join('\n');
+  }
+
+  test.it('overrides non-empty model audio_tasks for scenario cards with deterministic markdown-derived tasks', () => {
+    const content = {
+      markdown_content: scenarioCard(),
+      audio_tasks: [
+        { lang: 'en', text: 'wrong text', filename_suffix: '_bad_1' }
+      ],
+    };
+
+    const tasks = resolveCardAudioTasks(content, 'scenario_phrase');
+
+    assert.equal(tasks.length, 24);
+    assert.equal(tasks[0].filename_suffix, '_en_1');
+    assert.equal(tasks[1].filename_suffix, '_ja_1');
+    assert.equal(tasks[0].text, 'Where is gate 1?');
+    assert.match(tasks[1].text, /搭乗口/);
+    assert.doesNotMatch(tasks[1].text, /\(/);
+  });
+
+  test.it('keeps non-empty model audio_tasks for non-scenario cards', () => {
+    const tasks = [{ lang: 'en', text: 'Keep me', filename_suffix: '_custom' }];
+
+    assert.deepEqual(
+      resolveCardAudioTasks({ markdown_content: '## 1. 英文', audio_tasks: tasks }, 'trilingual'),
+      tasks
+    );
+  });
 });
 
 test.describe('extractGeminiMarkdownResponse', () => {
@@ -209,10 +282,13 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
           : options.duplicateEnglishNoJapanese
             ? `- **英文**: Where can I find gate ${i}?`
             : `- **日本語**: 搭乗口${i}はどこですか。`,
-        '- **使用提示**: 确认位置时使用。'
+        options.missingUsageHint ? '' : '- **使用提示**: 确认位置时使用。'
       );
     }
-    return lines.join('\n');
+    const markdown = lines.filter(Boolean).join('\n');
+    return options.missingChinese
+      ? markdown.replace(/^- \*\*中文\*\*: .+$/gm, '')
+      : markdown;
   }
 
   function scenarioCardWithExpressionsInSectionThree() {
@@ -320,6 +396,23 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(
       validateSanitizedGeminiCardResponse(
         { markdown: scenarioCardWithDuplicateAndMissingEnglishIndex() },
+        'scenario_phrase'
+      ),
+      false
+    );
+  });
+
+  test.it('rejects scenario markdown missing Chinese or usage hint lines', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { missingChinese: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { missingUsageHint: true }) },
         'scenario_phrase'
       ),
       false

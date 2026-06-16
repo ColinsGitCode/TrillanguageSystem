@@ -446,7 +446,11 @@ function renderTaskQueueDetails(snapshot) {
         : [];
     const auditEvents = Array.isArray(snapshot.auditEvents) ? snapshot.auditEvents : [];
     const auditFocusJob = snapshot.auditFocusJob || active || recentTasks[0] || null;
-    const cardTypeText = (rawType) => String(rawType || '').toLowerCase() === 'grammar_ja' ? '语法' : '三语';
+    const cardTypeText = (rawType) => ({
+        grammar_ja: '语法',
+        scenario_phrase: '场景',
+        trilingual: '三语'
+    }[String(rawType || 'trilingual').trim().toLowerCase()] || '三语');
 
     const activeText = active
         ? `#${active.seq} · [${cardTypeText(active.cardType)}] ${escapeHtml(active.phrase || '-')}`
@@ -2339,4 +2343,3 @@ function renderLineChart(containerId, data, color) {
 }
 
 // ========== Utilities ==========
-

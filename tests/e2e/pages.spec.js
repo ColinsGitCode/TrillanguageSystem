@@ -104,6 +104,7 @@ test.describe('Playwright page smoke', () => {
   test('06 Mission Control 可展示共享队列失败与重试结果', async ({ page, request }) => {
     const phrase = `__E2E_FAIL_ONCE__ PW mission retry ${Date.now()}`;
     const phrase2 = `PW mission second ${Date.now()}`;
+    const scenarioPhrase = `PW mission scenario ${Date.now()}`;
     const enqueueRes = await request.post('/api/generation-jobs', {
       data: {
         phrase,
@@ -166,11 +167,28 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('queue-job-copy-events')).toBeVisible();
     await page.getByTestId('queue-job-detail-close').click();
 
+    const scenarioRes = await request.post('/api/generation-jobs', {
+      data: {
+        phrase: scenarioPhrase,
+        card_type: 'scenario_phrase',
+        source_mode: 'input'
+      }
+    });
+    expect(scenarioRes.ok()).toBeTruthy();
+
+    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(scenarioPhrase, { timeout: 15_000 });
+    const scenarioItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: scenarioPhrase }).first();
+    await expect(scenarioItem).toContainText('场景');
+    await scenarioItem.getByTestId('mission-queue-detail-btn').click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
+    await expect(page.getByTestId('queue-job-detail-meta')).toContainText('场景卡');
+    await page.getByTestId('queue-job-detail-close').click();
+
     const jobsRes = await request.get('/api/generation-jobs?limit=10');
     expect(jobsRes.ok()).toBeTruthy();
     const jobsJson = await jobsRes.json();
     const jobs = Array.isArray(jobsJson?.jobs) ? jobsJson.jobs : [];
-    for (const currentPhrase of [phrase, phrase2]) {
+    for (const currentPhrase of [phrase, phrase2, scenarioPhrase]) {
       const job = jobs.find((item) => String(item.phraseNormalized || '').trim() === currentPhrase);
       const resultFolder = String(job?.resultFolder || '').trim();
       const resultBase = String(job?.resultBaseFilename || '').trim();

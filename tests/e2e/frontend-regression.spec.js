@@ -177,7 +177,13 @@ test.describe.serial('前端综合回归', () => {
 
     await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED|IDLE/, { timeout: 10_000 });
     await page.getByTestId('hero-queue-status').click();
-    await expect(page.getByTestId('queue-task-item').filter({ hasText: phrase }).first()).toContainText('场景');
+    const queueItem = page.getByTestId('queue-task-item').filter({ hasText: phrase }).first();
+    await expect(queueItem).toContainText('场景');
+    await queueItem.getByTestId('queue-task-detail-btn').click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
+    await expect(page.getByTestId('queue-job-detail-meta')).toContainText('场景卡');
+    await page.getByTestId('queue-job-detail-close').click();
+    await expect(page.getByTestId('queue-job-detail-modal')).toBeHidden();
     await waitForQueueIdle(page);
 
     folder = await openFirstFolder(page);

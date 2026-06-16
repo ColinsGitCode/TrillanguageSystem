@@ -7,7 +7,6 @@
 const express = require('express');
 const {
   PerformanceMonitor,
-  buildAudioTasksFromMarkdown,
   renderHtmlFromMarkdown,
   prepareMarkdownForCard,
   postProcessGeneratedContent,
@@ -16,6 +15,7 @@ const {
   generateWithAutoFallback,
   validateGeneratedContent,
   normalizeAudioTasks,
+  resolveCardAudioTasks,
   buildE2EGenerateResult,
   checkGenerateThrottle,
   dbService,
@@ -73,10 +73,7 @@ router.post('/api/generate', async (req, res) => {
       return res.status(422).json({ error: 'Validation failed', details: validationErrors, prompt, llm_output: content });
     }
 
-    const derivedAudioTasks = buildAudioTasksFromMarkdown(content.markdown_content);
-    if (!Array.isArray(content.audio_tasks) || !content.audio_tasks.length) {
-      content.audio_tasks = derivedAudioTasks;
-    }
+    content.audio_tasks = resolveCardAudioTasks(content, cardType);
 
     const preparedMarkdown = await prepareMarkdownForCard(content.markdown_content, { baseName, audioTasks: content.audio_tasks });
     content.markdown_content = preparedMarkdown;
