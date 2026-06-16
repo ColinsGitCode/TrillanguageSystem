@@ -601,6 +601,21 @@ h1 {
   box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.22), 0 12px 24px rgba(20, 184, 166, 0.2);
 }
 
+.file-list .list-item-btn.card-type-scenario {
+  background: linear-gradient(180deg, #ecfdf5 0%, #d9fbe8 100%);
+  border-color: #86efac;
+}
+
+.file-list .list-item-btn.card-type-scenario:hover {
+  border-color: #22c55e;
+  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.18);
+}
+
+.file-list .list-item-btn.card-type-scenario.active {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22), 0 12px 24px rgba(34, 197, 94, 0.18);
+}
+
 .file-list .list-item-btn .file-item-title {
   display: block;
   width: 100%;
@@ -637,6 +652,12 @@ h1 {
   color: #0f766e;
   background: #ccf4ef;
   border-color: #81d8d0;
+}
+
+.file-list .list-item-btn .file-item-corner.corner-scenario {
+  color: #0f766e;
+  background: #dcfce7;
+  border-color: #86efac;
 }
 
 .file-list .list-item-btn .file-item-tag {
@@ -2111,6 +2132,12 @@ h1 {
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
+.selector-hint.mode-scenario {
+  background: rgba(20, 184, 166, 0.12);
+  color: #0f766e;
+  border: 1px solid rgba(20, 184, 166, 0.32);
+}
+
 .selector-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2119,6 +2146,10 @@ h1 {
 
 .selector-buttons-two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selector-buttons-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .card-type-btn {
@@ -2160,6 +2191,13 @@ h1 {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(125, 211, 252, 0.15));
   color: #1e40af;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.card-type-btn[data-card-type="scenario_phrase"].active {
+  border-color: #0f766e;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.14), rgba(34, 197, 94, 0.1));
+  color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
 }
 
 .model-icon {

@@ -17,7 +17,7 @@ class Store {
             imageBase64: null,
             isGenerating: false,
             llmProvider: 'gemini',
-            cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja'
+            cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja' | 'scenario_phrase'
 
             // 历史记录相关
             history: {

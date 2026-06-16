@@ -116,6 +116,53 @@ const infrastructureState = {
     generationBlockedReason: ''
 };
 const INFRA_HEALTH_POLL_INTERVAL_MS = 15000;
+const CARD_TYPE_CONFIG = {
+    trilingual: {
+        key: 'trilingual',
+        selectorHint: '三语学习卡片',
+        hintClass: 'mode-gemini',
+        generateText: 'Generate',
+        placeholder: '输入短语或句子...',
+        queueLabel: '三语',
+        fileClass: 'trilingual',
+        fileCornerClass: 'corner-trilingual',
+        fileCornerText: '三语卡',
+        modalMetaLabel: 'TRILINGUAL',
+        modalTabLabel: '三语卡片',
+        historyLabel: '🧩 三语',
+        knowledgeEnabled: true
+    },
+    grammar_ja: {
+        key: 'grammar_ja',
+        selectorHint: '日语语法卡片',
+        hintClass: 'mode-grammar',
+        generateText: 'Generate Grammar Card',
+        placeholder: '输入日语语法点或句型...',
+        queueLabel: '语法',
+        fileClass: 'grammar',
+        fileCornerClass: 'corner-grammar',
+        fileCornerText: '语法卡',
+        modalMetaLabel: 'JA GRAMMAR',
+        modalTabLabel: '语法卡片',
+        historyLabel: '📘 语法',
+        knowledgeEnabled: true
+    },
+    scenario_phrase: {
+        key: 'scenario_phrase',
+        selectorHint: '场景常用表达',
+        hintClass: 'mode-scenario',
+        generateText: 'Generate Scenario Card',
+        placeholder: '描述一个具体场景，例如：保育园早上送孩子，说明昨晚有点咳嗽...',
+        queueLabel: '场景',
+        fileClass: 'scenario',
+        fileCornerClass: 'corner-scenario',
+        fileCornerText: '场景卡',
+        modalMetaLabel: 'SCENARIO EXPRESSIONS',
+        modalTabLabel: '场景表达卡',
+        historyLabel: '🎭 场景',
+        knowledgeEnabled: false
+    }
+};
 
 // Timer State
 let timerInterval = null;
@@ -693,12 +740,11 @@ function renderFiles(files) {
     files.forEach(item => {
         const btn = document.createElement('button');
         const cardType = normalizeCardType(item.cardType || item.card_type || 'trilingual');
-        btn.className = `list-item-btn card-type-${cardType === 'grammar_ja' ? 'grammar' : 'trilingual'}`;
-        btn.dataset.testid = `file-${cardType}-${String(item.title || item.file || '').trim()}`;
-        const cornerText = cardType === 'grammar_ja' ? '语法卡' : '三语卡';
-        const cornerClass = cardType === 'grammar_ja' ? 'corner-grammar' : 'corner-trilingual';
+        const config = getCardTypeConfig(cardType);
+        btn.className = `list-item-btn card-type-${config.fileClass}`;
+        btn.dataset.testid = `file-${config.key}-${String(item.title || item.file || '').trim()}`;
         btn.innerHTML = `
-          <span class="file-item-corner ${cornerClass}">${cornerText}</span>
+          <span class="file-item-corner ${config.fileCornerClass}">${config.fileCornerText}</span>
           <span class="file-item-title">${escapeHtml(item.title || '')}</span>
         `;
         if (store.get('selectedFile') === item.file) {
@@ -741,13 +787,16 @@ async function selectFile(file, title, cardType = 'trilingual') {
 }
 
 function normalizeCardType(cardType) {
-    return String(cardType || 'trilingual').trim().toLowerCase() === 'grammar_ja'
-        ? 'grammar_ja'
-        : 'trilingual';
+    const normalized = String(cardType || 'trilingual').trim().toLowerCase();
+    return CARD_TYPE_CONFIG[normalized] ? normalized : 'trilingual';
+}
+
+function getCardTypeConfig(cardType) {
+    return CARD_TYPE_CONFIG[normalizeCardType(cardType)];
 }
 
 function getCardTypeLabel(cardType) {
-    return normalizeCardType(cardType) === 'grammar_ja' ? '日语语法卡片' : '三语学习卡片';
+    return getCardTypeConfig(cardType).selectorHint;
 }
 
 function initCardTypeSelector() {
@@ -757,11 +806,13 @@ function initCardTypeSelector() {
 
     const updateCardTypeUI = (rawType) => {
         const cardType = normalizeCardType(rawType);
+        const config = getCardTypeConfig(cardType);
         store.setState({ cardType });
         buttons.forEach((btn) => btn.classList.toggle('active', btn.dataset.cardType === cardType));
         hint.textContent = getCardTypeLabel(cardType);
-        hint.className = `selector-hint ${cardType === 'grammar_ja' ? 'mode-grammar' : 'mode-gemini'}`;
-        els.genBtn.textContent = cardType === 'grammar_ja' ? 'Generate Grammar Card' : 'Generate';
+        hint.className = `selector-hint ${config.hintClass}`;
+        els.genBtn.textContent = config.generateText;
+        els.phraseInput.placeholder = config.placeholder;
     };
 
     updateCardTypeUI(store.get('cardType'));
@@ -809,10 +860,8 @@ function initGenerator() {
 }
 
 function updateGenUI(isGenerating) {
-    const idleText = normalizeCardType(store.get('cardType')) === 'grammar_ja'
-        ? 'Generate Grammar Card'
-        : 'Generate';
-    els.genBtn.textContent = isGenerating ? 'Generating...' : idleText;
+    const config = getCardTypeConfig(store.get('cardType'));
+    els.genBtn.textContent = isGenerating ? 'Generating...' : config.generateText;
     applyInfrastructureGuardToInputs();
 }
 
@@ -1505,7 +1554,7 @@ function updateHeroTaskQueueStatus() {
     }
 
     if (activeTask) {
-        const cardType = normalizeCardType(activeTask.cardType) === 'grammar_ja' ? '语法' : '三语';
+        const cardType = getCardTypeConfig(activeTask.cardType).queueLabel;
         const phrase = truncateQueuePhrase(activeTask.phraseNormalized, 30);
         if (!activeTask.startedAt) {
             activeTask.startedAt = activeTask.createdAt || Date.now();
@@ -1559,7 +1608,7 @@ function renderGenerationQueuePanel() {
     const success = tasks.filter((task) => task.status === 'success').length;
 
     const runningTask = tasks.find((task) => task.status === 'running');
-    const runningType = runningTask ? (normalizeCardType(runningTask.cardType) === 'grammar_ja' ? '语法' : '三语') : '';
+    const runningType = runningTask ? getCardTypeConfig(runningTask.cardType).queueLabel : '';
     const runningText = runningTask
         ? `执行中 #${runningTask.seq} [${runningType}]: ${escapeHtml(runningTask.phraseNormalized)}`
         : '空闲';
@@ -1579,7 +1628,7 @@ function renderGenerationQueuePanel() {
                 cancelled: 'CANCELLED'
             }[task.status] || task.status.toUpperCase());
             const cardType = normalizeCardType(task.cardType || 'trilingual');
-            const cardTypeLabel = cardType === 'grammar_ja' ? '语法' : '三语';
+            const cardTypeLabel = getCardTypeConfig(cardType).queueLabel;
             const selected = String(task.id) === String(generationQueueState.timelineJobId) ? ' is-selected' : '';
 
             const cls = `status-${task.status}`;
@@ -2782,8 +2831,8 @@ function renderCardModal(markdown, title, options = {}) {
         options.metrics?.observability?.metadata?.cardType ||
         'trilingual'
     );
-    const cardTypeMetaLabel = cardType === 'grammar_ja' ? 'JA GRAMMAR' : 'TRILINGUAL';
-    const cardTypeTabLabel = cardType === 'grammar_ja' ? '语法卡片' : '三语卡片';
+    const cardTypeConfig = getCardTypeConfig(cardType);
+    const showKnowledge = Boolean(generationId && cardTypeConfig.knowledgeEnabled);
     const contentHighlightContext = buildCardHighlightContext({
         folder,
         baseName: options.baseName || '',
@@ -2904,7 +2953,7 @@ function renderCardModal(markdown, title, options = {}) {
                 <div style="flex:1;">
                     <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono" style="color: var(--neon-blue);">
-                        <span>${cardTypeMetaLabel}</span>
+                        <span>${cardTypeConfig.modalMetaLabel}</span>
                         <span>::</span>
                         <span>${new Date().getFullYear()}</span>
                     </div>
@@ -2913,13 +2962,13 @@ function renderCardModal(markdown, title, options = {}) {
                 <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
                     <button class="tab-btn active" data-target="cardContent" data-testid="tab-content" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
                     <button class="tab-btn" data-target="cardIntel" data-testid="tab-intel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
-                    ${generationId ? '<button class="tab-btn" data-target="cardKnowledge" data-testid="tab-knowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
+                    ${showKnowledge ? '<button class="tab-btn" data-target="cardKnowledge" data-testid="tab-knowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
                 </div>
             </div>
 
             <!-- Content Tab -->
             <div id="cardContent" class="mc-body mc-content" style="display:block;" data-testid="card-content-panel">
-                <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeTabLabel}</div>
+                <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeConfig.modalTabLabel}</div>
                 ${cardContentHtml}
             </div>
 
@@ -3062,7 +3111,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             </div>
 
-            ${generationId ? '<div id="cardKnowledge" class="mc-body" style="display:none;"></div>' : ''}
+            ${showKnowledge ? '<div id="cardKnowledge" class="mc-body" style="display:none;"></div>' : ''}
         </div>
     `;
 
@@ -3562,7 +3611,7 @@ function renderHistory(records) {
         <div class="history-item" data-id="${r.id}">
             <div class="history-item-phrase">${escapeHtml(r.phrase)}</div>
             <div class="history-item-meta">
-                <span>${normalizeCardType(r.card_type) === 'grammar_ja' ? '📘 语法' : '🧩 三语'}</span>
+                <span>${getCardTypeConfig(r.card_type).historyLabel}</span>
                 <span>${formatDate(r.created_at)}</span>
                 <span class="quality-badge q-${Math.floor(r.quality_score/10)}0">${r.quality_score}</span>
             </div>
