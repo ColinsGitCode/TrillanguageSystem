@@ -82,6 +82,7 @@ test.describe.serial('前端综合回归', () => {
     await expect(page.getByTestId('phrase-input')).toBeVisible();
     await expect(page.getByTestId('generate-btn')).toHaveText('Generate');
     await expect(page.locator('#teacherModelHint')).toHaveText('DeepSeek V4 Flash');
+    await expect(page.locator('#setupOverlay')).toHaveCount(0);
     await expect(page.getByTestId('folder-list')).toBeVisible();
     await expect(page.getByTestId('file-list')).toBeVisible();
 
