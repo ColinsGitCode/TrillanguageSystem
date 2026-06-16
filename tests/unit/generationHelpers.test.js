@@ -87,6 +87,15 @@ test.describe('validateGeneratedContent', () => {
     return scenarioCard().replace('## 2. 常用表达\n', '## 2. 常用表达\n## 3. 常用表达\n');
   }
 
+  function scenarioCardWithDuplicateAndMissingEnglishIndex() {
+    return scenarioCard()
+      .replace(
+        '- **英文**: Where is gate 1?',
+        '- **英文**: Where is gate 1?\n- **英文**: Where can I find gate 1?'
+      )
+      .replace('- **英文**: Where is gate 12?', '- **英语**: Where is gate 12?');
+  }
+
   test.it('reports non-object input as invalid JSON', () => {
     assert.deepEqual(validateGeneratedContent(null), ['Response is not a valid JSON object']);
     assert.deepEqual(validateGeneratedContent('text'), ['Response is not a valid JSON object']);
@@ -146,6 +155,16 @@ test.describe('validateGeneratedContent', () => {
       ['scenario_phrase requires exactly 12 expression blocks']
     );
   });
+
+  test.it('rejects scenario cards without one English audio line per expression index', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCardWithDuplicateAndMissingEnglishIndex() },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires one English and one Japanese audio line per expression block']
+    );
+  });
 });
 
 test.describe('extractGeminiMarkdownResponse', () => {
@@ -198,6 +217,15 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
 
   function scenarioCardWithExpressionsInSectionThree() {
     return scenarioCard().replace('## 2. 常用表达\n', '## 2. 常用表达\n## 3. 常用表达\n');
+  }
+
+  function scenarioCardWithDuplicateAndMissingEnglishIndex() {
+    return scenarioCard()
+      .replace(
+        '- **英文**: Where is gate 1?',
+        '- **英文**: Where is gate 1?\n- **英文**: Where can I find gate 1?'
+      )
+      .replace('- **英文**: Where is gate 12?', '- **英语**: Where is gate 12?');
   }
 
   function trilingualCard() {
@@ -282,6 +310,16 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(
       validateSanitizedGeminiCardResponse(
         { markdown: scenarioCardWithExpressionsInSectionThree() },
+        'scenario_phrase'
+      ),
+      false
+    );
+  });
+
+  test.it('rejects scenario markdown without one English audio line per expression index', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCardWithDuplicateAndMissingEnglishIndex() },
         'scenario_phrase'
       ),
       false
