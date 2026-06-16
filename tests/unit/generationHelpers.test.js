@@ -69,7 +69,7 @@ test.describe('validateGeneratedContent', () => {
       const padded = String(i).padStart(2, '0');
       lines.push(
         `### ${padded}. 表达标题${i}`,
-        `- **中文**: 请问${i}号登机口在哪里？`,
+        options.emptyChinese ? '- **中文**:   ' : `- **中文**: 请问${i}号登机口在哪里？`,
         options.missingAudioLines
           ? `- **英语**: Where is gate ${i}?`
           : `- **英文**: Where is gate ${i}?`,
@@ -78,7 +78,11 @@ test.describe('validateGeneratedContent', () => {
           : options.duplicateEnglishNoJapanese
             ? `- **英文**: Where can I find gate ${i}?`
             : `- **日本語**: 搭乗口${i}はどこですか。`,
-        options.missingUsageHint ? '' : '- **使用提示**: 确认位置时使用。'
+        options.missingUsageHint
+          ? ''
+          : options.emptyUsageHint
+            ? '- **使用提示**:   '
+            : '- **使用提示**: 确认位置时使用。'
       );
     }
     const markdown = lines.filter(Boolean).join('\n');
@@ -176,7 +180,7 @@ test.describe('validateGeneratedContent', () => {
         { markdown_content: scenarioCard(12, { missingChinese: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
-      ['scenario_phrase requires every expression block to include Chinese and usage hint lines']
+      ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
     );
   });
 
@@ -186,7 +190,24 @@ test.describe('validateGeneratedContent', () => {
         { markdown_content: scenarioCard(12, { missingUsageHint: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
-      ['scenario_phrase requires every expression block to include Chinese and usage hint lines']
+      ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
+    );
+  });
+
+  test.it('rejects scenario expression blocks with empty Chinese or usage hint values', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(12, { emptyChinese: true }) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
+    );
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(12, { emptyUsageHint: true }) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
     );
   });
 });
@@ -273,7 +294,7 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
       const padded = String(i).padStart(2, '0');
       lines.push(
         `### ${padded}. 表达标题${i}`,
-        `- **中文**: 请问${i}号登机口在哪里？`,
+        options.emptyChinese ? '- **中文**:   ' : `- **中文**: 请问${i}号登机口在哪里？`,
         options.missingAudioLines
           ? `- **英语**: Where is gate ${i}?`
           : `- **英文**: Where is gate ${i}?`,
@@ -282,7 +303,11 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
           : options.duplicateEnglishNoJapanese
             ? `- **英文**: Where can I find gate ${i}?`
             : `- **日本語**: 搭乗口${i}はどこですか。`,
-        options.missingUsageHint ? '' : '- **使用提示**: 确认位置时使用。'
+        options.missingUsageHint
+          ? ''
+          : options.emptyUsageHint
+            ? '- **使用提示**:   '
+            : '- **使用提示**: 确认位置时使用。'
       );
     }
     const markdown = lines.filter(Boolean).join('\n');
@@ -413,6 +438,23 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(
       validateSanitizedGeminiCardResponse(
         { markdown: scenarioCard(12, { missingUsageHint: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
+  });
+
+  test.it('rejects scenario markdown with empty Chinese or usage hint values', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { emptyChinese: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { emptyUsageHint: true }) },
         'scenario_phrase'
       ),
       false
