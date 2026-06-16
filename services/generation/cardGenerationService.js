@@ -54,7 +54,9 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
-  const resolvedModel = resolveDeepSeekModel(options.modelOverride);
+  const resolvedModel = provider === 'deepseek'
+    ? resolveDeepSeekModel(options.modelOverride)
+    : '';
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   const prompt = useMarkdownOutput

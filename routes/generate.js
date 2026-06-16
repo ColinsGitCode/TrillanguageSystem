@@ -24,7 +24,6 @@ const {
   normalizeSourceMode,
   normalizeLlmProvider,
   DEFAULT_LLM_PROVIDER,
-  DEFAULT_DEEPSEEK_MODEL,
   E2E_TEST_MODE,
 } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'route/generate' });
@@ -58,7 +57,6 @@ router.post('/api/generate', async (req, res) => {
     const genResult = E2E_TEST_MODE
       ? buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMode })
       : await generateWithAutoFallback(phrase, requestedProvider, perf, {
-          modelOverride: DEFAULT_DEEPSEEK_MODEL,
           targetFolder: target_folder || '',
           cardType,
           sourceMode
