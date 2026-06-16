@@ -1554,10 +1554,11 @@ test.describe('databaseService — knowledge_relations + overview + summary', ()
       newGenId(db, { folderName: '20260201', cardType: 'grammar_ja', requestId: 'rid_src_b' });
       newGenId(db, { folderName: '20260301', cardType: 'trilingual', requestId: 'rid_src_c' });
       newGenId(db, { folderName: '20260401', cardType: 'scenario_phrase', requestId: 'rid_src_scenario' });
+      db.db.prepare(`UPDATE generations SET card_type = 'GRAMMAR_JA' WHERE request_id = ?`).run('rid_src_b');
 
       const all = db.getKnowledgeSourceCards({});
       assert.equal(all.length, 3);
-      assert.deepEqual(new Set(all.map((card) => card.card_type)), new Set(['trilingual', 'grammar_ja']));
+      assert.deepEqual(new Set(all.map((card) => card.card_type.toLowerCase())), new Set(['trilingual', 'grammar_ja']));
 
       const scenarios = db.getKnowledgeSourceCards({ cardTypes: ['scenario_phrase'] });
       assert.deepEqual(scenarios, []);
@@ -1821,13 +1822,15 @@ test.describe('databaseService — card_srs (spaced repetition)', () => {
     const db = freshDb();
     try {
       const tri = newGenId(db, { phrase: 'tri', baseFilename: 'tri', cardType: 'trilingual', requestId: 'rid_srs_tri' });
+      const grammar = newGenId(db, { phrase: 'grammar', baseFilename: 'grammar', cardType: 'grammar_ja', requestId: 'rid_srs_grammar' });
       const scenario = newGenId(db, { phrase: 'scenario', baseFilename: 'scenario', cardType: 'scenario_phrase', requestId: 'rid_srs_scenario' });
+      db.db.prepare(`UPDATE generations SET card_type = 'GRAMMAR_JA' WHERE id = ?`).run(grammar);
 
       const queue = db.getSrsQueue({ limit: 50 });
-      assert.deepEqual(queue.map((card) => card.generationId), [tri]);
+      assert.deepEqual(new Set(queue.map((card) => card.generationId)), new Set([tri, grammar]));
 
       const stats = db.getSrsStats();
-      assert.equal(stats.newCount, 1);
+      assert.equal(stats.newCount, 2);
 
       assert.equal(db.reviewCardSrs(scenario, 'good'), null);
       assert.equal(db.getCardSrsState(scenario), null);

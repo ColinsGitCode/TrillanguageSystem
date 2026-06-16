@@ -107,7 +107,7 @@ function getQueue(db, { limit = 20, cardType = '' } = {}) {
     SRS_SUPPORTED_CARD_TYPES.forEach((value, idx) => {
       params[`cardType${idx}`] = value;
     });
-    where.push(`g.card_type IN (${placeholders.join(', ')})`);
+    where.push(`lower(g.card_type) IN (${placeholders.join(', ')})`);
   }
 
   const rows = db.prepare(`
@@ -150,12 +150,12 @@ function getStats(db) {
         FROM card_srs s
         JOIN generations g ON g.id = s.generation_id
         WHERE s.due_date <= date('now')
-          AND g.card_type IN (${supportedCardTypesSql})
+          AND lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS due_count,
       (
         SELECT COUNT(*)
         FROM generations g
-        WHERE g.card_type IN (${supportedCardTypesSql})
+        WHERE lower(g.card_type) IN (${supportedCardTypesSql})
           AND NOT EXISTS (SELECT 1 FROM card_srs s WHERE s.generation_id = g.id)
       ) AS new_count,
       (
@@ -163,13 +163,13 @@ function getStats(db) {
         FROM card_reviews r
         JOIN generations g ON g.id = r.generation_id
         WHERE date(r.reviewed_at) = date('now')
-          AND g.card_type IN (${supportedCardTypesSql})
+          AND lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS reviewed_today,
       (
         SELECT COUNT(*)
         FROM card_srs s
         JOIN generations g ON g.id = s.generation_id
-        WHERE g.card_type IN (${supportedCardTypesSql})
+        WHERE lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS tracked_total
   `).get(params) || {};
   return {

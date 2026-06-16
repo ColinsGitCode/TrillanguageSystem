@@ -64,7 +64,7 @@ function getSourceCards(db, scope = {}) {
     cardTypes.forEach((value, idx) => {
       params[`cardType${idx}`] = String(value);
     });
-    conditions.push(`g.card_type IN (${placeholders.join(', ')})`);
+    conditions.push(`lower(g.card_type) IN (${placeholders.join(', ')})`);
   }
 
   const limit = Number(scope.limit || 0);
