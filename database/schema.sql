@@ -579,7 +579,7 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
   phrase_normalized TEXT NOT NULL,
   source_mode TEXT,
   target_folder TEXT,
-  llm_provider TEXT NOT NULL DEFAULT 'gemini',
+  llm_provider TEXT NOT NULL DEFAULT 'deepseek',
   llm_model TEXT,
   enable_compare INTEGER DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'queued',          -- queued/running/success/failed/cancelled

@@ -266,6 +266,16 @@ function buildJobPayload(overrides = {}) {
 }
 
 test.describe('databaseService — generation_jobs lifecycle', () => {
+  test.it('fresh schema defaults generation_jobs.llm_provider to DeepSeek', () => {
+    const db = freshDb();
+    try {
+      const columns = db.db.prepare('PRAGMA table_info(generation_jobs)').all();
+      const providerColumn = columns.find((column) => column.name === 'llm_provider');
+      assert.ok(providerColumn, 'llm_provider column expected');
+      assert.equal(providerColumn.dflt_value, "'deepseek'");
+    } finally { db.close(); }
+  });
+
   test.it('createGenerationJob returns the full job row with status=queued, attempts=0', () => {
     const db = freshDb();
     try {
