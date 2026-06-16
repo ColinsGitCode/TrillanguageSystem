@@ -1,7 +1,7 @@
 /**
  * 健康检查服务 - F3: 服务状态监控
  * 功能：
- * - 检查 Gemini API 状态
+ * - 检查 DeepSeek API 状态
  * - 检查本地 LLM 状态
  * - 检查 TTS 服务状态
  * - 检查存储状态
@@ -11,8 +11,33 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const log = require('../../lib/logger').child({ module: 'svc/health' });
+const {
+  DEFAULT_DEEPSEEK_BASE_URL,
+  DEFAULT_DEEPSEEK_MODEL,
+  E2E_TEST_MODE,
+  resolveDeepSeekModel,
+} = require('../../lib/serverConfig');
 
 class HealthCheckService {
+  static resolveDeepSeekBaseUrl() {
+    const configuredBaseUrl = String(process.env.DEEPSEEK_BASE_URL || '').trim();
+    const defaultBaseUrl = String(DEFAULT_DEEPSEEK_BASE_URL || '').trim();
+    return (configuredBaseUrl || defaultBaseUrl).replace(/\/+$/, '');
+  }
+
+  static buildDeepSeekModelsUrl() {
+    const baseUrl = this.resolveDeepSeekBaseUrl();
+    if (!baseUrl) return '';
+    try {
+      const parsed = new URL(baseUrl);
+      parsed.pathname = `${parsed.pathname.replace(/\/+$/, '')}/models`;
+      parsed.search = '';
+      return parsed.toString();
+    } catch (error) {
+      return `${baseUrl}/models`;
+    }
+  }
+
   static buildGatewayHealthUrl() {
     const apiUrl = String(process.env.GEMINI_PROXY_URL || '').trim();
     if (!apiUrl) return '';
@@ -46,25 +71,15 @@ class HealthCheckService {
     // 并行检查所有服务（提高性能）
     const checks = [];
 
-    const geminiMode = String(process.env.GEMINI_MODE || '').trim().toLowerCase();
+    // 1. DeepSeek API
+    checks.push(this.checkDeepSeekApi());
 
-    // 1. Internal Gemini bridge
-    if (geminiMode === 'host-proxy') {
-      checks.push(this.checkGeminiGateway());
-      checks.push(this.checkGeminiHostExecutor());
-    }
-
-    // 2. Gemini API
-    if (process.env.GEMINI_API_KEY) {
-      checks.push(this.checkGemini());
-    }
-
-    // 3. Local LLM
+    // 2. Local LLM
     if (process.env.LLM_BASE_URL) {
       checks.push(this.checkLocalLLM());
     }
 
-    // 4. TTS Services
+    // 3. TTS Services
     if (process.env.TTS_EN_ENDPOINT) {
       checks.push(this.checkTTSEnglish());
     }
@@ -72,13 +87,13 @@ class HealthCheckService {
       checks.push(this.checkTTSJapanese());
     }
 
-    // 5. OCR Service
+    // 4. OCR Service
     const ocrProvider = (process.env.OCR_PROVIDER || '').toLowerCase();
     if (ocrProvider === 'tesseract' || process.env.OCR_TESSERACT_ENDPOINT) {
       checks.push(this.checkTesseractOCR());
     }
 
-    // 6. Storage
+    // 5. Storage
     checks.push(this.checkStorage());
 
     // 等待所有检查完成
@@ -108,6 +123,85 @@ class HealthCheckService {
     };
 
     return { services, system };
+  }
+
+  /**
+   * 检查 DeepSeek API
+   */
+  static async checkDeepSeekApi() {
+    const model = resolveDeepSeekModel(process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
+    const service = {
+      name: 'DeepSeek API',
+      type: 'llm',
+      critical: true,
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        endpoint: this.buildDeepSeekModelsUrl(),
+        model,
+        fixtureSafe: false
+      }
+    };
+
+    if (E2E_TEST_MODE) {
+      service.status = 'online';
+      service.latency = 0;
+      service.message = 'E2E fixture mode: DeepSeek API check bypassed';
+      service.details.fixtureSafe = true;
+      return service;
+    }
+
+    const apiKey = String(process.env.DEEPSEEK_API_KEY || '').trim();
+    if (!apiKey) {
+      service.status = 'offline';
+      service.message = 'DeepSeek API key is not configured';
+      return service;
+    }
+
+    const url = service.details.endpoint;
+    if (!url) {
+      service.status = 'offline';
+      service.message = 'DeepSeek API base URL is not configured';
+      return service;
+    }
+
+    try {
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      let response;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${apiKey}`
+          },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      service.latency = Date.now() - startTime;
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        service.status = service.latency > 2000 ? 'degraded' : 'online';
+        service.message = service.latency > 2000 ? 'DeepSeek API 响应偏慢' : 'DeepSeek API 正常';
+
+        if (Array.isArray(data.data)) {
+          service.details.availableModels = data.data.map((entry) => entry.id || entry.name).filter(Boolean);
+        }
+      } else {
+        service.status = 'degraded';
+        service.message = data?.error?.message || data?.message || `DeepSeek API 响应异常: ${response.status}`;
+      }
+    } catch (error) {
+      service.status = 'offline';
+      service.message = error.name === 'AbortError' ? 'DeepSeek API 请求超时' : error.message;
+    }
+
+    return service;
   }
 
   static async checkGeminiGateway() {
@@ -594,11 +688,7 @@ class HealthCheckService {
   static async quickCheck() {
     const services = [];
 
-    // 只检查 Gemini 和存储
-    if (process.env.GEMINI_API_KEY) {
-      services.push(await this.checkGemini());
-    }
-
+    services.push(await this.checkDeepSeekApi());
     services.push(await this.checkStorage());
 
     return { services };

@@ -2,41 +2,50 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+
+process.env.DEEPSEEK_API_KEY = '';
+process.env.DEEPSEEK_BASE_URL = '';
+process.env.DEEPSEEK_MODEL = '';
+process.env.GEMINI_API_KEY = '';
+process.env.GEMINI_MODE = '';
+
 const { api, closeServer } = require('./_harness');
 
 test.after(async () => { await closeServer(); });
 
-test.describe('/api/health + /api/gemini/auth/*', () => {
-  test.it('GET /api/health returns the overall status + e2e flag', async () => {
+test.describe('/api/health + removed /api/gemini/auth/* routes', () => {
+  test.it('GET /api/health returns online DeepSeek API health in E2E mode without a key', async () => {
     const res = await api('GET', '/api/health');
     assert.equal(res.status, 200);
-    // HealthCheckService.checkAll() returns an object with services and system.
     assert.ok(res.body && typeof res.body === 'object');
     assert.equal(res.body.e2e_test_mode, true, 'e2e_test_mode should be reflected');
+
+    const services = Array.isArray(res.body.services) ? res.body.services : [];
+    const serviceNames = services.map((service) => service.name);
+    assert.ok(
+      serviceNames.every((name) => !/gemini/i.test(name)),
+      `health services should not expose Gemini LLM checks: ${serviceNames.join(', ')}`
+    );
+
+    const deepSeekApi = services.find((service) => service.name === 'DeepSeek API');
+    assert.ok(deepSeekApi, 'DeepSeek API health service should be present');
+    assert.equal(deepSeekApi.type, 'llm');
+    assert.equal(deepSeekApi.critical, true);
+    assert.equal(deepSeekApi.status, 'online');
+    assert.equal(deepSeekApi.details?.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekApi.details?.fixtureSafe, true);
   });
 
-  test.it('GET /api/gemini/auth/status returns enabled flag based on GEMINI_MODE', async () => {
-    const res = await api('GET', '/api/gemini/auth/status');
-    assert.equal(res.status, 200);
-    // GEMINI_MODE is unset under the test harness, so default 'host-proxy' applies → enabled=false.
-    assert.equal(typeof res.body.enabled, 'boolean');
-  });
+  [
+    ['GET', '/api/gemini/auth/status'],
+    ['POST', '/api/gemini/auth/start'],
+    ['POST', '/api/gemini/auth/submit'],
+    ['POST', '/api/gemini/auth/cancel'],
+  ].forEach(([method, route]) => {
+    test.it(`${method} ${route} returns Express 404`, async () => {
+      const res = await api(method, route, { body: method === 'POST' ? {} : undefined });
 
-  test.it('POST /api/gemini/auth/start 400 when CLI not enabled', async () => {
-    const res = await api('POST', '/api/gemini/auth/start');
-    assert.equal(res.status, 400);
-    assert.equal(res.body.error, 'Gemini CLI not enabled');
-  });
-
-  test.it('POST /api/gemini/auth/submit 400 when code missing', async () => {
-    const res = await api('POST', '/api/gemini/auth/submit', { body: {} });
-    assert.equal(res.status, 400);
-    assert.equal(res.body.error, 'Missing authorization code');
-  });
-
-  test.it('POST /api/gemini/auth/cancel returns a result object', async () => {
-    const res = await api('POST', '/api/gemini/auth/cancel');
-    assert.equal(res.status, 200);
-    assert.ok(res.body && typeof res.body === 'object');
+      assert.equal(res.status, 404);
+    });
   });
 });
