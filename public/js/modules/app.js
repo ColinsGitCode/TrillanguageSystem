@@ -255,8 +255,13 @@ function getInfrastructureService(services, name) {
 
 function buildGenerationBlockedReason(health) {
     const services = Array.isArray(health?.services) ? health.services : [];
+    const deepSeek = getInfrastructureService(services, 'DeepSeek API');
     const executor = getInfrastructureService(services, 'Gemini Host Executor');
     const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
+
+    if (deepSeek && deepSeek.status !== 'online') {
+        return deepSeek.message || 'DeepSeek API 不可用，新的生成任务暂不可提交。';
+    }
 
     if (executor && executor.status !== 'online') {
         return executor.message || '宿主机执行器不可用，新的生成任务暂不可提交。';
@@ -271,8 +276,17 @@ function buildGenerationBlockedReason(health) {
 
 function buildInfrastructureAlertState(health) {
     const services = Array.isArray(health?.services) ? health.services : [];
+    const deepSeek = getInfrastructureService(services, 'DeepSeek API');
     const executor = getInfrastructureService(services, 'Gemini Host Executor');
     const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
+
+    if (deepSeek && deepSeek.status !== 'online') {
+        return {
+            visible: true,
+            title: 'DeepSeek API 离线',
+            text: deepSeek.message || 'DeepSeek API 不可用，新的生成任务将失败。'
+        };
+    }
 
     if (executor && executor.status !== 'online') {
         return {
