@@ -2,7 +2,7 @@
 
 const express = require('express');
 const generationJobService = require('../services/generation/generationJobService');
-const { DEFAULT_DEEPSEEK_MODEL, normalizeCardType, normalizeSourceMode } = require('../lib/serverConfig');
+const { normalizeCardType, normalizeSourceMode } = require('../lib/serverConfig');
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.post('/api/generation-jobs', async (req, res) => {
     const jobType = normalizeCardType(req.body?.card_type || req.body?.job_type || 'trilingual');
     const sourceMode = normalizeSourceMode(req.body?.source_mode);
     const provider = 'gemini';
-    const llmModel = DEFAULT_DEEPSEEK_MODEL;
+    const llmModel = null;
     const targetFolder = String(req.body?.target_folder || '').trim();
     const sourceContext = req.body?.source_context && typeof req.body.source_context === 'object'
       ? req.body.source_context

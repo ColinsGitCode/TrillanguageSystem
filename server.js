@@ -8,10 +8,7 @@ require('dotenv').config();
 const generationJobService = require('./services/generation/generationJobService');
 
 const app = express();
-const {
-    PORT,
-    DEFAULT_DEEPSEEK_MODEL,
-} = require('./lib/serverConfig');
+const { PORT } = require('./lib/serverConfig');
 const log = require('./lib/logger').child({ module: 'http' });
 
 app.use(express.static('public'));
@@ -33,7 +30,7 @@ async function executeGenerationJobViaHttp(job) {
     card_type: normalizeCardType(job.jobType),
     source_mode: normalizeSourceMode(job.sourceMode),
     target_folder: job.targetFolder || '',
-    llm_model: DEFAULT_DEEPSEEK_MODEL
+    llm_model: null
   };
 
   const response = await fetch(`http://127.0.0.1:${PORT}/api/generate`, {
