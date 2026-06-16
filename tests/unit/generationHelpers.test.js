@@ -55,6 +55,32 @@ test.describe('normalizeAudioTasks', () => {
 });
 
 test.describe('validateGeneratedContent', () => {
+  function scenarioCard(count = 12, options = {}) {
+    const lines = [
+      '# 空港で道を尋ねる',
+      '## 1. 场景说明',
+      '- **角色**: 旅行者と駅員',
+      '- **语气**: 丁寧',
+      '- **目标**: 乗り場を確認する',
+      '## 2. 常用表达',
+    ];
+    for (let i = 1; i <= count; i += 1) {
+      const padded = String(i).padStart(2, '0');
+      lines.push(
+        `### ${padded}. 表达标题${i}`,
+        `- **中文**: 请问${i}号登机口在哪里？`,
+        options.missingAudioLines
+          ? `- **英语**: Where is gate ${i}?`
+          : `- **英文**: Where is gate ${i}?`,
+        options.missingAudioLines
+          ? `- **日文**: 搭乗口${i}はどこですか。`
+          : `- **日本語**: 搭乗口${i}はどこですか。`,
+        '- **使用提示**: 确认位置时使用。'
+      );
+    }
+    return lines.join('\n');
+  }
+
   test.it('reports non-object input as invalid JSON', () => {
     assert.deepEqual(validateGeneratedContent(null), ['Response is not a valid JSON object']);
     assert.deepEqual(validateGeneratedContent('text'), ['Response is not a valid JSON object']);
@@ -72,6 +98,26 @@ test.describe('validateGeneratedContent', () => {
     assert.deepEqual(
       validateGeneratedContent({ markdown_content: '## hello' }),
       []
+    );
+  });
+
+  test.it('accepts complete scenario card', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard() },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      []
+    );
+  });
+
+  test.it('rejects fewer than 12 scenario expressions', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(11) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires exactly 12 expression blocks']
     );
   });
 });
@@ -96,6 +142,32 @@ test.describe('extractGeminiMarkdownResponse', () => {
 });
 
 test.describe('validateSanitizedGeminiCardResponse', () => {
+  function scenarioCard(count = 12, options = {}) {
+    const lines = [
+      '# 空港で道を尋ねる',
+      '## 1. 场景说明',
+      '- **角色**: 旅行者と駅員',
+      '- **语气**: 丁寧',
+      '- **目标**: 乗り場を確認する',
+      '## 2. 常用表达',
+    ];
+    for (let i = 1; i <= count; i += 1) {
+      const padded = String(i).padStart(2, '0');
+      lines.push(
+        `### ${padded}. 表达标题${i}`,
+        `- **中文**: 请问${i}号登机口在哪里？`,
+        options.missingAudioLines
+          ? `- **英语**: Where is gate ${i}?`
+          : `- **英文**: Where is gate ${i}?`,
+        options.missingAudioLines
+          ? `- **日文**: 搭乗口${i}はどこですか。`
+          : `- **日本語**: 搭乗口${i}はどこですか。`,
+        '- **使用提示**: 确认位置时使用。'
+      );
+    }
+    return lines.join('\n');
+  }
+
   function trilingualCard() {
     return [
       '## 1. 英文',
@@ -145,5 +217,22 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(validateSanitizedGeminiCardResponse({ markdown: grammarCard() }, 'grammar_ja'), true);
     // A trilingual card lacks the grammar headings.
     assert.equal(validateSanitizedGeminiCardResponse({ markdown: trilingualCard() }, 'grammar_ja'), false);
+  });
+
+  test.it('accepts well-formed scenario card', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse({ markdown: scenarioCard() }, 'scenario_phrase'),
+      true
+    );
+  });
+
+  test.it('rejects scenario markdown with missing expression audio lines', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { missingAudioLines: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
   });
 });

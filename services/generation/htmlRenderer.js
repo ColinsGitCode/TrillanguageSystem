@@ -16,6 +16,10 @@ function stripMarkup(text) {
     .trim();
 }
 
+function stripAudioTaskText(text) {
+  return stripMarkup(applyExplicitRuby(stripKatakanaReadings(text)));
+}
+
 function stripKatakanaReadings(text) {
   let cleaned = String(text || '');
   let previous = '';
@@ -33,25 +37,65 @@ function applyExplicitRuby(text) {
   );
 }
 
+function isScenarioExpressionsHeader(header) {
+  return /常用表达|常用表現|常用表達|common\s+(?:expressions?|phrases?)|useful\s+(?:expressions?|phrases?)|よく使う(?:表現|フレーズ)/i.test(
+    String(header || '')
+  );
+}
+
+function getScenarioLineMatch(line) {
+  const match = String(line || '').match(/^\s*-\s*\*\*(英文|日本語)\*\*\s*[:：]\s*(.+)$/);
+  if (!match) return null;
+  return {
+    lang: match[1] === '英文' ? 'en' : 'ja',
+    text: match[2],
+  };
+}
+
 function buildAudioTasksFromMarkdown(markdown) {
   const tasks = [];
   if (!markdown) return tasks;
   const lines = String(markdown).split(/\r?\n/);
   let currentLang = null;
+  let inScenarioExpressions = false;
+  let currentScenarioIndex = null;
   lines.forEach((line) => {
     const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
     if (headerMatch) {
       const header = headerMatch[1];
+      inScenarioExpressions = isScenarioExpressionsHeader(header);
+      currentScenarioIndex = null;
       if (/英文/i.test(header)) currentLang = 'en';
       else if (/日本語|日语/i.test(header)) currentLang = 'ja';
       else currentLang = null;
+    }
+
+    if (inScenarioExpressions) {
+      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s+.+$/);
+      if (scenarioHeading) {
+        currentScenarioIndex = String(Number(scenarioHeading[1]));
+        return;
+      }
+
+      const scenarioLine = getScenarioLineMatch(line);
+      if (scenarioLine && currentScenarioIndex) {
+        const cleanText = stripAudioTaskText(scenarioLine.text);
+        if (cleanText) {
+          tasks.push({
+            text: cleanText,
+            lang: scenarioLine.lang,
+            filename_suffix: `_${scenarioLine.lang}_${currentScenarioIndex}`,
+          });
+        }
+      }
+      return;
     }
 
     const exampleMatch = line.match(/^\s*-\s*\*\*例句(\d+)\*\*:\s*(.+)$/);
     if (exampleMatch && currentLang) {
       const index = exampleMatch[1];
       const rawText = exampleMatch[2];
-      const cleanText = stripMarkup(rawText);
+      const cleanText = stripAudioTaskText(rawText);
       if (cleanText) {
         tasks.push({
           text: cleanText,
@@ -79,6 +123,22 @@ async function normalizeJapaneseRuby(markdown) {
       } else {
         inJapanese = false;
       }
+    }
+
+    const scenarioJapaneseLine = line.match(/^(\s*-\s*\*\*日本語\*\*\s*[:：]\s*)(.+)$/);
+    if (scenarioJapaneseLine) {
+      if (line.includes('<ruby>') || line.includes('<rt>')) {
+        output.push(line);
+        continue;
+      }
+      if (/<[^>]+>/.test(line)) {
+        output.push(line);
+        continue;
+      }
+      const content = stripKatakanaReadings(scenarioJapaneseLine[2]);
+      const converted = await toRuby(content);
+      output.push(`${scenarioJapaneseLine[1]}${converted}`);
+      continue;
     }
 
     if (!inJapanese) {
@@ -139,15 +199,39 @@ function injectAudioTags(markdown, baseName, audioTasks) {
 
   const lines = String(markdown).split(/\r?\n/);
   let currentLang = null;
+  let inScenarioExpressions = false;
+  let currentScenarioIndex = null;
   const output = [];
 
   lines.forEach((line) => {
     const headerMatch = line.match(/^##\s*\d+\.\s*(.+)\s*$/);
     if (headerMatch) {
       const header = headerMatch[1];
+      inScenarioExpressions = isScenarioExpressionsHeader(header);
+      currentScenarioIndex = null;
       if (/英文/i.test(header)) currentLang = 'en';
       else if (/日本語|日语/i.test(header)) currentLang = 'ja';
       else currentLang = null;
+    }
+
+    if (inScenarioExpressions) {
+      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s+.+$/);
+      if (scenarioHeading) {
+        currentScenarioIndex = String(Number(scenarioHeading[1]));
+        output.push(line);
+        return;
+      }
+
+      const scenarioLine = getScenarioLineMatch(line);
+      if (scenarioLine && currentScenarioIndex) {
+        const suffixKey = `${scenarioLine.lang}:${scenarioLine.lang}_${currentScenarioIndex}`;
+        const audioMeta = audioMap.get(suffixKey) || {
+          suffix: `_${scenarioLine.lang}_${currentScenarioIndex}`,
+          extension: getPreferredAudioExtension(scenarioLine.lang),
+        };
+        output.push(`${line} <audio src="${baseName}${audioMeta.suffix}.${audioMeta.extension}"></audio>`);
+        return;
+      }
     }
 
     const exampleMatch = line.match(/^\s*-\s*\*\*例句(\d+)\*\*:/);
