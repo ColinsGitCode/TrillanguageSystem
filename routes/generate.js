@@ -22,13 +22,12 @@ const {
   prepareInsertData,
   normalizeCardType,
   normalizeSourceMode,
-  normalizeLlmProvider,
-  DEFAULT_LLM_PROVIDER,
   E2E_TEST_MODE,
 } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'route/generate' });
 
 const router = express.Router();
+const TRANSITIONAL_GENERATE_PROVIDER = 'gemini';
 
 router.post('/api/generate', async (req, res) => {
   const perf = new PerformanceMonitor().start();
@@ -50,7 +49,7 @@ router.post('/api/generate', async (req, res) => {
       target_folder = '',
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
-    const requestedProvider = 'gemini';
+    const requestedProvider = TRANSITIONAL_GENERATE_PROVIDER;
     const cardType = normalizeCardType(card_type);
     const sourceMode = normalizeSourceMode(source_mode);
 
@@ -141,10 +140,9 @@ router.post('/api/generate', async (req, res) => {
     log.error({ err, route: '/api/generate' }, 'generate failed');
 
     try {
-      const requestedProvider = normalizeLlmProvider(req.body?.llm_provider || DEFAULT_LLM_PROVIDER);
       dbService.insertError({
         phrase: req.body?.phrase || 'unknown',
-        llmProvider: requestedProvider,
+        llmProvider: TRANSITIONAL_GENERATE_PROVIDER,
         requestId: null,
         errorType: err.name || 'UnknownError',
         errorMessage: err.message,

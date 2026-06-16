@@ -18,8 +18,7 @@ function installStub(modulePath, exportsValue) {
   };
 }
 
-test.describe('cardGenerationService transitional provider wiring', () => {
-  test.it('does not pass DeepSeek defaults into the legacy Gemini proxy path', async (t) => {
+async function captureGeminiProxyModel(t, { modelOverride = undefined } = {}) {
     const servicePath = require.resolve('../../services/generation/cardGenerationService');
     const restoreFns = [];
     const captured = {};
@@ -81,10 +80,47 @@ test.describe('cardGenerationService transitional provider wiring', () => {
 
     const { generateWithProvider } = require('../../services/generation/cardGenerationService');
     await generateWithProvider('hello', 'gemini', { mark: () => {} }, {
-      modelOverride: 'deepseek-v4-flash',
+      modelOverride,
     });
 
-    assert.notEqual(captured.model, 'deepseek-v4-flash');
-    assert.equal(captured.model, '');
+    return captured.model;
+}
+
+test.describe('cardGenerationService transitional provider wiring', () => {
+  test.it('does not pass DeepSeek defaults into the legacy Gemini proxy path', async (t) => {
+    const model = await captureGeminiProxyModel(t, { modelOverride: 'deepseek-v4-flash' });
+
+    assert.notEqual(model, 'deepseek-v4-flash');
+    assert.equal(model, '');
+  });
+
+  test.it('preserves GEMINI_PROXY_MODEL fallback for the legacy Gemini proxy path', async (t) => {
+    const savedProxyModel = process.env.GEMINI_PROXY_MODEL;
+    process.env.GEMINI_PROXY_MODEL = 'gemini-legacy-proxy';
+    t.after(() => {
+      if (savedProxyModel === undefined) delete process.env.GEMINI_PROXY_MODEL;
+      else process.env.GEMINI_PROXY_MODEL = savedProxyModel;
+    });
+
+    const model = await captureGeminiProxyModel(t, { modelOverride: 'deepseek-v4-pro' });
+
+    assert.equal(model, 'gemini-legacy-proxy');
+  });
+
+  test.it('preserves TRAINING_TEACHER_MODEL fallback for the legacy Gemini proxy path', async (t) => {
+    const savedProxyModel = process.env.GEMINI_PROXY_MODEL;
+    const savedTeacherModel = process.env.TRAINING_TEACHER_MODEL;
+    delete process.env.GEMINI_PROXY_MODEL;
+    process.env.TRAINING_TEACHER_MODEL = 'gemini-teacher-legacy';
+    t.after(() => {
+      if (savedProxyModel === undefined) delete process.env.GEMINI_PROXY_MODEL;
+      else process.env.GEMINI_PROXY_MODEL = savedProxyModel;
+      if (savedTeacherModel === undefined) delete process.env.TRAINING_TEACHER_MODEL;
+      else process.env.TRAINING_TEACHER_MODEL = savedTeacherModel;
+    });
+
+    const model = await captureGeminiProxyModel(t, { modelOverride: 'deepseek-custom' });
+
+    assert.equal(model, 'gemini-teacher-legacy');
   });
 });

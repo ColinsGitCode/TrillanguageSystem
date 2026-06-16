@@ -35,6 +35,38 @@ const {
   validateSanitizedGeminiCardResponse,
 } = require('../../lib/generationHelpers');
 
+function sanitizeLegacyGeminiModelName(modelName) {
+  const model = String(modelName || '').trim();
+  if (!model) return '';
+  const lowered = model.toLowerCase();
+  if (lowered === 'gemini-cli' || lowered === 'cli' || lowered === 'default') return '';
+  if (lowered === 'deepseek-v4-flash' || lowered === 'deepseek-v4-pro' || lowered.startsWith('deepseek-')) return '';
+  return model;
+}
+
+function resolveLegacyGeminiModel(mode, modelOverride) {
+  const candidates = mode === 'host-proxy'
+    ? [
+        modelOverride,
+        process.env.GEMINI_PROXY_MODEL,
+        process.env.TRAINING_TEACHER_MODEL,
+        process.env.GEMINI_CLI_MODEL,
+        process.env.GEMINI_MODEL
+      ]
+    : [
+        modelOverride,
+        process.env.GEMINI_CLI_MODEL,
+        process.env.GEMINI_MODEL,
+        process.env.TRAINING_TEACHER_MODEL
+      ];
+
+  for (const candidate of candidates) {
+    const sanitized = sanitizeLegacyGeminiModelName(candidate);
+    if (sanitized) return sanitized;
+  }
+  return '';
+}
+
 async function generateWithProvider(phrase, provider, perf, options = {}) {
   let llmService;
   try {
@@ -56,7 +88,7 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
   const resolvedModel = provider === 'deepseek'
     ? resolveDeepSeekModel(options.modelOverride)
-    : '';
+    : (provider === 'gemini' ? resolveLegacyGeminiModel(geminiMode, options.modelOverride) : '');
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   const prompt = useMarkdownOutput
