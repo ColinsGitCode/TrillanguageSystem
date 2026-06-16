@@ -28,6 +28,12 @@ function mockFetch(handler) {
   return { calls, restore: () => { global.fetch = orig; } };
 }
 
+function abortError() {
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
 function withEnv(values, fn) {
   const saved = {};
   for (const key of Object.keys(values)) {
@@ -50,7 +56,7 @@ test.describe('deepseekService', () => {
     await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
       const m = mockFetch(() => jsonResponse(200, {
         model: 'deepseek-v4-flash',
-        choices: [{ message: { content: '# Hello' }, finish_reason: 'stop' }],
+        choices: [{ message: { content: '  # Hello\n' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
       }));
       t.after(() => m.restore());
@@ -71,8 +77,8 @@ test.describe('deepseekService', () => {
       assert.deepEqual(body.thinking, { type: 'disabled' });
       assert.equal(Object.hasOwn(body, 'response_format'), false);
 
-      assert.equal(result.markdown, '# Hello');
-      assert.equal(result.rawOutput, '# Hello');
+      assert.equal(result.markdown, '  # Hello\n');
+      assert.equal(result.rawOutput, '  # Hello\n');
       assert.equal(result.model, 'deepseek-v4-flash');
       assert.deepEqual(result.usage, { input: 11, output: 7, total: 18 });
       assert.equal(result.finishReason, 'stop');
@@ -146,6 +152,43 @@ test.describe('deepseekService', () => {
       await assert.rejects(
         () => generateMarkdown('prompt'),
         (err) => err.code === CODES.EMPTY_RESPONSE
+      );
+    });
+  });
+
+  test.it('maps fetch AbortError to a timeout error', async (t) => {
+    await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
+      const m = mockFetch(() => {
+        throw abortError();
+      });
+      t.after(() => m.restore());
+
+      const { generateMarkdown } = loadService();
+      await assert.rejects(
+        () => generateMarkdown('prompt', { timeoutMs: 1 }),
+        (err) => err.code === CODES.TIMEOUT && err.status === 504
+      );
+    });
+  });
+
+  test.it('keeps timeout active while reading the response body', async (t) => {
+    await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
+      const m = mockFetch(({ opts }) => ({
+        ok: true,
+        status: 200,
+        text: async () => new Promise((resolve, reject) => {
+          opts.signal.addEventListener('abort', () => reject(abortError()), { once: true });
+          setTimeout(() => resolve(JSON.stringify({
+            choices: [{ message: { content: 'late body' }, finish_reason: 'stop' }],
+          })), 30);
+        }),
+      }));
+      t.after(() => m.restore());
+
+      const { generateMarkdown } = loadService();
+      await assert.rejects(
+        () => generateMarkdown('prompt', { timeoutMs: 5 }),
+        (err) => err.code === CODES.TIMEOUT && err.status === 504
       );
     });
   });

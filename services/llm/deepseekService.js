@@ -74,6 +74,10 @@ function parseJsonText(text, status) {
   }
 }
 
+function isAbortError(err) {
+  return err?.name === 'AbortError';
+}
+
 async function chatCompletion(prompt, options = {}) {
   const apiKey = resolveApiKey(options);
   const baseUrl = resolveBaseUrl(options);
@@ -81,6 +85,8 @@ async function chatCompletion(prompt, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  let responseText;
+  let payload;
   let response;
   try {
     response = await fetch(`${baseUrl}/chat/completions`, {
@@ -92,17 +98,17 @@ async function chatCompletion(prompt, options = {}) {
       body: JSON.stringify(buildRequestBody(prompt, options)),
       signal: controller.signal,
     });
+    responseText = await response.text();
+    payload = parseJsonText(responseText, response.status);
   } catch (err) {
-    if (err?.name === 'AbortError') {
+    if (isAbortError(err)) {
       throw codedError(CODES.TIMEOUT, `DeepSeek request timed out after ${timeoutMs}ms`);
     }
+    if (err?.code) throw err;
     throw codedError(CODES.UNAVAILABLE, `DeepSeek request failed: ${err.message || err}`);
   } finally {
     clearTimeout(timer);
   }
-
-  const responseText = await response.text();
-  const payload = parseJsonText(responseText, response.status);
 
   if (!response.ok) {
     const code = codeForHttpStatus(response.status);
@@ -113,8 +119,8 @@ async function chatCompletion(prompt, options = {}) {
   }
 
   const content = payload?.choices?.[0]?.message?.content;
-  const text = typeof content === 'string' ? content.trim() : '';
-  if (!text) {
+  const text = typeof content === 'string' ? content : '';
+  if (!text.trim()) {
     throw codedError(CODES.EMPTY_RESPONSE, 'DeepSeek returned an empty response');
   }
 
