@@ -28,6 +28,11 @@ test.describe('serverConfig.normalizeCardType', () => {
     assert.equal(cfg.normalizeCardType('  GRAMMAR_JA '), 'grammar_ja');
   });
 
+  test.it('keeps scenario_phrase', () => {
+    assert.equal(cfg.normalizeCardType('scenario_phrase'), 'scenario_phrase');
+    assert.equal(cfg.normalizeCardType('  SCENARIO_PHRASE '), 'scenario_phrase');
+  });
+
   test.it('defaults everything else to trilingual', () => {
     assert.equal(cfg.normalizeCardType('trilingual'), 'trilingual');
     assert.equal(cfg.normalizeCardType('weird'), 'trilingual');
