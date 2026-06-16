@@ -8,6 +8,7 @@ logs/
 # IDE / tooling artifacts
 .idea/
 .playwright-mcp/
+.worktrees/
 
 # Personal scratch files (codex resume cmds, ad-hoc shell snippets)
 cmds
