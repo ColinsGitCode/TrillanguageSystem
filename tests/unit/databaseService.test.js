@@ -24,8 +24,8 @@ function buildGenerationFixture(overrides = {}) {
     phraseLanguage: 'en',
     cardType: 'trilingual',
     sourceMode: 'input',
-    llmProvider: 'gemini',
-    llmModel: 'gemini-test',
+    llmProvider: 'deepseek',
+    llmModel: 'deepseek-v4-flash',
     folderName: '20260101',
     baseFilename: 'hello',
     mdFilePath: '/tmp/hello.md',
@@ -143,7 +143,7 @@ test.describe('databaseService — query / search / count', () => {
     const db = freshDb();
     try {
       assert.equal(db.getTotalCount({}), 0);
-      db.insertGeneration(buildGenerationFixture());
+      db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'gemini', llmModel: 'gemini-test' } }));
       db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'local' } }));
       assert.equal(db.getTotalCount({}), 2);
       assert.equal(db.getTotalCount({ provider: 'gemini' }), 1);
@@ -256,8 +256,8 @@ function buildJobPayload(overrides = {}) {
     phraseRaw: 'hello',
     phraseNormalized: 'hello',
     sourceMode: 'input',
-    provider: 'gemini',
-    llmModel: 'gemini-test',
+    provider: 'deepseek',
+    llmModel: 'deepseek-v4-flash',
     maxRetries: 2,
     sourceContext: {},
     requestPayload: { phrase: 'hello' },
@@ -273,8 +273,20 @@ test.describe('databaseService — generation_jobs lifecycle', () => {
       assert.ok(job);
       assert.equal(job.status, 'queued');
       assert.equal(job.attempts, 0);
+      assert.equal(job.provider, 'deepseek');
+      assert.equal(job.llmModel, 'deepseek-v4-flash');
       assert.equal(job.phraseNormalized, 'hello');
       assert.deepEqual(job.sourceContext, {});
+    } finally { db.close(); }
+  });
+
+  test.it('createGenerationJob defaults missing provider metadata to DeepSeek', () => {
+    const db = freshDb();
+    try {
+      const job = db.createGenerationJob(buildJobPayload({ provider: undefined, llmModel: undefined }));
+      assert.ok(job);
+      assert.equal(job.provider, 'deepseek');
+      assert.equal(job.llmModel, '');
     } finally { db.close(); }
   });
 

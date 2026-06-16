@@ -36,14 +36,15 @@ test.describe('/api/generation-jobs/*', () => {
     assert.equal(detail.body.job.id, jobId);
   });
 
-  test.it('POST does not pair transitional Gemini provider with a DeepSeek model', async () => {
+  test.it('POST creates jobs with DeepSeek provider/model metadata', async () => {
     const created = await api('POST', '/api/generation-jobs', {
       body: { phrase: 'job model metadata', card_type: 'trilingual' }
     });
     assert.equal(created.status, 200);
-    assert.equal(created.body.job.provider, 'gemini');
-    assert.notEqual(created.body.job.llmModel, 'deepseek-v4-flash');
-    assert.notEqual(created.body.job.requestPayload?.llm_model, 'deepseek-v4-flash');
+    assert.equal(created.body.job.provider, 'deepseek');
+    assert.equal(created.body.job.llmModel, 'deepseek-v4-flash');
+    assert.equal(created.body.job.requestPayload?.llm_provider, 'deepseek');
+    assert.equal(created.body.job.requestPayload?.llm_model, 'deepseek-v4-flash');
   });
 
   test.it('POST preserves scenario_phrase job type', async () => {

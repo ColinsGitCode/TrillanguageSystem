@@ -22,15 +22,15 @@ app.use(express.json({ limit: '10mb' }));
 // Generation jobs use the HTTP /api/generate endpoint as their executor, so
 // the worker re-enters the same code path users hit. The worker's request
 // carries X-Generation-Job-Worker:1 so the throttle skips it.
-const { normalizeCardType, normalizeSourceMode } = require('./lib/serverConfig');
+const { DEFAULT_DEEPSEEK_MODEL, normalizeCardType, normalizeSourceMode } = require('./lib/serverConfig');
 async function executeGenerationJobViaHttp(job) {
   const payload = {
     phrase: job.phraseNormalized,
-    llm_provider: 'gemini',
+    llm_provider: 'deepseek',
     card_type: normalizeCardType(job.jobType),
     source_mode: normalizeSourceMode(job.sourceMode),
     target_folder: job.targetFolder || '',
-    llm_model: null
+    llm_model: DEFAULT_DEEPSEEK_MODEL
   };
 
   const response = await fetch(`http://127.0.0.1:${PORT}/api/generate`, {

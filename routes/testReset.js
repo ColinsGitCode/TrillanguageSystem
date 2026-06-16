@@ -55,7 +55,7 @@ router.post('/api/_test/seed-knowledge', (req, res) => {
     const buildGen = (overrides) => ({
       generation: {
         phrase: 'x', phraseLanguage: 'ja', cardType: 'grammar_ja', sourceMode: 'input',
-        llmProvider: 'gemini', llmModel: 'gemini-test', folderName: '20260101',
+        llmProvider: 'deepseek', llmModel: 'deepseek-v4-flash', folderName: '20260101',
         baseFilename: 'x', mdFilePath: '', htmlFilePath: '', metaFilePath: '',
         markdownContent: '# x', enTranslation: '', jaTranslation: '', zhTranslation: '',
         generationDate: '2026-01-01', requestId: `seed_${Math.random().toString(36).slice(2)}`,
