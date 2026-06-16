@@ -71,7 +71,7 @@ function buildAudioTasksFromMarkdown(markdown) {
     }
 
     if (inScenarioExpressions) {
-      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s+.+$/);
+      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s*.*$/);
       if (scenarioHeading) {
         currentScenarioIndex = String(Number(scenarioHeading[1]));
         return;
@@ -215,7 +215,7 @@ function injectAudioTags(markdown, baseName, audioTasks) {
     }
 
     if (inScenarioExpressions) {
-      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s+.+$/);
+      const scenarioHeading = line.match(/^###\s*(\d{1,2})\.\s*.*$/);
       if (scenarioHeading) {
         currentScenarioIndex = String(Number(scenarioHeading[1]));
         output.push(line);

@@ -74,7 +74,9 @@ test.describe('validateGeneratedContent', () => {
           : `- **英文**: Where is gate ${i}?`,
         options.missingAudioLines
           ? `- **日文**: 搭乗口${i}はどこですか。`
-          : `- **日本語**: 搭乗口${i}はどこですか。`,
+          : options.duplicateEnglishNoJapanese
+            ? `- **英文**: Where can I find gate ${i}?`
+            : `- **日本語**: 搭乗口${i}はどこですか。`,
         '- **使用提示**: 确认位置时使用。'
       );
     }
@@ -120,6 +122,16 @@ test.describe('validateGeneratedContent', () => {
       ['scenario_phrase requires exactly 12 expression blocks']
     );
   });
+
+  test.it('rejects scenario cards without 12 English and 12 Japanese audio lines', () => {
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase requires 12 English and 12 Japanese audio lines']
+    );
+  });
 });
 
 test.describe('extractGeminiMarkdownResponse', () => {
@@ -161,7 +173,9 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
           : `- **英文**: Where is gate ${i}?`,
         options.missingAudioLines
           ? `- **日文**: 搭乗口${i}はどこですか。`
-          : `- **日本語**: 搭乗口${i}はどこですか。`,
+          : options.duplicateEnglishNoJapanese
+            ? `- **英文**: Where can I find gate ${i}?`
+            : `- **日本語**: 搭乗口${i}はどこですか。`,
         '- **使用提示**: 确认位置时使用。'
       );
     }
@@ -230,6 +244,16 @@ test.describe('validateSanitizedGeminiCardResponse', () => {
     assert.equal(
       validateSanitizedGeminiCardResponse(
         { markdown: scenarioCard(12, { missingAudioLines: true }) },
+        'scenario_phrase'
+      ),
+      false
+    );
+  });
+
+  test.it('rejects scenario markdown without 12 English and 12 Japanese audio lines', () => {
+    assert.equal(
+      validateSanitizedGeminiCardResponse(
+        { markdown: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
         'scenario_phrase'
       ),
       false

@@ -126,6 +126,30 @@ test.describe('buildAudioTasksFromMarkdown', () => {
     assert.equal(japaneseTask.text, '今日はどこですか。');
   });
 
+  test.it('extracts scenario audio tasks from a numbered heading without title text', () => {
+    const markdown = [
+      '# 空港で道を尋ねる',
+      '## 1. 场景说明',
+      '- **角色**: 旅行者と駅員',
+      '## 2. 常用表达',
+      '### 01.',
+      '- **中文**: 请问登机口在哪里？',
+      '- **英文**: Where is the gate?',
+      '- **日本語**: 搭乗口はどこですか。',
+      '- **使用提示**: 确认位置时使用。',
+    ].join('\n');
+
+    const tasks = buildAudioTasksFromMarkdown(markdown);
+
+    assert.deepEqual(
+      tasks.map((task) => `${task.lang}:${task.filename_suffix}:${task.text}`),
+      [
+        'en:_en_1:Where is the gate?',
+        'ja:_ja_1:搭乗口はどこですか。',
+      ]
+    );
+  });
+
   test.it('injects audio tags into scenario English and Japanese lines', async () => {
     const markdown = scenarioMarkdown(2);
     const tasks = buildAudioTasksFromMarkdown(markdown);
