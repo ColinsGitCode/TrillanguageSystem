@@ -82,6 +82,7 @@ test.describe('TokenCounter.calculateCost', () => {
   test.afterEach(() => {
     delete process.env.DEEPSEEK_INPUT_COST_PER_1M;
     delete process.env.DEEPSEEK_OUTPUT_COST_PER_1M;
+    delete process.env.DEEPSEEK_MODEL;
   });
 
   test.it('returns zero cost for gemini (free tier)', () => {
@@ -109,11 +110,37 @@ test.describe('TokenCounter.calculateCost', () => {
   });
 
   test.it('uses DeepSeek V4 Flash cache-miss conservative default per-1M rates', () => {
-    const cost = TokenCounter.calculateCost({ input: 1_000_000, output: 1_000_000, total: 2_000_000 }, 'deepseek');
+    const cost = TokenCounter.calculateCost(
+      { input: 1_000_000, output: 1_000_000, total: 2_000_000 },
+      'deepseek',
+      { model: 'deepseek-v4-flash' }
+    );
 
     assert.equal(cost.input, 0.14);
     assert.equal(cost.output, 0.28);
     assert.equal(cost.total, 0.14 + 0.28);
+  });
+
+  test.it('uses DeepSeek V4 Pro cache-miss conservative default per-1M rates', () => {
+    const cost = TokenCounter.calculateCost(
+      { input: 1_000_000, output: 1_000_000, total: 2_000_000 },
+      'deepseek',
+      { model: 'deepseek-v4-pro' }
+    );
+
+    assert.equal(cost.input, 0.435);
+    assert.equal(cost.output, 0.87);
+    assert.equal(cost.total, 0.435 + 0.87);
+  });
+
+  test.it('uses DEEPSEEK_MODEL for DeepSeek default rates when model option is omitted', () => {
+    process.env.DEEPSEEK_MODEL = 'deepseek-v4-pro';
+
+    const cost = TokenCounter.calculateCost({ input: 1_000_000, output: 1_000_000, total: 2_000_000 }, 'deepseek');
+
+    assert.equal(cost.input, 0.435);
+    assert.equal(cost.output, 0.87);
+    assert.equal(cost.total, 0.435 + 0.87);
   });
 
   test.it('returns zero cost for unknown providers (safe default)', () => {

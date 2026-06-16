@@ -60,7 +60,9 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
   const estimatedInputTokens = TokenCounter.estimate(prompt);
   const estimatedOutputTokens = TokenCounter.estimate(markdown);
   const providerUsage = response.usage || null;
-  const hasAuthoritativeProviderUsage = Number(providerUsage?.total || 0) > 0;
+  const providerUsageTotal =
+    Number(providerUsage?.input || 0) + Number(providerUsage?.output || 0) + Number(providerUsage?.total || 0);
+  const hasAuthoritativeProviderUsage = providerUsageTotal > 0;
   const usage = hasAuthoritativeProviderUsage ? providerUsage : {
     input: estimatedInputTokens,
     output: estimatedOutputTokens,
@@ -69,7 +71,7 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
 
   perf.mark('jsonParse');
 
-  const cost = TokenCounter.calculateCost(usage, providerName);
+  const cost = TokenCounter.calculateCost(usage, providerName, { model });
   const quality = QualityChecker.check(content, phrase);
   const promptData = PromptParser.parse(prompt);
 

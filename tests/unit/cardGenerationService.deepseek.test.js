@@ -148,4 +148,20 @@ test.describe('cardGenerationService DeepSeek provider wiring', () => {
       total: 25,
     });
   });
+
+  test.it('keeps provider usage when input/output are nonzero but total is missing', async (t) => {
+    const { result } = await captureDeepSeekCall(t, {
+      usage: { input: 9, output: 13 },
+      estimate: () => 99,
+    });
+
+    assert.deepEqual(result.observability.tokens, {
+      input: 9,
+      output: 13,
+    });
+    assert.deepEqual(result.observability.cost.usage, {
+      input: 9,
+      output: 13,
+    });
+  });
 });

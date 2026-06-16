@@ -2,12 +2,20 @@ require('dotenv').config();
 const { parseTrilingualMarkdown } = require('../generation/markdownParser');
 const log = require('../../lib/logger').child({ module: 'svc/observability' });
 
-const DEFAULT_DEEPSEEK_INPUT_COST_PER_1M = 0.14;
-const DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1M = 0.28;
+const DEEPSEEK_DEFAULT_COST_RATES_PER_1M = {
+  'deepseek-v4-flash': { input: 0.14, output: 0.28 },
+  'deepseek-v4-pro': { input: 0.435, output: 0.87 },
+};
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
 function toNumberOr(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function resolveDeepSeekCostRates(options = {}) {
+  const model = String(options.model || process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL).trim();
+  return DEEPSEEK_DEFAULT_COST_RATES_PER_1M[model] || DEEPSEEK_DEFAULT_COST_RATES_PER_1M[DEFAULT_DEEPSEEK_MODEL];
 }
 
 /**
@@ -87,9 +95,10 @@ class TokenCounter {
    * 计算成本（基于不同 provider）
    * @param {Object} tokens - Token 使用信息
    * @param {string} provider - LLM 提供商 ('gemini' | 'local' | 'deepseek')
+   * @param {Object} options - 计算选项
    * @returns {Object} 成本信息
    */
-  static calculateCost(tokens, provider) {
+  static calculateCost(tokens, provider, options = {}) {
     const normalizedProvider = String(provider || '').trim().toLowerCase();
     if (normalizedProvider === 'gemini') {
       // Gemini 1.5 Flash 免费层 - 实际免费
@@ -115,13 +124,14 @@ class TokenCounter {
     if (normalizedProvider === 'deepseek') {
       const inputTokens = Number(tokens?.input || 0);
       const outputTokens = Number(tokens?.output || 0);
+      const defaultRates = resolveDeepSeekCostRates(options);
       const inputRatePer1M = toNumberOr(
         process.env.DEEPSEEK_INPUT_COST_PER_1M,
-        DEFAULT_DEEPSEEK_INPUT_COST_PER_1M
+        defaultRates.input
       );
       const outputRatePer1M = toNumberOr(
         process.env.DEEPSEEK_OUTPUT_COST_PER_1M,
-        DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1M
+        defaultRates.output
       );
       const input = (inputTokens / 1_000_000) * inputRatePer1M;
       const output = (outputTokens / 1_000_000) * outputRatePer1M;
