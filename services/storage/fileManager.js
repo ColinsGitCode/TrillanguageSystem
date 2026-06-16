@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const log = require('../../lib/logger').child({ module: 'svc/file-manager' });
+const { normalizeCardType } = require('../../lib/serverConfig');
 
 // Inherit the base path from server.js logic (or environment variable)
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
@@ -94,7 +95,7 @@ function getDisplayMeta(folderPath, baseName) {
     const metaPath = path.join(folderPath, `${baseName}.meta.json`);
     const meta = readMetaInfo(metaPath);
     const title = meta?.phrase || readMarkdownTitle(path.join(folderPath, `${baseName}.md`)) || baseName;
-    const cardType = meta?.cardType === 'grammar_ja' ? 'grammar_ja' : 'trilingual';
+    const cardType = normalizeCardType(meta?.cardType);
     return {
         title,
         cardType,
@@ -331,9 +332,7 @@ function saveGeneratedFiles(phrase, content, options = {}) {
     fs.writeFileSync(htmlPath, content.html_content, 'utf-8');
     const metaPath = path.join(targetDir, `${baseName}.meta.json`);
     const displayPhrase = String(phrase || '').trim();
-    const cardType = String(options.cardType || 'trilingual').toLowerCase() === 'grammar_ja'
-        ? 'grammar_ja'
-        : 'trilingual';
+    const cardType = normalizeCardType(options.cardType);
     const sourceMode = String(options.sourceMode || '').trim().toLowerCase();
     const meta = {
         phrase: displayPhrase,

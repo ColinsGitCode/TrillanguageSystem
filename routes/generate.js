@@ -68,7 +68,7 @@ router.post('/api/generate', async (req, res) => {
 
     postProcessGeneratedContent(content);
 
-    const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true });
+    const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true, cardType });
     if (validationErrors.length) {
       return res.status(422).json({ error: 'Validation failed', details: validationErrors, prompt, llm_output: content });
     }

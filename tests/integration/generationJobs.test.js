@@ -36,6 +36,21 @@ test.describe('/api/generation-jobs/*', () => {
     assert.equal(detail.body.job.id, jobId);
   });
 
+  test.it('POST preserves scenario_phrase job type', async () => {
+    const created = await api('POST', '/api/generation-jobs', {
+      body: {
+        phrase: '机场值机时询问行李额度',
+        card_type: 'scenario_phrase'
+      }
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.body.job.jobType, 'scenario_phrase');
+
+    const detail = await api('GET', `/api/generation-jobs/${created.body.job.id}`);
+    assert.equal(detail.status, 200);
+    assert.equal(detail.body.job.jobType, 'scenario_phrase');
+  });
+
   test.it('GET /api/generation-jobs/:id 404 for unknown id', async () => {
     const res = await api('GET', '/api/generation-jobs/9999');
     assert.equal(res.status, 404);
