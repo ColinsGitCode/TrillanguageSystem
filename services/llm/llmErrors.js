@@ -40,7 +40,7 @@ function codedError(code, message, payload = null) {
   const err = new Error(message || code);
   err.code = code;
   err.status = statusForCode(code);
-  if (payload) err.payload = payload;
+  if (payload !== null && payload !== undefined) err.payload = payload;
   return err;
 }
 

@@ -10,7 +10,7 @@ const generationJobService = require('./services/generation/generationJobService
 const app = express();
 const {
     PORT,
-    DEFAULT_GEMINI_MODEL,
+    DEFAULT_DEEPSEEK_MODEL,
 } = require('./lib/serverConfig');
 const log = require('./lib/logger').child({ module: 'http' });
 
@@ -33,7 +33,7 @@ async function executeGenerationJobViaHttp(job) {
     card_type: normalizeCardType(job.jobType),
     source_mode: normalizeSourceMode(job.sourceMode),
     target_folder: job.targetFolder || '',
-    llm_model: DEFAULT_GEMINI_MODEL
+    llm_model: DEFAULT_DEEPSEEK_MODEL
   };
 
   const response = await fetch(`http://127.0.0.1:${PORT}/api/generate`, {

@@ -29,7 +29,7 @@ const {
   RECORDS_PATH,
   normalizeCardType,
   normalizeSourceMode,
-  resolveGeminiModel,
+  resolveDeepSeekModel,
 } = require('../../lib/serverConfig');
 const {
   validateSanitizedGeminiCardResponse,
@@ -54,7 +54,7 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
   const localOutputMode = (process.env.LLM_OUTPUT_MODE || 'json').toLowerCase();
   const useGeminiCli = provider === 'gemini' && geminiMode === 'cli';
   const useGeminiProxy = provider === 'gemini' && geminiMode === 'host-proxy';
-  const resolvedGeminiCliModel = resolveGeminiModel(geminiMode, options.modelOverride);
+  const resolvedModel = resolveDeepSeekModel(options.modelOverride);
   const useLocalMarkdown = provider === 'local' && localOutputMode === 'markdown';
   const useMarkdownOutput = useGeminiCli || useGeminiProxy || useLocalMarkdown;
   const prompt = useMarkdownOutput
@@ -67,12 +67,12 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
     response = await runGeminiCli(prompt, {
       baseName,
       outputDir: process.env.GEMINI_CLI_OUTPUT_DIR || path.join(RECORDS_PATH, 'cli_suggestions'),
-      model: resolvedGeminiCliModel
+      model: resolvedModel
     });
   } else if (useGeminiProxy) {
     response = await runGeminiProxy(prompt, {
       baseName,
-      model: resolvedGeminiCliModel,
+      model: resolvedModel,
       validateSanitizedResponse: (sanitizedResponse) => validateSanitizedGeminiCardResponse(sanitizedResponse, cardType)
     });
   } else {
@@ -128,8 +128,8 @@ async function generateWithProvider(phrase, provider, perf, options = {}) {
         timestamp: Date.now(),
         model: provider === 'gemini'
           ? (useGeminiCli
-            ? (response.model || resolvedGeminiCliModel || 'gemini-cli')
-            : (useGeminiProxy ? (response.model || resolvedGeminiCliModel || process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
+            ? (response.model || resolvedModel || 'gemini-cli')
+            : (useGeminiProxy ? (response.model || resolvedModel || process.env.GEMINI_PROXY_MODEL || 'gemini-cli') : process.env.GEMINI_MODEL))
           : process.env.LLM_MODEL,
         promptText: prompt,
         promptParsed: promptData,

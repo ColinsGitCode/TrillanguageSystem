@@ -44,6 +44,14 @@ test.describe('llmErrors', () => {
     assert.equal(err.status, 429);
   });
 
+  test.it('attaches falsy payload values except null and undefined', () => {
+    assert.equal(Object.hasOwn(codedError(CODES.BAD_REQUEST, 'bad', 0), 'payload'), true);
+    assert.equal(Object.hasOwn(codedError(CODES.BAD_REQUEST, 'bad', false), 'payload'), true);
+    assert.equal(Object.hasOwn(codedError(CODES.BAD_REQUEST, 'bad', ''), 'payload'), true);
+    assert.equal(Object.hasOwn(codedError(CODES.BAD_REQUEST, 'bad', null), 'payload'), false);
+    assert.equal(Object.hasOwn(codedError(CODES.BAD_REQUEST, 'bad', undefined), 'payload'), false);
+  });
+
   test.it('extracts direct and payload codes', () => {
     assert.equal(errorCodeOf({ code: CODES.TIMEOUT }), CODES.TIMEOUT);
     assert.equal(errorCodeOf({ payload: { code: CODES.RATE_LIMITED } }), CODES.RATE_LIMITED);
