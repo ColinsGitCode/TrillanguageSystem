@@ -1553,9 +1553,14 @@ test.describe('databaseService — knowledge_relations + overview + summary', ()
       newGenId(db, { folderName: '20260101', cardType: 'trilingual', requestId: 'rid_src_a' });
       newGenId(db, { folderName: '20260201', cardType: 'grammar_ja', requestId: 'rid_src_b' });
       newGenId(db, { folderName: '20260301', cardType: 'trilingual', requestId: 'rid_src_c' });
+      newGenId(db, { folderName: '20260401', cardType: 'scenario_phrase', requestId: 'rid_src_scenario' });
 
       const all = db.getKnowledgeSourceCards({});
       assert.equal(all.length, 3);
+      assert.deepEqual(new Set(all.map((card) => card.card_type)), new Set(['trilingual', 'grammar_ja']));
+
+      const scenarios = db.getKnowledgeSourceCards({ cardTypes: ['scenario_phrase'] });
+      assert.deepEqual(scenarios, []);
 
       const ranged = db.getKnowledgeSourceCards({ folderFrom: '20260201', folderTo: '20260201' });
       assert.equal(ranged.length, 1);
@@ -1809,6 +1814,23 @@ test.describe('databaseService — card_srs (spaced repetition)', () => {
       assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM card_reviews WHERE generation_id = ?').get(g).c, 2);
 
       assert.equal(db.reviewCardSrs(999999, 'good'), null);
+    } finally { db.close(); }
+  });
+
+  test.it('excludes scenario_phrase cards from MVP SRS queue, stats, and review', () => {
+    const db = freshDb();
+    try {
+      const tri = newGenId(db, { phrase: 'tri', baseFilename: 'tri', cardType: 'trilingual', requestId: 'rid_srs_tri' });
+      const scenario = newGenId(db, { phrase: 'scenario', baseFilename: 'scenario', cardType: 'scenario_phrase', requestId: 'rid_srs_scenario' });
+
+      const queue = db.getSrsQueue({ limit: 50 });
+      assert.deepEqual(queue.map((card) => card.generationId), [tri]);
+
+      const stats = db.getSrsStats();
+      assert.equal(stats.newCount, 1);
+
+      assert.equal(db.reviewCardSrs(scenario, 'good'), null);
+      assert.equal(db.getCardSrsState(scenario), null);
     } finally { db.close(); }
   });
 

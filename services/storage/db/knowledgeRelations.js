@@ -11,6 +11,18 @@
 const crypto = require('crypto');
 const { safeJsonParse } = require('./helpers');
 
+const KNOWLEDGE_SUPPORTED_CARD_TYPES = ['trilingual', 'grammar_ja'];
+
+function normalizeKnowledgeCardTypes(cardTypes) {
+  if (!Array.isArray(cardTypes) || cardTypes.length === 0) {
+    return [...KNOWLEDGE_SUPPORTED_CARD_TYPES];
+  }
+
+  return Array.from(new Set(cardTypes
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter((value) => KNOWLEDGE_SUPPORTED_CARD_TYPES.includes(value))));
+}
+
 function insertRawOutput(db, jobId, batchNo, outputData = {}) {
   const inputDigest = crypto
     .createHash('sha1')
@@ -36,6 +48,8 @@ function insertRawOutput(db, jobId, batchNo, outputData = {}) {
 function getSourceCards(db, scope = {}) {
   const conditions = ['1=1'];
   const params = {};
+  const cardTypes = normalizeKnowledgeCardTypes(scope.cardTypes);
+  if (cardTypes.length === 0) return [];
 
   if (scope.folderFrom) {
     conditions.push('g.folder_name >= @folderFrom');
@@ -45,9 +59,9 @@ function getSourceCards(db, scope = {}) {
     conditions.push('g.folder_name <= @folderTo');
     params.folderTo = String(scope.folderTo);
   }
-  if (Array.isArray(scope.cardTypes) && scope.cardTypes.length > 0) {
-    const placeholders = scope.cardTypes.map((_, idx) => `@cardType${idx}`);
-    scope.cardTypes.forEach((value, idx) => {
+  {
+    const placeholders = cardTypes.map((_, idx) => `@cardType${idx}`);
+    cardTypes.forEach((value, idx) => {
       params[`cardType${idx}`] = String(value);
     });
     conditions.push(`g.card_type IN (${placeholders.join(', ')})`);

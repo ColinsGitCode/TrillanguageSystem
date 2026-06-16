@@ -7,6 +7,14 @@
 
 const { schedule } = require('../../srs/srsScheduler');
 
+const SRS_SUPPORTED_CARD_TYPES = ['trilingual', 'grammar_ja'];
+
+function normalizeSrsCardType(cardType) {
+  const ct = String(cardType || '').trim().toLowerCase();
+  if (!ct || ct === 'all') return '';
+  return SRS_SUPPORTED_CARD_TYPES.includes(ct) ? ct : '__unsupported__';
+}
+
 function mapState(row) {
   if (!row) return null;
   return {
@@ -31,8 +39,8 @@ function getState(db, generationId) {
 function review(db, generationId, grade) {
   const gid = Number(generationId);
   if (!gid) return null;
-  const gen = db.prepare('SELECT id FROM generations WHERE id = ?').get(gid);
-  if (!gen) return null;
+  const gen = db.prepare('SELECT id, card_type FROM generations WHERE id = ?').get(gid);
+  if (!gen || !SRS_SUPPORTED_CARD_TYPES.includes(String(gen.card_type || '').toLowerCase())) return null;
 
   const prev = getState(db, gid);
   const next = schedule(prev ? {
@@ -85,13 +93,23 @@ function review(db, generationId, grade) {
 // ("new") cards. Due cards come first, then new, capped by `limit`.
 function getQueue(db, { limit = 20, cardType = '' } = {}) {
   const safeLimit = Math.min(200, Math.max(1, Number(limit) || 20));
-  const ct = String(cardType || '').trim().toLowerCase();
+  const ct = normalizeSrsCardType(cardType);
+  if (ct === '__unsupported__') return [];
+
   const where = ["(s.id IS NULL OR s.due_date <= date('now'))"];
   const params = { limit: safeLimit };
-  if (ct && ct !== 'all') {
+
+  if (ct) {
     where.push('lower(g.card_type) = @cardType');
     params.cardType = ct;
+  } else {
+    const placeholders = SRS_SUPPORTED_CARD_TYPES.map((_, idx) => `@cardType${idx}`);
+    SRS_SUPPORTED_CARD_TYPES.forEach((value, idx) => {
+      params[`cardType${idx}`] = value;
+    });
+    where.push(`g.card_type IN (${placeholders.join(', ')})`);
   }
+
   const rows = db.prepare(`
     SELECT
       g.id AS generation_id, g.phrase, g.card_type, g.folder_name, g.base_filename, g.created_at,
@@ -118,13 +136,42 @@ function getQueue(db, { limit = 20, cardType = '' } = {}) {
 }
 
 function getStats(db) {
+  const params = {};
+  const placeholders = SRS_SUPPORTED_CARD_TYPES.map((_, idx) => `@cardType${idx}`);
+  SRS_SUPPORTED_CARD_TYPES.forEach((value, idx) => {
+    params[`cardType${idx}`] = value;
+  });
+  const supportedCardTypesSql = placeholders.join(', ');
+
   const row = db.prepare(`
     SELECT
-      (SELECT COUNT(*) FROM card_srs WHERE due_date <= date('now')) AS due_count,
-      (SELECT COUNT(*) FROM generations g WHERE NOT EXISTS (SELECT 1 FROM card_srs s WHERE s.generation_id = g.id)) AS new_count,
-      (SELECT COUNT(*) FROM card_reviews WHERE date(reviewed_at) = date('now')) AS reviewed_today,
-      (SELECT COUNT(*) FROM card_srs) AS tracked_total
-  `).get() || {};
+      (
+        SELECT COUNT(*)
+        FROM card_srs s
+        JOIN generations g ON g.id = s.generation_id
+        WHERE s.due_date <= date('now')
+          AND g.card_type IN (${supportedCardTypesSql})
+      ) AS due_count,
+      (
+        SELECT COUNT(*)
+        FROM generations g
+        WHERE g.card_type IN (${supportedCardTypesSql})
+          AND NOT EXISTS (SELECT 1 FROM card_srs s WHERE s.generation_id = g.id)
+      ) AS new_count,
+      (
+        SELECT COUNT(*)
+        FROM card_reviews r
+        JOIN generations g ON g.id = r.generation_id
+        WHERE date(r.reviewed_at) = date('now')
+          AND g.card_type IN (${supportedCardTypesSql})
+      ) AS reviewed_today,
+      (
+        SELECT COUNT(*)
+        FROM card_srs s
+        JOIN generations g ON g.id = s.generation_id
+        WHERE g.card_type IN (${supportedCardTypesSql})
+      ) AS tracked_total
+  `).get(params) || {};
   return {
     dueCount: Number(row.due_count || 0),
     newCount: Number(row.new_count || 0),
