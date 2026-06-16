@@ -17,6 +17,69 @@ function buildPrompt(args) {
     const filenameBase = args.filenameBase || '';
     const cardType = String(args.cardType || 'trilingual').toLowerCase();
 
+    if (cardType === 'scenario_phrase') {
+        return `你是场景表达卡生成器。
+输入场景: "${phrase}"
+文件名基础: "${filenameBase}"
+
+严格要求:
+1) 只输出有效 JSON，不要任何额外文本。
+2) markdown_content 必须为 Markdown，内容是一张“场景表达卡”，并且必须使用以下章节:
+# ${phrase}
+## 1. 场景说明
+- 用中文说明场景目标、对象、语气和注意事项。
+## 2. 常用表达
+### 01.
+- **中文**: ...
+- **英文**: ...
+- **日本語**: ...
+- **使用提示**: ...
+...
+### 12.
+- **中文**: ...
+- **英文**: ...
+- **日本語**: ...
+- **使用提示**: ...
+
+3) 必须生成 12 个常用表达，编号固定为 ### 01. 到 ### 12.，不要增加或减少。
+4) 每个表达块必须包含中文、英文、日本語、使用提示；英文和日语表达要自然口语化。
+5) 日语汉字需加假名(例: 漢字(かな))；不要输出原始 <ruby> 标签。
+6) audio_tasks 必须含 24 项: 每个表达的英文和日语各 1 项。filename_suffix 固定为 _en_1 到 _en_12、_ja_1 到 _ja_12；text 去掉末尾标点；日语 text 不能含 ruby。
+7) JSON 转义: markdown_content 换行用 \\n，双引号用 \\"。
+禁止: <script>/<iframe>/<object>/<embed>。
+
+JSON 结构:
+{
+  "markdown_content": "...",
+  "audio_tasks": [
+    { "text": "...", "lang": "en", "filename_suffix": "_en_1" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_1" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_2" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_2" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_3" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_3" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_4" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_4" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_5" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_5" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_6" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_6" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_7" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_7" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_8" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_8" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_9" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_9" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_10" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_10" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_11" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_11" },
+    { "text": "...", "lang": "en", "filename_suffix": "_en_12" },
+    { "text": "...", "lang": "ja", "filename_suffix": "_ja_12" }
+  ]
+}`;
+    }
+
     if (cardType === 'grammar_ja') {
         return `你是日语语法学习卡片生成器。
 输入内容: "${phrase}"
@@ -110,17 +173,27 @@ JSON 结构:
 function buildMarkdownPrompt(args) {
     const phrase = args.phrase || '';
     const cardType = String(args.cardType || 'trilingual').toLowerCase();
-    const templatePath = cardType === 'grammar_ja'
-        ? (process.env.GRAMMAR_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_ja_grammar_markdown.md'))
-        : (process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_3LANS_markdown.md'));
+    let templatePath;
+    if (cardType === 'scenario_phrase') {
+        templatePath = process.env.SCENARIO_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_scenario_expressions_markdown.md');
+    } else if (cardType === 'grammar_ja') {
+        templatePath = process.env.GRAMMAR_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_ja_grammar_markdown.md');
+    } else {
+        templatePath = process.env.MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_3LANS_markdown.md');
+    }
+
     let template = '';
     try {
         template = fs.readFileSync(templatePath, 'utf8');
     } catch (err) {
         // Fallback to minimal inline prompt if template missing
-        template = cardType === 'grammar_ja'
-            ? `你是日语语法学习卡片生成器。\n输入内容: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`
-            : `你是中英日三语学习卡片生成器。\n输入短语: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+        if (cardType === 'scenario_phrase') {
+            template = `你是场景表达卡生成器。\n输入场景: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。\n必须包含 ## 1. 场景说明 和 ## 2. 常用表达，并生成 ### 01. 到 ### 12. 共 12 个表达块。`;
+        } else if (cardType === 'grammar_ja') {
+            template = `你是日语语法学习卡片生成器。\n输入内容: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+        } else {
+            template = `你是中英日三语学习卡片生成器。\n输入短语: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
+        }
     }
 
     return template.replace(/\{\{\s*phrase\s*\}\}/g, phrase);
