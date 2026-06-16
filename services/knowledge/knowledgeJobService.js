@@ -1,6 +1,7 @@
 const dbService = require('../storage/databaseService');
 const { runTask } = require('./knowledgeAnalysisEngine');
 const log = require('../../lib/logger').child({ module: 'svc/knowledge-jobs' });
+const { resolveDeepSeekModel } = require('../../lib/serverConfig');
 
 const SUPPORTED_TASKS = new Set([
   'summary',
@@ -17,8 +18,8 @@ const DEFAULT_SYNONYM_OPTIONS = {
   maxPairs: 120,
   maxLlmPairs: 24,
   llmEnabled: false,
-  llmTransport: 'proxy',
   model: '',
+  llmProvider: 'deepseek',
   promptVersion: 'syn-v1',
   schemaVersion: '1.0.0',
   llmTimeoutMs: 120000
@@ -42,10 +43,8 @@ function normalizeSynonymOptions(raw = {}) {
     maxPairs: Math.max(1, Number(merged.maxPairs ?? DEFAULT_SYNONYM_OPTIONS.maxPairs)),
     maxLlmPairs: Math.max(0, Number(merged.maxLlmPairs ?? DEFAULT_SYNONYM_OPTIONS.maxLlmPairs)),
     llmEnabled: merged.llmEnabled == null ? envEnabled : Boolean(merged.llmEnabled),
-    llmTransport: String(merged.llmTransport || DEFAULT_SYNONYM_OPTIONS.llmTransport).trim().toLowerCase() === 'cli'
-      ? 'cli'
-      : 'proxy',
-    model: merged.model ? String(merged.model) : '',
+    llmProvider: 'deepseek',
+    model: resolveDeepSeekModel(merged.model || process.env.KNOWLEDGE_SYNONYM_MODEL || process.env.DEEPSEEK_MODEL),
     promptVersion: String(merged.promptVersion || DEFAULT_SYNONYM_OPTIONS.promptVersion),
     schemaVersion: String(merged.schemaVersion || DEFAULT_SYNONYM_OPTIONS.schemaVersion),
     llmTimeoutMs: Math.max(5000, Number(merged.llmTimeoutMs ?? DEFAULT_SYNONYM_OPTIONS.llmTimeoutMs))

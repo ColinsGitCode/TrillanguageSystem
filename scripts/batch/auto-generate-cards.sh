@@ -1,16 +1,12 @@
 #!/bin/bash
 
 # 自动生成学习卡片工作流
-# 结合 Gemini CLI（搜索）+ 本地 API（生成卡片）
+# 使用 DeepSeek 搜索式摘要，再调用本地 API 生成卡片。
 
 PHRASE="$1"
-API_URL="http://localhost:3010/api/generate"
-GEMINI_GATEWAY_URL="${GEMINI_GATEWAY_URL:-http://localhost:18888/api/gemini}"
-GEMINI_API_KEY="${GEMINI_API_KEY:-${GEMINI_PROXY_API_KEY:-}}"
-GEMINI_SOURCE_APP="${GEMINI_SOURCE_APP:-tri-lang-learning-system}"
-GEMINI_SOURCE_ENV="${GEMINI_SOURCE_ENV:-prod}"
-GEMINI_PROJECT="${GEMINI_PROJECT:-tri-lang-learning-system}"
-GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
+API_URL="${API_URL:-http://localhost:3010/api/generate}"
+DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-flash}"
 
 if [ -z "$PHRASE" ]; then
   echo "用法: $0 <phrase>"
@@ -18,48 +14,54 @@ if [ -z "$PHRASE" ]; then
   exit 1
 fi
 
-if [ -z "$GEMINI_API_KEY" ]; then
-  echo "缺少 GEMINI API Key：请设置 GEMINI_API_KEY 或 GEMINI_PROXY_API_KEY"
+if [ -z "$DEEPSEEK_API_KEY" ]; then
+  echo "缺少 DeepSeek API Key：请设置 DEEPSEEK_API_KEY"
   exit 1
 fi
 
-echo "🔍 步骤1：使用 Gemini 搜索最新定义..."
+echo "步骤1：使用 DeepSeek 总结最新定义..."
 
-# 通过 Gateway(18888) 调用 Gemini 搜索
-GEMINI_RESULT=$(curl -s -X POST "$GEMINI_GATEWAY_URL" \
+summary_payload=$(jq -n \
+  --arg model "$DEEPSEEK_MODEL" \
+  --arg prompt "搜索并总结【$PHRASE】的最新定义和用法（2026年），用中文回答" \
+  '{model:$model, messages:[{role:"user", content:$prompt}], stream:false}')
+
+summary_result=$(curl -s -X POST "${DEEPSEEK_BASE_URL%/}/chat/completions" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $GEMINI_API_KEY" \
-  -H "X-Source-App: $GEMINI_SOURCE_APP" \
-  -H "X-Source-Env: $GEMINI_SOURCE_ENV" \
-  -d "{\"prompt\":\"搜索并总结【$PHRASE】的最新定义和用法（2026年），用中文回答\",\"baseName\":\"search\",\"model\":\"$GEMINI_MODEL\",\"project\":\"$GEMINI_PROJECT\"}")
+  -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+  -d "$summary_payload")
 
-DEFINITION=$(echo "$GEMINI_RESULT" | jq -r '.markdown')
+definition=$(echo "$summary_result" | jq -r '.choices[0].message.content // .error.message // .message // empty')
 
-echo "📖 Gemini 返回："
-echo "$DEFINITION" | head -n 5
+echo "DeepSeek 返回："
+echo "$definition" | head -n 5
 echo "..."
 echo ""
 
-echo "🎨 步骤2：生成三语学习卡片..."
+echo "步骤2：生成三语学习卡片..."
 
-# 调用本地 API 生成完整卡片（使用 Local LLM）
-CARD_RESULT=$(curl -s -X POST "$API_URL" \
+card_payload=$(jq -n \
+  --arg phrase "$PHRASE" \
+  --arg model "$DEEPSEEK_MODEL" \
+  '{phrase:$phrase, llm_provider:"deepseek", llm_model:$model, enable_compare:false}')
+
+card_result=$(curl -s -X POST "$API_URL" \
   -H "Content-Type: application/json" \
-  -d "{\"phrase\":\"$PHRASE\",\"llm_provider\":\"local\",\"enable_compare\":false}")
+  -d "$card_payload")
 
-SUCCESS=$(echo "$CARD_RESULT" | jq -r '.success')
+success=$(echo "$card_result" | jq -r '.success')
 
-if [ "$SUCCESS" = "true" ]; then
-  FOLDER=$(echo "$CARD_RESULT" | jq -r '.result.folder')
-  BASENAME=$(echo "$CARD_RESULT" | jq -r '.result.baseName')
-  QUALITY=$(echo "$CARD_RESULT" | jq -r '.observability.quality.score')
+if [ "$success" = "true" ]; then
+  folder=$(echo "$card_result" | jq -r '.result.folder')
+  base_name=$(echo "$card_result" | jq -r '.result.baseName')
+  quality=$(echo "$card_result" | jq -r '.observability.quality.score')
 
-  echo "✅ 卡片生成成功！"
-  echo "   - 文件夹: $FOLDER"
-  echo "   - 文件名: $BASENAME"
-  echo "   - 质量评分: $QUALITY"
+  echo "卡片生成成功！"
+  echo "   - 文件夹: $folder"
+  echo "   - 文件名: $base_name"
+  echo "   - 质量评分: $quality"
   echo "   - 查看: http://localhost:3010"
 else
-  echo "❌ 生成失败"
-  echo "$CARD_RESULT" | jq .
+  echo "生成失败"
+  echo "$card_result" | jq .
 fi

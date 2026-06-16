@@ -9,15 +9,15 @@
 //   1. rule pass — keyword match each card against the axis categories; the
 //      best-scoring category wins.
 //   2. LLM fallback (optional, default on) — cards the rules could not place
-//      are batched to Gemini, which assigns each to one axis category. Any
+//      are batched to DeepSeek, which assigns each to one axis category. Any
 //      card the model declines / mis-labels lands in the axis fallback bucket.
 //
 // Output shape is unchanged from the legacy version (`{ clusters: [...] }`)
 // plus a `taxonomy` field per cluster, so the persistence layer keeps working.
 
 const { normalizeText } = require('../textUtils');
-const { runGeminiCli } = require('../../llm/geminiCliService');
-const { runGeminiProxy } = require('../../llm/geminiProxyService');
+const { generateJson } = require('../../llm/deepseekService');
+const { resolveDeepSeekModel } = require('../../../lib/serverConfig');
 const {
   axisForCardType,
   getTaxonomy,
@@ -35,21 +35,13 @@ function boolFromEnv(name, defaultValue) {
 function normalizeOptions(options = {}) {
   const envEnabled = boolFromEnv('KNOWLEDGE_CLUSTER_LLM_ENABLED', true);
   const llmEnabled = options.llmEnabled == null ? envEnabled : Boolean(options.llmEnabled);
-  const llmTransport = String(options.llmTransport || process.env.KNOWLEDGE_CLUSTER_LLM_TRANSPORT || 'proxy')
-    .trim().toLowerCase() === 'cli' ? 'cli' : 'proxy';
   return {
     llmEnabled,
-    llmTransport,
     // Hard ceiling on cards sent to the model per job (across both axes).
     maxLlmCards: Math.max(0, Number(options.maxLlmCards == null ? (process.env.KNOWLEDGE_CLUSTER_MAX_LLM_CARDS || 80) : options.maxLlmCards)),
     llmBatchSize: Math.max(1, Number(options.llmBatchSize == null ? (process.env.KNOWLEDGE_CLUSTER_LLM_BATCH_SIZE || 20) : options.llmBatchSize)),
-    model: options.model || process.env.KNOWLEDGE_CLUSTER_MODEL || process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || '',
+    model: resolveDeepSeekModel(options.model || process.env.KNOWLEDGE_CLUSTER_MODEL || process.env.DEEPSEEK_MODEL),
     llmTimeoutMs: Math.max(5000, Number(options.llmTimeoutMs || process.env.KNOWLEDGE_CLUSTER_LLM_TIMEOUT_MS || 120000)),
-    llmGatewayUrl: options.llmGatewayUrl || process.env.KNOWLEDGE_CLUSTER_PROXY_URL || process.env.GEMINI_PROXY_URL || '',
-    proxyAuthMode: options.proxyAuthMode || process.env.KNOWLEDGE_CLUSTER_PROXY_AUTH_MODE || process.env.GEMINI_PROXY_AUTH_MODE,
-    proxyApiKey: options.proxyApiKey || process.env.KNOWLEDGE_CLUSTER_PROXY_API_KEY || process.env.GEMINI_PROXY_API_KEY,
-    proxyBearerToken: options.proxyBearerToken || process.env.KNOWLEDGE_CLUSTER_PROXY_BEARER_TOKEN || process.env.GEMINI_PROXY_BEARER_TOKEN,
-    enforceGateway: options.enforceGateway,
     // Test seam: callers (unit tests) can inject an async (prompt) => text|obj
     // to avoid real network. Production never sets this.
     llmInvoke: typeof options.llmInvoke === 'function' ? options.llmInvoke : null
@@ -139,18 +131,10 @@ function buildLlmPrompt(axis, cards) {
 
 async function invokeLlm(prompt, config, baseName) {
   if (config.llmInvoke) return config.llmInvoke(prompt);
-  if (config.llmTransport === 'cli') {
-    return runGeminiCli(prompt, { model: config.model, timeoutMs: config.llmTimeoutMs, baseName });
-  }
-  return runGeminiProxy(prompt, {
+  void baseName;
+  return generateJson(prompt, {
     model: config.model,
-    timeoutMs: config.llmTimeoutMs,
-    baseName,
-    url: config.llmGatewayUrl || undefined,
-    authMode: config.proxyAuthMode,
-    apiKey: config.proxyApiKey,
-    bearerToken: config.proxyBearerToken,
-    enforceGateway: config.enforceGateway
+    timeoutMs: config.llmTimeoutMs
   });
 }
 
@@ -265,8 +249,8 @@ async function run(cards = [], taskOptions = {}) {
     clusters,
     meta: {
       llmEnabled: config.llmEnabled,
-      llmTransport: config.llmTransport,
-      model: config.model || null,
+      llmProvider: 'deepseek',
+      model: config.model,
       stats
     }
   };

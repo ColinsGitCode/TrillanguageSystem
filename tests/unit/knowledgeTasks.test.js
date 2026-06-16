@@ -3,8 +3,7 @@
 // Smoke tests for the per-task modules under services/knowledge/tasks/.
 // One representative case per task — they're pure transforms over a card
 // list, so the goal here is to fence the public output shape against
-// regressions while the engine itself is being split. The synonym_boundary
-// LLM branch is intentionally NOT exercised (no env / no proxy).
+// regressions while the engine itself is being split.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -17,12 +16,39 @@ const issuesAudit = require('../../services/knowledge/tasks/issuesAudit');
 const synonymBoundary = require('../../services/knowledge/tasks/synonymBoundary');
 const engine = require('../../services/knowledge/knowledgeAnalysisEngine');
 
+function installStub(modulePath, exportsValue) {
+  const resolved = require.resolve(modulePath);
+  const previous = require.cache[resolved];
+  require.cache[resolved] = {
+    id: resolved,
+    filename: resolved,
+    loaded: true,
+    exports: exportsValue,
+  };
+  return () => {
+    if (previous) require.cache[resolved] = previous;
+    else delete require.cache[resolved];
+  };
+}
+
+function loadKnowledgeTaskWithDeepSeekStub(t, taskName, generateJson) {
+  const taskPath = require.resolve(`../../services/knowledge/tasks/${taskName}`);
+  const restoreFns = [];
+  delete require.cache[taskPath];
+  restoreFns.push(installStub('../../services/llm/deepseekService', { generateJson }));
+  t.after(() => {
+    delete require.cache[taskPath];
+    for (const restore of restoreFns.reverse()) restore();
+  });
+  return require(`../../services/knowledge/tasks/${taskName}`);
+}
+
 function buildCard(overrides = {}) {
   return {
     id: 1,
     phrase: 'hello',
     card_type: 'trilingual',
-    llm_provider: 'gemini',
+    llm_provider: 'deepseek',
     folder_name: '20260101',
     base_filename: 'hello',
     md_file_path: '',
@@ -47,7 +73,7 @@ function buildCard(overrides = {}) {
 test.describe('knowledge task: summary', () => {
   test.it('returns counts + qualityObservations for non-empty input', () => {
     const out = summary.run([
-      buildCard({ id: 1, llm_provider: 'gemini', quality_score: 90 }),
+      buildCard({ id: 1, llm_provider: 'deepseek', quality_score: 90 }),
       buildCard({ id: 2, llm_provider: 'local', quality_score: 70 })
     ]);
     assert.equal(typeof out.overview, 'string');
@@ -169,6 +195,37 @@ test.describe('knowledge task: cluster', () => {
     assert.equal(out.meta.stats.llmMatched, 1);
   });
 
+  test.it('uses DeepSeek generateJson for rule-misses when no test seam is provided', async (t) => {
+    const calls = [];
+    const task = loadKnowledgeTaskWithDeepSeekStub(t, 'cluster', async (prompt, options) => {
+      calls.push({ prompt, options });
+      return {
+        text: JSON.stringify({ assignments: [{ id: 17, categoryKey: 'tp_business', confidence: 0.82 }] }),
+        model: options.model,
+      };
+    });
+    const blankCard = (id, phrase) => buildCard({
+      id, phrase, en_translation: phrase, ja_translation: '', zh_translation: '', markdown_content: ''
+    });
+
+    const out = await task.run([
+      blankCard(17, 'quarterly synergy alignment')
+    ], { llmEnabled: true, model: 'deepseek-v4-pro', llmTimeoutMs: 12345 });
+
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].prompt, /task=cluster axis=topic/);
+    assert.deepEqual(calls[0].options, {
+      model: 'deepseek-v4-pro',
+      timeoutMs: 12345,
+    });
+    const business = out.clusters.find((c) => c.clusterKey === 'tp_business');
+    assert.ok(business, 'tp_business cluster missing');
+    assert.ok(business.cards.some((c) => c.generationId === 17));
+    assert.equal(out.meta.llmProvider, 'deepseek');
+    assert.equal(out.meta.model, 'deepseek-v4-pro');
+    assert.equal(Object.hasOwn(out.meta, 'llmTransport'), false);
+  });
+
   test.it('falls back to tp_general when the LLM returns an unknown key', async () => {
     const blankCard = (id, phrase) => buildCard({
       id, phrase, en_translation: phrase, ja_translation: '', zh_translation: '', markdown_content: ''
@@ -232,6 +289,50 @@ test.describe('knowledge task: synonymBoundary (LLM disabled / local-only path)'
       buildCard({ id: 2, phrase: 'truck', zh_translation: '卡车' })
     ], { llmEnabled: false });
     assert.equal(out.groups.length, 0);
+  });
+
+  test.it('uses DeepSeek generateJson for LLM boundaries and records provider metadata', async (t) => {
+    const calls = [];
+    const task = loadKnowledgeTaskWithDeepSeekStub(t, 'synonymBoundary', async (prompt, options) => {
+      calls.push({ prompt, options });
+      return {
+        text: JSON.stringify({
+          pair: { termA: 'persistent', termB: 'sustained' },
+          contextSplit: [{ dimension: 'register', a: 'persistent usage', b: 'sustained usage', why: 'context differs' }],
+          misuseRisks: [{ scenario: 'formal writing', risk: 'meaning drift', severity: 'medium' }],
+          jpNuance: { a: '持続的', b: '継続的', note: 'context matters' },
+          boundaryTags: { a: ['durable'], b: ['continuous'] },
+          confidence: 0.88,
+          evidenceRefs: [1, 2],
+          actionableHint: 'Use by context.',
+        }),
+        model: options.model,
+      };
+    });
+
+    const out = await task.run([
+      buildCard({ id: 1, phrase: 'persistent', en_translation: 'persistent', zh_translation: '持续的, 稳定的' }),
+      buildCard({ id: 2, phrase: 'sustained', en_translation: 'sustained', zh_translation: '持续的, 稳定的' })
+    ], {
+      llmEnabled: true,
+      minCandidateScore: 0.2,
+      model: 'deepseek-v4-pro',
+      llmTimeoutMs: 23456,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].prompt, /task=synonym_boundary/);
+    assert.deepEqual(calls[0].options, {
+      model: 'deepseek-v4-pro',
+      timeoutMs: 23456,
+    });
+    assert.equal(out.groups.length, 1);
+    assert.equal(out.groups[0].parseStatus, 'ok');
+    assert.equal(out.groups[0].model, 'deepseek-v4-pro');
+    assert.equal(out.meta.llmProvider, 'deepseek');
+    assert.equal(out.meta.model, 'deepseek-v4-pro');
+    assert.equal(Object.hasOwn(out.meta, 'llmTransport'), false);
+    assert.equal(out.stats.llmSuccessCount, 1);
   });
 });
 

@@ -195,7 +195,7 @@ function buildFixtureObservability({ provider, model, phrase, cardType, sourceMo
       mode: 'e2e-fixture'
     },
     metadata: {
-      provider: provider || 'gemini',
+      provider: provider || 'deepseek',
       model: model || 'e2e-fixture',
       cardType: cardType || 'trilingual',
       sourceMode: sourceMode || 'input',

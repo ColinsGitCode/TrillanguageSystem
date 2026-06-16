@@ -5,13 +5,13 @@
 // 2. discoverSynonymCandidates: pair-wise jaccard over zh meaning tokens
 //    + tag overlap, keep pairs above minCandidateScore
 // 3. for each candidate: build evidence snapshot → build local boundary
-//    result → optionally invoke Gemini (proxy or CLI) for richer payload
+//    result → optionally invoke DeepSeek for richer payload
 //    that supersedes the local result if it parses + validates
 // 4. roll up groups + candidates + stats (latency p95, parse rate)
 
 const crypto = require('crypto');
-const { runGeminiCli } = require('../../llm/geminiCliService');
-const { runGeminiProxy } = require('../../llm/geminiProxyService');
+const { generateJson } = require('../../llm/deepseekService');
+const { resolveDeepSeekModel } = require('../../../lib/serverConfig');
 const {
   normalizeText,
   profileLang,
@@ -87,26 +87,15 @@ function extractCollocationTokens(...texts) {
 function normalizeOptions(options = {}) {
   const llmEnvEnabled = ['1', 'true', 'yes'].includes(String(process.env.KNOWLEDGE_SYNONYM_LLM_ENABLED || '').toLowerCase());
   const llmEnabled = options.llmEnabled == null ? llmEnvEnabled : Boolean(options.llmEnabled);
-  const llmTransport = String(options.llmTransport || process.env.KNOWLEDGE_SYNONYM_LLM_TRANSPORT || 'proxy').trim().toLowerCase() === 'cli'
-    ? 'cli'
-    : 'proxy';
   return {
     minCandidateScore: Number(options.minCandidateScore == null ? 0.62 : options.minCandidateScore),
     maxPairs: Math.max(1, Number(options.maxPairs == null ? 120 : options.maxPairs)),
     maxLlmPairs: Math.max(0, Number(options.maxLlmPairs == null ? 24 : options.maxLlmPairs)),
-    model: options.model || process.env.KNOWLEDGE_SYNONYM_MODEL || process.env.GEMINI_PROXY_MODEL || process.env.GEMINI_CLI_MODEL || '',
+    model: resolveDeepSeekModel(options.model || process.env.KNOWLEDGE_SYNONYM_MODEL || process.env.DEEPSEEK_MODEL),
     schemaVersion: String(options.schemaVersion || '1.0.0'),
     promptVersion: String(options.promptVersion || 'syn-v1'),
     llmEnabled,
-    llmTimeoutMs: Math.max(5000, Number(options.llmTimeoutMs || process.env.KNOWLEDGE_SYNONYM_LLM_TIMEOUT_MS || 120000)),
-    llmTransport,
-    llmGatewayUrl: options.llmGatewayUrl || process.env.KNOWLEDGE_SYNONYM_PROXY_URL || process.env.GEMINI_PROXY_URL || '',
-    llmRetries: Math.max(0, Number(options.llmRetries == null ? (process.env.KNOWLEDGE_SYNONYM_LLM_RETRIES || 1) : options.llmRetries)),
-    llmRetryDelayMs: Math.max(0, Number(options.llmRetryDelayMs == null ? (process.env.KNOWLEDGE_SYNONYM_LLM_RETRY_DELAY_MS || 1200) : options.llmRetryDelayMs)),
-    proxyAuthMode: options.proxyAuthMode || process.env.KNOWLEDGE_SYNONYM_PROXY_AUTH_MODE || process.env.GEMINI_PROXY_AUTH_MODE,
-    proxyApiKey: options.proxyApiKey || process.env.KNOWLEDGE_SYNONYM_PROXY_API_KEY || process.env.GEMINI_PROXY_API_KEY,
-    proxyBearerToken: options.proxyBearerToken || process.env.KNOWLEDGE_SYNONYM_PROXY_BEARER_TOKEN || process.env.GEMINI_PROXY_BEARER_TOKEN,
-    enforceGateway: options.enforceGateway
+    llmTimeoutMs: Math.max(5000, Number(options.llmTimeoutMs || process.env.KNOWLEDGE_SYNONYM_LLM_TIMEOUT_MS || 120000))
   };
 }
 
@@ -453,26 +442,10 @@ async function run(cards = [], taskOptions = {}) {
           fallbackResult: localResult,
           config
         });
-        const baseName = `synonym_${candidate.termA}_${candidate.termB}`;
-        const llmResp = config.llmTransport === 'cli'
-          ? await runGeminiCli(prompt, {
-              model: config.model,
-              timeoutMs: config.llmTimeoutMs,
-              baseName
-            })
-          : await runGeminiProxy(prompt, {
-              model: config.model,
-              timeoutMs: config.llmTimeoutMs,
-              baseName,
-              url: config.llmGatewayUrl || undefined,
-              retries: config.llmRetries,
-              retryDelayMs: config.llmRetryDelayMs,
-              authMode: config.proxyAuthMode,
-              apiKey: config.proxyApiKey,
-              bearerToken: config.proxyBearerToken,
-              enforceGateway: config.enforceGateway,
-              validateSanitizedResponse: buildResponseValidator(candidate)
-            });
+        const llmResp = await generateJson(prompt, {
+          model: config.model,
+          timeoutMs: config.llmTimeoutMs
+        });
         llmLatencyMs = Math.max(0, Date.now() - started);
         llmLatencies.push(llmLatencyMs);
         const jsonText = extractFirstJsonBlock(getLlmResponseText(llmResp));
@@ -565,8 +538,8 @@ async function run(cards = [], taskOptions = {}) {
       p95LlmLatencyMs: p95Latency
     },
     meta: {
-      model: config.model || null,
-      llmTransport: config.llmTransport,
+      llmProvider: 'deepseek',
+      model: config.model,
       promptVersion: config.promptVersion,
       schemaVersion: config.schemaVersion,
       minCandidateScore: config.minCandidateScore,
@@ -579,7 +552,7 @@ async function run(cards = [], taskOptions = {}) {
 
 module.exports = {
   run,
-  // Exposed for the gemini-sanitize e2e regression and any future direct callers.
+  // Exposed for direct unit callers and future payload-validation checks.
   _internal: {
     extractFirstJsonBlock,
     validatePayload,

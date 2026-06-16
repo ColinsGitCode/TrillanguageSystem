@@ -143,10 +143,10 @@ test.describe('databaseService — query / search / count', () => {
     const db = freshDb();
     try {
       assert.equal(db.getTotalCount({}), 0);
-      db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'gemini', llmModel: 'gemini-test' } }));
+      db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'deepseek', llmModel: 'deepseek-v4-flash' } }));
       db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'local' } }));
       assert.equal(db.getTotalCount({}), 2);
-      assert.equal(db.getTotalCount({ provider: 'gemini' }), 1);
+      assert.equal(db.getTotalCount({ provider: 'deepseek' }), 1);
       assert.equal(db.getTotalCount({ provider: 'local' }), 1);
     } finally { db.close(); }
   });
@@ -184,7 +184,7 @@ test.describe('databaseService — errors table', () => {
     try {
       const result = db.insertError({
         phrase: 'x',
-        llmProvider: 'gemini',
+        llmProvider: 'deepseek',
         requestId: 'req_err_1',
         errorType: 'timeout',
         errorMessage: 'boom',
@@ -496,7 +496,7 @@ test.describe('databaseService — knowledge_jobs lifecycle', () => {
     try {
       const job = db.createKnowledgeJob({ jobType: 'synonym_boundary', scope: {} });
       db.upsertKnowledgeSynonymJobMeta(job.id, {
-        model: 'gemini-test',
+        model: 'deepseek-v4-flash',
         promptVersion: 'v1',
         schemaVersion: 'v1',
         llmEnabled: true,
@@ -510,7 +510,7 @@ test.describe('databaseService — knowledge_jobs lifecycle', () => {
       });
       const meta = db.getKnowledgeSynonymJobMeta(job.id);
       assert.ok(meta);
-      assert.equal(meta.model, 'gemini-test');
+      assert.equal(meta.model, 'deepseek-v4-flash');
       assert.equal(meta.llmEnabled, true);
       assert.equal(meta.candidateCount, 100);
       assert.deepEqual(meta.options, { foo: 'bar' });

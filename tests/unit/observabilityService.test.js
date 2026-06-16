@@ -27,41 +27,6 @@ test.describe('TokenCounter.estimate', () => {
   });
 });
 
-test.describe('TokenCounter.extractGeminiTokens', () => {
-  test.it('returns zeros + cached field when no usage metadata', () => {
-    assert.deepEqual(
-      TokenCounter.extractGeminiTokens({}),
-      { input: 0, output: 0, total: 0, cached: 0 }
-    );
-    assert.deepEqual(
-      TokenCounter.extractGeminiTokens(null),
-      { input: 0, output: 0, total: 0, cached: 0 }
-    );
-  });
-
-  test.it('reads usageMetadata fields', () => {
-    const res = TokenCounter.extractGeminiTokens({
-      usageMetadata: {
-        promptTokenCount: 100,
-        candidatesTokenCount: 200,
-        totalTokenCount: 300,
-        cachedContentTokenCount: 5
-      }
-    });
-    assert.deepEqual(res, { input: 100, output: 200, total: 300, cached: 5 });
-  });
-
-  test.it('falls back to `usage` if usageMetadata is missing', () => {
-    const res = TokenCounter.extractGeminiTokens({
-      usage: { promptTokenCount: 9, candidatesTokenCount: 1, totalTokenCount: 10 }
-    });
-    assert.equal(res.input, 9);
-    assert.equal(res.output, 1);
-    assert.equal(res.total, 10);
-    assert.equal(res.cached, 0);
-  });
-});
-
 test.describe('TokenCounter.extractOpenAITokens', () => {
   test.it('returns zeros (no cached field) when usage missing', () => {
     assert.deepEqual(
@@ -83,13 +48,6 @@ test.describe('TokenCounter.calculateCost', () => {
     delete process.env.DEEPSEEK_INPUT_COST_PER_1M;
     delete process.env.DEEPSEEK_OUTPUT_COST_PER_1M;
     delete process.env.DEEPSEEK_MODEL;
-  });
-
-  test.it('returns zero cost for gemini (free tier)', () => {
-    assert.deepEqual(
-      TokenCounter.calculateCost({ input: 1000, output: 2000, total: 3000 }, 'gemini'),
-      { input: 0, output: 0, total: 0 }
-    );
   });
 
   test.it('returns zero cost for local', () => {

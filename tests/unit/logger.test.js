@@ -85,13 +85,13 @@ test.describe('logger', () => {
 
   test.it('child binds fields onto every subsequent record', () => {
     const { log, out } = mkLogger();
-    const childLog = log.child({ module: 'gemini', req_id: 'abc' });
+    const childLog = log.child({ module: 'deepseek', req_id: 'abc' });
     childLog.info('start');
     childLog.info({ attempt: 2 }, 'retry');
     const recs = out.records();
-    assert.equal(recs[0].module, 'gemini');
+    assert.equal(recs[0].module, 'deepseek');
     assert.equal(recs[0].req_id, 'abc');
-    assert.equal(recs[1].module, 'gemini');
+    assert.equal(recs[1].module, 'deepseek');
     assert.equal(recs[1].attempt, 2);
   });
 

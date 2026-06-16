@@ -127,9 +127,7 @@ class GenerationJobService {
     const patterns = [
       /MODEL_CAPACITY_EXHAUSTED/i,
       /No capacity available for model/i,
-      /Gemini CLI rate limited/i,
-      /Gemini proxy error\s*\(429\)/i,
-      /\brate limited\b/i
+      /\brate[-\s_]?limit(?:ed)?\b/i
     ];
     return status === 429 || patterns.some((pattern) => pattern.test(haystack));
   }

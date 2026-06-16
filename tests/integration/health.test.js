@@ -6,8 +6,6 @@ const assert = require('node:assert/strict');
 process.env.DEEPSEEK_API_KEY = '';
 process.env.DEEPSEEK_BASE_URL = '';
 process.env.DEEPSEEK_MODEL = '';
-process.env.GEMINI_API_KEY = '';
-process.env.GEMINI_MODE = '';
 
 const { api, closeServer } = require('./_harness');
 

@@ -7,7 +7,7 @@ test.describe('Playwright page smoke', () => {
     await resetServerState(request);
   });
 
-  test('00 首页在 Gemini Host Executor 离线时显示告警', async ({ page }) => {
+  test('00 首页在 DeepSeek API 离线时显示告警', async ({ page }) => {
     await page.route('**/api/health', async (route) => {
       await route.fulfill({
         status: 200,
@@ -15,15 +15,9 @@ test.describe('Playwright page smoke', () => {
         body: JSON.stringify({
           services: [
             {
-              name: 'Gemini Gateway (Internal)',
+              name: 'DeepSeek API',
               status: 'offline',
-              message: 'Gateway 异常 · executor=down · fetch failed',
-              critical: true
-            },
-            {
-              name: 'Gemini Host Executor',
-              status: 'offline',
-              message: 'Executor 请求失败',
+              message: 'DeepSeek API key is not configured',
               critical: true
             }
           ],
@@ -31,7 +25,7 @@ test.describe('Playwright page smoke', () => {
             overallStatus: 'degraded',
             criticalOnline: false,
             criticalServices: [
-              { name: 'Gemini Host Executor', status: 'offline', message: 'Executor 请求失败' }
+              { name: 'DeepSeek API', status: 'offline', message: 'DeepSeek API key is not configured' }
             ]
           }
         })
@@ -40,7 +34,7 @@ test.describe('Playwright page smoke', () => {
 
     await page.goto('/');
     await expect(page.getByTestId('infra-alert-banner')).toBeVisible();
-    await expect(page.getByTestId('infra-alert-banner')).toContainText('Gemini Host Executor 离线');
+    await expect(page.getByTestId('infra-alert-banner')).toContainText('DeepSeek API 离线');
     await expect(page.getByTestId('generate-btn')).toBeDisabled();
   });
 

@@ -40,34 +40,6 @@ class TokenCounter {
   }
 
   /**
-   * 从 Gemini API 响应提取 Token 信息
-   * @param {Object} response - Gemini API 原始响应
-   * @returns {Object} Token 使用信息
-   */
-  static extractGeminiTokens(response) {
-    // Gemini API 的 usageMetadata 可能在不同位置
-    const usage = response?.usageMetadata || response?.usage;
-
-    if (!usage) {
-      // 如果没有 usage 信息，尝试估算
-      log.warn('TokenCounter: no usage metadata found, estimating tokens');
-      return {
-        input: 0,
-        output: 0,
-        total: 0,
-        cached: 0
-      };
-    }
-
-    return {
-      input: usage.promptTokenCount || 0,
-      output: usage.candidatesTokenCount || 0,
-      total: usage.totalTokenCount || 0,
-      cached: usage.cachedContentTokenCount || 0
-    };
-  }
-
-  /**
    * 从 OpenAI 兼容响应提取 Token 信息
    * @param {Object} response - OpenAI 兼容的 API 响应
    * @returns {Object} Token 使用信息
@@ -94,24 +66,12 @@ class TokenCounter {
   /**
    * 计算成本（基于不同 provider）
    * @param {Object} tokens - Token 使用信息
-   * @param {string} provider - LLM 提供商 ('gemini' | 'local' | 'deepseek')
+   * @param {string} provider - LLM 提供商 ('local' | 'deepseek')
    * @param {Object} options - 计算选项
    * @returns {Object} 成本信息
    */
   static calculateCost(tokens, provider, options = {}) {
     const normalizedProvider = String(provider || '').trim().toLowerCase();
-    if (normalizedProvider === 'gemini') {
-      // Gemini 1.5 Flash 免费层 - 实际免费
-      // 付费价格参考（如需切换到付费）：
-      // Input: $0.075 per 1M tokens
-      // Output: $0.30 per 1M tokens
-      return {
-        input: 0,
-        output: 0,
-        total: 0
-      };
-    }
-
     if (normalizedProvider === 'local') {
       // 本地 LLM - 免费
       return {
