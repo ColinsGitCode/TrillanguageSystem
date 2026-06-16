@@ -2,6 +2,14 @@ require('dotenv').config();
 const { parseTrilingualMarkdown } = require('../generation/markdownParser');
 const log = require('../../lib/logger').child({ module: 'svc/observability' });
 
+const DEFAULT_DEEPSEEK_INPUT_COST_PER_1K = 0.00000028;
+const DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1K = 0.0000011;
+
+function toNumberOr(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 /**
  * 可观测性服务 - 统一管理 Token、性能、质量等指标
  * 功能：
@@ -78,11 +86,12 @@ class TokenCounter {
   /**
    * 计算成本（基于不同 provider）
    * @param {Object} tokens - Token 使用信息
-   * @param {string} provider - LLM 提供商 ('gemini' | 'local')
+   * @param {string} provider - LLM 提供商 ('gemini' | 'local' | 'deepseek')
    * @returns {Object} 成本信息
    */
   static calculateCost(tokens, provider) {
-    if (provider === 'gemini') {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    if (normalizedProvider === 'gemini') {
       // Gemini 1.5 Flash 免费层 - 实际免费
       // 付费价格参考（如需切换到付费）：
       // Input: $0.075 per 1M tokens
@@ -94,12 +103,32 @@ class TokenCounter {
       };
     }
 
-    if (provider === 'local') {
+    if (normalizedProvider === 'local') {
       // 本地 LLM - 免费
       return {
         input: 0,
         output: 0,
         total: 0
+      };
+    }
+
+    if (normalizedProvider === 'deepseek') {
+      const inputTokens = Number(tokens?.input || 0);
+      const outputTokens = Number(tokens?.output || 0);
+      const inputRatePer1K = toNumberOr(
+        process.env.DEEPSEEK_INPUT_COST_PER_1K,
+        DEFAULT_DEEPSEEK_INPUT_COST_PER_1K
+      );
+      const outputRatePer1K = toNumberOr(
+        process.env.DEEPSEEK_OUTPUT_COST_PER_1K,
+        DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1K
+      );
+      const input = (inputTokens / 1000) * inputRatePer1K;
+      const output = (outputTokens / 1000) * outputRatePer1K;
+      return {
+        input,
+        output,
+        total: input + output
       };
     }
 

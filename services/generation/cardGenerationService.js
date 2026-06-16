@@ -59,7 +59,9 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
   };
   const estimatedInputTokens = TokenCounter.estimate(prompt);
   const estimatedOutputTokens = TokenCounter.estimate(markdown);
-  const usage = response.usage || {
+  const providerUsage = response.usage || null;
+  const hasAuthoritativeProviderUsage = Number(providerUsage?.total || 0) > 0;
+  const usage = hasAuthoritativeProviderUsage ? providerUsage : {
     input: estimatedInputTokens,
     output: estimatedOutputTokens,
     total: estimatedInputTokens + estimatedOutputTokens

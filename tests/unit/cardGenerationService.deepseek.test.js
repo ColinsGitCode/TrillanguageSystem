@@ -18,7 +18,15 @@ function installStub(modulePath, exportsValue) {
   };
 }
 
-async function captureDeepSeekCall(t, { provider = 'gemini', modelOverride = 'deepseek-v4-pro' } = {}) {
+async function captureDeepSeekCall(
+  t,
+  {
+    provider = 'gemini',
+    modelOverride = 'deepseek-v4-pro',
+    usage = { input: 7, output: 11, total: 18 },
+    estimate = () => 0,
+  } = {}
+) {
   const servicePath = require.resolve('../../services/generation/cardGenerationService');
   const restoreFns = [];
   const captured = {};
@@ -48,7 +56,7 @@ async function captureDeepSeekCall(t, { provider = 'gemini', modelOverride = 'de
         ].join('\n'),
         rawOutput: 'raw markdown',
         model: options.model,
-        usage: { input: 7, output: 11, total: 18 },
+        usage,
       };
     },
   }));
@@ -69,7 +77,7 @@ async function captureDeepSeekCall(t, { provider = 'gemini', modelOverride = 'de
   }));
   restoreFns.push(installStub('../../services/observability/observabilityService', {
     TokenCounter: {
-      estimate: () => 0,
+      estimate,
       calculateCost: (usage, providerName) => ({ usage, providerName }),
     },
     QualityChecker: {
@@ -121,5 +129,23 @@ test.describe('cardGenerationService DeepSeek provider wiring', () => {
 
     assert.equal(typeof service.generateWithProvider, 'function');
     assert.equal(service.generateWithAutoFallback, undefined);
+  });
+
+  test.it('falls back to estimated tokens when DeepSeek reports zero usage', async (t) => {
+    const { result } = await captureDeepSeekCall(t, {
+      usage: { input: 0, output: 0, total: 0 },
+      estimate: (text) => (text === 'markdown prompt' ? 4 : 21),
+    });
+
+    assert.deepEqual(result.observability.tokens, {
+      input: 4,
+      output: 21,
+      total: 25,
+    });
+    assert.deepEqual(result.observability.cost.usage, {
+      input: 4,
+      output: 21,
+      total: 25,
+    });
   });
 });

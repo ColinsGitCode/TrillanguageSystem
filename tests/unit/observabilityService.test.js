@@ -79,6 +79,11 @@ test.describe('TokenCounter.extractOpenAITokens', () => {
 });
 
 test.describe('TokenCounter.calculateCost', () => {
+  test.afterEach(() => {
+    delete process.env.DEEPSEEK_INPUT_COST_PER_1K;
+    delete process.env.DEEPSEEK_OUTPUT_COST_PER_1K;
+  });
+
   test.it('returns zero cost for gemini (free tier)', () => {
     assert.deepEqual(
       TokenCounter.calculateCost({ input: 1000, output: 2000, total: 3000 }, 'gemini'),
@@ -91,6 +96,24 @@ test.describe('TokenCounter.calculateCost', () => {
       TokenCounter.calculateCost({ input: 1, output: 1, total: 2 }, 'local'),
       { input: 0, output: 0, total: 0 }
     );
+  });
+
+  test.it('calculates non-zero DeepSeek cost from env-configured per-1K token rates', () => {
+    process.env.DEEPSEEK_INPUT_COST_PER_1K = '0.01';
+    process.env.DEEPSEEK_OUTPUT_COST_PER_1K = '0.02';
+
+    assert.deepEqual(
+      TokenCounter.calculateCost({ input: 1000, output: 2000, total: 3000 }, 'deepseek'),
+      { input: 0.01, output: 0.04, total: 0.05 }
+    );
+  });
+
+  test.it('calculates non-zero DeepSeek cost with default placeholder rates', () => {
+    const cost = TokenCounter.calculateCost({ input: 1000, output: 1000, total: 2000 }, 'deepseek');
+
+    assert.ok(cost.input > 0);
+    assert.ok(cost.output > 0);
+    assert.ok(cost.total > 0);
   });
 
   test.it('returns zero cost for unknown providers (safe default)', () => {
