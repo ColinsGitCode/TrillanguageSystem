@@ -2,8 +2,8 @@ require('dotenv').config();
 const { parseTrilingualMarkdown } = require('../generation/markdownParser');
 const log = require('../../lib/logger').child({ module: 'svc/observability' });
 
-const DEFAULT_DEEPSEEK_INPUT_COST_PER_1K = 0.00000028;
-const DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1K = 0.0000011;
+const DEFAULT_DEEPSEEK_INPUT_COST_PER_1M = 0.14;
+const DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1M = 0.28;
 
 function toNumberOr(value, fallback) {
   const num = Number(value);
@@ -115,16 +115,16 @@ class TokenCounter {
     if (normalizedProvider === 'deepseek') {
       const inputTokens = Number(tokens?.input || 0);
       const outputTokens = Number(tokens?.output || 0);
-      const inputRatePer1K = toNumberOr(
-        process.env.DEEPSEEK_INPUT_COST_PER_1K,
-        DEFAULT_DEEPSEEK_INPUT_COST_PER_1K
+      const inputRatePer1M = toNumberOr(
+        process.env.DEEPSEEK_INPUT_COST_PER_1M,
+        DEFAULT_DEEPSEEK_INPUT_COST_PER_1M
       );
-      const outputRatePer1K = toNumberOr(
-        process.env.DEEPSEEK_OUTPUT_COST_PER_1K,
-        DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1K
+      const outputRatePer1M = toNumberOr(
+        process.env.DEEPSEEK_OUTPUT_COST_PER_1M,
+        DEFAULT_DEEPSEEK_OUTPUT_COST_PER_1M
       );
-      const input = (inputTokens / 1000) * inputRatePer1K;
-      const output = (outputTokens / 1000) * outputRatePer1K;
+      const input = (inputTokens / 1_000_000) * inputRatePer1M;
+      const output = (outputTokens / 1_000_000) * outputRatePer1M;
       return {
         input,
         output,
