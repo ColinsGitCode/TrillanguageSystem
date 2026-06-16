@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY services/llm/geminiGatewayServer.js /app/services/llm/geminiGatewayServer.js
 COPY services/llm/geminiTimeouts.js /app/services/llm/geminiTimeouts.js
-COPY services/llm/geminiErrors.js /app/services/llm/geminiErrors.js
+COPY services/llm/llmErrors.js /app/services/llm/llmErrors.js
 COPY lib/logger.js /app/lib/logger.js
 
 EXPOSE 18888

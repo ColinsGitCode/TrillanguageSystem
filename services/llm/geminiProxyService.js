@@ -3,7 +3,7 @@ const {
   clampExecutionBudget,
   clientTimeoutFor,
 } = require('./geminiTimeouts');
-const { CODES, isRetriableCode, errorCodeOf } = require('./geminiErrors');
+const { CODES, isRetriableCode, errorCodeOf } = require('./llmErrors');
 const log = require('../../lib/logger').child({ module: 'gemini-proxy' });
 
 function toNumberOr(value, fallback) {

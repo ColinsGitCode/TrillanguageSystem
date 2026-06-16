@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { runGeminiProxy, _internal: I } = require('../../services/llm/geminiProxyService');
-const { CODES } = require('../../services/llm/geminiErrors');
+const { CODES } = require('../../services/llm/llmErrors');
 
 // -- pure helpers ------------------------------------------------------------
 

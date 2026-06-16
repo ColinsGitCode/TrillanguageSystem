@@ -1,6 +1,6 @@
 const http = require('http');
 const { gatewayTimeoutFor } = require('./geminiTimeouts');
-const { CODES, statusForCode, codedError } = require('./geminiErrors');
+const { CODES, statusForCode, codedError } = require('./llmErrors');
 const log = require('../../lib/logger').child({ module: 'gemini-gateway' });
 
 const PORT = Number(process.env.GEMINI_GATEWAY_PORT || 18888);

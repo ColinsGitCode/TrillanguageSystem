@@ -28,6 +28,18 @@ test.describe('llmErrors', () => {
     assert.equal(statusForCode('unknown'), 500);
   });
 
+  test.it('preserves legacy executor and gateway HTTP status mappings', () => {
+    assert.equal(statusForCode(CODES.EXECUTOR_BAD_REQUEST), 400);
+    assert.equal(statusForCode(CODES.EXECUTOR_TIMEOUT), 504);
+    assert.equal(statusForCode(CODES.EXECUTOR_CLI_ERROR), 502);
+    assert.equal(statusForCode(CODES.EXECUTOR_SPAWN_ERROR), 500);
+    assert.equal(statusForCode(CODES.EXECUTOR_BUSY), 429);
+    assert.equal(statusForCode(CODES.EXECUTOR_ERROR), 500);
+    assert.equal(statusForCode(CODES.GATEWAY_TIMEOUT), 504);
+    assert.equal(statusForCode(CODES.GATEWAY_UPSTREAM_UNREACHABLE), 502);
+    assert.equal(statusForCode(CODES.GATEWAY_ERROR), 500);
+  });
+
   test.it('marks transient provider errors as retriable', () => {
     assert.equal(isRetriableCode(CODES.TIMEOUT), true);
     assert.equal(isRetriableCode(CODES.RATE_LIMITED), true);
@@ -35,6 +47,18 @@ test.describe('llmErrors', () => {
     assert.equal(isRetriableCode(CODES.BAD_REQUEST), false);
     assert.equal(isRetriableCode(CODES.AUTH_ERROR), false);
     assert.equal(isRetriableCode(CODES.CONFIG_ERROR), false);
+  });
+
+  test.it('preserves legacy executor and gateway retry semantics', () => {
+    assert.equal(isRetriableCode(CODES.EXECUTOR_TIMEOUT), true);
+    assert.equal(isRetriableCode(CODES.EXECUTOR_CLI_ERROR), true);
+    assert.equal(isRetriableCode(CODES.EXECUTOR_BUSY), true);
+    assert.equal(isRetriableCode(CODES.GATEWAY_TIMEOUT), true);
+    assert.equal(isRetriableCode(CODES.GATEWAY_UPSTREAM_UNREACHABLE), true);
+    assert.equal(isRetriableCode(CODES.EXECUTOR_BAD_REQUEST), false);
+    assert.equal(isRetriableCode(CODES.EXECUTOR_SPAWN_ERROR), false);
+    assert.equal(isRetriableCode(CODES.EXECUTOR_ERROR), false);
+    assert.equal(isRetriableCode(CODES.GATEWAY_ERROR), false);
   });
 
   test.it('creates coded Error objects', () => {

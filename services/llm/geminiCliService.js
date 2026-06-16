@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { stripFence, signalProcessTree } = require('./geminiProcessUtils');
-const { CODES, codedError } = require('./geminiErrors');
+const { CODES, codedError } = require('./llmErrors');
 
 const FORCE_KILL_MS = Number(process.env.GEMINI_CLI_FORCE_KILL_MS || 1000);
 
