@@ -58,59 +58,37 @@ test.describe('serverConfig.normalizeSourceMode', () => {
   });
 });
 
-test.describe('serverConfig.sanitizeGeminiModelName', () => {
-  test.it('drops internal alias labels', () => {
-    assert.equal(cfg.sanitizeGeminiModelName('gemini-cli'), '');
-    assert.equal(cfg.sanitizeGeminiModelName('cli'), '');
-    assert.equal(cfg.sanitizeGeminiModelName('default'), '');
-    assert.equal(cfg.sanitizeGeminiModelName('DEFAULT'), '');
+test.describe('serverConfig.deepseek defaults', () => {
+  test.it('uses DeepSeek as the only normalized provider', () => {
+    assert.equal(cfg.DEFAULT_LLM_PROVIDER, 'deepseek');
+    assert.equal(cfg.normalizeLlmProvider(), 'deepseek');
+    assert.equal(cfg.normalizeLlmProvider('gemini'), 'deepseek');
+    assert.equal(cfg.normalizeLlmProvider('local'), 'deepseek');
   });
 
-  test.it('keeps real model ids and trims them', () => {
-    assert.equal(cfg.sanitizeGeminiModelName('gemini-3-flash'), 'gemini-3-flash');
-    assert.equal(cfg.sanitizeGeminiModelName('  gemini-3-pro  '), 'gemini-3-pro');
+  test.it('defaults to DeepSeek V4 Flash', () => {
+    assert.equal(cfg.DEFAULT_DEEPSEEK_MODEL, 'deepseek-v4-flash');
+    assert.equal(cfg.DEFAULT_DEEPSEEK_BASE_URL, 'https://api.deepseek.com');
   });
 
-  test.it('returns empty string for blank input', () => {
-    assert.equal(cfg.sanitizeGeminiModelName(''), '');
-    assert.equal(cfg.sanitizeGeminiModelName(undefined), '');
-  });
-});
-
-test.describe('serverConfig.resolveGeminiModel', () => {
-  test.it('prefers a valid model override', () => {
-    assert.equal(cfg.resolveGeminiModel('host-proxy', 'gemini-3-pro'), 'gemini-3-pro');
-    assert.equal(cfg.resolveGeminiModel('cli', 'gemini-x'), 'gemini-x');
+  test.it('sanitizes DeepSeek model names and rejects legacy Gemini aliases', () => {
+    assert.equal(cfg.sanitizeDeepSeekModelName('deepseek-v4-flash'), 'deepseek-v4-flash');
+    assert.equal(cfg.sanitizeDeepSeekModelName('  deepseek-v4-pro  '), 'deepseek-v4-pro');
+    assert.equal(cfg.sanitizeDeepSeekModelName('gemini-cli'), '');
+    assert.equal(cfg.sanitizeDeepSeekModelName('gemini-3-flash-preview'), '');
+    assert.equal(cfg.sanitizeDeepSeekModelName(''), '');
   });
 
-  test.it('skips an alias override and falls through to env', () => {
-    const saved = process.env.GEMINI_PROXY_MODEL;
-    process.env.GEMINI_PROXY_MODEL = 'env-proxy-model';
+  test.it('resolves DeepSeek model override before env default', () => {
+    const saved = process.env.DEEPSEEK_MODEL;
+    process.env.DEEPSEEK_MODEL = 'deepseek-v4-pro';
     try {
-      assert.equal(cfg.resolveGeminiModel('host-proxy', 'cli'), 'env-proxy-model');
+      assert.equal(cfg.resolveDeepSeekModel('deepseek-v4-flash'), 'deepseek-v4-flash');
+      assert.equal(cfg.resolveDeepSeekModel('gemini-3-pro'), 'deepseek-v4-pro');
+      assert.equal(cfg.resolveDeepSeekModel(''), 'deepseek-v4-pro');
     } finally {
-      if (saved === undefined) delete process.env.GEMINI_PROXY_MODEL;
-      else process.env.GEMINI_PROXY_MODEL = saved;
+      if (saved === undefined) delete process.env.DEEPSEEK_MODEL;
+      else process.env.DEEPSEEK_MODEL = saved;
     }
-  });
-
-  test.it('returns empty string when nothing resolves', () => {
-    const keys = ['GEMINI_PROXY_MODEL', 'GEMINI_CLI_MODEL', 'GEMINI_MODEL'];
-    const saved = {};
-    for (const k of keys) { saved[k] = process.env[k]; delete process.env[k]; }
-    try {
-      assert.equal(cfg.resolveGeminiModel('host-proxy', 'default'), '');
-    } finally {
-      for (const k of keys) {
-        if (saved[k] === undefined) delete process.env[k];
-        else process.env[k] = saved[k];
-      }
-    }
-  });
-});
-
-test.describe('serverConfig misc helpers', () => {
-  test.it('normalizeLlmProvider always returns gemini', () => {
-    assert.equal(cfg.normalizeLlmProvider(), 'gemini');
   });
 });
