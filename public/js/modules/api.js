@@ -174,26 +174,6 @@ class ApiService {
         return this.fetchJson('/api/health');
     }
 
-    async getGeminiAuthStatus() {
-        return this.fetchJson('/api/gemini/auth/status');
-    }
-
-    async startGeminiAuth() {
-        return this.fetchJson('/api/gemini/auth/start', { method: 'POST' });
-    }
-
-    async submitGeminiAuth(code) {
-        return this.fetchJson('/api/gemini/auth/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
-        });
-    }
-
-    async cancelGeminiAuth() {
-        return this.fetchJson('/api/gemini/auth/cancel', { method: 'POST' });
-    }
-
     async startKnowledgeJob(payload = {}) {
         return this.fetchJson('/api/knowledge/jobs/start', {
             method: 'POST',

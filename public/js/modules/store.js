@@ -7,7 +7,7 @@ class Store {
     constructor() {
         localStorage.removeItem('model_mode');
         localStorage.removeItem('compare_mode');
-        localStorage.setItem('llm_provider', 'gemini');
+        localStorage.setItem('llm_provider', 'deepseek');
         this.state = {
             folders: [],
             files: [],
@@ -16,7 +16,7 @@ class Store {
             selectedFileTitle: null,
             imageBase64: null,
             isGenerating: false,
-            llmProvider: 'gemini',
+            llmProvider: 'deepseek',
             cardType: localStorage.getItem('card_type') || 'trilingual', // 'trilingual' | 'grammar_ja' | 'scenario_phrase'
 
             // 历史记录相关

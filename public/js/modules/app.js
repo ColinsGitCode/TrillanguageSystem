@@ -68,11 +68,7 @@ const els = {
     infraAlertBanner: document.getElementById('infraAlertBanner'),
     infraAlertTitle: document.getElementById('infraAlertTitle'),
     infraAlertText: document.getElementById('infraAlertText'),
-    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn'),
-
-    // Setup
-    setupOverlay: document.getElementById('setupOverlay'),
-    setupCard: document.getElementById('setupCard')
+    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn')
 };
 
 let fileListState = null;
@@ -120,7 +116,7 @@ const CARD_TYPE_CONFIG = {
     trilingual: {
         key: 'trilingual',
         selectorHint: '三语学习卡片',
-        hintClass: 'mode-gemini',
+        hintClass: 'mode-deepseek',
         generateText: 'Generate',
         placeholder: '输入短语或句子...',
         queueLabel: '三语',
@@ -181,8 +177,8 @@ function init() {
     const cardId = Number(params?.get('card') || 0);
 
     // Card-only embed mode (Knowledge Hub preview iframe): /?card=<id>&embed=1.
-    // Skip the full app bootstrap — no folder loading, queue/health/gemini
-    // pollers — and just mount the card modal. Big iframe-cost + polling win.
+    // Skip the full app bootstrap — no folder loading or queue/health pollers —
+    // and just mount the card modal. Big iframe-cost + polling win.
     if (cardId && params.get('embed') === '1') {
         initEmbeddedCard(cardId);
         return;
@@ -197,7 +193,6 @@ function init() {
     initHistory();
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
-    initGeminiSetup();
     initInfrastructureHealthMonitor();
 
     // Non-embed deep link (e.g. opened in a full tab): open the card over the
@@ -256,19 +251,9 @@ function getInfrastructureService(services, name) {
 function buildGenerationBlockedReason(health) {
     const services = Array.isArray(health?.services) ? health.services : [];
     const deepSeek = getInfrastructureService(services, 'DeepSeek API');
-    const executor = getInfrastructureService(services, 'Gemini Host Executor');
-    const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
 
     if (deepSeek && deepSeek.status !== 'online') {
         return deepSeek.message || 'DeepSeek API 不可用，新的生成任务暂不可提交。';
-    }
-
-    if (executor && executor.status !== 'online') {
-        return executor.message || '宿主机执行器不可用，新的生成任务暂不可提交。';
-    }
-
-    if (gateway && gateway.status !== 'online') {
-        return gateway.message || '内部 Gateway 异常，新的生成任务暂不可提交。';
     }
 
     return '';
@@ -277,30 +262,12 @@ function buildGenerationBlockedReason(health) {
 function buildInfrastructureAlertState(health) {
     const services = Array.isArray(health?.services) ? health.services : [];
     const deepSeek = getInfrastructureService(services, 'DeepSeek API');
-    const executor = getInfrastructureService(services, 'Gemini Host Executor');
-    const gateway = getInfrastructureService(services, 'Gemini Gateway (Internal)');
 
     if (deepSeek && deepSeek.status !== 'online') {
         return {
             visible: true,
             title: 'DeepSeek API 离线',
             text: deepSeek.message || 'DeepSeek API 不可用，新的生成任务将失败。'
-        };
-    }
-
-    if (executor && executor.status !== 'online') {
-        return {
-            visible: true,
-            title: 'Gemini Host Executor 离线',
-            text: executor.message || '宿主机执行器不可用，新的生成任务将失败。'
-        };
-    }
-
-    if (gateway && gateway.status !== 'online') {
-        return {
-            visible: true,
-            title: 'Gemini Gateway 降级',
-            text: gateway.message || '项目内 Gateway 无法稳定连接宿主机 Executor。'
         };
     }
 
@@ -377,178 +344,6 @@ async function refreshInfrastructureHealth() {
         applyInfrastructureGuardToInputs();
         throw error;
     }
-}
-
-// ==========================================
-// Gemini CLI 初始化设置
-// ==========================================
-
-let setupPollTimer = null;
-
-async function initGeminiSetup() {
-    try {
-        const status = await api.getGeminiAuthStatus();
-        if (!status.enabled || status.authenticated) return;
-        renderSetupOverlay(status);
-        startSetupPolling();
-    } catch (err) {
-        console.error('Gemini setup status failed:', err);
-    }
-}
-
-function renderSetupOverlay(status = {}) {
-    if (!els.setupOverlay || !els.setupCard) return;
-    els.setupOverlay.classList.remove('hidden');
-    els.setupCard.innerHTML = `
-      <div class="setup-header">
-        <div>
-          <h2 class="setup-title">初始化设置 · Gemini CLI 认证</h2>
-          <p class="setup-subtitle">首次使用需要登录 Google 账号以启用 Gemini CLI。</p>
-        </div>
-      </div>
-      <ol class="setup-steps">
-        <li>点击“开始认证”生成登录链接</li>
-        <li>浏览器完成登录后复制授权码</li>
-        <li>粘贴授权码并提交</li>
-      </ol>
-      <div class="setup-actions">
-        <button class="btn-secondary" id="setupStartBtn">开始认证</button>
-        <button class="btn-text" id="setupRefreshBtn">刷新状态</button>
-      </div>
-      <div class="setup-status" id="setupStatus">等待开始认证。</div>
-      <div class="setup-auth hidden" id="setupAuthBlock">
-        <div class="setup-field">
-          <label>登录链接</label>
-          <div class="setup-input-row">
-            <input id="setupAuthUrl" readonly placeholder="点击开始认证获取链接" />
-            <button class="btn-primary" id="setupOpenBtn">打开</button>
-          </div>
-        </div>
-        <div class="setup-field">
-          <label>授权码</label>
-          <div class="setup-input-row">
-            <input id="setupAuthCode" placeholder="粘贴授权码" />
-            <button class="btn-secondary" id="setupSubmitBtn">提交</button>
-          </div>
-        </div>
-        <div class="setup-help">如果提示授权码失效，请重新点击“开始认证”获取新链接。</div>
-      </div>
-    `;
-
-    bindSetupEvents();
-    if (status.url) {
-        updateSetupAuthBlock(status.url);
-        updateSetupStatus('已生成登录链接，请完成授权。');
-    }
-}
-
-function bindSetupEvents() {
-    const startBtn = document.getElementById('setupStartBtn');
-    const refreshBtn = document.getElementById('setupRefreshBtn');
-    const openBtn = document.getElementById('setupOpenBtn');
-    const submitBtn = document.getElementById('setupSubmitBtn');
-
-    if (startBtn) startBtn.onclick = handleSetupStart;
-    if (refreshBtn) refreshBtn.onclick = handleSetupRefresh;
-    if (openBtn) openBtn.onclick = handleSetupOpen;
-    if (submitBtn) submitBtn.onclick = handleSetupSubmit;
-}
-
-function updateSetupStatus(text) {
-    const statusEl = document.getElementById('setupStatus');
-    if (statusEl) statusEl.textContent = text;
-}
-
-function updateSetupAuthBlock(url) {
-    const block = document.getElementById('setupAuthBlock');
-    const input = document.getElementById('setupAuthUrl');
-    if (block) block.classList.remove('hidden');
-    if (input) input.value = url || '';
-}
-
-async function handleSetupStart() {
-    updateSetupStatus('正在生成登录链接...');
-    try {
-        const data = await api.startGeminiAuth();
-        if (data.url) {
-            updateSetupAuthBlock(data.url);
-            updateSetupStatus('登录链接已生成，请完成授权并提交授权码。');
-        } else if (data.authenticated) {
-            finishSetup();
-        }
-    } catch (err) {
-        updateSetupStatus(`启动失败：${err.message}`);
-    }
-}
-
-async function handleSetupRefresh() {
-    updateSetupStatus('正在刷新状态...');
-    try {
-        const data = await api.getGeminiAuthStatus();
-        if (data.authenticated) {
-            finishSetup();
-            return;
-        }
-        if (data.url) updateSetupAuthBlock(data.url);
-        updateSetupStatus(data.url ? '等待授权码提交。' : '请点击开始认证生成链接。');
-    } catch (err) {
-        updateSetupStatus(`刷新失败：${err.message}`);
-    }
-}
-
-function handleSetupOpen() {
-    const input = document.getElementById('setupAuthUrl');
-    if (input && input.value) {
-        window.open(input.value, '_blank', 'noopener');
-    }
-}
-
-async function handleSetupSubmit() {
-    const input = document.getElementById('setupAuthCode');
-    const code = input ? input.value.trim() : '';
-    if (!code) {
-        updateSetupStatus('请输入授权码。');
-        return;
-    }
-    updateSetupStatus('正在提交授权码...');
-    try {
-        const result = await api.submitGeminiAuth(code);
-        if (result.status === 'success') {
-            finishSetup();
-        } else if (result.status === 'retry') {
-            updateSetupAuthBlock(result.url);
-            updateSetupStatus('授权码失效，请重新登录获取新授权码。');
-        } else {
-            updateSetupStatus('授权处理中，请稍后刷新状态。');
-        }
-    } catch (err) {
-        updateSetupStatus(`提交失败：${err.message}`);
-    }
-}
-
-function startSetupPolling() {
-    if (setupPollTimer) return;
-    setupPollTimer = setInterval(async () => {
-        try {
-            const status = await api.getGeminiAuthStatus();
-            if (status.authenticated) {
-                finishSetup();
-                return;
-            }
-            if (status.url) updateSetupAuthBlock(status.url);
-        } catch (err) {
-            console.error('Gemini auth polling failed:', err);
-        }
-    }, 3000);
-}
-
-function finishSetup() {
-    if (setupPollTimer) {
-        clearInterval(setupPollTimer);
-        setupPollTimer = null;
-    }
-    if (els.setupOverlay) els.setupOverlay.classList.add('hidden');
-    updateSetupStatus('认证完成。');
 }
 
 // ==========================================
@@ -1205,7 +1000,7 @@ function mapGenerationJobToQueueTask(job = {}) {
         phraseRaw: String(job.phraseRaw || job.phraseNormalized || '').trim(),
         phraseNormalized: String(job.phraseNormalized || '').trim(),
         source: job.sourceContext || null,
-        provider: String(job.provider || 'gemini').trim() || 'gemini',
+        provider: String(job.provider || 'deepseek').trim() || 'deepseek',
         cardType: jobType,
         sourceMode: String(job.sourceMode || '').trim().toLowerCase() || null,
         targetFolder: String(job.targetFolder || '').trim(),
@@ -1751,7 +1546,7 @@ async function enqueueBackgroundGenerationTask(phraseRaw, phraseNormalized, sour
         return false;
     }
 
-    const provider = 'gemini';
+    const provider = 'deepseek';
     const sourceEntry = String(source.entry || '').trim().toLowerCase();
     const inferredSourceMode = String(
         source.sourceMode ||
@@ -2680,7 +2475,7 @@ async function openRelationCardFromKnowledge(payload = {}) {
 
 function buildIntelHud(metrics, options = {}) {
     const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
-    const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'TEACHER').toUpperCase();
+    const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'deepseek').toUpperCase();
     const modelLabel = options.modelLabel || metrics.metadata?.model || 'UNKNOWN';
     const templateCompliance = metrics.quality?.templateCompliance ?? metrics.quality?.checks?.templateCompliance ?? 0;
 
@@ -2926,7 +2721,7 @@ function renderCardModal(markdown, title, options = {}) {
     };
 
     const tokens = metrics.tokens || { input: 0, output: 0 };
-    const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'gemini').toUpperCase();
+    const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'deepseek').toUpperCase();
     const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
 
     const toText = (val) => {
