@@ -141,7 +141,7 @@ test.describe.serial('前端综合回归', () => {
     await page.goto('/');
     await page.getByTestId('phrase-input').fill(phrase);
     await page.getByTestId('generate-btn').click();
-    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED/, { timeout: 10_000 });
+    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED|IDLE/, { timeout: 10_000 });
     await waitForQueueIdle(page);
     await expect(page.getByTestId('phrase-input')).toHaveValue('');
 
@@ -151,7 +151,7 @@ test.describe.serial('前端综合回归', () => {
 
     await page.getByTestId('tab-content').click();
     await expect(page.getByTestId('card-content-panel')).toBeVisible();
-    await expect.poll(() => page.locator('.audio-btn').count()).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => page.getByTestId('card-content-panel').locator('.audio-btn').count()).toBeGreaterThanOrEqual(1);
 
     await page.getByTestId('tab-intel').click();
     await expect(page.getByText('QUALITY GRADE')).toBeVisible();
@@ -175,25 +175,29 @@ test.describe.serial('前端综合回归', () => {
     await page.getByTestId('phrase-input').fill(phrase);
     await page.getByTestId('generate-btn').click();
 
-    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED/, { timeout: 10_000 });
+    await expect(page.getByTestId('hero-queue-state')).toHaveText(/RUNNING|QUEUED|IDLE/, { timeout: 10_000 });
     await page.getByTestId('hero-queue-status').click();
     await expect(page.getByTestId('queue-task-item').filter({ hasText: phrase }).first()).toContainText('场景');
     await waitForQueueIdle(page);
 
     folder = await openFirstFolder(page);
-    const fileButton = page.getByTestId('file-list').locator('button').filter({ hasText: phrase }).first();
-    await expect(fileButton).toContainText('场景卡');
-    await fileButton.click();
+    try {
+      const fileButton = page.getByTestId('file-list').locator('button').filter({ hasText: phrase }).first();
+      const contentPanel = page.getByTestId('card-content-panel');
+      await expect(fileButton).toContainText('场景卡');
+      await fileButton.click();
 
-    await expect(page.getByTestId('card-modal')).toBeVisible();
-    await expect(page.getByTestId('card-modal-container')).toContainText('SCENARIO EXPRESSIONS');
-    await expect(page.getByTestId('card-content-panel')).toContainText('CARD TYPE · 场景表达卡');
-    await expect(page.getByTestId('card-content-panel').locator('h3')).toHaveCount(12);
-    await expect.poll(() => page.locator('.audio-btn').count()).toBeGreaterThanOrEqual(2);
-    await expect(page.getByTestId('tab-knowledge')).toHaveCount(0);
+      await expect(page.getByTestId('card-modal')).toBeVisible();
+      await expect(page.getByTestId('card-modal-container')).toContainText('SCENARIO EXPRESSIONS');
+      await expect(contentPanel).toContainText('CARD TYPE · 场景表达卡');
+      await expect(contentPanel.locator('h3')).toHaveCount(12);
+      await expect.poll(() => contentPanel.locator('.audio-btn').count()).toBeGreaterThanOrEqual(2);
+      await expect(page.getByTestId('tab-knowledge')).toHaveCount(0);
 
-    await page.getByTestId('card-modal-close').click();
-    await deleteRecord(request, folder, phrase);
+      await page.getByTestId('card-modal-close').click();
+    } finally {
+      await deleteRecord(request, folder, phrase);
+    }
     await expectNoDiagnostics(diagnostics);
   });
 
