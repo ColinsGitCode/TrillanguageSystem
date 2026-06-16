@@ -12,7 +12,7 @@
 项目的"当前现状"（目录结构、provider 链、persistence、background jobs、frontend 模块、测试与环境变量等）请直接参考：
 
 - **`CLAUDE.md`**（项目根目录）：持续维护的架构索引，是最权威的入口
-- **代码本身**：`routes/`、`services/`、`services/db/`、`services/knowledge/`、`lib/`、`public/js/modules/`
+- **代码本身**：`routes/`、`services/`、`services/storage/db/`、`services/knowledge/`、`lib/`、`public/js/modules/`
 - **`database/schema.sql`**：数据库结构
 
 历史上的 `Docs/Status/` 目录（IMPLEMENTATION_STATUS / BACKEND / FRONTEND / API / repo_status 等）已废弃并删除，不再代表当前状态；如需查阅可从 git 历史恢复。
@@ -32,10 +32,15 @@
 
 ## 主题导航
 
-### 1. 系统主架构
+### 1. 当前系统入口
 
-- `Docs/Architecture/Trilingual_Card_Generation_System.md`
-- `Docs/Architecture/数据库设计方案.md`
+- `../README.md`：快速启动、Docker 服务、当前 DeepSeek provider 链与关键环境变量
+- `../CLAUDE.md`：最完整的当前架构索引，覆盖目录结构、任务队列、测试与运行约定
+
+下列架构文档保留为历史参考，不作为当前运行入口：
+
+- `Docs/Architecture/Trilingual_Card_Generation_System.md`（早期 Gemini/Piper 方案）
+- `Docs/Architecture/数据库设计方案.md`（含已删除/已迁移表结构说明）
 
 ### 2. Knowledge / 知识系统
 
@@ -48,7 +53,8 @@
 
 - `CLAUDE.md`（根目录，provider 链、环境变量、Docker 服务）
 - `.env.example`（DeepSeek、可选本地 LLM/OCR、知识 LLM 兜底配置）
-- `Docs/Operations/vLLM_Recommended_Config.md`
+
+`Docs/Operations/vLLM_Recommended_Config.md` 是历史本地模型/few-shot 验证参考，不属于当前 DeepSeek 运行链路。
 
 ### 4. UI / Card 功能
 

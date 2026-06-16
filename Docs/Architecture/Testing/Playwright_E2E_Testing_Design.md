@@ -17,11 +17,11 @@
 本项目的 Playwright 采用两层策略：
 
 1. `smoke 回归`：默认走 `E2E_TEST_MODE`
-   - 不依赖真实 Gemini / OCR / TTS
+   - 不依赖真实 DeepSeek / OCR / TTS
    - 目标是稳定验证 UI 主链路
 2. `真实链路验收`：保留给手工或低频专项测试
-   - 不纳入高频 smoke
-   - 避免把外部依赖波动引入日常回归
+   - 当前没有专用 NPM real-e2e 脚本
+   - 不纳入高频 smoke，避免把外部依赖波动引入日常回归
 
 ## 3. 本次已落地内容
 
@@ -38,9 +38,6 @@
   - `npm run test:e2e:ui`
   - `npm run test:e2e:smoke`
   - `npm run test:e2e:pages`
-  - `npm run test:e2e:real`
-  - `npm run test:e2e:real:nightly`
-  - 对应封装脚本：`scripts/tests/runRealNightlyE2E.sh`
 
 ### 3.2 E2E_TEST_MODE
 
@@ -100,32 +97,8 @@
 5. OCR fixture 上传、清洗与输入框回填
 6. `Mission Control` 展示共享队列失败与重试结果
 
-低频真实验收用例：
-
-- `tests/e2e/real-gemini.spec.js`
-- 仅在设置 `RUN_REAL_GEMINI_E2E=1` 时执行
-- 默认目标地址：`http://127.0.0.1:3010`
-- 用于验证真实 Gemini CLI Proxy 主链路，不纳入高频 smoke
-- 当前已覆盖：
-  - 文本输入生成真实 Gemini 卡片
-  - `TRAIN regenerate` 完成并更新 `updatedAt`
-  - `synonym_boundary` 真实 Knowledge Job 启动、执行、落库与详情读取
-  - `Knowledge Hub` 页面真实 synonym 列表点击与 Relation Inspector 详情展示
-  - `Mission Control` 页面展示最近一次 `summary` 任务结果
-  - 该用例默认使用 `PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash` 以控制时延与配额消耗
-  - 已提供 nightly 入口：`npm run test:e2e:real:nightly`
-
-新增后端清洗回归：
-
-- `tests/e2e/gemini-sanitize.spec.js`
-- 覆盖 2 条回归断言：
-  1. `geminiProxyService` 可清洗 MCP 诊断前缀，并保留有效 markdown
-  2. `knowledgeAnalysisEngine` 的 `synonym_boundary` 链路可清洗 MCP 诊断前缀，并解析有效 JSON
-- 对应脚本：
-
-```bash
-npm run test:e2e:gemini-sanitize
-```
+低频真实验收不再放在 Playwright 默认脚本中；需要验证真实 DeepSeek 链路时，先启动正常服务并配置
+`DEEPSEEK_API_KEY`，再用人工样例或临时专项 spec 执行，避免真实模型状态影响日常 smoke。
 
 已验证：
 
@@ -135,17 +108,6 @@ npm run test:e2e:gemini-sanitize
 - 命令：`npm run test:e2e`
 - 结果：`11 passed, 1 skipped`
 - `2026-03-10`
-- 命令：`npm run test:e2e:gemini-sanitize`
-- 结果：`2 passed`
-- `2026-03-10`
-- 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge synonym_boundary"`
-- 结果：`1 passed`
-- `2026-03-10`
-- 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge"`
-- 结果：`2 passed`
-- `2026-03-10`
-- 命令：`RUN_REAL_GEMINI_E2E=1 PLAYWRIGHT_REAL_KNOWLEDGE_MODEL=gemini-2.5-flash npx playwright test tests/e2e/real-gemini.spec.js --grep "Knowledge|Mission Control"`
-- 结果：`3 passed`
 
 ## 5. 运行方式
 
@@ -179,28 +141,21 @@ npm run test:e2e:headed
 npm run test:e2e:ui
 ```
 
-执行 nightly 真实验收：
-
-```bash
-npm run test:e2e:real:nightly
-```
-
 ## 6. 当前限制
 
 当前 smoke 重点验证的是“UI 行为正确”，不是“模型输出质量正确”。
 
 因此暂不覆盖：
 
-- 真实 Gemini 输出质量
+- 真实 DeepSeek 输出质量
 - OCR 准确率
 - TTS 音频内容质量
-- few-shot 提升效果
 
 这些仍应由：
 
 - 数据验收
 - 专项 UI 验证
-- 实验报告链路
+- 真实链路专项测试
 
 分别承担。
 
@@ -208,4 +163,4 @@ npm run test:e2e:real:nightly
 
 1. 把 `TRAIN` 标红统计拆分为 `content/train` 两个维度
 2. 增加 `Knowledge OPS / Knowledge Hub` 的 smoke 用例
-3. 为真实 Gemini 链路补一组低频验收用例，与 smoke 分离
+3. 为真实 DeepSeek 链路补一组低频验收用例，与 smoke 分离

@@ -1,5 +1,8 @@
 # 三语卡片生成系统工程化设计方案
 
+> 历史参考：本文描述的是早期 Gemini/Piper 方案，不代表当前运行架构。当前系统已迁移为
+> DeepSeek V4 Flash 主生成路径，运行入口以根目录 `README.md`、`CLAUDE.md` 和 `.env.example` 为准。
+
 ## 1. 概述
 本方案旨在将现有的“HTML 档案查看器”升级为“三语学习卡片生成系统”。核心思想采用 **"Code as Prompt"**，利用 Gemini API 的强逻辑能力生成结构化文本与前端代码，并结合外部本地 TTS 容器生成高质量语音，最终自动归档为标准化的 HTML 学习卡片。
 
@@ -106,9 +109,7 @@ Prompt 将不仅仅是生成文本，我们将要求 Gemini 返回 **JSON 格式
 
 ### 4.1 环境变量 (.env)
 ```bash
-# Gemini 配置
-GEMINI_API_KEY=AIzaSy...
-GEMINI_MODEL=gemini-1.5-flash
+# 旧 LLM 配置已废弃；当前请使用根目录 .env.example 的 DeepSeek 配置。
 
 # TTS 配置（英文 Piper + 日文 VOICEVOX）
 TTS_EN_ENDPOINT=http://tts-en:5002/api/tts

@@ -18,7 +18,7 @@
 
 ## M0：准备阶段（0.5 天）
 
-- [ ] 确认当前 DB 结构与迁移方式（`database/schema.sql` + `services/databaseService.js`）
+- [ ] 确认当前 DB 结构与迁移方式（`database/schema.sql` + `services/storage/databaseService.js`）
 - [ ] 定义 job_type 枚举与状态机
 - [ ] 固化输出 schema（JSON Schema 或代码校验器）
 
@@ -30,7 +30,7 @@
 实现项：
 
 1. 在 `database/schema.sql` 增加知识任务与物化表
-2. 在 `services/databaseService.js` 增加迁移语句（兼容旧库）
+2. 在 `services/storage/databaseService.js` 增加迁移语句（兼容旧库）
 3. 增加 CRUD 方法：
    - `createKnowledgeJob / updateKnowledgeJobStatus / appendKnowledgeRawOutput`
    - `upsertKnowledgeIndex / replaceKnowledgeSynonymVersion / ...`
@@ -43,7 +43,7 @@
 ## M2：分析引擎（1.5 天）
 
 新增文件：
-- `services/knowledgeAnalysisEngine.js`
+- `services/knowledge/knowledgeAnalysisEngine.js`
 
 实现函数：
 
@@ -66,7 +66,7 @@
 ## M3：任务编排与 API（1 天）
 
 新增文件：
-- `services/knowledgeJobService.js`
+- `services/knowledge/knowledgeJobService.js`
 
 改动文件：
 - `server.js`（新增 API 路由）
@@ -121,9 +121,9 @@
 ## 3. 文件级开发清单（按优先顺序）
 
 1. `database/schema.sql`
-2. `services/databaseService.js`
-3. `services/knowledgeAnalysisEngine.js`（新）
-4. `services/knowledgeJobService.js`（新）
+2. `services/storage/databaseService.js`
+3. `services/knowledge/knowledgeAnalysisEngine.js`
+4. `services/knowledge/knowledgeJobService.js`
 5. `server.js`
 6. `public/js/modules/dashboard.js`
 7. `public/js/modules/app.js`（卡片详情 API 消费）
