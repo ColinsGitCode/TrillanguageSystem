@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeAudioTasks,
   resolveCardAudioTasks,
+  buildPersistedAudioTasks,
   validateGeneratedContent,
   extractMarkdownProviderResponse,
   validateSanitizedCardResponse,
@@ -52,6 +53,57 @@ test.describe('normalizeAudioTasks', () => {
     const before = { ...tasks[0] };
     normalizeAudioTasks(tasks, 'mycard');
     assert.deepEqual(tasks[0], before);
+  });
+});
+
+test.describe('buildPersistedAudioTasks', () => {
+  test.it('maps generated audio results back to their source tasks for database persistence', () => {
+    const sourceTasks = [
+      { lang: 'en', text: 'Please call maintenance', filename_suffix: '_en_1', extension: 'mp3' },
+      { lang: 'ja', text: '修理をお願いします', filename_suffix: '_ja_1', extension: 'wav' },
+      { lang: 'en', text: 'Thank you', filename_suffix: '_en_2', extension: 'mp3' },
+    ];
+    const audio = {
+      results: [
+        {
+          index: 1,
+          filePath: '/data/cards/base_ja_1.wav',
+          extension: 'wav',
+        },
+        {
+          index: 0,
+          filePath: '/data/cards/base_en_1.mp3',
+          extension: 'mp3',
+        },
+      ],
+      errors: [
+        { index: 2, message: 'provider timeout' },
+      ],
+    };
+
+    assert.deepEqual(buildPersistedAudioTasks(sourceTasks, audio), [
+      {
+        lang: 'ja',
+        text: '修理をお願いします',
+        filename_suffix: '_ja_1',
+        extension: 'wav',
+        filePath: '/data/cards/base_ja_1.wav',
+        status: 'generated',
+      },
+      {
+        lang: 'en',
+        text: 'Please call maintenance',
+        filename_suffix: '_en_1',
+        extension: 'mp3',
+        filePath: '/data/cards/base_en_1.mp3',
+        status: 'generated',
+      },
+    ]);
+  });
+
+  test.it('returns [] when there are no generated audio results', () => {
+    assert.deepEqual(buildPersistedAudioTasks([], null), []);
+    assert.deepEqual(buildPersistedAudioTasks([{ lang: 'en' }], { errors: [] }), []);
   });
 });
 
@@ -131,6 +183,21 @@ test.describe('validateGeneratedContent', () => {
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       []
+    );
+  });
+
+  test.it('rejects scenario cards with an overlong title', () => {
+    const markdown = scenarioCard().replace(
+      '# 空港で道を尋ねる',
+      '# 我家的空调使用1小时以上时间后室内出风口会有很多漏水'
+    );
+
+    assert.deepEqual(
+      validateGeneratedContent(
+        { markdown_content: markdown },
+        { cardType: 'scenario_phrase', allowMissingHtml: true }
+      ),
+      ['scenario_phrase title must be 1-10 characters']
     );
   });
 
@@ -388,6 +455,18 @@ test.describe('validateSanitizedCardResponse', () => {
     assert.equal(
       validateSanitizedCardResponse({ markdown: scenarioCard() }, 'scenario_phrase'),
       true
+    );
+  });
+
+  test.it('rejects sanitized scenario markdown with an overlong title', () => {
+    const markdown = scenarioCard().replace(
+      '# 空港で道を尋ねる',
+      '# 我家的空调使用1小时以上时间后室内出风口会有很多漏水'
+    );
+
+    assert.equal(
+      validateSanitizedCardResponse({ markdown }, 'scenario_phrase'),
+      false
     );
   });
 

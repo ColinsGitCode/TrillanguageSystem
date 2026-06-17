@@ -25,8 +25,9 @@ function buildPrompt(args) {
 严格要求:
 1) 只输出有效 JSON，不要任何额外文本。
 2) markdown_content 必须为 Markdown，内容是一张“场景表达卡”，并且必须使用以下章节:
-# ${phrase}
+# 10字以内的场景主旨标题
 ## 1. 场景说明
+- **原始场景**: ${phrase}
 - 用中文说明场景目标、对象、语气和注意事项。
 ## 2. 常用表达
 ### 01.
@@ -41,11 +42,12 @@ function buildPrompt(args) {
 - **日本語**: ...
 - **使用提示**: ...
 
-3) 必须生成 12 个常用表达，编号固定为 ### 01. 到 ### 12.，不要增加或减少。
-4) 每个表达块必须包含中文、英文、日本語、使用提示；英文和日语表达要自然口语化。
-5) 日语汉字需加假名(例: 漢字(かな))；不要输出原始 <ruby> 标签。
-6) audio_tasks 必须含 24 项: 每个表达的英文和日语各 1 项。filename_suffix 固定为 _en_1 到 _en_12、_ja_1 到 _ja_12；text 去掉末尾标点；日语 text 不能含 ruby。
-7) JSON 转义: markdown_content 换行用 \\n，双引号用 \\"。
+3) H1 标题必须由你总结输入场景主旨，不要照抄完整输入场景；去掉空格和标点后必须为 1-10 个字符，例如 空调维修预约、保育园交接。
+4) 必须生成 12 个常用表达，编号固定为 ### 01. 到 ### 12.，不要增加或减少。
+5) 每个表达块必须包含中文、英文、日本語、使用提示；英文和日语表达要自然口语化。
+6) 日语汉字需加假名(例: 漢字(かな))；不要输出原始 <ruby> 标签。
+7) audio_tasks 必须含 24 项: 每个表达的英文和日语各 1 项。filename_suffix 固定为 _en_1 到 _en_12、_ja_1 到 _ja_12；text 去掉末尾标点；日语 text 不能含 ruby。
+8) JSON 转义: markdown_content 换行用 \\n，双引号用 \\"。
 禁止: <script>/<iframe>/<object>/<embed>。
 
 JSON 结构:
@@ -188,7 +190,7 @@ function buildMarkdownPrompt(args) {
     } catch (err) {
         // Fallback to minimal inline prompt if template missing
         if (cardType === 'scenario_phrase') {
-            template = `你是场景表达卡生成器。\n输入场景: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。\n必须包含 ## 1. 场景说明 和 ## 2. 常用表达，并生成 ### 01. 到 ### 12. 共 12 个表达块。`;
+            template = `你是场景表达卡生成器。\n输入场景: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。\nH1 标题必须总结场景主旨，去掉空格和标点后 10字以内，不能照抄完整输入场景。\n必须包含 ## 1. 场景说明 和 ## 2. 常用表达；场景说明中必须包含 - **原始场景**: {{ phrase }}；并生成 ### 01. 到 ### 12. 共 12 个表达块。`;
         } else if (cardType === 'grammar_ja') {
             template = `你是日语语法学习卡片生成器。\n输入内容: "{{ phrase }}"\n\n只输出 Markdown，不要输出 JSON 或额外解释。`;
         } else {

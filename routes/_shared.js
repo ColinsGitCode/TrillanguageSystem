@@ -35,7 +35,12 @@ const {
 const {
   generateWithProvider,
 } = require('../services/generation/cardGenerationService');
-const { validateGeneratedContent, normalizeAudioTasks, resolveCardAudioTasks } = require('../lib/generationHelpers');
+const {
+  validateGeneratedContent,
+  normalizeAudioTasks,
+  resolveCardAudioTasks,
+  buildPersistedAudioTasks,
+} = require('../lib/generationHelpers');
 
 module.exports = {
   buildPrompt,
@@ -89,4 +94,5 @@ module.exports = {
   validateGeneratedContent,
   normalizeAudioTasks,
   resolveCardAudioTasks,
+  buildPersistedAudioTasks,
 };

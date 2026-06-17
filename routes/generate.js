@@ -16,6 +16,7 @@ const {
   validateGeneratedContent,
   normalizeAudioTasks,
   resolveCardAudioTasks,
+  buildPersistedAudioTasks,
   buildE2EGenerateResult,
   checkGenerateThrottle,
   dbService,
@@ -88,10 +89,12 @@ router.post('/api/generate', async (req, res) => {
     });
 
     let audio = null;
+    let persistedAudioTasks = [];
     const hasTtsEndpoint = !E2E_TEST_MODE && (process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT);
     if (hasTtsEndpoint && content.audio_tasks.length) {
       const audioTasks = normalizeAudioTasks(content.audio_tasks, result.baseName);
       audio = await generateAudioBatch(audioTasks, { outputDir: result.targetDir, baseName: result.baseName });
+      persistedAudioTasks = buildPersistedAudioTasks(audioTasks, audio);
     }
 
     perf.mark('audioGenerate');
@@ -113,7 +116,7 @@ router.post('/api/generate', async (req, res) => {
         content,
         observability,
         prompt,
-        audioTasks: audio?.tasks || [],
+        audioTasks: persistedAudioTasks,
         cardType,
         sourceMode
       });

@@ -44,8 +44,15 @@ function buildGrammarMarkdown(phrase) {
 `;
 }
 
+function buildScenarioTitle(phrase) {
+  const safePhrase = escapeMarkdownText(phrase);
+  if (/保育园|保育園|kindergarten|nursery/i.test(safePhrase)) return '保育园交接';
+  return '场景表达';
+}
+
 function buildScenarioMarkdown(phrase) {
   const safePhrase = escapeMarkdownText(phrase);
+  const title = buildScenarioTitle(safePhrase);
   const expressions = [
     {
       zh: '早上好，我来送孩子上学。',
@@ -130,9 +137,10 @@ function buildScenarioMarkdown(phrase) {
 - **使用提示**: ${item.tip}`;
   }).join('\n\n');
 
-  return `# ${safePhrase}
+  return `# ${title}
 
 ## 1. 场景说明
+- **原始场景**: ${safePhrase}
 - **角色**: 家长在保育园早晨送孩子，与老师沟通孩子昨晚咳嗽的情况。
 - **语气**: 礼貌、简洁、具体，避免夸大病情。
 - **目标**: 让老师了解孩子状态，并知道白天需要观察和联系的条件。
