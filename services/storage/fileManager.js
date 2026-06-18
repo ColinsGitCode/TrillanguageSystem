@@ -94,8 +94,11 @@ function readMarkdownTitle(mdPath) {
 function getDisplayMeta(folderPath, baseName) {
     const metaPath = path.join(folderPath, `${baseName}.meta.json`);
     const meta = readMetaInfo(metaPath);
-    const title = meta?.phrase || readMarkdownTitle(path.join(folderPath, `${baseName}.md`)) || baseName;
     const cardType = normalizeCardType(meta?.cardType);
+    const markdownTitle = readMarkdownTitle(path.join(folderPath, `${baseName}.md`));
+    const title = cardType === 'scenario_phrase'
+        ? (markdownTitle || meta?.phrase || baseName)
+        : (meta?.phrase || markdownTitle || baseName);
     return {
         title,
         cardType,

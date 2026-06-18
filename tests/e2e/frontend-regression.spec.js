@@ -189,12 +189,16 @@ test.describe.serial('前端综合回归', () => {
 
     folder = await openFirstFolder(page);
     try {
-      const fileButton = page.getByTestId('file-list').locator('button').filter({ hasText: phrase }).first();
+      const scenarioTitle = '场景表达';
+      const fileButton = page.getByTestId('file-list').locator('button').filter({ hasText: scenarioTitle }).first();
       const contentPanel = page.getByTestId('card-content-panel');
       await expect(fileButton).toContainText('场景卡');
+      await expect(fileButton.locator('.file-item-title')).toHaveText(scenarioTitle);
+      await expect(fileButton).not.toContainText(phrase);
       await fileButton.click();
 
       await expect(page.getByTestId('card-modal')).toBeVisible();
+      await expect(page.getByTestId('card-modal-title')).toHaveText(scenarioTitle);
       await expect(page.getByTestId('card-modal-container')).toContainText('SCENARIO EXPRESSIONS');
       await expect(contentPanel).toContainText('CARD TYPE · 场景表达卡');
       await expect(contentPanel.locator('h3')).toHaveCount(12);
