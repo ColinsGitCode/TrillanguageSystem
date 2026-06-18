@@ -13,13 +13,13 @@
 </head>
 <body data-dashboard-page="knowledge-hub" data-testid="knowledge-hub-page">
     <div class="dashboard-container">
-        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 16px;">
-                <a href="/" style="color: #6b7280; text-decoration: none; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono'; font-size: 13px; transition: color 0.2s;">
-                    <span style="font-size: 16px;">←</span> TERMINAL
+        <header class="kh-page-header">
+            <div class="kh-page-header-main">
+                <a href="/" class="kh-back-link">
+                    <span class="kh-back-icon">←</span> Terminal
                 </a>
-                <h1 style="font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: #1f2937;" data-testid="knowledge-hub-title">
-                    KNOWLEDGE HUB <span style="color: #3b82f6;">// EXPLORER</span>
+                <h1 class="kh-page-title" data-testid="knowledge-hub-title">
+                    Knowledge Hub <span>Explorer</span>
                 </h1>
                 <nav class="dashboard-page-nav">
                     <a class="dashboard-page-link" href="/dashboard.html">Mission Control</a>
@@ -27,19 +27,22 @@
                     <a class="dashboard-page-link active" href="/knowledge-hub.html">Knowledge Hub</a>
                 </nav>
             </div>
-            <div style="display: flex; align-items: center; gap: 18px;">
+            <div class="kh-page-status">
                 <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="status-dot" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);"></div>
-                    <span id="systemStatusText" style="font-family: 'JetBrains Mono'; font-size: 12px; color: #10b981;">SYSTEM ONLINE</span>
+                <div class="kh-system-pill">
+                    <div class="status-dot"></div>
+                    <span id="systemStatusText">SYSTEM ONLINE</span>
                 </div>
             </div>
         </header>
 
         <section class="glass-panel kh-statsbar">
             <div class="kh-statsbar-title">知识库 · Knowledge Base</div>
-            <div id="knowledgeHubCounts" class="knowledge-hub-counts" data-testid="knowledge-hub-counts">
-                <span class="tag">terms 0</span>
+            <div id="knowledgeHubCounts" class="knowledge-hub-counts kh-metrics" data-testid="knowledge-hub-counts">
+                <div class="kh-metric" data-testid="kh-metric-terms">
+                    <span class="label">Terms</span>
+                    <span class="value">0</span>
+                </div>
             </div>
             <div class="kh-actions" data-testid="kh-actions">
                 <span id="khStaleHint" class="kh-stale-hint" data-testid="kh-stale-hint" hidden></span>
@@ -169,8 +172,11 @@
             </div>
 
             <!-- RIGHT: relation inspector -->
-            <div class="kh-inspector">
-                <div class="kh-nav-title">Relation Inspector</div>
+            <div class="kh-inspector" id="khInspector" data-testid="kh-inspector" aria-hidden="true">
+                <div class="kh-inspector-head">
+                    <div class="kh-nav-title">Relation Inspector</div>
+                    <button id="khInspectorClose" class="kh-inspector-close" type="button" aria-label="收起关系面板">✕</button>
+                </div>
                 <div id="knowledgeRelationInspector" class="knowledge-summary-body kh-scroll" data-testid="knowledge-relation-inspector">
                     <div class="empty-hint">点击词条 / 洞察项查看关系</div>
                 </div>

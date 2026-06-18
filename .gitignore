@@ -8,6 +8,7 @@ logs/
 # IDE / tooling artifacts
 .idea/
 .playwright-mcp/
+.superpowers/
 .worktrees/
 
 # Personal scratch files (codex resume cmds, ad-hoc shell snippets)
@@ -21,6 +22,7 @@ data/
 *.db-wal
 
 # Temporary documentation files
+Docs/kindergarden_*.md
 Docs/**/*.bak
 Docs/**/*_backup.md
 Docs/**/*_ja.md

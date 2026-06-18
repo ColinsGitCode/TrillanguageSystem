@@ -952,6 +952,32 @@ function renderKnowledgeHub(overview, synonymData) {
     );
 }
 
+function getKhExplorer() {
+    return document.querySelector('.kh-explorer');
+}
+
+function setKhInspectorOpen(open, options = {}) {
+    const explorer = getKhExplorer();
+    const inspector = document.getElementById('khInspector');
+    if (!explorer || !inspector) return;
+    const isOpen = Boolean(open);
+    explorer.classList.toggle('has-inspector', isOpen);
+    inspector.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    if (isOpen && options.focus) {
+        const closeBtn = document.getElementById('khInspectorClose');
+        if (closeBtn) closeBtn.focus();
+    }
+}
+
+function closeKhInspector() {
+    setKhInspectorOpen(false);
+}
+
+async function openKhInspectorForSelection(options = {}) {
+    setKhInspectorOpen(true, options);
+    await renderKnowledgeRelationInspector();
+}
+
 async function renderKnowledgeRelationInspector() {
     const token = ++state.knowledgeRelationToken;
     const container = document.getElementById('knowledgeRelationInspector');
@@ -1318,7 +1344,21 @@ function initKnowledgeBaseBrowse() {
     }
 
     list.addEventListener('click', async (event) => {
-        const item = event.target.closest('.knowledge-hub-item');
+        const relBtn = event.target.closest('[data-inspector-action="term-relation"]');
+        if (relBtn) {
+            const item = relBtn.closest('[data-testid="knowledge-base-term"]');
+            if (!item) return;
+            const key = String(item.dataset.key || '').trim();
+            if (!key) return;
+            state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
+            renderKnowledgeBaseTerms();
+            await openKhInspectorForSelection();
+            return;
+        }
+
+        const mainBtn = event.target.closest('.kh-term-main');
+        if (!mainBtn) return;
+        const item = mainBtn.closest('[data-testid="knowledge-base-term"]');
         if (!item) return;
         const key = String(item.dataset.key || '').trim();
         if (!key) return;
@@ -1328,8 +1368,23 @@ function initKnowledgeBaseBrowse() {
         state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
         renderKnowledgeBaseTerms();
         if (genId) openKhCard(genId);
-        await renderKnowledgeRelationInspector();
     });
+
+    const inspectorClose = document.getElementById('khInspectorClose');
+    if (inspectorClose) inspectorClose.addEventListener('click', closeKhInspector);
+
+    const explorer = getKhExplorer();
+    if (explorer) {
+        explorer.addEventListener('click', (event) => {
+            if (!explorer.classList.contains('has-inspector')) return;
+            if (state.knowledgeBase.navMode !== 'browse') return;
+            if (event.target.closest('.kh-inspector')) return;
+            if (event.target.closest('.kh-nav')) return;
+            if (event.target.closest('.kh-term-card')) return;
+            if (event.target.closest('button, a, input, select, textarea, label')) return;
+            if (event.target.closest('.kh-list')) closeKhInspector();
+        });
+    }
 
     // Card preview modal close wiring (button / backdrop / Esc).
     const cardModal = document.getElementById('khCardModal');
@@ -1341,7 +1396,9 @@ function initKnowledgeBaseBrowse() {
         });
     }
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') closeKhCard();
+        if (event.key !== 'Escape') return;
+        closeKhInspector();
+        closeKhCard();
     });
 
     // Insight list selection → relation inspector (reuses the shared renderer).
@@ -1361,7 +1418,7 @@ function initKnowledgeBaseBrowse() {
                 pinned: true
             };
             renderKhInsightList();
-            await renderKnowledgeRelationInspector();
+            await openKhInspectorForSelection();
         });
     }
 
@@ -1640,12 +1697,17 @@ function setKhMode(mode, insightType) {
     }
     if (mode === 'insight') {
         if (crumb) crumb.textContent = KH_INSIGHT_LABEL[state.knowledgeBase.insightType] || '洞察 Insights';
+        setKhInspectorOpen(true);
         renderKhInsightList();
+        renderKnowledgeRelationInspector();
     } else if (mode === 'review') {
+        closeKhInspector();
         if (crumb) crumb.textContent = '复习 · Review';
     } else if (mode === 'plan') {
+        closeKhInspector();
         if (crumb) crumb.textContent = '学习计划 · Plan';
     } else {
+        closeKhInspector();
         if (crumb) crumb.textContent = '词条 · Terms';
     }
 }
@@ -1674,12 +1736,20 @@ function renderKhStats() {
     if (!node) return;
     const counts = (state.knowledgeBase.insightsOverview || {}).counts || {};
     const synTotal = Number(state.knowledgeBase.insightsSynonyms?.total || 0);
+    const metrics = [
+        { testid: 'kh-metric-terms', label: 'Terms', value: Number(counts.termCount || 0) },
+        { testid: 'kh-metric-grammar', label: 'Grammar', value: Number(counts.grammarPatternCount || 0) },
+        { testid: 'kh-metric-clusters', label: 'Clusters', value: Number(counts.clusterCount || 0) },
+        { testid: 'kh-metric-synonyms', label: 'Synonyms', value: synTotal },
+        { testid: 'kh-metric-issues', label: 'Open Issues', value: Number(counts.openIssueCount || 0) }
+    ];
     node.innerHTML = `
-        <span class="tag">terms ${Number(counts.termCount || 0)}</span>
-        <span class="tag">grammar ${Number(counts.grammarPatternCount || 0)}</span>
-        <span class="tag">clusters ${Number(counts.clusterCount || 0)}</span>
-        <span class="tag">synonyms ${synTotal}</span>
-        <span class="tag">open issues ${Number(counts.openIssueCount || 0)}</span>
+        ${metrics.map((metric) => `
+            <div class="kh-metric" data-testid="${metric.testid}">
+                <span class="label">${escapeHtml(metric.label)}</span>
+                <span class="value">${metric.value}</span>
+            </div>
+        `).join('')}
     `;
 }
 
@@ -1950,15 +2020,31 @@ function renderKnowledgeBaseTerms() {
             const diff = String(term.difficulty || '');
             const diffLabel = { easy: '简单', medium: '中等', hard: '困难' }[diff] || '';
             const diffBadge = diffLabel ? `<span class="kh-diff ${diff}" title="难度 ${diffLabel}">${diffLabel}</span> ` : '';
+            const cardType = formatKhCardType(term.cardType);
+            const meta = `${heads || '—'}${tags ? ` · ${tags}` : ''}`;
             return `
-                <div class="knowledge-hub-item ${isActive ? 'active' : ''}"
+                <div class="knowledge-hub-item kh-term-card ${isActive ? 'active' : ''}"
                      data-entity-type="term"
                      data-key="${escapeHtml(key)}"
                      data-generation-id="${Number(term.generationId || 0)}"
                      data-difficulty="${escapeHtml(diff)}"
                      data-testid="knowledge-base-term">
-                    <div class="name">${diffBadge}${escapeHtml(term.phrase || '-')} <span class="mono" style="color:#9ca3af;">${escapeHtml(term.langProfile || '')}</span></div>
-                    <div class="meta">${escapeHtml(heads || '—')}${tags ? ` · ${escapeHtml(tags)}` : ''}</div>
+                    <button class="kh-term-main" type="button">
+                        <div class="kh-term-head">
+                            <span class="kh-term-phrase">${escapeHtml(term.phrase || '-')}</span>
+                            ${diffBadge}
+                            <span class="kh-pill ${cardType.className}">${escapeHtml(cardType.label)}</span>
+                            <span class="kh-lang">${escapeHtml(term.langProfile || '')}</span>
+                        </div>
+                        <div class="kh-term-gloss">${escapeHtml(meta)}</div>
+                    </button>
+                    <button
+                        class="kh-term-rel"
+                        type="button"
+                        data-inspector-action="term-relation"
+                        data-testid="kh-term-rel"
+                        aria-label="查看 ${escapeHtml(term.phrase || '词条')} 的关系"
+                    >关系</button>
                 </div>
             `;
         }).join('');
@@ -1974,6 +2060,16 @@ function renderKnowledgeBaseTerms() {
     if (pageInfo) pageInfo.textContent = `${from} - ${to} / ${total}`;
     if (prevBtn) prevBtn.disabled = kb.page <= 1;
     if (nextBtn) nextBtn.disabled = kb.page >= maxPage;
+}
+
+function formatKhCardType(rawType) {
+    const type = String(rawType || 'trilingual').trim().toLowerCase();
+    const map = {
+        grammar_ja: { label: '语法', className: 'card-grammar' },
+        scenario_phrase: { label: '场景', className: 'card-scenario' },
+        trilingual: { label: '三语', className: 'card-trilingual' }
+    };
+    return map[type] || map.trilingual;
 }
 
 async function loadKnowledgePreview(job) {

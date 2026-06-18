@@ -19,20 +19,22 @@ test.describe('Knowledge Hub explorer', () => {
     await seedKnowledge(request);
   });
 
-  test('01 三栏结构 + 统计条 + 默认功能轴分类与词条', async ({ page }) => {
+  test('01 两栏主体 + metric 指标条 + 默认功能轴分类与词条', async ({ page }) => {
     const consoleErrors = [];
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
     await page.goto('/knowledge-hub.html');
 
-    // Three-pane scaffold + stats bar present.
+    // Two-pane scaffold + metric stats bar present.
     await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
     await expect(page.getByTestId('knowledge-base-panel')).toBeVisible();
+    await expect(page.getByTestId('knowledge-base-panel')).not.toHaveClass(/has-inspector/);
     await expect(page.getByTestId('kh-axis-toggle')).toBeVisible();
     await expect(page.getByTestId('knowledge-base-term-list')).toBeVisible();
-    await expect(page.getByTestId('knowledge-relation-inspector')).toBeVisible();
+    await expect(page.getByTestId('kh-inspector')).toBeHidden();
     await expect(page.getByTestId('kh-actions')).toBeVisible();
-    await expect(page.getByTestId('knowledge-hub-counts')).toContainText('terms 4');
+    await expect(page.getByTestId('knowledge-hub-counts').locator('.kh-metric')).toHaveCount(5);
+    await expect(page.getByTestId('knowledge-hub-counts').getByTestId('kh-metric-terms')).toContainText('4');
 
     // Default axis = function → grammar categories + the uncategorized bucket.
     const cats = page.getByTestId('knowledge-base-categories');
@@ -41,6 +43,8 @@ test.describe('Knowledge Hub explorer', () => {
     await expect(cats.getByText('未分类')).toBeVisible();
     // function axis pins card-type grammar_ja → the 3 grammar terms.
     await expect(page.locator('#knowledgeBasePageInfo')).toContainText('1 - 3 / 3');
+    await expect(page.getByTestId('knowledge-base-term').first()).toHaveClass(/kh-term-card/);
+    await expect(page.getByTestId('knowledge-base-term').first().locator('.kh-pill')).toBeVisible();
 
     expect(consoleErrors, 'console errors').toEqual([]);
   });
@@ -74,6 +78,8 @@ test.describe('Knowledge Hub explorer', () => {
     await page.goto('/knowledge-hub.html');
 
     await page.getByTestId('kh-insights').getByRole('button', { name: '聚类' }).click();
+    await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
+    await expect(page.getByTestId('kh-inspector')).toBeVisible();
     const insightList = page.getByTestId('knowledge-hub-synonyms'); // shared insight list container
     await expect(insightList).toBeVisible();
     await expect(insightList).toContainText('工程技术');
@@ -90,7 +96,7 @@ test.describe('Knowledge Hub explorer', () => {
     const modal = page.getByTestId('kh-card-modal');
     await expect(modal).toBeHidden();
 
-    await page.getByTestId('knowledge-base-term').first().click();
+    await page.getByTestId('knowledge-base-term').first().locator('.kh-term-main').click();
     await expect(modal).toBeVisible();
     // The Hub embeds the main app's native card modal via /?card=<id>&embed=1.
     await expect(page.locator('#khCardFrame')).toHaveAttribute('src', /\/\?card=\d+&embed=1/);
@@ -99,10 +105,35 @@ test.describe('Knowledge Hub explorer', () => {
     await expect(modal).toBeHidden();
   });
 
+  test('05b 词条关系按钮打开 Inspector 且不会弹卡片', async ({ page }) => {
+    await page.goto('/knowledge-hub.html');
+
+    const panel = page.getByTestId('knowledge-base-panel');
+    const modal = page.getByTestId('kh-card-modal');
+    await expect(panel).not.toHaveClass(/has-inspector/);
+    await expect(modal).toBeHidden();
+
+    await page.getByTestId('knowledge-base-term').first().getByTestId('kh-term-rel').click();
+    await expect(panel).toHaveClass(/has-inspector/);
+    await expect(page.getByTestId('kh-inspector')).toBeVisible();
+    await expect(page.getByTestId('knowledge-relation-inspector')).not.toContainText('点击词条');
+    await expect(modal).toBeHidden();
+
+    await page.getByTestId('kh-list-crumb').click();
+    await expect(panel).not.toHaveClass(/has-inspector/);
+    await expect(page.getByTestId('kh-inspector')).toBeHidden();
+
+    await page.getByTestId('knowledge-base-term').first().getByTestId('kh-term-rel').click();
+    await expect(panel).toHaveClass(/has-inspector/);
+    await page.keyboard.press('Escape');
+    await expect(panel).not.toHaveClass(/has-inspector/);
+    await expect(page.getByTestId('kh-inspector')).toBeHidden();
+  });
+
   test('06 难度徽标与按难度筛选', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
     // grammar terms (default function axis) carry a difficulty badge
-    await expect(page.getByTestId('knowledge-base-term-list').locator('.kh-diff').first()).toBeVisible();
+    await expect(page.getByTestId('knowledge-base-term-list').locator('.kh-term-card .kh-diff').first()).toBeVisible();
     // switch to 全部 axis (card-type all) then filter to 简单 → only the trilingual 'api'
     await page.getByTestId('kh-axis-toggle').getByRole('button', { name: '全部' }).click();
     await page.getByTestId('knowledge-base-difficulty').selectOption('easy');
@@ -112,7 +143,10 @@ test.describe('Knowledge Hub explorer', () => {
 
   test('07 学习计划：阶段列表与「学这组」跳转', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
+    await page.getByTestId('knowledge-base-term').first().getByTestId('kh-term-rel').click();
+    await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
     await page.getByTestId('kh-plan-btn').click();
+    await expect(page.getByTestId('knowledge-base-panel')).not.toHaveClass(/has-inspector/);
     await expect(page.getByTestId('kh-plan-pane')).toBeVisible();
     await expect(page.getByTestId('kh-plan-stage').first()).toBeVisible();
     // 「学这组」jumps to that category's filtered browse
@@ -124,7 +158,10 @@ test.describe('Knowledge Hub explorer', () => {
   test('08 复习模式：进入队列、评分推进直至完成', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
 
+    await page.getByTestId('knowledge-base-term').first().getByTestId('kh-term-rel').click();
+    await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
     await page.getByTestId('kh-review-btn').click();
+    await expect(page.getByTestId('knowledge-base-panel')).not.toHaveClass(/has-inspector/);
     await expect(page.getByTestId('kh-review-pane')).toBeVisible();
     await expect(page.getByTestId('kh-review-card')).toBeVisible();
 
