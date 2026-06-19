@@ -461,6 +461,12 @@ class DatabaseService {
         FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_card_reviews_at ON card_reviews(reviewed_at);
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // 'function' (japanese grammar axis) | 'topic' (vocab axis) — see

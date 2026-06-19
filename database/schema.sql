@@ -569,6 +569,16 @@ CREATE TABLE IF NOT EXISTS card_reviews (
 CREATE INDEX IF NOT EXISTS idx_card_reviews_at ON card_reviews(reviewed_at);
 
 -- ========================================
+-- 表 27: user_preferences（单用户偏好）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ========================================
 -- 表 25: generation_jobs（服务端共享生成队列）
 -- ========================================
 
