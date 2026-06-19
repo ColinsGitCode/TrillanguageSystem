@@ -60,8 +60,9 @@
 
 - `Docs/Features/Modern_Card_UI_Design.md`
 - `Docs/Features/Knowledge_Hub_and_Semantic_Classification.md`（语义分类两轴分类法 + Knowledge Hub 三栏浏览器 + 卡片嵌入弹窗）
-- `Docs/Features/Knowledge_Hub_UI_Redesign.md`（Knowledge Hub 三栏空间重排 + 学习者友好视觉，设计方案/待实施）
+- `Docs/Features/Knowledge_Hub_UI_Redesign.md`（Knowledge Hub 三栏空间重排 + 学习者友好视觉，P1/P2/P3 已实施；P4 待实施）
 - `Docs/Features/Engagement_and_Retention_System.md`（首页「今日学习」条：streak / 每日目标 / 掌握度 / 时区聚合，设计方案/待实施）
+- `Docs/superpowers/plans/2026-06-19-engagement-retention-system.md`（激励留存 P1 详细执行任务清单）
 
 ### 5. 测试与验收
 

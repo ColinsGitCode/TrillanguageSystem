@@ -3,7 +3,7 @@
 > 状态：**设计方案（待实施）** · 2026-06
 > 决策：展示位置 = **首页顶部「今日学习」条**；第一阶段 = **streak + 每日目标 + 掌握度 + 复习入口**（完整热力图排 P2）
 > 关联：[Knowledge Hub 与语义分类](Knowledge_Hub_and_Semantic_Classification.md)（SRS / 难度 / 学习计划）
-> 影响文件：`database/schema.sql` · `services/storage/db/cardSrs.js` · 新 `db/userPreferences.js` · `lib/serverConfig.js` · `routes/srs.js` · `public/index.html` · `public/styles.css` · `public/js/modules/{app,api}.js`
+> 影响文件：`database/schema.sql` · `services/storage/db/cardSrs.js` · `services/storage/db/userPreferences.js` · `lib/serverConfig.js` · `routes/srs.js` · `public/index.html` · `public/styles.css` · `public/js/modules/{app,api,dashboard}.js`
 
 本文是「激励与留存」特性的真源说明。系统的学习闭环骨架（生成 → 索引 → 语义分类 → SRS 复习 → 难度 → 学习计划）已成形，但缺少**让用户回来的理由**。本特性用**现成的 SRS 数据**建立动机飞轮：学 → 即时正反馈 + 连续性 → 想再学。
 
@@ -136,6 +136,7 @@ GET /api/srs/goal            → { success: true, goal: 5 }
 PUT /api/srs/goal  { goal }  → { success: true, goal: 25 }
 ```
 
+- **Goal validation**：`goal` 必须是整数，范围 `1..200`。非法值返回 `400 { error: "goal must be an integer between 1 and 200" }`，不写入 `user_preferences`。
 - `mastery`：`tracked` = 已进 SRS 的 eligible 卡数；`eligibleTotal` = 所有 eligible 卡（含未追踪 new）；掌握率 = `mastered / eligibleTotal`（§4 口径，分母排除 `scenario_phrase`）。
 - `db/cardSrs.js` 新增：`getEngagement(db, { tzShift })`（streak + today + mastery，P2 加 heatmap）。复用 §3 的 `@tzShift`。
 - `databaseService.js`：`getEngagement()` / `getDailyGoal()` / `setDailyGoal()` 薄委托。
@@ -161,8 +162,10 @@ PUT /api/srs/goal  { goal }  → { success: true, goal: 25 }
 **加载/刷新时机**（`public/js/modules/app.js`）：
 
 - 首页 `init()` 拉 `GET /api/srs/engagement` 渲染。
-- 复习后（如果就地复习）或返回首页时刷新——把「今天又学了一张」即时反映到进度条。
-- `api.js` 加 `getEngagement()` / `getDailyGoal()` / `setDailyGoal(goal)`。
+- 增加 `window.addEventListener('pageshow', ...)`：处理从 Knowledge Hub 后退回首页时的 bfcache 场景。
+- 增加 `document.addEventListener('visibilitychange', ...)`：页面重新可见时刷新 engagement。
+- 增加 `window.addEventListener('focus', ...)`：跨 tab 回到首页时刷新 engagement。
+- `api.js` 加 `getSrsEngagement()` / `getDailyGoal()` / `setDailyGoal(goal)`。
 
 ---
 

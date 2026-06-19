@@ -1,6 +1,6 @@
 # Knowledge Hub UI 重设计方案（学习者友好 · 三栏空间重排）
 
-> 状态：**设计方案（待实施）** · 2026-06
+> 状态：**P1/P2/P3 已实施；P4 左栏精简待实施** · 2026-06
 > 调性决策：**学习者友好** · 第一阶段：**三栏空间重排**
 > 关联：[Knowledge Hub 与语义分类](Knowledge_Hub_and_Semantic_Classification.md) · [Modern Card UI](Modern_Card_UI_Design.md)
 > 影响文件：`public/knowledge-hub.html` · `public/css/dashboard.css` · `public/js/modules/dashboard.js` · `tests/e2e/knowledge-hub.spec.js`
@@ -247,9 +247,9 @@
 
 | 阶段 | 范围 | 本次 |
 |------|------|------|
-| **P1 空间重排** | 三栏→两栏 + Inspector 抽屉化 + 栅格/过渡 | ✅ 本次 |
-| **P2 词条卡片化** | `.kh-term-card` + 卡型 pill + 难度锚点 + 指标条 metric | ✅ 本次（与 P1 同改一处 DOM，合并做） |
-| **P3 调性收敛** | 配色/字体统一、`<header>` 内联样式归一 token、极客文案降权 | 随手做（低风险） |
+| **P1 空间重排** | 三栏→两栏 + Inspector 抽屉化 + 栅格/过渡 | ✅ 已实施 |
+| **P2 词条卡片化** | `.kh-term-card` + 卡型 pill + 难度锚点 + 指标条 metric | ✅ 已实施 |
+| **P3 调性收敛** | 配色/字体统一、`<header>` 内联样式归一 token、极客文案降权 | ✅ 已实施 |
 | **P4 左栏精简** | 筛选器折叠收纳、分组重排 | 后续单独一轮（问题②，独立验证） |
 
 > 第一阶段交付 = P1 + P2 + P3（同一处 DOM/CSS 改动，自然合并）；P4 左栏过载是独立问题，留作下一轮，避免一次改动面过大。
