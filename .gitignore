@@ -31,6 +31,10 @@ Docs/**/*_with_d3.md
 # UI build leftovers
 public/*.bak
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # Local E2E artifacts
 .tmp/
 output/playwright/

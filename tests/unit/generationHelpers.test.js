@@ -105,6 +105,39 @@ test.describe('buildPersistedAudioTasks', () => {
     assert.deepEqual(buildPersistedAudioTasks([], null), []);
     assert.deepEqual(buildPersistedAudioTasks([{ lang: 'en' }], { errors: [] }), []);
   });
+
+  test.it('copies actual TTS provider metadata from generated audio results', () => {
+    const sourceTasks = [
+      { lang: 'ja', text: '確認してください', filename_suffix: '_ja_1', extension: 'wav' },
+    ];
+    const audio = {
+      results: [
+        {
+          index: 0,
+          filePath: '/data/cards/base_ja_1.wav',
+          extension: 'wav',
+          ttsProvider: 'style_bert_vits2',
+          ttsModel: 'model:3',
+          ttsVoice: 'speaker:4 style:Neutral',
+          status: 'generated',
+        },
+      ],
+    };
+
+    assert.deepEqual(buildPersistedAudioTasks(sourceTasks, audio), [
+      {
+        lang: 'ja',
+        text: '確認してください',
+        filename_suffix: '_ja_1',
+        extension: 'wav',
+        filePath: '/data/cards/base_ja_1.wav',
+        ttsProvider: 'style_bert_vits2',
+        ttsModel: 'model:3',
+        ttsVoice: 'speaker:4 style:Neutral',
+        status: 'generated',
+      },
+    ]);
+  });
 });
 
 test.describe('validateGeneratedContent', () => {

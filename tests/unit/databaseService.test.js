@@ -97,14 +97,21 @@ test.describe('databaseService — generations CRUD', () => {
     try {
       const id = db.insertGeneration(buildGenerationFixture({
         audioFiles: [
-          { language: 'en', text: 'hello', filenameSuffix: '_en_1', filePath: '/tmp/hello_en_1.mp3', ttsProvider: 'kokoro', ttsModel: 'k', status: 'ready' },
-          { language: 'ja', text: 'こんにちは', filenameSuffix: '_ja_1', filePath: '/tmp/hello_ja_1.wav', ttsProvider: 'voicevox', ttsModel: 'v', status: 'ready' },
+          { language: 'en', text: 'hello', filenameSuffix: '_en_1', filePath: '/tmp/hello_en_1.mp3', ttsProvider: 'kokoro', ttsModel: 'k', ttsVoice: 'af_bella', status: 'ready' },
+          { language: 'ja', text: 'こんにちは', filenameSuffix: '_ja_1', filePath: '/tmp/hello_ja_1.wav', ttsProvider: 'voicevox', ttsModel: 'v', ttsVoice: 'speaker:2', status: 'ready' },
         ],
       }));
       const got = db.getGenerationById(id);
       assert.equal(got.audioFiles.length, 2);
       const langs = got.audioFiles.map((a) => a.language).sort();
       assert.deepEqual(langs, ['en', 'ja']);
+      assert.deepEqual(
+        got.audioFiles.map((a) => [a.language, a.tts_provider, a.tts_model, a.tts_voice]).sort(),
+        [
+          ['en', 'kokoro', 'k', 'af_bella'],
+          ['ja', 'voicevox', 'v', 'speaker:2'],
+        ]
+      );
     } finally { db.close(); }
   });
 

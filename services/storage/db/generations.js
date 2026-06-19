@@ -52,15 +52,15 @@ function insertGeneration(db, data) {
         const audioInsert = db.prepare(`
           INSERT INTO audio_files (
             generation_id, language, text, filename_suffix, file_path,
-            tts_provider, tts_model, status
+            tts_provider, tts_model, tts_voice, status
           ) VALUES (
             @generationId, @language, @text, @filenameSuffix, @filePath,
-            @ttsProvider, @ttsModel, @status
+            @ttsProvider, @ttsModel, @ttsVoice, @status
           )
         `);
 
         for (const audio of audioData) {
-          audioInsert.run({ ...audio, generationId });
+          audioInsert.run({ ttsVoice: null, ...audio, generationId });
         }
       }
 

@@ -158,8 +158,9 @@ function prepareAudioFilesData({ audioTasks, baseName, folderName }) {
       folderName,
       `${baseName}${task.filename_suffix}.${normalizeAudioExtension(task.extension, task.lang)}`
     ),
-    ttsProvider: task.lang === 'en' ? 'kokoro' : 'voicevox',
-    ttsModel: task.lang === 'en' ? process.env.TTS_EN_MODEL : null,
+    ttsProvider: task.ttsProvider || (task.lang === 'en' ? 'kokoro' : 'voicevox'),
+    ttsModel: task.ttsModel || (task.lang === 'en' ? process.env.TTS_EN_MODEL : null),
+    ttsVoice: task.ttsVoice || null,
     status: task.status || 'pending'
   }));
 }

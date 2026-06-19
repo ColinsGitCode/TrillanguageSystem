@@ -60,8 +60,11 @@ class HealthCheckService {
     if (process.env.TTS_EN_ENDPOINT) {
       checks.push(this.checkTTSEnglish());
     }
+    if (process.env.TTS_JA_SBV2_ENDPOINT) {
+      checks.push(this.checkTTSJapanesePrimary());
+    }
     if (process.env.TTS_JA_ENDPOINT) {
-      checks.push(this.checkTTSJapanese());
+      checks.push(this.checkTTSJapanese({ fallback: Boolean(process.env.TTS_JA_SBV2_ENDPOINT) }));
     }
 
     // 4. OCR Service
@@ -298,23 +301,76 @@ class HealthCheckService {
   }
 
   /**
-   * 检查日文 TTS (VOICEVOX)
+   * 检查日文 TTS 主服务 (Style-Bert-VITS2)
    */
-  static async checkTTSJapanese() {
+  static async checkTTSJapanesePrimary() {
+    const endpoint = String(process.env.TTS_JA_SBV2_ENDPOINT || '').replace(/\/$/, '');
     const service = {
-      name: 'TTS Japanese (VOICEVOX)',
+      name: 'TTS Japanese Primary (Style-Bert-VITS2)',
       type: 'tts',
       critical: false,
       status: 'unknown',
       lastCheck: Date.now(),
       details: {
-        endpoint: process.env.TTS_JA_ENDPOINT
+        endpoint
       }
     };
 
     try {
       const startTime = Date.now();
-      const url = `${process.env.TTS_JA_ENDPOINT}/version`;
+      const url = `${endpoint}/status`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      service.latency = Date.now() - startTime;
+
+      if (response.ok) {
+        service.status = service.latency > 2000 ? 'degraded' : 'online';
+        service.message = service.latency > 2000 ? '响应缓慢' : '服务正常';
+
+        const status = await response.json().catch(() => null);
+        if (status?.devices) {
+          service.details.devices = status.devices;
+        }
+      } else {
+        service.status = 'degraded';
+        service.message = `连接异常: ${response.status}`;
+      }
+    } catch (error) {
+      service.status = 'offline';
+      service.message = error.name === 'AbortError' ? '请求超时' : error.message;
+    }
+
+    return service;
+  }
+
+  /**
+   * 检查日文 TTS (VOICEVOX)
+   */
+  static async checkTTSJapanese(options = {}) {
+    const endpoint = String(process.env.TTS_JA_ENDPOINT || '').replace(/\/$/, '');
+    const service = {
+      name: options.fallback ? 'TTS Japanese Fallback (VOICEVOX)' : 'TTS Japanese (VOICEVOX)',
+      type: 'tts',
+      critical: false,
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        endpoint
+      }
+    };
+
+    try {
+      const startTime = Date.now();
+      const url = `${endpoint}/version`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);

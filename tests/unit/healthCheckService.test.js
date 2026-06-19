@@ -81,3 +81,54 @@ test.describe('HealthCheckService DeepSeek health', () => {
     });
   });
 });
+
+test.describe('HealthCheckService Japanese TTS health', () => {
+  test.it('checks Style-Bert-VITS2 primary and VOICEVOX fallback independently', async (t) => {
+    const recordsPath = fs.mkdtempSync(path.join(os.tmpdir(), 'health-records-'));
+    t.after(() => fs.rmSync(recordsPath, { recursive: true, force: true }));
+
+    const originalFetch = global.fetch;
+    t.after(() => { global.fetch = originalFetch; });
+
+    global.fetch = async (url) => {
+      const href = String(url);
+      if (href === 'http://sbv2:5000/status') {
+        return Response.json({ devices: ['cpu'] });
+      }
+      if (href === 'http://voicevox:50021/version') {
+        return new Response('0.21.0', { status: 200 });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    };
+
+    await withEnv({
+      E2E_TEST_MODE: undefined,
+      DEEPSEEK_API_KEY: '',
+      DEEPSEEK_BASE_URL: '',
+      DEEPSEEK_MODEL: '',
+      LLM_BASE_URL: '',
+      TTS_EN_ENDPOINT: '',
+      TTS_JA_TYPE: 'style_bert_vits2',
+      TTS_JA_SBV2_ENDPOINT: 'http://sbv2:5000',
+      TTS_JA_ENDPOINT: 'http://voicevox:50021',
+      OCR_PROVIDER: '',
+      OCR_TESSERACT_ENDPOINT: '',
+      RECORDS_PATH: recordsPath,
+      LOG_SILENT: '1',
+    }, async () => {
+      const HealthCheckService = loadHealthCheckService();
+      const health = await HealthCheckService.checkAll();
+
+      const primary = health.services.find((service) => service.name === 'TTS Japanese Primary (Style-Bert-VITS2)');
+      const fallback = health.services.find((service) => service.name === 'TTS Japanese Fallback (VOICEVOX)');
+
+      assert.ok(primary, 'primary Japanese TTS service should be present');
+      assert.ok(fallback, 'fallback Japanese TTS service should be present');
+      assert.equal(primary.status, 'online');
+      assert.equal(primary.details.endpoint, 'http://sbv2:5000');
+      assert.equal(fallback.status, 'online');
+      assert.equal(fallback.details.endpoint, 'http://voicevox:50021');
+      assert.equal(fallback.details.version, '0.21.0');
+    });
+  });
+});
