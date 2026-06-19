@@ -1452,6 +1452,12 @@ function initKnowledgeBaseBrowse() {
     refreshKnowledgeBaseOverview();
     refreshKnowledgeBaseCategories();
     refreshKnowledgeBaseTerms();
+
+    let params;
+    try { params = new URLSearchParams(window.location.search); } catch (err) { params = null; }
+    if (params?.get('mode') === 'review') {
+        enterKhReview();
+    }
 }
 
 // ===== Spaced-repetition review =====

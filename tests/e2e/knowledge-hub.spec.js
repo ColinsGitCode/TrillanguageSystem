@@ -173,4 +173,10 @@ test.describe('Knowledge Hub explorer', () => {
     }
     await expect(page.getByTestId('kh-review-done')).toBeVisible({ timeout: 5000 });
   });
+
+  test('09 URL mode=review 直接进入复习模式', async ({ page }) => {
+    await page.goto('/knowledge-hub.html?mode=review');
+    await expect(page.getByTestId('kh-review-pane')).toBeVisible();
+    await expect(page.getByTestId('kh-review-card').or(page.getByTestId('kh-review-done'))).toBeVisible();
+  });
 });

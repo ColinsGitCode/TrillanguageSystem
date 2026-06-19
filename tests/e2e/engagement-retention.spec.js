@@ -25,4 +25,11 @@ test.describe('Homepage engagement bar', () => {
     await expect(page.getByTestId('today-learning-goal')).toContainText('目标 12');
     await expect(page.getByTestId('today-learning-progress')).toContainText('0 / 12');
   });
+
+  test('review CTA opens Knowledge Hub review mode', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('today-learning-review').click();
+    await expect(page).toHaveURL(/knowledge-hub\.html\?mode=review/);
+    await expect(page.getByTestId('kh-review-pane')).toBeVisible();
+  });
 });
