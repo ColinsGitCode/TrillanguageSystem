@@ -68,7 +68,15 @@ const els = {
     infraAlertBanner: document.getElementById('infraAlertBanner'),
     infraAlertTitle: document.getElementById('infraAlertTitle'),
     infraAlertText: document.getElementById('infraAlertText'),
-    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn')
+    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn'),
+    todayLearningBar: document.getElementById('todayLearningBar'),
+    todayLearningStreak: document.getElementById('todayLearningStreak'),
+    todayLearningStreakHint: document.getElementById('todayLearningStreakHint'),
+    todayLearningGoalBtn: document.getElementById('todayLearningGoalBtn'),
+    todayLearningProgressFill: document.getElementById('todayLearningProgressFill'),
+    todayLearningProgress: document.getElementById('todayLearningProgress'),
+    todayLearningMastery: document.getElementById('todayLearningMastery'),
+    todayLearningReview: document.getElementById('todayLearningReview')
 };
 
 let fileListState = null;
@@ -166,6 +174,7 @@ let timerStartTime = null;
 let heroTaskQueueElapsedTimerId = null;
 let heroTaskQueueElapsedTaskId = null;
 let infraHealthPollTimer = null;
+let todayLearningRefreshPromise = null;
 
 // ==========================================
 // 初始化与事件绑定
@@ -194,6 +203,7 @@ function init() {
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
     initInfrastructureHealthMonitor();
+    initTodayLearningBar();
 
     // Non-embed deep link (e.g. opened in a full tab): open the card over the
     // normal app.
@@ -207,6 +217,95 @@ function init() {
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
+}
+
+function renderTodayLearningBar(engagement) {
+    if (!els.todayLearningBar) return;
+    const data = engagement || {};
+    const streak = data.streak || {};
+    const today = data.today || {};
+    const mastery = data.mastery || {};
+    const goal = Math.max(1, Number(today.goal || 5));
+    const reviewed = Math.max(0, Number(today.reviewed || 0));
+    const progress = Math.max(0, Math.min(100, Math.round((reviewed / goal) * 100)));
+    const days = Number(streak.days || 0);
+    const mastered = Number(mastery.mastered || 0);
+    const eligibleTotal = Number(mastery.eligibleTotal || 0);
+    const newLearned = Number(today.newLearned || 0);
+
+    els.todayLearningBar.classList.remove('is-loading', 'is-error');
+    if (els.todayLearningStreak) {
+        els.todayLearningStreak.textContent = days > 0 ? `连续 ${days} 天` : '开始你的第一天';
+    }
+    if (els.todayLearningStreakHint) {
+        els.todayLearningStreakHint.textContent = streak.activeToday ? '今日已保持' : (days > 0 ? '今日待保持' : '今日学习');
+    }
+    if (els.todayLearningGoalBtn) {
+        els.todayLearningGoalBtn.textContent = `目标 ${goal}`;
+    }
+    if (els.todayLearningProgress) {
+        els.todayLearningProgress.textContent = `${reviewed} / ${goal}${newLearned ? ` · 今日新句式 ${newLearned}` : ''}`;
+    }
+    if (els.todayLearningProgressFill) {
+        els.todayLearningProgressFill.style.width = `${progress}%`;
+    }
+    if (els.todayLearningMastery) {
+        els.todayLearningMastery.textContent = `${mastered} / ${eligibleTotal}`;
+    }
+}
+
+async function refreshTodayLearningBar(options = {}) {
+    if (!els.todayLearningBar) return null;
+    if (todayLearningRefreshPromise) {
+        if (!options.force) return todayLearningRefreshPromise;
+        await todayLearningRefreshPromise;
+    }
+    todayLearningRefreshPromise = api.getSrsEngagement()
+        .then((res) => {
+            renderTodayLearningBar(res.engagement);
+            return res.engagement;
+        })
+        .catch((err) => {
+            console.warn('[Engagement] load failed:', err.message);
+            els.todayLearningBar.classList.add('is-error');
+            if (els.todayLearningStreak) els.todayLearningStreak.textContent = '今日学习';
+            if (els.todayLearningStreakHint) els.todayLearningStreakHint.textContent = '稍后重试';
+            return null;
+        })
+        .finally(() => {
+            todayLearningRefreshPromise = null;
+        });
+    return todayLearningRefreshPromise;
+}
+
+function initTodayLearningBar() {
+    if (!els.todayLearningBar) return;
+    if (els.todayLearningGoalBtn) {
+        els.todayLearningGoalBtn.addEventListener('click', async () => {
+            const current = Number((els.todayLearningGoalBtn.textContent || '').replace(/\D+/g, '')) || 5;
+            const raw = window.prompt('设置每日复习目标（1-200）', String(current));
+            if (raw === null) return;
+            const goal = Number(raw);
+            try {
+                await api.setDailyGoal(goal);
+                await refreshTodayLearningBar({ force: true });
+            } catch (err) {
+                window.alert(err.message || '目标设置失败');
+            }
+        });
+    }
+
+    refreshTodayLearningBar();
+
+    window.addEventListener('pageshow', () => {
+        refreshTodayLearningBar();
+    });
+    window.addEventListener('focus', () => {
+        refreshTodayLearningBar();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshTodayLearningBar();
+    });
 }
 
 // Minimal init for the embedded card-only view: only what renderCardModal

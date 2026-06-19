@@ -14,4 +14,15 @@ test.describe('Homepage engagement bar', () => {
     await expect(page.getByTestId('today-learning-mastery')).toContainText('0 / 0');
     await expect(page.getByTestId('today-learning-review')).toHaveAttribute('href', /knowledge-hub\.html\?mode=review/);
   });
+
+  test('updates the daily goal from the goal prompt', async ({ page }) => {
+    await page.goto('/');
+    page.once('dialog', async (dialog) => {
+      expect(dialog.type()).toBe('prompt');
+      await dialog.accept('12');
+    });
+    await page.getByTestId('today-learning-goal').click();
+    await expect(page.getByTestId('today-learning-goal')).toContainText('目标 12');
+    await expect(page.getByTestId('today-learning-progress')).toContainText('0 / 12');
+  });
 });
