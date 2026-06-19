@@ -1920,4 +1920,52 @@ test.describe('databaseService — card_srs (spaced repetition)', () => {
       assert.equal(stats.dueCount, 0); // g1 now due tomorrow
     } finally { db.close(); }
   });
+
+  test.it('getSrsEngagement excludes scenario cards from mastery denominator', () => {
+    const db = freshDb();
+    try {
+      const tri = newGenId(db, { phrase: 'tri', baseFilename: 'tri-eg', requestId: 'rid_eng_tri' });
+      const grammar = newGenId(db, { phrase: 'grammar', baseFilename: 'grammar-eg', cardType: 'grammar_ja', requestId: 'rid_eng_grammar' });
+      newGenId(db, { phrase: 'scenario', baseFilename: 'scenario-eg', cardType: 'scenario_phrase', requestId: 'rid_eng_scenario' });
+      db.reviewCardSrs(tri, 'good');
+      db.reviewCardSrs(tri, 'good');
+      db.reviewCardSrs(grammar, 'good');
+
+      const engagement = db.getSrsEngagement();
+      assert.equal(engagement.mastery.mastered, 1);
+      assert.equal(engagement.mastery.tracked, 2);
+      assert.equal(engagement.mastery.eligibleTotal, 2);
+    } finally { db.close(); }
+  });
+
+  test.it('getSrsEngagement reports active streak and today progress', () => {
+    const db = freshDb();
+    try {
+      const g = newGenId(db, { phrase: 'today', baseFilename: 'today-eg', requestId: 'rid_eng_today' });
+      db.reviewCardSrs(g, 'good');
+
+      const engagement = db.getSrsEngagement();
+      assert.equal(engagement.streak.days, 1);
+      assert.equal(engagement.streak.activeToday, true);
+      assert.equal(engagement.today.reviewed, 1);
+      assert.equal(engagement.today.newLearned, 1);
+      assert.equal(engagement.today.goal, 5);
+    } finally { db.close(); }
+  });
+
+  test.it('getSrsStats and engagement count reviewedToday with configured timezone', () => {
+    const db = freshDb();
+    try {
+      const g = newGenId(db, { phrase: 'tz', baseFilename: 'tz-eg', requestId: 'rid_eng_tz' });
+      db.reviewCardSrs(g, 'good');
+      db.db.prepare(`UPDATE card_reviews SET reviewed_at = '2026-06-18 16:30:00' WHERE generation_id = ?`).run(g);
+
+      const options = { now: new Date('2026-06-18T17:00:00Z'), timezone: 'Asia/Shanghai' };
+      const stats = db.getSrsStats(options);
+      const engagement = db.getSrsEngagement(options);
+      assert.equal(stats.reviewedToday, 1);
+      assert.equal(engagement.today.reviewed, 1);
+      assert.equal(engagement.streak.lastActiveDay, '2026-06-19');
+    } finally { db.close(); }
+  });
 });

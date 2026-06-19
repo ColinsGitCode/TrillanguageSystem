@@ -34,3 +34,17 @@ test.describe('SRS engagement goal routes', () => {
     }
   });
 });
+
+test.describe('GET /api/srs/engagement', () => {
+  test.beforeEach(() => resetState());
+
+  test.it('returns the engagement envelope for homepage rendering', async () => {
+    const res = await api('GET', '/api/srs/engagement');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.engagement.today.goal, 5);
+    assert.equal(typeof res.body.engagement.streak.days, 'number');
+    assert.equal(typeof res.body.engagement.streak.activeToday, 'boolean');
+    assert.ok('eligibleTotal' in res.body.engagement.mastery);
+  });
+});

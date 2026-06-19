@@ -31,6 +31,14 @@ router.get('/api/srs/stats', (req, res) => {
   }
 });
 
+router.get('/api/srs/engagement', (_req, res) => {
+  try {
+    res.json({ success: true, engagement: dbService.getSrsEngagement() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/srs/goal', (_req, res) => {
   try {
     res.json({ success: true, goal: dbService.getDailyGoal() });

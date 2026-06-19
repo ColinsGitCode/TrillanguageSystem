@@ -254,6 +254,10 @@ class ApiService {
         return this.fetchJson('/api/srs/stats');
     }
 
+    async getSrsEngagement() {
+        return this.fetchJson('/api/srs/engagement');
+    }
+
     async getDailyGoal() {
         return this.fetchJson('/api/srs/goal');
     }

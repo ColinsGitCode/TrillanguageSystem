@@ -1,18 +1,38 @@
 'use strict';
 
 // card_srs + card_reviews domain. Spaced-repetition state per generation plus
-// a lightweight review log. Functions take `db` first. `due_date` is stored
-// and compared with SQLite's `date('now')` (both UTC) so scheduling and the
-// queue agree without a JS/SQLite timezone mismatch.
+// a lightweight review log. Functions take `db` first. `due_date` scheduling
+// stays UTC-date based, while natural-day learning stats shift review logs into
+// the configured records timezone.
 
+const { RECORDS_TIMEZONE, tzOffsetClause } = require('../../../lib/serverConfig');
 const { schedule } = require('../../srs/srsScheduler');
 
 const SRS_SUPPORTED_CARD_TYPES = ['trilingual', 'grammar_ja'];
+const DEFAULT_DAILY_GOAL = 5;
 
 function normalizeSrsCardType(cardType) {
   const ct = String(cardType || '').trim().toLowerCase();
   if (!ct || ct === 'all') return '';
   return SRS_SUPPORTED_CARD_TYPES.includes(ct) ? ct : '__unsupported__';
+}
+
+function supportedCardTypeParams(prefix = 'cardType') {
+  const params = {};
+  const placeholders = SRS_SUPPORTED_CARD_TYPES.map((value, idx) => {
+    const key = `${prefix}${idx}`;
+    params[key] = value;
+    return `@${key}`;
+  });
+  return { params, sql: placeholders.join(', ') };
+}
+
+function sqliteDateTime(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return new Date().toISOString().slice(0, 19).replace('T', ' ');
+  }
+  return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 function mapState(row) {
@@ -135,13 +155,13 @@ function getQueue(db, { limit = 20, cardType = '' } = {}) {
   }));
 }
 
-function getStats(db) {
-  const params = {};
-  const placeholders = SRS_SUPPORTED_CARD_TYPES.map((_, idx) => `@cardType${idx}`);
-  SRS_SUPPORTED_CARD_TYPES.forEach((value, idx) => {
-    params[`cardType${idx}`] = value;
-  });
-  const supportedCardTypesSql = placeholders.join(', ');
+function getStats(db, { timezone = RECORDS_TIMEZONE, now = new Date() } = {}) {
+  const { params, sql: supportedCardTypesSql } = supportedCardTypeParams();
+  const queryParams = {
+    ...params,
+    now: sqliteDateTime(now),
+    tzShift: tzOffsetClause(timezone, now)
+  };
 
   const row = db.prepare(`
     SELECT
@@ -149,7 +169,7 @@ function getStats(db) {
         SELECT COUNT(*)
         FROM card_srs s
         JOIN generations g ON g.id = s.generation_id
-        WHERE s.due_date <= date('now')
+        WHERE s.due_date <= date(@now)
           AND lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS due_count,
       (
@@ -162,7 +182,7 @@ function getStats(db) {
         SELECT COUNT(*)
         FROM card_reviews r
         JOIN generations g ON g.id = r.generation_id
-        WHERE date(r.reviewed_at) = date('now')
+        WHERE date(r.reviewed_at, @tzShift) = date(@now, @tzShift)
           AND lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS reviewed_today,
       (
@@ -171,7 +191,7 @@ function getStats(db) {
         JOIN generations g ON g.id = s.generation_id
         WHERE lower(g.card_type) IN (${supportedCardTypesSql})
       ) AS tracked_total
-  `).get(params) || {};
+  `).get(queryParams) || {};
   return {
     dueCount: Number(row.due_count || 0),
     newCount: Number(row.new_count || 0),
@@ -180,9 +200,97 @@ function getStats(db) {
   };
 }
 
+function getEngagement(db, { goal = DEFAULT_DAILY_GOAL, timezone = RECORDS_TIMEZONE, now = new Date() } = {}) {
+  const { params, sql: supportedCardTypesSql } = supportedCardTypeParams();
+  const baseParams = {
+    ...params,
+    now: sqliteDateTime(now),
+    tzShift: tzOffsetClause(timezone, now)
+  };
+
+  const today = db.prepare(`
+    SELECT
+      COUNT(*) AS reviewed,
+      COUNT(DISTINCT CASE WHEN r.interval_before = 0 THEN r.generation_id END) AS new_learned
+    FROM card_reviews r
+    JOIN generations g ON g.id = r.generation_id
+    WHERE date(r.reviewed_at, @tzShift) = date(@now, @tzShift)
+      AND lower(g.card_type) IN (${supportedCardTypesSql})
+  `).get(baseParams) || {};
+
+  const mastery = db.prepare(`
+    SELECT
+      (
+        SELECT COUNT(*)
+        FROM card_srs s
+        JOIN generations g ON g.id = s.generation_id
+        WHERE s.repetitions >= 2
+          AND lower(g.card_type) IN (${supportedCardTypesSql})
+      ) AS mastered,
+      (
+        SELECT COUNT(*)
+        FROM card_srs s
+        JOIN generations g ON g.id = s.generation_id
+        WHERE lower(g.card_type) IN (${supportedCardTypesSql})
+      ) AS tracked,
+      (
+        SELECT COUNT(*)
+        FROM generations g
+        WHERE lower(g.card_type) IN (${supportedCardTypesSql})
+      ) AS eligible_total
+  `).get(params) || {};
+
+  const dayRows = db.prepare(`
+    SELECT date(r.reviewed_at, @tzShift) AS day, COUNT(*) AS count
+    FROM card_reviews r
+    JOIN generations g ON g.id = r.generation_id
+    WHERE date(r.reviewed_at, @tzShift) >= date(@now, @tzShift, '-180 days')
+      AND lower(g.card_type) IN (${supportedCardTypesSql})
+    GROUP BY day
+    ORDER BY day DESC
+  `).all(baseParams);
+
+  const activeDays = new Set(
+    dayRows
+      .filter((row) => Number(row.count || 0) > 0)
+      .map((row) => row.day)
+  );
+  const todayKey = db.prepare(`SELECT date(@now, @tzShift) AS day`).get(baseParams).day;
+  let cursor = todayKey;
+  const activeToday = activeDays.has(todayKey);
+  let days = 0;
+
+  if (!activeToday) {
+    cursor = db.prepare(`SELECT date(@day, '-1 day') AS day`).get({ day: todayKey }).day;
+  }
+  while (activeDays.has(cursor)) {
+    days += 1;
+    cursor = db.prepare(`SELECT date(@day, '-1 day') AS day`).get({ day: cursor }).day;
+  }
+
+  return {
+    streak: {
+      days,
+      activeToday,
+      lastActiveDay: dayRows[0]?.day || null
+    },
+    today: {
+      goal: Number(goal || DEFAULT_DAILY_GOAL),
+      reviewed: Number(today.reviewed || 0),
+      newLearned: Number(today.new_learned || 0)
+    },
+    mastery: {
+      mastered: Number(mastery.mastered || 0),
+      tracked: Number(mastery.tracked || 0),
+      eligibleTotal: Number(mastery.eligible_total || 0)
+    }
+  };
+}
+
 module.exports = {
   getState,
   review,
   getQueue,
   getStats,
+  getEngagement,
 };

@@ -991,8 +991,8 @@ class DatabaseService {
     return cardSrsDomain.getQueue(this.db, filters);
   }
 
-  getSrsStats() {
-    return cardSrsDomain.getStats(this.db);
+  getSrsStats(options = {}) {
+    return cardSrsDomain.getStats(this.db, options);
   }
 
   getDailyGoal() {
@@ -1006,6 +1006,13 @@ class DatabaseService {
     }
     userPreferencesDomain.setPreference(this.db, 'daily_goal', String(parsed));
     return parsed;
+  }
+
+  getSrsEngagement(options = {}) {
+    return cardSrsDomain.getEngagement(this.db, {
+      ...options,
+      goal: this.getDailyGoal()
+    });
   }
 
   getLearningPlan(filters = {}) {
