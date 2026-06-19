@@ -300,6 +300,98 @@ select {
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.16);
 }
 
+.today-learning-bar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.4fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.today-learning-cell {
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.today-learning-cell.streak,
+.today-learning-cell.mastery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.today-learning-icon {
+  font-size: 1.35rem;
+  flex: 0 0 auto;
+}
+
+.today-learning-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text, #1f2937);
+  line-height: 1.25;
+}
+
+.today-learning-label,
+.today-learning-meta {
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+  line-height: 1.35;
+}
+
+.today-learning-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.today-learning-goal,
+.today-learning-review {
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 10px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.today-learning-goal:hover,
+.today-learning-review:hover {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: rgba(59, 130, 246, 0.13);
+}
+
+.today-learning-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+
+.today-learning-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  transition: width 0.2s ease;
+}
+
+.today-learning-bar.is-loading .today-learning-cell {
+  opacity: 0.82;
+}
+
 .dashboard-link {
   color: #5b6472;
   text-decoration: none;
@@ -1049,6 +1141,15 @@ h1 {
 
   .hero-queue-retry {
     justify-self: start;
+  }
+
+  .today-learning-bar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .today-learning-cell {
+    padding: 10px 12px;
   }
 
   .page {

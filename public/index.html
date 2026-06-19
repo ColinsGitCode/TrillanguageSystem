@@ -56,6 +56,32 @@
           </div>
         </div>
 <!--        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>-->
+        <section id="todayLearningBar" class="today-learning-bar is-loading" data-testid="today-learning-bar" aria-live="polite">
+          <div class="today-learning-cell streak">
+            <span class="today-learning-icon" aria-hidden="true">🔥</span>
+            <div>
+              <div id="todayLearningStreak" class="today-learning-value" data-testid="today-learning-streak">开始你的第一天</div>
+              <div id="todayLearningStreakHint" class="today-learning-label">今日学习</div>
+            </div>
+          </div>
+          <div class="today-learning-cell progress">
+            <div class="today-learning-row">
+              <span class="today-learning-label">今日目标</span>
+              <button id="todayLearningGoalBtn" class="today-learning-goal" type="button" data-testid="today-learning-goal">目标 5</button>
+            </div>
+            <div class="today-learning-progress-track" aria-hidden="true">
+              <div id="todayLearningProgressFill" class="today-learning-progress-fill"></div>
+            </div>
+            <div id="todayLearningProgress" class="today-learning-meta" data-testid="today-learning-progress">0 / 5</div>
+          </div>
+          <div class="today-learning-cell mastery">
+            <div>
+              <div id="todayLearningMastery" class="today-learning-value" data-testid="today-learning-mastery">0 / 0</div>
+              <div class="today-learning-label">已掌握</div>
+            </div>
+            <a id="todayLearningReview" class="today-learning-review" href="knowledge-hub.html?mode=review" data-testid="today-learning-review">开始复习</a>
+          </div>
+        </section>
         <div id="infraAlertBanner" class="infra-alert hidden" aria-live="polite" data-testid="infra-alert-banner">
           <div class="infra-alert-main">
             <span id="infraAlertTitle" class="infra-alert-title">DeepSeek API 离线</span>
