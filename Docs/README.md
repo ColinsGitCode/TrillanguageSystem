@@ -36,7 +36,7 @@
 
 - `../README.md`：快速启动、Docker 服务、当前 DeepSeek provider 链与关键环境变量
 - `../CLAUDE.md`：最完整的当前架构索引，覆盖目录结构、任务队列、测试与运行约定
-- `Docs/Architecture/TTS_Model_Selection.md`：三语 TTS 选型调研 + 决策（中文补 Kokoro / 日语 Style-Bert-VITS2 主 + VOICEVOX 备 / 许可维度），设计方案·待实施
+- `Docs/Architecture/TTS_Model_Selection.md`：英文 / 日文 TTS 选型调研 + 决策（中文不做语音 / 日语 Style-Bert-VITS2 主候选 + VOICEVOX 备 / 许可维度），设计方案·待实施
 
 下列架构文档保留为历史参考，不作为当前运行入口：
 
