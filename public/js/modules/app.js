@@ -260,7 +260,7 @@ async function refreshTodayLearningBar(options = {}) {
         if (!options.force) return todayLearningRefreshPromise;
         await todayLearningRefreshPromise;
     }
-    todayLearningRefreshPromise = api.getSrsEngagement()
+    todayLearningRefreshPromise = api.getSrsEngagement(Boolean(options.force))
         .then((res) => {
             renderTodayLearningBar(res.engagement);
             return res.engagement;
@@ -298,13 +298,16 @@ function initTodayLearningBar() {
     refreshTodayLearningBar();
 
     window.addEventListener('pageshow', () => {
-        refreshTodayLearningBar();
+        refreshTodayLearningBar({ force: true });
     });
     window.addEventListener('focus', () => {
-        refreshTodayLearningBar();
+        refreshTodayLearningBar({ force: true });
+    });
+    window.addEventListener('popstate', () => {
+        refreshTodayLearningBar({ force: true });
     });
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) refreshTodayLearningBar();
+        if (!document.hidden) refreshTodayLearningBar({ force: true });
     });
 }
 

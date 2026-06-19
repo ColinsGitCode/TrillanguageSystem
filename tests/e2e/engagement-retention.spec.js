@@ -32,4 +32,21 @@ test.describe('Homepage engagement bar', () => {
     await expect(page).toHaveURL(/knowledge-hub\.html\?mode=review/);
     await expect(page.getByTestId('kh-review-pane')).toBeVisible();
   });
+
+  test('homepage engagement refreshes after completing one review and going back', async ({ page, request }) => {
+    const seed = await request.post('/api/_test/seed-knowledge');
+    expect(seed.ok()).toBeTruthy();
+
+    await page.goto('/');
+    await expect(page.getByTestId('today-learning-progress')).toContainText('0 / 5');
+
+    await page.getByTestId('today-learning-review').click();
+    await expect(page.getByTestId('kh-review-pane')).toBeVisible();
+    await expect(page.getByTestId('kh-review-card')).toBeVisible();
+    await page.getByTestId('kh-grade-good').click();
+    await expect(page.locator('.kh-review-progress')).toContainText('今日已复习 1');
+    await page.goBack();
+
+    await expect(page.getByTestId('today-learning-progress')).toContainText('1 / 5', { timeout: 10_000 });
+  });
 });

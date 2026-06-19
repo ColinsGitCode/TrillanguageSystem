@@ -254,8 +254,10 @@ class ApiService {
         return this.fetchJson('/api/srs/stats');
     }
 
-    async getSrsEngagement() {
-        return this.fetchJson('/api/srs/engagement');
+    async getSrsEngagement(noCache = false) {
+        return this.fetchJson(withNoCache('/api/srs/engagement', noCache), {
+            cache: noCache ? 'no-store' : 'default'
+        });
     }
 
     async getDailyGoal() {
