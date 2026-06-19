@@ -25,6 +25,7 @@ const knowledgeRelationsDomain = require('./db/knowledgeRelations');
 const cardSrsDomain = require('./db/cardSrs');
 const learningPlanDomain = require('./db/learningPlan');
 const testResetDomain = require('./db/testReset');
+const userPreferencesDomain = require('./db/userPreferences');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -992,6 +993,19 @@ class DatabaseService {
 
   getSrsStats() {
     return cardSrsDomain.getStats(this.db);
+  }
+
+  getDailyGoal() {
+    return Number(userPreferencesDomain.getPreference(this.db, 'daily_goal', '5'));
+  }
+
+  setDailyGoal(goal) {
+    const parsed = Number(goal);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
+      throw new Error('goal must be an integer between 1 and 200');
+    }
+    userPreferencesDomain.setPreference(this.db, 'daily_goal', String(parsed));
+    return parsed;
   }
 
   getLearningPlan(filters = {}) {

@@ -254,6 +254,18 @@ class ApiService {
         return this.fetchJson('/api/srs/stats');
     }
 
+    async getDailyGoal() {
+        return this.fetchJson('/api/srs/goal');
+    }
+
+    async setDailyGoal(goal) {
+        return this.fetchJson('/api/srs/goal', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ goal: Number(goal) })
+        });
+    }
+
     async getLearningPlan(axis = 'all') {
         const query = new URLSearchParams();
         query.set('axis', String(axis || 'all'));

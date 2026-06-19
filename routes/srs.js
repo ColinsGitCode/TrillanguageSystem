@@ -31,6 +31,24 @@ router.get('/api/srs/stats', (req, res) => {
   }
 });
 
+router.get('/api/srs/goal', (_req, res) => {
+  try {
+    res.json({ success: true, goal: dbService.getDailyGoal() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/api/srs/goal', (req, res) => {
+  try {
+    const goal = dbService.setDailyGoal(req.body?.goal);
+    res.json({ success: true, goal });
+  } catch (err) {
+    const status = /goal must be an integer/.test(err.message) ? 400 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
 // Staged learning path: one stage per active semantic cluster (axis-scoped),
 // ordered easy → hard, with SRS progress + difficulty mix.
 router.get('/api/srs/plan', (req, res) => {

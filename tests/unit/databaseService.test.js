@@ -1746,8 +1746,10 @@ test.describe('databaseService — truncateAllForTests', () => {
           ttsProvider: 't', ttsModel: 't', status: 'ready'
         }]
       }));
+      db.setDailyGoal(12);
       assert.ok(id > 0);
       assert.ok(db.getGenerationById(id));
+      assert.equal(db.getDailyGoal(), 12);
 
       db.truncateAllForTests();
 
@@ -1755,6 +1757,7 @@ test.describe('databaseService — truncateAllForTests', () => {
       assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM generations').get().c, 0);
       assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM audio_files').get().c, 0);
       assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM observability_metrics').get().c, 0);
+      assert.equal(db.getDailyGoal(), 5);
     } finally { db.close(); }
   });
 
@@ -1804,6 +1807,30 @@ test.describe('databaseService — truncateAllForTests', () => {
       const id2 = db.insertGeneration(buildGenerationFixture());
       assert.equal(id2, 1);
     } finally { db.close(); }
+  });
+});
+
+test.describe('databaseService — user preferences', () => {
+  test.it('defaults daily goal to 5 and persists updates', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.getDailyGoal(), 5);
+      assert.equal(db.setDailyGoal(12), 12);
+      assert.equal(db.getDailyGoal(), 12);
+    } finally {
+      db.close();
+    }
+  });
+
+  test.it('rejects invalid daily goals', () => {
+    const db = freshDb();
+    try {
+      assert.throws(() => db.setDailyGoal(0), /goal must be an integer between 1 and 200/);
+      assert.throws(() => db.setDailyGoal(201), /goal must be an integer between 1 and 200/);
+      assert.throws(() => db.setDailyGoal(1.5), /goal must be an integer between 1 and 200/);
+    } finally {
+      db.close();
+    }
   });
 });
 

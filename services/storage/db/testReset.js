@@ -43,6 +43,7 @@ const TABLES_IN_DELETE_ORDER = [
   'generation_jobs',
 
   // background tables (counters that accumulate across tests)
+  'user_preferences',
   'model_statistics',
   'system_health',
 
