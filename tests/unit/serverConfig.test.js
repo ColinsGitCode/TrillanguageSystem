@@ -92,3 +92,18 @@ test.describe('serverConfig.deepseek defaults', () => {
     }
   });
 });
+
+test.describe('serverConfig timezone helpers', () => {
+  test.it('exports the configured records timezone', () => {
+    assert.equal(typeof cfg.RECORDS_TIMEZONE, 'string');
+    assert.ok(cfg.RECORDS_TIMEZONE.length > 0);
+  });
+
+  test.it('builds a SQLite minute modifier for Asia/Shanghai', () => {
+    assert.equal(cfg.tzOffsetClause('Asia/Shanghai', new Date('2026-06-19T00:00:00Z')), '+480 minutes');
+  });
+
+  test.it('falls back to UTC for invalid timezone names', () => {
+    assert.equal(cfg.tzOffsetClause('Not/AZone', new Date('2026-06-19T00:00:00Z')), '+0 minutes');
+  });
+});

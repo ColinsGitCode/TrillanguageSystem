@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const log = require('../../lib/logger').child({ module: 'svc/file-manager' });
-const { normalizeCardType } = require('../../lib/serverConfig');
+const { normalizeCardType, RECORDS_TIMEZONE } = require('../../lib/serverConfig');
 
 // Inherit the base path from server.js logic (or environment variable)
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
@@ -11,7 +11,6 @@ const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 // We will resolve it similarly.
 
 const baseDir = path.resolve(RECORDS_PATH);
-const RECORDS_TIMEZONE = process.env.RECORDS_TIMEZONE || process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Shanghai';
 let timezoneWarningPrinted = false;
 
 function getTodayFolderName() {
