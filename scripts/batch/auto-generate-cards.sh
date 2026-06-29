@@ -6,7 +6,7 @@
 PHRASE="$1"
 API_URL="${API_URL:-http://localhost:3010/api/generate}"
 DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
-DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-flash}"
+DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-pro}"
 
 if [ -z "$PHRASE" ]; then
   echo "用法: $0 <phrase>"

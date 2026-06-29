@@ -1,6 +1,6 @@
 # 三语卡片生成系统（Trilingual Records Viewer）
 
-一个基于 Express 的 Web 应用：通过 DeepSeek V4 Flash 生成中 / 英 / 日三语学习卡片并合成配音音频。除卡片生成外，还包含 SQLite 支撑的历史记录与可观测性层、两条后台任务队列（生成队列 + 知识分析队列），以及一个知识分析子系统（同义词组、语法模式、语义聚类）。
+一个基于 Express 的 Web 应用：通过 DeepSeek V4 Pro 生成中 / 英 / 日三语学习卡片并合成配音音频。除卡片生成外，还包含 SQLite 支撑的历史记录与可观测性层、两条后台任务队列（生成队列 + 知识分析队列），以及一个知识分析子系统（同义词组、语法模式、语义聚类）。
 
 ## 功能概览
 
@@ -50,7 +50,7 @@ npm run test:e2e:smoke   # happy-path 生成 / OCR / 历史
 
 `services/generation/cardGenerationService.js` 按请求选择 provider：
 
-- 当前主卡片生成路径固定为 DeepSeek（`services/llm/deepseekService.js`），默认模型为 `deepseek-v4-flash`。
+- 当前主卡片生成路径固定为 DeepSeek（`services/llm/deepseekService.js`），默认模型为 `deepseek-v4-pro`。
 - 请求中的旧 provider 值会被规范化为 DeepSeek，后台生成队列也写入 `llm_provider=deepseek`。
 - `LLM_*` 本地 OpenAI 兼容配置仅用于可选本地 OCR / 开发调试，不是当前主卡片生成路径。
 

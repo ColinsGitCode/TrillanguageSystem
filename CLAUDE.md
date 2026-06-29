@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via DeepSeek V4 Flash and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a knowledge analysis subsystem (synonym groups, grammar patterns, two-axis semantic classification), and a learner-facing study layer on top of it (Knowledge Hub semantic browse, SM-2 spaced-repetition review, difficulty grading, staged learning plans).
+Trilingual Records Viewer (三语卡片生成系统) — An Express web app that generates trilingual (Chinese/English/Japanese) learning cards via DeepSeek V4 Pro and synthesises audio. Beyond card generation it has a SQLite-backed history / observability layer, two background job queues (generation + knowledge analysis), a knowledge analysis subsystem (synonym groups, grammar patterns, two-axis semantic classification), and a learner-facing study layer on top of it (Knowledge Hub semantic browse, SM-2 spaced-repetition review, difficulty grading, staged learning plans).
 
 ## Commands
 
@@ -139,7 +139,7 @@ User Input → promptEngine (Markdown) → DeepSeek → Markdown/HTML → htmlRe
 [services/generation/cardGenerationService.js](services/generation/cardGenerationService.js) picks a provider per request:
 - The active card-generation path is always DeepSeek via [services/llm/deepseekService.js](services/llm/deepseekService.js).
 - [lib/serverConfig.js](lib/serverConfig.js) normalizes legacy or caller-supplied provider names to `deepseek`; generation jobs also default to `llm_provider=deepseek`.
-- `DEEPSEEK_MODEL` defaults to `deepseek-v4-flash`; supported runtime model names are sanitized before use.
+- `DEEPSEEK_MODEL` defaults to `deepseek-v4-pro`; supported runtime model names are sanitized before use.
 - [services/llm/localLlmService.js](services/llm/localLlmService.js) remains for optional OpenAI-compatible local OCR / development fallback, not the primary card-generation route.
 
 **Timeouts**: DeepSeek calls use `DEEPSEEK_TIMEOUT_MS` (defaulted in service code when unset). Knowledge LLM fallback tasks use their own optional task timeout envs and model overrides, falling back to the DeepSeek model when unset.
@@ -231,7 +231,7 @@ See `.env.example` for the full set. Key knobs:
 **LLM provider chain:**
 - `DEEPSEEK_API_KEY` — required outside fixture/test modes; never commit a real value.
 - `DEEPSEEK_BASE_URL` — defaults to `https://api.deepseek.com`.
-- `DEEPSEEK_MODEL` — defaults to `deepseek-v4-flash`; accepted values are sanitized in `lib/serverConfig.js`.
+- `DEEPSEEK_MODEL` — defaults to `deepseek-v4-pro`; accepted values are sanitized in `lib/serverConfig.js`.
 - `DEEPSEEK_TIMEOUT_MS` and `DEEPSEEK_THINKING` — provider call timeout and thinking-mode flag.
 - `DEEPSEEK_INPUT_COST_PER_1M` / `DEEPSEEK_OUTPUT_COST_PER_1M` — optional observability cost overrides.
 - `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_OCR_MODEL` — optional OpenAI-compatible local endpoint for OCR local/auto mode and development fallback only.

@@ -66,8 +66,8 @@ test.describe('serverConfig.deepseek defaults', () => {
     assert.equal(cfg.normalizeLlmProvider('local'), 'deepseek');
   });
 
-  test.it('defaults to DeepSeek V4 Flash', () => {
-    assert.equal(cfg.DEFAULT_DEEPSEEK_MODEL, 'deepseek-v4-flash');
+  test.it('defaults to DeepSeek V4 Pro', () => {
+    assert.equal(cfg.DEFAULT_DEEPSEEK_MODEL, 'deepseek-v4-pro');
     assert.equal(cfg.DEFAULT_DEEPSEEK_BASE_URL, 'https://api.deepseek.com');
   });
 

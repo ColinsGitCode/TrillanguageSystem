@@ -98,7 +98,6 @@ const generationQueueState = {
     retryTimerId: null,
     pollTimerId: null,
     lastSuccessCount: 0,
-    panelDismissed: false,
     panelEl: null,
     summaryEl: null,
     listEl: null,
@@ -1183,6 +1182,20 @@ function startGenerationQueuePolling() {
     }, 1800);
 }
 
+function showGenerationQueuePanel() {
+    generationQueueState.panelEl?.classList.remove('hidden');
+}
+
+function hideGenerationQueuePanel() {
+    generationQueueState.panelEl?.classList.add('hidden');
+}
+
+function toggleGenerationQueuePanel() {
+    const panel = generationQueueState.panelEl;
+    if (!panel) return;
+    panel.classList.toggle('hidden');
+}
+
 function initGenerationQueuePanel() {
     const panel = document.createElement('div');
     panel.id = 'generationQueuePanel';
@@ -1251,9 +1264,12 @@ function initGenerationQueuePanel() {
     };
 
     generationQueueState.closeBtn.onclick = () => {
-        generationQueueState.panelDismissed = true;
-        panel.classList.add('hidden');
+        hideGenerationQueuePanel();
     };
+
+    panel.addEventListener('click', (event) => {
+        event.stopPropagation();
+    });
 
     generationQueueState.listEl.addEventListener('click', async (event) => {
         const detailBtn = event.target.closest('[data-action="job-detail"]');
@@ -1280,11 +1296,15 @@ function initGenerationQueuePanel() {
     });
 
     if (els.heroTaskQueueStatus) {
-        els.heroTaskQueueStatus.onclick = () => {
-            generationQueueState.panelDismissed = false;
-            panel.classList.remove('hidden');
-        };
+        els.heroTaskQueueStatus.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleGenerationQueuePanel();
+        });
     }
+
+    document.addEventListener('click', () => {
+        hideGenerationQueuePanel();
+    });
 
     updateHeroTaskQueueStatus();
     startGenerationQueuePolling();
@@ -1562,10 +1582,6 @@ function renderGenerationQueuePanel() {
     generationQueueState.retryFailedBtn.disabled = failed === 0 || Boolean(infrastructureState.generationBlockedReason);
     generationQueueState.retryFailedBtn.title = infrastructureState.generationBlockedReason || '';
     generationQueueState.clearDoneBtn.disabled = success === 0;
-
-    if ((tasks.length > 0 || generationQueueState.running) && !generationQueueState.panelDismissed) {
-        panel.classList.remove('hidden');
-    }
 
     updateHeroTaskQueueStatus();
     renderQueueAuditTimeline();

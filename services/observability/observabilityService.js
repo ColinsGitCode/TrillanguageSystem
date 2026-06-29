@@ -6,7 +6,7 @@ const DEEPSEEK_DEFAULT_COST_RATES_PER_1M = {
   'deepseek-v4-flash': { input: 0.14, output: 0.28 },
   'deepseek-v4-pro': { input: 0.435, output: 0.87 },
 };
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-pro';
 
 function toNumberOr(value, fallback) {
   const num = Number(value);

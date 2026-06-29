@@ -235,7 +235,10 @@ test.describe.serial('UI quality regression', () => {
     await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
     await page.getByTestId('queue-job-detail-close').click();
     await expect(page.getByTestId('queue-job-detail-modal')).toBeHidden();
+    await expect(panel).toBeHidden();
 
+    await page.getByTestId('hero-queue-status').click();
+    await expect(panel).toBeVisible();
     await page.getByTestId('queue-panel-close').click();
     await expect(panel).toBeHidden();
     await page.getByTestId('hero-queue-status').click();

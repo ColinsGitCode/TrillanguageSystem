@@ -1931,8 +1931,8 @@ button[onclick^="navigator.clipboard"]:hover {
 }
 
 .kh-pill.card-scenario {
-    background: rgba(20, 184, 166, 0.12);
-    color: #0f766e;
+    background: #fff0c2;
+    color: #9a4f00;
 }
 
 .kh-pill.card-trilingual {

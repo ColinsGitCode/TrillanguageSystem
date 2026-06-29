@@ -42,9 +42,9 @@ test.describe('/api/generation-jobs/*', () => {
     });
     assert.equal(created.status, 200);
     assert.equal(created.body.job.provider, 'deepseek');
-    assert.equal(created.body.job.llmModel, 'deepseek-v4-flash');
+    assert.equal(created.body.job.llmModel, 'deepseek-v4-pro');
     assert.equal(created.body.job.requestPayload?.llm_provider, 'deepseek');
-    assert.equal(created.body.job.requestPayload?.llm_model, 'deepseek-v4-flash');
+    assert.equal(created.body.job.requestPayload?.llm_model, 'deepseek-v4-pro');
   });
 
   test.it('POST preserves scenario_phrase job type', async () => {

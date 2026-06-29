@@ -55,7 +55,7 @@ test.describe('deepseekService', () => {
   test.it('generateMarkdown builds a non-stream DeepSeek chat completion request', async (t) => {
     await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
       const m = mockFetch(() => jsonResponse(200, {
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-v4-pro',
         choices: [{ message: { content: '  # Hello\n' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
       }));
@@ -71,7 +71,7 @@ test.describe('deepseekService', () => {
       assert.equal(m.calls[0].opts.headers.Authorization, 'Bearer test-key');
 
       const body = JSON.parse(m.calls[0].opts.body);
-      assert.equal(body.model, 'deepseek-v4-flash');
+      assert.equal(body.model, 'deepseek-v4-pro');
       assert.deepEqual(body.messages[0], { role: 'user', content: 'Write markdown' });
       assert.equal(body.stream, false);
       assert.deepEqual(body.thinking, { type: 'disabled' });
@@ -79,7 +79,7 @@ test.describe('deepseekService', () => {
 
       assert.equal(result.markdown, '  # Hello\n');
       assert.equal(result.rawOutput, '  # Hello\n');
-      assert.equal(result.model, 'deepseek-v4-flash');
+      assert.equal(result.model, 'deepseek-v4-pro');
       assert.deepEqual(result.usage, { input: 11, output: 7, total: 18 });
       assert.equal(result.finishReason, 'stop');
     });

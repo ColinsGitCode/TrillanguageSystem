@@ -30,7 +30,7 @@ test.describe('/api/health + removed /api/gemini/auth/* routes', () => {
     assert.equal(deepSeekApi.type, 'llm');
     assert.equal(deepSeekApi.critical, true);
     assert.equal(deepSeekApi.status, 'online');
-    assert.equal(deepSeekApi.details?.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekApi.details?.model, 'deepseek-v4-pro');
     assert.equal(deepSeekApi.details?.fixtureSafe, true);
   });
 

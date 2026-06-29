@@ -25,7 +25,7 @@ function buildGenerationFixture(overrides = {}) {
     cardType: 'trilingual',
     sourceMode: 'input',
     llmProvider: 'deepseek',
-    llmModel: 'deepseek-v4-flash',
+    llmModel: 'deepseek-v4-pro',
     folderName: '20260101',
     baseFilename: 'hello',
     mdFilePath: '/tmp/hello.md',
@@ -150,7 +150,7 @@ test.describe('databaseService — query / search / count', () => {
     const db = freshDb();
     try {
       assert.equal(db.getTotalCount({}), 0);
-      db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'deepseek', llmModel: 'deepseek-v4-flash' } }));
+      db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'deepseek', llmModel: 'deepseek-v4-pro' } }));
       db.insertGeneration(buildGenerationFixture({ generation: { llmProvider: 'local' } }));
       assert.equal(db.getTotalCount({}), 2);
       assert.equal(db.getTotalCount({ provider: 'deepseek' }), 1);
@@ -264,7 +264,7 @@ function buildJobPayload(overrides = {}) {
     phraseNormalized: 'hello',
     sourceMode: 'input',
     provider: 'deepseek',
-    llmModel: 'deepseek-v4-flash',
+    llmModel: 'deepseek-v4-pro',
     maxRetries: 2,
     sourceContext: {},
     requestPayload: { phrase: 'hello' },
@@ -291,7 +291,7 @@ test.describe('databaseService — generation_jobs lifecycle', () => {
       assert.equal(job.status, 'queued');
       assert.equal(job.attempts, 0);
       assert.equal(job.provider, 'deepseek');
-      assert.equal(job.llmModel, 'deepseek-v4-flash');
+      assert.equal(job.llmModel, 'deepseek-v4-pro');
       assert.equal(job.phraseNormalized, 'hello');
       assert.deepEqual(job.sourceContext, {});
     } finally { db.close(); }
@@ -503,7 +503,7 @@ test.describe('databaseService — knowledge_jobs lifecycle', () => {
     try {
       const job = db.createKnowledgeJob({ jobType: 'synonym_boundary', scope: {} });
       db.upsertKnowledgeSynonymJobMeta(job.id, {
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-v4-pro',
         promptVersion: 'v1',
         schemaVersion: 'v1',
         llmEnabled: true,
@@ -517,7 +517,7 @@ test.describe('databaseService — knowledge_jobs lifecycle', () => {
       });
       const meta = db.getKnowledgeSynonymJobMeta(job.id);
       assert.ok(meta);
-      assert.equal(meta.model, 'deepseek-v4-flash');
+      assert.equal(meta.model, 'deepseek-v4-pro');
       assert.equal(meta.llmEnabled, true);
       assert.equal(meta.candidateCount, 100);
       assert.deepEqual(meta.options, { foo: 'bar' });

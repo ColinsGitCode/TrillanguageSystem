@@ -694,18 +694,18 @@ h1 {
 }
 
 .file-list .list-item-btn.card-type-scenario {
-  background: linear-gradient(180deg, #ecfdf5 0%, #d9fbe8 100%);
-  border-color: #86efac;
+  background: linear-gradient(180deg, #fff8e1 0%, #ffedb8 100%);
+  border-color: #f2b84b;
 }
 
 .file-list .list-item-btn.card-type-scenario:hover {
-  border-color: #22c55e;
-  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.18);
+  border-color: #f59e0b;
+  box-shadow: 0 12px 26px rgba(245, 158, 11, 0.2);
 }
 
 .file-list .list-item-btn.card-type-scenario.active {
-  border-color: #16a34a;
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22), 0 12px 24px rgba(34, 197, 94, 0.18);
+  border-color: #f37021;
+  box-shadow: 0 0 0 2px rgba(243, 112, 33, 0.22), 0 12px 24px rgba(243, 112, 33, 0.2);
 }
 
 .file-list .list-item-btn .file-item-title {
@@ -747,9 +747,9 @@ h1 {
 }
 
 .file-list .list-item-btn .file-item-corner.corner-scenario {
-  color: #0f766e;
-  background: #dcfce7;
-  border-color: #86efac;
+  color: #9a4f00;
+  background: #fff0c2;
+  border-color: #f2b84b;
 }
 
 .file-list .list-item-btn .file-item-tag {
@@ -776,6 +776,12 @@ h1 {
   color: #1d4ed8;
   background: #dbeafe;
   border-color: #93c5fd;
+}
+
+.file-list .list-item-btn .file-item-tag.tag-scenario {
+  color: #9a4f00;
+  background: #fff0c2;
+  border-color: #f2b84b;
 }
 
 .file-list .list-item-btn:hover {
@@ -2123,9 +2129,9 @@ h1 {
 }
 
 .selector-hint.mode-scenario {
-  background: rgba(20, 184, 166, 0.12);
-  color: #0f766e;
-  border: 1px solid rgba(20, 184, 166, 0.32);
+  background: rgba(255, 240, 194, 0.72);
+  color: #9a4f00;
+  border: 1px solid rgba(242, 184, 75, 0.72);
 }
 
 .selector-buttons {
@@ -2184,10 +2190,10 @@ h1 {
 }
 
 .card-type-btn[data-card-type="scenario_phrase"].active {
-  border-color: #0f766e;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.14), rgba(34, 197, 94, 0.1));
-  color: #0f766e;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+  border-color: #f37021;
+  background: linear-gradient(135deg, rgba(255, 240, 194, 0.74), rgba(243, 112, 33, 0.12));
+  color: #9a4f00;
+  box-shadow: 0 0 0 3px rgba(243, 112, 33, 0.14);
 }
 
 .model-icon {
@@ -2410,10 +2416,13 @@ h1 {
 /* Silent generation queue */
 .gen-queue-panel {
   position: fixed;
-  right: 14px;
-  bottom: 14px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 10010;
-  width: min(430px, calc(100vw - 28px));
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   background: rgba(15, 23, 42, 0.92);
   color: #e2e8f0;
   border: 1px solid rgba(148, 163, 184, 0.45);

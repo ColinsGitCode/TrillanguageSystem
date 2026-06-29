@@ -5,7 +5,7 @@
 
 INPUT_FILE="$1"
 DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
-DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-flash}"
+DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-pro}"
 
 if [ -z "$INPUT_FILE" ] || [ ! -f "$INPUT_FILE" ]; then
   echo "用法: $0 <input_file>"

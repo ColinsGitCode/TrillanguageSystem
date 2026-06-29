@@ -81,7 +81,7 @@ test.describe.serial('前端综合回归', () => {
     await expect(page.getByTestId('hero-queue-state')).toHaveText('IDLE');
     await expect(page.getByTestId('phrase-input')).toBeVisible();
     await expect(page.getByTestId('generate-btn')).toHaveText('Generate');
-    await expect(page.locator('#teacherModelHint')).toHaveText('DeepSeek V4 Flash');
+    await expect(page.locator('#teacherModelHint')).toHaveText('DeepSeek V4 Pro');
     await expect(page.locator('#setupOverlay')).toHaveCount(0);
     await expect(page.getByTestId('folder-list')).toBeVisible();
     await expect(page.getByTestId('file-list')).toBeVisible();
@@ -120,6 +120,24 @@ test.describe.serial('前端综合回归', () => {
 
     await page.goto('/');
     const queuePanel = page.locator('#generationQueuePanel');
+    await expect(queuePanel).toBeHidden();
+
+    await page.getByTestId('hero-queue-status').click();
+    await expect(queuePanel).toBeVisible();
+    await expect.poll(async () => queuePanel.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const viewportCenterX = window.innerWidth / 2;
+      const viewportCenterY = window.innerHeight / 2;
+      return {
+        xCentered: Math.abs((rect.left + rect.width / 2) - viewportCenterX) <= 1,
+        yCentered: Math.abs((rect.top + rect.height / 2) - viewportCenterY) <= 1
+      };
+    })).toEqual({
+      xCentered: true,
+      yCentered: true
+    });
+
+    await page.getByTestId('phrase-input').click();
     await expect(queuePanel).toBeHidden();
 
     await page.getByTestId('hero-queue-status').click();
@@ -194,8 +212,26 @@ test.describe.serial('前端综合回归', () => {
       const contentPanel = page.getByTestId('card-content-panel');
       await expect(fileButton).toContainText('场景卡');
       await expect(fileButton.locator('.file-item-title')).toHaveText(scenarioTitle);
+      await expect.poll(async () => fileButton.evaluate((node) => {
+        const buttonStyle = window.getComputedStyle(node);
+        const corner = node.querySelector('.file-item-corner');
+        const cornerStyle = corner ? window.getComputedStyle(corner) : null;
+        return {
+          borderColor: buttonStyle.borderTopColor,
+          cornerColor: cornerStyle?.color,
+          cornerBackground: cornerStyle?.backgroundColor,
+          cornerBorderColor: cornerStyle?.borderTopColor,
+        };
+      })).toEqual({
+        borderColor: 'rgb(242, 184, 75)',
+        cornerColor: 'rgb(154, 79, 0)',
+        cornerBackground: 'rgb(255, 240, 194)',
+        cornerBorderColor: 'rgb(242, 184, 75)',
+      });
       await expect(fileButton).not.toContainText(phrase);
       await fileButton.click();
+      await expect.poll(async () => fileButton.evaluate((node) => window.getComputedStyle(node).borderTopColor))
+        .toBe('rgb(243, 112, 33)');
 
       await expect(page.getByTestId('card-modal')).toBeVisible();
       await expect(page.getByTestId('card-modal-title')).toHaveText(scenarioTitle);
