@@ -36,7 +36,7 @@
 
 - `../README.md`：快速启动、Docker 服务、当前 DeepSeek provider 链与关键环境变量
 - `../CLAUDE.md`：最完整的当前架构索引，覆盖目录结构、任务队列、测试与运行约定
-- `Docs/Architecture/TTS_Model_Selection.md`：英文 / 日文 TTS 选型调研 + 决策（中文不做语音 / 日语 Style-Bert-VITS2 主候选 + VOICEVOX 备 / 许可维度），设计方案·待实施
+- `Docs/Architecture/TTS_Model_Selection.md`：英文 / 日文 TTS 选型调研 + 决策（中文不做语音 / 日语默认 VOICEVOX / Style-Bert-VITS2 因开销大且收益有限已封存）
 
 下列架构文档保留为历史参考，不作为当前运行入口：
 
@@ -63,6 +63,7 @@
 - `Docs/Features/Knowledge_Hub_and_Semantic_Classification.md`（语义分类两轴分类法 + Knowledge Hub 三栏浏览器 + 卡片嵌入弹窗）
 - `Docs/Features/Knowledge_Hub_UI_Redesign.md`（Knowledge Hub 三栏空间重排 + 学习者友好视觉，P1/P2/P3 已实施；P4 待实施）
 - `Docs/Features/Engagement_and_Retention_System.md`（首页「今日学习」条：streak / 每日目标 / 掌握度 / 时区聚合，设计方案/待实施）
+- `Docs/Features/UI_Modernization_Design_System.md`（全站 UI 现代化：统一 tokens.css + 暗色模式 + 左侧边栏 App Shell + 组件层，专业克制 SaaS，设计方案/待实施）
 - `Docs/superpowers/plans/2026-06-19-engagement-retention-system.md`（激励留存 P1 详细执行任务清单）
 
 ### 5. 测试与验收
