@@ -170,7 +170,7 @@ test.describe.serial('UI quality regression', () => {
       const layout = await page.evaluate(() => {
         const card = document.querySelector('.modern-card')?.getBoundingClientRect();
         const header = document.querySelector('.mc-header')?.getBoundingClientRect();
-        const tabs = document.querySelector('.mc-header .panel-tabs')?.getBoundingClientRect();
+        const tabs = document.querySelector('.mc-panel-tabs')?.getBoundingClientRect();
         const content = document.querySelector('#cardContent')?.getBoundingClientRect();
         return {
           viewportHeight: window.innerHeight,

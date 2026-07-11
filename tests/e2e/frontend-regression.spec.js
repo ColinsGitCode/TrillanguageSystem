@@ -137,7 +137,7 @@ test.describe.serial('前端综合回归', () => {
       yCentered: true
     });
 
-    await page.getByTestId('phrase-input').click();
+    await page.getByTestId('queue-panel-backdrop').click({ position: { x: 8, y: 8 } });
     await expect(queuePanel).toBeHidden();
 
     await page.getByTestId('hero-queue-status').click();
@@ -236,7 +236,7 @@ test.describe.serial('前端综合回归', () => {
       await expect(page.getByTestId('card-modal')).toBeVisible();
       await expect(page.getByTestId('card-modal-title')).toHaveText(scenarioTitle);
       await expect(page.getByTestId('card-modal-container')).toContainText('SCENARIO EXPRESSIONS');
-      await expect(contentPanel).toContainText('CARD TYPE · 场景表达卡');
+      await expect(contentPanel).toContainText('卡片类型场景表达卡');
       await expect(contentPanel.locator('h3')).toHaveCount(12);
       await expect.poll(() => contentPanel.locator('.audio-btn').count()).toBeGreaterThanOrEqual(2);
       await expect(page.getByTestId('tab-knowledge')).toHaveCount(0);

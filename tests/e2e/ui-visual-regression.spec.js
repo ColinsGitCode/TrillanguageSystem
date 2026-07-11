@@ -101,6 +101,13 @@ test.describe.serial('UI visual regression', () => {
       for (const target of targets) {
         await page.goto(target.path, { waitUntil: 'domcontentloaded' });
         await expect(page.getByTestId(target.ready)).toBeVisible();
+        if (target.name === 'knowledge-hub') {
+          await expect(page.getByTestId('knowledge-base-term').first()).toBeVisible();
+          if (viewport.width > 1100) {
+            await expect(page.getByTestId('kh-card-preview')).toBeVisible();
+            await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
+          }
+        }
         await expectPageScreenshot(page, `${target.name}-${viewport.name}.png`);
       }
     }
@@ -152,6 +159,13 @@ test.describe.serial('UI visual regression', () => {
       for (const target of targets) {
         await page.goto(target.path, { waitUntil: 'domcontentloaded' });
         await expect(page.getByTestId(target.ready)).toBeVisible();
+        if (target.name === 'knowledge-hub') {
+          await expect(page.getByTestId('knowledge-base-term').first()).toBeVisible();
+          if (viewport.width > 1100) {
+            await expect(page.getByTestId('kh-card-preview')).toBeVisible();
+            await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
+          }
+        }
         await expectPageScreenshot(page, `${target.name}-${viewport.name}-dark.png`);
       }
     }

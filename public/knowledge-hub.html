@@ -146,6 +146,7 @@
 
             <!-- CENTER: list (browse terms OR insight aggregate) -->
             <div class="kh-list">
+                <button id="khLocalNavToggle" class="kh-local-nav-toggle" type="button" aria-expanded="false"><i data-lucide="sliders-horizontal" aria-hidden="true"></i>分类与筛选</button>
                 <div class="kh-list-crumb" id="khListCrumb" data-testid="kh-list-crumb">词条 · Terms</div>
 
                 <div id="khBrowsePane" class="kh-pane">
@@ -181,10 +182,13 @@
             <!-- RIGHT: relation inspector -->
             <div class="kh-inspector" id="khInspector" data-testid="kh-inspector" aria-hidden="true">
                 <div class="kh-inspector-head">
-                    <div class="kh-nav-title">Relation Inspector</div>
+                    <div id="khContextTitle" class="kh-nav-title">当前卡片</div>
                     <button id="khInspectorClose" class="kh-inspector-close" type="button" aria-label="收起关系面板"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
-                <div id="knowledgeRelationInspector" class="knowledge-summary-body kh-scroll" data-testid="knowledge-relation-inspector">
+                <div id="khCardPreview" class="kh-card-preview" data-testid="kh-card-preview">
+                    <div class="empty-hint">选择一张卡片查看摘要</div>
+                </div>
+                <div id="knowledgeRelationInspector" class="knowledge-summary-body kh-scroll" data-testid="knowledge-relation-inspector" hidden>
                     <div class="empty-hint">点击词条 / 洞察项查看关系</div>
                 </div>
             </div>

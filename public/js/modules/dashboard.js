@@ -25,6 +25,7 @@ const state = {
     knowledgeOverview: null,
     knowledgeSynonymBoundaries: null,
     knowledgeHubSelection: null,
+    knowledgeHubPreview: null,
     knowledgeBase: {
         overview: null,
         terms: [],
@@ -947,8 +948,38 @@ function closeKhInspector() {
 }
 
 async function openKhInspectorForSelection(options = {}) {
+    setKhContextMode('relation');
     setKhInspectorOpen(true, options);
     await renderKnowledgeRelationInspector();
+}
+
+function setKhContextMode(mode) {
+    const preview = document.getElementById('khCardPreview');
+    const relation = document.getElementById('knowledgeRelationInspector');
+    const title = document.getElementById('khContextTitle');
+    const isRelation = mode === 'relation';
+    if (preview) preview.hidden = isRelation;
+    if (relation) relation.hidden = !isRelation;
+    if (title) title.textContent = isRelation ? '关系洞察' : '当前卡片';
+}
+
+function renderKhCardPreview(term, options = {}) {
+    const container = document.getElementById('khCardPreview');
+    if (!container || !term) return;
+    state.knowledgeHubPreview = term;
+    const cardType = formatKhCardType(term.cardType);
+    const heads = [term.zhHeadword, term.enHeadword, term.jaHeadword].filter(Boolean).join(' · ');
+    container.innerHTML = `
+        <div class="kh-preview-type"><span class="kh-pill ${cardType.className}">${escapeHtml(cardType.label)}</span><span>${escapeHtml(term.langProfile || '')}</span></div>
+        <h2>${escapeHtml(term.phrase || '-')}</h2>
+        <p>${escapeHtml(heads || '暂无词头摘要')}</p>
+        <div class="kh-preview-actions">
+            <button class="ko-start-btn" type="button" data-preview-action="open" data-generation-id="${Number(term.generationId || 0)}">打开学习卡</button>
+            <button class="kh-action-btn" type="button" data-preview-action="relation" data-key="${escapeHtml(term.phrase || '')}">查看关系</button>
+        </div>`;
+    setKhContextMode('preview');
+    const shouldOpen = options.open ?? window.matchMedia('(min-width: 1101px)').matches;
+    setKhInspectorOpen(shouldOpen);
 }
 
 async function renderKnowledgeRelationInspector() {
@@ -1160,6 +1191,16 @@ function initKnowledgeBaseBrowse() {
     const prevBtn = document.getElementById('knowledgeBasePrev');
     const nextBtn = document.getElementById('knowledgeBaseNext');
     const tagsBox = document.getElementById('knowledgeBaseTags');
+    const explorer = getKhExplorer();
+    const localNavToggle = document.getElementById('khLocalNavToggle');
+    if (explorer && localNavToggle) {
+        localNavToggle.addEventListener('click', () => {
+            const opening = !explorer.classList.contains('local-nav-open');
+            if (opening) closeKhInspector();
+            explorer.classList.toggle('local-nav-open', opening);
+            localNavToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        });
+    }
 
     if (searchInput) {
         searchInput.addEventListener('input', () => {
@@ -1316,6 +1357,23 @@ function initKnowledgeBaseBrowse() {
         });
     }
 
+    const preview = document.getElementById('khCardPreview');
+    if (preview) {
+        preview.addEventListener('click', async (event) => {
+            const action = event.target.closest('[data-preview-action]');
+            if (!action) return;
+            if (action.dataset.previewAction === 'open') {
+                openKhCard(Number(action.dataset.generationId || 0));
+                return;
+            }
+            const key = String(action.dataset.key || '').trim();
+            if (!key) return;
+            state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
+            renderKnowledgeBaseTerms();
+            await openKhInspectorForSelection({ focus: true });
+        });
+    }
+
     list.addEventListener('click', async (event) => {
         const relBtn = event.target.closest('[data-inspector-action="term-relation"]');
         if (relBtn) {
@@ -1336,17 +1394,16 @@ function initKnowledgeBaseBrowse() {
         const key = String(item.dataset.key || '').trim();
         if (!key) return;
         const genId = Number(item.dataset.generationId || 0);
-        // `pinned` keeps any periodic refresh from clobbering a term that is
-        // not in the top-N overview.
-        state.knowledgeHubSelection = { entityType: 'term', key, severity: '', pinned: true };
+        const term = state.knowledgeBase.terms.find((entry) => Number(entry.generationId || 0) === genId)
+            || state.knowledgeBase.terms.find((entry) => String(entry.phrase || '').trim() === key);
+        state.knowledgeHubSelection = null;
         renderKnowledgeBaseTerms();
-        if (genId) openKhCard(genId);
+        if (term) renderKhCardPreview(term, { open: true });
     });
 
     const inspectorClose = document.getElementById('khInspectorClose');
     if (inspectorClose) inspectorClose.addEventListener('click', closeKhInspector);
 
-    const explorer = getKhExplorer();
     if (explorer) {
         explorer.addEventListener('click', (event) => {
             if (!explorer.classList.contains('has-inspector')) return;
@@ -1370,6 +1427,8 @@ function initKnowledgeBaseBrowse() {
     }
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        explorer?.classList.remove('local-nav-open');
+        localNavToggle?.setAttribute('aria-expanded', 'false');
         closeKhInspector();
         closeKhCard();
     });
@@ -1474,21 +1533,22 @@ function renderKhReview() {
     if (!card) {
         body.innerHTML = `
             <div class="kh-review-done" data-testid="kh-review-done">
-                <div class="kh-review-done-emoji">🎉</div>
+                <div class="kh-review-done-icon"><i data-lucide="circle-check-big" aria-hidden="true"></i></div>
                 <div class="kh-review-done-title">今日复习完成</div>
                 <div class="kh-review-done-meta">已复习 ${Number(stats.reviewedToday || 0)} · 待复习 ${Number(stats.dueCount || 0)} · 新卡 ${Number(stats.newCount || 0)}</div>
                 <button class="ko-start-btn" type="button" data-review-action="exit">← 返回浏览</button>
             </div>`;
+        window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
         return;
     }
 
     const remaining = queue.length - kb.reviewCursor;
     const tag = card.isNew ? '<span class="kh-review-tag is-new">NEW</span>' : `<span class="kh-review-tag">rep ${card.repetitions}</span>`;
     const grades = [
-        { g: 'again', label: 'Again', cls: 'again' },
-        { g: 'hard', label: 'Hard', cls: 'hard' },
-        { g: 'good', label: 'Good', cls: 'good' },
-        { g: 'easy', label: 'Easy', cls: 'easy' }
+        { g: 'again', label: '重来', cls: 'again' },
+        { g: 'hard', label: '困难', cls: 'hard' },
+        { g: 'good', label: '记住', cls: 'good' },
+        { g: 'easy', label: '简单', cls: 'easy' }
     ];
     body.innerHTML = `
         <div class="kh-review-progress">剩 ${remaining} 张 · 今日已复习 ${Number(stats.reviewedToday || 0)}</div>
@@ -1497,7 +1557,7 @@ function renderKhReview() {
             <div class="kh-review-meta">${escapeHtml(card.cardType || '')} ${tag} · ${escapeHtml(card.folderName || '')}</div>
             <button class="ko-start-btn kh-review-view" type="button" data-review-action="view" data-generation-id="${Number(card.generationId || 0)}">查看卡片 ↗</button>
         </div>
-        <div class="kh-review-grades" ${kb.reviewBusy ? 'style="pointer-events:none;opacity:.5"' : ''}>
+        <div class="kh-review-grades ${kb.reviewBusy ? 'is-busy' : ''}">
             ${grades.map((x) => `<button class="kh-grade-btn ${x.cls}" type="button" data-grade="${x.g}" data-testid="kh-grade-${x.g}">${x.label}</button>`).join('')}
         </div>`;
 }
@@ -1680,6 +1740,7 @@ function setKhMode(mode, insightType) {
     }
     if (mode === 'insight') {
         if (crumb) crumb.textContent = KH_INSIGHT_LABEL[state.knowledgeBase.insightType] || '洞察 Insights';
+        setKhContextMode('relation');
         setKhInspectorOpen(true);
         renderKhInsightList();
         renderKnowledgeRelationInspector();
@@ -1690,7 +1751,8 @@ function setKhMode(mode, insightType) {
         closeKhInspector();
         if (crumb) crumb.textContent = '学习计划 · Plan';
     } else {
-        closeKhInspector();
+        if (state.knowledgeHubPreview) renderKhCardPreview(state.knowledgeHubPreview);
+        else closeKhInspector();
         if (crumb) crumb.textContent = '词条 · Terms';
     }
 }
@@ -1993,7 +2055,8 @@ function renderKnowledgeBaseTerms() {
         list.innerHTML = '<div class="empty-hint">No terms</div>';
     } else {
         const selectedKey = (state.knowledgeHubSelection && state.knowledgeHubSelection.entityType === 'term')
-            ? state.knowledgeHubSelection.key : '';
+            ? state.knowledgeHubSelection.key
+            : String(state.knowledgeHubPreview?.phrase || '').trim();
         list.innerHTML = terms.map((term) => {
             const key = String(term.phrase || '').trim();
             const isActive = selectedKey && selectedKey === key;
@@ -2030,6 +2093,8 @@ function renderKnowledgeBaseTerms() {
                 </div>
             `;
         }).join('');
+        const previewStillPresent = Boolean(state.knowledgeHubPreview) && terms.some((term) => Number(term.generationId || 0) === Number(state.knowledgeHubPreview?.generationId || 0));
+        if (state.knowledgeBase.navMode === 'browse' && !previewStillPresent) renderKhCardPreview(terms[0]);
     }
 
     const pageInfo = document.getElementById('knowledgeBasePageInfo');

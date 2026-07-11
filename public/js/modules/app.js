@@ -8,6 +8,7 @@ import { escapeHtml, sanitizeHtml, formatTime, formatDate, debounce } from './ut
 import { initInfoModal, createInfoBtn, bindInfoButtons } from './info-modal.js';
 import { openGenerationJobDetailModal } from './generation-job-detail.js';
 import { refreshHealth, subscribeHealth } from './shell-health.js';
+import { enhanceCardHtmlByType, migrateHighlightHtml } from './card-renderer.js';
 
 // DOM Elements
 const els = {
@@ -100,6 +101,7 @@ const generationQueueState = {
     pollTimerId: null,
     lastSuccessCount: 0,
     panelEl: null,
+    backdropEl: null,
     summaryEl: null,
     listEl: null,
     eventsEl: null,
@@ -173,6 +175,8 @@ let timerStartTime = null;
 let heroTaskQueueElapsedTimerId = null;
 let heroTaskQueueElapsedTaskId = null;
 let todayLearningRefreshPromise = null;
+let modalRestoreFocus = null;
+let modalRestoreScrollY = 0;
 
 // ==========================================
 // 初始化与事件绑定
@@ -683,7 +687,8 @@ async function selectFile(file, title, cardType = 'trilingual') {
         const modalCardType = normalizeCardType(
             cardType || metrics?.card_type || metrics?.observability?.metadata?.cardType || 'trilingual'
         );
-        renderCardModal(mdContent, title || baseName, { folder, baseName, metrics, cardType: modalCardType });
+        const restoreFocusElement = els.fileList.querySelector('button.active');
+        renderCardModal(mdContent, title || baseName, { folder, baseName, metrics, cardType: modalCardType, restoreFocusElement });
     } catch (err) {
         console.error('Render card failed:', err);
         alert('无法加载文件内容');
@@ -973,7 +978,25 @@ function initModal() {
         if (e.target === els.modalOverlay) closeModal();
     };
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeModal();
+        if (els.modalOverlay.classList.contains('hidden')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeModal();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        const focusable = [...els.modalOverlay.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]')]
+            .filter((node) => !node.closest('.hidden') && node.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
     });
 }
 
@@ -1049,13 +1072,14 @@ function normalizeLoanwordAnnotations(markdown) {
 
 function renderMarkdownWithAudioButtons(markdown, options = {}) {
     const folder = options.folder || '';
+    const cardType = options.cardType || 'trilingual';
     const normalized = normalizeLoanwordAnnotations(markdown || '');
     const html = marked.parse(normalized);
     const processedHtml = html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src) => {
         const folderAttr = folder ? ` data-folder="${folder}"` : '';
         return `<button class="audio-btn" type="button" aria-label="播放语音" data-src="${src}"${folderAttr}><i data-lucide="play" aria-hidden="true"></i></button>`;
     });
-    return sanitizeHtml(processedHtml);
+    return enhanceCardHtmlByType(sanitizeHtml(processedHtml), cardType);
 }
 
 function bindAudioButtons(container, defaultFolder = null) {
@@ -1178,19 +1202,26 @@ function startGenerationQueuePolling() {
 
 function showGenerationQueuePanel() {
     generationQueueState.panelEl?.classList.remove('hidden');
+    generationQueueState.backdropEl?.classList.remove('hidden');
 }
 
 function hideGenerationQueuePanel() {
     generationQueueState.panelEl?.classList.add('hidden');
+    generationQueueState.backdropEl?.classList.add('hidden');
 }
 
 function toggleGenerationQueuePanel() {
     const panel = generationQueueState.panelEl;
     if (!panel) return;
-    panel.classList.toggle('hidden');
+    const opening = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !opening);
+    generationQueueState.backdropEl?.classList.toggle('hidden', !opening);
 }
 
 function initGenerationQueuePanel() {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'gen-queue-backdrop hidden';
+    backdrop.dataset.testid = 'queue-panel-backdrop';
     const panel = document.createElement('div');
     panel.id = 'generationQueuePanel';
     panel.className = 'gen-queue-panel hidden';
@@ -1208,9 +1239,10 @@ function initGenerationQueuePanel() {
       <div class="gen-queue-events" data-testid="queue-audit-timeline"></div>
       <div class="gen-queue-toast hidden"></div>
     `;
-    document.body.appendChild(panel);
+    document.body.append(backdrop, panel);
 
     generationQueueState.panelEl = panel;
+    generationQueueState.backdropEl = backdrop;
     generationQueueState.summaryEl = panel.querySelector('.gen-queue-summary');
     generationQueueState.listEl = panel.querySelector('.gen-queue-list');
     generationQueueState.eventsEl = panel.querySelector('.gen-queue-events');
@@ -1260,6 +1292,7 @@ function initGenerationQueuePanel() {
     generationQueueState.closeBtn.onclick = () => {
         hideGenerationQueuePanel();
     };
+    backdrop.addEventListener('click', hideGenerationQueuePanel);
 
     panel.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -2256,16 +2289,20 @@ function computeTextHash(input) {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-function loadPersistedCardHighlights(storageKey, sourceHash) {
+function loadPersistedCardHighlights(storageKey, sourceHash, freshHtml, cardType) {
     if (!storageKey) return null;
     try {
         const raw = localStorage.getItem(storageKey);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (!parsed || parsed.version !== 1) return null;
+        if (!parsed || ![1, 2].includes(Number(parsed.version))) return null;
         if (parsed.sourceHash !== sourceHash) return null;
         if (typeof parsed.html !== 'string' || !parsed.html.trim()) return null;
-        return sanitizeHtml(parsed.html);
+        const sanitized = sanitizeHtml(parsed.html);
+        if (Number(parsed.version) === 2) {
+            return { html: enhanceCardHtmlByType(sanitized, cardType), version: 2 };
+        }
+        return { html: migrateHighlightHtml(freshHtml, sanitized), version: 1 };
     } catch (err) {
         console.warn('[Highlight] load failed:', err.message);
         return null;
@@ -2285,7 +2322,7 @@ function syncLocalHighlightCache(storageKey, sourceHash, html) {
     if (!storageKey || !sourceHash || typeof html !== 'string' || !html.trim()) return;
     try {
         localStorage.setItem(storageKey, JSON.stringify({
-            version: 1,
+            version: 2,
             sourceHash,
             updatedAt: Date.now(),
             html
@@ -2310,16 +2347,23 @@ async function hydrateCardHighlightsFromServer(container, context, options = {})
         const latestContext = getActiveHighlightContext(context.highlightScope || HIGHLIGHT_SCOPE_CONTENT);
         if (!isSameCardContext(context, latestContext)) return;
 
+        const currentRenderer = container.querySelector('[data-card-renderer-version="2"]');
+        const freshHtml = currentRenderer?.outerHTML || '';
         const sanitized = sanitizeHtml(remote.htmlContent);
-        if (!sanitized.trim()) return;
-        if (container.innerHTML !== sanitized) {
-            container.innerHTML = sanitized;
+        const nextHtml = Number(remote.version || 1) >= 2
+            ? enhanceCardHtmlByType(sanitized, activeCardContext?.cardType || 'trilingual')
+            : migrateHighlightHtml(freshHtml, sanitized);
+        if (!nextHtml.trim()) return;
+        if (currentRenderer && currentRenderer.outerHTML !== nextHtml) {
+            currentRenderer.outerHTML = nextHtml;
             bindAudioButtons(els.modalContainer, folder);
+            window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
             if (typeof options.onHydrated === 'function') {
                 options.onHydrated(container);
             }
         }
-        syncLocalHighlightCache(context.highlightStorageKey, sourceHash, sanitized);
+        syncLocalHighlightCache(context.highlightStorageKey, sourceHash, nextHtml);
+        if (Number(remote.version || 1) < 2) backfillCardHighlightsToServer(context, nextHtml);
     } catch (err) {
         console.warn('[Highlight] hydrate from server failed:', err.message);
     }
@@ -2337,7 +2381,7 @@ function backfillCardHighlightsToServer(context, html) {
         sourceHash,
         html,
         generationId: context.generationId || null,
-        version: 1,
+        version: 2,
         updatedBy: cardEditorName
     }).catch((err) => {
         console.warn('[Highlight] backfill to server failed:', err.message);
@@ -2354,20 +2398,23 @@ function persistCurrentCardHighlights(container, context = null) {
     const generationId = highlightContext?.generationId || null;
     if (!storageKey || !sourceHash || !folder || !baseName) return;
     try {
+        const renderer = container.querySelector('[data-card-renderer-version="2"]');
+        const html = renderer?.outerHTML || '';
+        if (!html) return;
         const payload = {
-            version: 1,
+            version: 2,
             sourceHash,
             updatedAt: Date.now(),
-            html: container.innerHTML
+            html
         };
         localStorage.setItem(storageKey, JSON.stringify(payload));
         api.saveCardHighlight({
             folder,
             base: baseName,
             sourceHash,
-            html: container.innerHTML,
+            html,
             generationId,
-            version: 1,
+            version: 2,
             updatedBy: cardEditorName
         }).catch((err) => {
             console.warn('[Highlight] persist to server failed:', err.message);
@@ -2771,14 +2818,16 @@ function renderCardModal(markdown, title, options = {}) {
         activeHighlightScope: HIGHLIGHT_SCOPE_CONTENT
     };
 
-    const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder });
-    const persistedHtml = loadPersistedCardHighlights(
+    const safeHtml = renderMarkdownWithAudioButtons(markdown, { folder, cardType });
+    const persistedHighlight = loadPersistedCardHighlights(
         contentHighlightContext?.highlightStorageKey || '',
-        contentHighlightContext?.highlightSourceHash || ''
+        contentHighlightContext?.highlightSourceHash || '',
+        safeHtml,
+        cardType
     );
-    const cardContentHtml = persistedHtml || safeHtml;
-    if (persistedHtml) {
-        backfillCardHighlightsToServer(contentHighlightContext, persistedHtml);
+    const cardContentHtml = persistedHighlight?.html || safeHtml;
+    if (persistedHighlight?.version === 1) {
+        backfillCardHighlightsToServer(contentHighlightContext, cardContentHtml);
     }
 
     // 尝试获取 observability 数据 (优先使用传入的 options.metrics)
@@ -2834,6 +2883,7 @@ function renderCardModal(markdown, title, options = {}) {
 
     const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'deepseek').toUpperCase();
     const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
+    const showSrsFooter = options.reviewOwner === 'modal' && generationId > 0;
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel">
@@ -2850,7 +2900,7 @@ function renderCardModal(markdown, title, options = {}) {
 
             <div class="mc-header">
                 <div class="mc-heading-main">
-                    <h1 class="mc-phrase" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
+                    <h1 id="cardModalTitle" class="mc-phrase" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
                     <div class="mc-meta font-mono">
                         <span>${cardTypeConfig.modalMetaLabel}</span>
                         <span>::</span>
@@ -2858,27 +2908,44 @@ function renderCardModal(markdown, title, options = {}) {
                     </div>
                 </div>
 
-                <div class="panel-tabs sub-tabs mc-panel-tabs">
-                    <button class="tab-btn active" data-target="cardContent" data-testid="tab-content">CONTENT</button>
-                    <button class="tab-btn tone-purple" data-target="cardIntel" data-testid="tab-intel">INTEL</button>
-                    ${showKnowledge ? '<button class="tab-btn tone-primary" data-target="cardKnowledge" data-testid="tab-knowledge">KNOWLEDGE</button>' : ''}
-                </div>
+            </div>
+
+            <div class="panel-tabs sub-tabs mc-panel-tabs" role="tablist" aria-label="学习卡片视图">
+                <button class="tab-btn active" role="tab" aria-selected="true" data-target="cardContent" data-testid="tab-content">CONTENT</button>
+                <button class="tab-btn tone-purple" role="tab" aria-selected="false" data-target="cardIntel" data-testid="tab-intel">INTEL</button>
+                ${showKnowledge ? '<button class="tab-btn tone-primary" role="tab" aria-selected="false" data-target="cardKnowledge" data-testid="tab-knowledge">KNOWLEDGE</button>' : ''}
             </div>
 
             <!-- Content Tab -->
             <div id="cardContent" class="mc-body mc-content active" data-testid="card-content-panel">
-                <div class="hud-ticker mc-card-type">CARD TYPE · ${cardTypeConfig.modalTabLabel}</div>
-                ${cardContentHtml}
+                <div class="mc-content-layout">
+                    <div class="mc-markdown">${cardContentHtml}</div>
+                    <aside class="mc-study-meta" aria-label="学习信息">
+                        <h2>学习信息</h2>
+                        <dl>
+                            <div><dt>卡片类型</dt><dd>${cardTypeConfig.modalTabLabel}</dd></div>
+                            <div><dt>生成模型</dt><dd>${escapeHtml(modelLabel)}</dd></div>
+                            <div><dt>内容来源</dt><dd>Markdown</dd></div>
+                        </dl>
+                    </aside>
+                </div>
             </div>
 
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body">${buildIntelHud(metrics, { providerLabel, modelLabel })}</div>
 
             ${showKnowledge ? '<div id="cardKnowledge" class="mc-body"></div>' : ''}
+            ${showSrsFooter ? `<footer class="mc-srs-footer" data-testid="card-srs-footer">
+                <button type="button" data-card-grade="again" data-testid="card-grade-again">重来</button>
+                <button type="button" data-card-grade="hard" data-testid="card-grade-hard">困难</button>
+                <button type="button" data-card-grade="good" data-testid="card-grade-good">记住</button>
+                <button type="button" data-card-grade="easy" data-testid="card-grade-easy">简单</button>
+            </footer>` : ''}
         </div>
     `;
     applyDynamicMetricStyles(els.modalContainer);
     window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
+    els.modalOverlay.setAttribute('aria-labelledby', 'cardModalTitle');
 
     // 绑定删除按钮
     const deleteBtn = document.getElementById('mcDeleteBtn');
@@ -2890,6 +2957,20 @@ function renderCardModal(markdown, title, options = {}) {
         deletePopover.classList.toggle('hidden', !visible);
         deleteBtn?.setAttribute('aria-expanded', visible ? 'true' : 'false');
     };
+
+    els.modalContainer.querySelectorAll('[data-card-grade]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (button.disabled) return;
+            els.modalContainer.querySelectorAll('[data-card-grade]').forEach((item) => { item.disabled = true; });
+            try {
+                await api.reviewSrs(generationId, button.dataset.cardGrade);
+                closeModal();
+            } catch (error) {
+                els.modalContainer.querySelectorAll('[data-card-grade]').forEach((item) => { item.disabled = false; });
+                window.alert(error.message || '复习提交失败');
+            }
+        });
+    });
 
     deleteCancelBtn?.addEventListener('click', () => {
         setDeletePopoverVisible(false);
@@ -2974,6 +3055,7 @@ function renderCardModal(markdown, title, options = {}) {
         btn.onclick = async () => {
             tabs.forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
+            tabs.forEach((tab) => tab.setAttribute('aria-selected', tab === btn ? 'true' : 'false'));
 
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
@@ -3010,11 +3092,15 @@ function renderCardModal(markdown, title, options = {}) {
         hydrateCardHighlightsFromServer(cardContent, contentHighlightContext);
     }
 
+    modalRestoreFocus = options.restoreFocusElement || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    modalRestoreScrollY = window.scrollY;
+    document.body.classList.add('card-modal-open');
     els.modalOverlay.classList.remove('hidden');
     setTimeout(() => {
         els.modalOverlay.classList.add('show');
         bindInfoButtons(els.modalContainer);
         bindIntelViewers(els.modalContainer);
+        document.getElementById('mcCloseBtn')?.focus();
     }, 10);
 }
 
@@ -3273,6 +3359,7 @@ function renderIntelCharts(metrics, suffix = '') {
 }
 
 function closeModal() {
+    if (!els.modalOverlay || els.modalOverlay.classList.contains('hidden')) return;
     els.modalOverlay.classList.remove('show');
     player.stop(); // 关闭卡片时停止播放
     if (selectionFabCleanup) {
@@ -3281,7 +3368,13 @@ function closeModal() {
     }
     activeCardContext = null;
     window.getSelection().removeAllRanges();
-    setTimeout(() => els.modalOverlay.classList.add('hidden'), 300);
+    setTimeout(() => {
+        els.modalOverlay.classList.add('hidden');
+        document.body.classList.remove('card-modal-open');
+        window.scrollTo({ top: modalRestoreScrollY, left: 0, behavior: 'auto' });
+        modalRestoreFocus?.focus({ preventScroll: true });
+        modalRestoreFocus = null;
+    }, 300);
 }
 
 // ==========================================

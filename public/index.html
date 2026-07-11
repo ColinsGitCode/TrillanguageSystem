@@ -26,9 +26,6 @@
     <div class="page">
       <header class="hero">
         <div class="hero-topbar app-topbar">
-          <div class="hero-brand">
-            <p class="eyebrow">Trilingual Records</p>
-          </div>
           <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status" data-shell-actions>
             <div class="hero-queue-main">
               <span class="hero-queue-dot" aria-hidden="true"></span>
@@ -96,14 +93,14 @@
         <article id="librarySection" class="card folders" aria-label="卡片库">
           <!-- Generation Panel -->
           <div class="gen-panel">
-            <p class="label">New Card</p>
+            <p class="label">创建学习卡</p>
 
             <div class="selector-row">
               <div class="card-type-selector" id="cardTypeSelector">
                 <div class="selector-header">
                   <span class="selector-label">卡片类型</span>
                   <div class="selector-header-right">
-                    <span class="selector-fixed-label">Teacher Model</span>
+                    <span class="selector-fixed-label">生成模型</span>
                     <span class="selector-hint mode-deepseek" id="teacherModelHint">DeepSeek V4 Pro</span>
                   </div>
                 </div>
@@ -113,15 +110,15 @@
                 </div>
                 <div class="selector-buttons selector-buttons-three">
                   <button class="card-type-btn active" data-card-type="trilingual" title="中英日三语学习卡片" data-testid="card-type-trilingual">
-                    <span class="model-icon">🧩</span>
+                    <span class="model-icon"><i data-lucide="languages" aria-hidden="true"></i></span>
                     <span>三语卡片</span>
                   </button>
                   <button class="card-type-btn" data-card-type="grammar_ja" title="日语语法学习卡片（中文讲解+日语例句）" data-testid="card-type-grammar">
-                    <span class="model-icon">📘</span>
+                    <span class="model-icon"><i data-lucide="book-open" aria-hidden="true"></i></span>
                     <span>日语语法</span>
                   </button>
                   <button class="card-type-btn" data-card-type="scenario_phrase" title="按具体场景生成中英日常用表达" data-testid="card-type-scenario">
-                    <span class="model-icon">🎭</span>
+                    <span class="model-icon"><i data-lucide="messages-square" aria-hidden="true"></i></span>
                     <span>场景表达</span>
                   </button>
                 </div>
@@ -258,7 +255,7 @@
 
             <!-- 搜索和过滤 -->
             <div class="history-filters">
-              <input type="text" id="historySearch" placeholder="🔍 搜索短语或翻译..." class="search-input" />
+              <input type="text" id="historySearch" placeholder="搜索短语或翻译..." class="search-input" />
             </div>
 
             <!-- 历史记录列表 -->
@@ -285,9 +282,9 @@
           <div class="file-panel">
             <div class="card-header sub">
               <div>
-                <p class="label">FileName</p>
-                <h3>Phrase List</h3>
-                <p class="muted small">Click to Browse</p>
+                <p class="label">最近卡片</p>
+                <h3>卡片库</h3>
+                <p class="muted small">选择卡片进入学习</p>
               </div>
               <div class="chip" id="fileCount">0</div>
             </div>

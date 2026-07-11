@@ -36,17 +36,19 @@ test.describe('/api/folders + /api/highlights/by-file + /api/records/by-file', (
         base: 'hello',
         sourceHash: 'h1',
         html: '<p>Hello <mark class="study-highlight-red">world</mark>!</p>',
-        version: 1,
+        version: 2,
         updatedBy: 'integration-test'
       }
     });
     assert.equal(put.status, 200);
     assert.equal(put.body.success, true);
     assert.equal(put.body.highlight.markCount, 1);
+    assert.equal(put.body.highlight.version, 2);
 
     const get = await api('GET', '/api/highlights/by-file?folder=20260101&base=hello&sourceHash=h1');
     assert.equal(get.status, 200);
     assert.equal(get.body.highlight.markCount, 1);
+    assert.equal(get.body.highlight.version, 2);
     assert.equal(get.body.highlight.updatedBy, 'integration-test');
   });
 

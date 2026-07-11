@@ -31,6 +31,7 @@ const {
   listE2EKnowledgeJobs,
   createE2EKnowledgeJob,
   cancelE2EKnowledgeJob,
+  resetE2EFixtures,
 } = require('../lib/e2eFixtures');
 const {
   generateWithProvider,
@@ -90,6 +91,7 @@ module.exports = {
   listE2EKnowledgeJobs,
   createE2EKnowledgeJob,
   cancelE2EKnowledgeJob,
+  resetE2EFixtures,
   generateWithProvider,
   validateGeneratedContent,
   normalizeAudioTasks,

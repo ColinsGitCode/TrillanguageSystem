@@ -30,6 +30,8 @@ export function sanitizeHtml(html) {
                 'data-target',
                 'data-view',
                 'data-viewer',
+                'data-card-renderer-version',
+                'data-card-type',
                 'preload',
                 'controls',
                 'href',
@@ -39,7 +41,7 @@ export function sanitizeHtml(html) {
             ],
         });
     }
-    return html;
+    return `<div class="safe-render-error" role="alert"><strong>卡片内容暂时无法安全显示。</strong><pre>${escapeHtml(String(html || ''))}</pre></div>`;
 }
 
 // URL 缓存清除

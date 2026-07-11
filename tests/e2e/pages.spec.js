@@ -43,6 +43,8 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('mission-control-page')).toBeVisible();
     await expect(page.getByTestId('mission-control-title')).toContainText('MISSION CONTROL');
     await expect(page.getByTestId('mission-task-queue')).toBeVisible();
+    await expect(page.getByTestId('runtime-boundary')).toContainText('DeepSeek V4 Pro');
+    await expect(page.getByTestId('runtime-boundary')).toContainText('VOICEVOX');
     await expect(page.getByTestId('service-matrix')).toBeVisible();
   });
 
@@ -51,6 +53,7 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('knowledge-ops-page')).toBeVisible();
     await expect(page.getByTestId('knowledge-ops-title')).toContainText('KNOWLEDGE OPS');
     await expect(page.getByTestId('knowledge-start-btn')).toBeVisible();
+    await expect(page.getByTestId('knowledge-pipeline')).toContainText('音频合成');
     await expect(page.getByTestId('knowledge-jobs-list')).toBeVisible();
   });
 

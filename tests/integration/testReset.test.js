@@ -32,4 +32,20 @@ test.describe('POST /api/_test/reset (mounted only under E2E_TEST_MODE=1)', () =
     assert.equal(after.body.records.length, 0);
     assert.equal(after.body.pagination.total, 0);
   });
+
+  test.it('reset wipes in-memory E2E knowledge jobs', async () => {
+    const created = await api('POST', '/api/knowledge/jobs/start', {
+      body: { jobType: 'summary' }
+    });
+    assert.equal(created.status, 200);
+
+    const before = await api('GET', '/api/knowledge/jobs');
+    assert.equal(before.body.jobs.length, 1);
+
+    const reset = await api('POST', '/api/_test/reset');
+    assert.equal(reset.status, 200);
+
+    const after = await api('GET', '/api/knowledge/jobs');
+    assert.deepEqual(after.body.jobs, []);
+  });
 });

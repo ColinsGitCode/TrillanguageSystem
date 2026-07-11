@@ -14,6 +14,7 @@ const {
   dbService,
   generationJobService,
   RECORDS_PATH,
+  resetE2EFixtures,
 } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'route/test-reset' });
 
@@ -38,6 +39,7 @@ router.post('/api/_test/reset', (req, res) => {
   try {
     dbService.truncateAllForTests();
     generationJobService.resetForTests();
+    resetE2EFixtures();
     wipeRecordsDir();
     res.json({ ok: true });
   } catch (err) {

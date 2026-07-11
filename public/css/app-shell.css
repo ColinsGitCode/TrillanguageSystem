@@ -111,7 +111,7 @@
 .app-shell .dashboard-links,
 .app-shell .system-back-link,
 .app-shell .kh-back-link { display: none; }
-.app-shell .hero-topbar { grid-template-columns: auto minmax(340px, 1fr); }
+.app-shell .hero-topbar { grid-template-columns: minmax(340px, 1fr); }
 .app-nav-toggle { display: none; }
 .app-nav-backdrop { display: none; }
 

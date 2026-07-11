@@ -483,21 +483,21 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: 50% 50%;
-  grid-template-rows: 1fr;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
   grid-template-areas:
     "folders viewer";
   gap: 14px;
-  height: calc(100vh - 130px);
-  min-height: 760px;
+  height: auto;
+  min-height: 0;
+  align-items: start;
 }
 
 .card {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
-  box-shadow: var(--shadow-modal);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -535,7 +535,7 @@ h1 {
 
 .folders {
   grid-area: folders;
-  overflow-y: auto;
+  overflow-y: visible;
   padding-bottom: 6px;
 }
 
@@ -574,7 +574,7 @@ h1 {
 
 .viewer {
   grid-area: viewer;
-  min-height: 520px;
+  min-height: 420px;
   gap: 12px;
 }
 
@@ -634,7 +634,8 @@ h1 {
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 10px;
   align-content: start;
-  min-height: 240px;
+  min-height: 180px;
+  max-height: 560px;
   flex: 1;
   position: relative;
   overflow-y: auto;
@@ -818,12 +819,14 @@ h1 {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   padding: 12px 28px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
 }
+
+body.card-modal-open { overflow: hidden; }
 
 .modal.show {
   opacity: 1;
@@ -2394,6 +2397,13 @@ h1 {
 }
 
 /* Silent generation queue */
+.gen-queue-backdrop {
+  position: fixed;
+  z-index: 10009;
+  inset: 0;
+  background: var(--color-overlay);
+}
+
 .gen-queue-panel {
   position: fixed;
   left: 50%;
@@ -2715,7 +2725,7 @@ h1 {
 .queue-job-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 2200;
+  z-index: 10020;
   background: rgba(2, 6, 23, 0.56);
   display: flex;
   align-items: center;

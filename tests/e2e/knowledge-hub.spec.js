@@ -19,19 +19,21 @@ test.describe('Knowledge Hub explorer', () => {
     await seedKnowledge(request);
   });
 
-  test('01 两栏主体 + metric 指标条 + 默认功能轴分类与词条', async ({ page }) => {
+  test('01 三职责区 + metric 指标条 + 默认功能轴分类与卡片预览', async ({ page }) => {
     const consoleErrors = [];
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
     await page.goto('/knowledge-hub.html');
 
-    // Two-pane scaffold + metric stats bar present.
+    // Semantic navigation + main list + contextual card preview.
     await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
     await expect(page.getByTestId('knowledge-base-panel')).toBeVisible();
-    await expect(page.getByTestId('knowledge-base-panel')).not.toHaveClass(/has-inspector/);
+    await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
     await expect(page.getByTestId('kh-axis-toggle')).toBeVisible();
     await expect(page.getByTestId('knowledge-base-term-list')).toBeVisible();
-    await expect(page.getByTestId('kh-inspector')).toBeHidden();
+    await expect(page.getByTestId('kh-inspector')).toBeVisible();
+    await expect(page.getByTestId('kh-card-preview')).toBeVisible();
+    await expect(page.getByTestId('knowledge-relation-inspector')).toBeHidden();
     await expect(page.getByTestId('kh-actions')).toBeVisible();
     await expect(page.getByTestId('knowledge-hub-counts').locator('.kh-metric')).toHaveCount(5);
     await expect(page.getByTestId('knowledge-hub-counts').getByTestId('kh-metric-terms')).toContainText('4');
@@ -90,13 +92,16 @@ test.describe('Knowledge Hub explorer', () => {
     await expect(page.getByTestId('knowledge-relation-inspector')).toContainText('CLUSTER');
   });
 
-  test('05 词条点击弹出嵌入式卡片弹窗并可关闭', async ({ page }) => {
+  test('05 词条点击更新右侧预览并可打开嵌入式学习卡', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
 
     const modal = page.getByTestId('kh-card-modal');
     await expect(modal).toBeHidden();
 
     await page.getByTestId('knowledge-base-term').first().locator('.kh-term-main').click();
+    await expect(page.getByTestId('kh-card-preview')).toBeVisible();
+    await expect(modal).toBeHidden();
+    await page.getByTestId('kh-card-preview').getByRole('button', { name: '打开学习卡' }).click();
     await expect(modal).toBeVisible();
     // The Hub embeds the main app's native card modal via /?card=<id>&embed=1.
     await expect(page.locator('#khCardFrame')).toHaveAttribute('src', /\/\?card=\d+&embed=1/);
@@ -110,13 +115,15 @@ test.describe('Knowledge Hub explorer', () => {
 
     const panel = page.getByTestId('knowledge-base-panel');
     const modal = page.getByTestId('kh-card-modal');
-    await expect(panel).not.toHaveClass(/has-inspector/);
+    await expect(panel).toHaveClass(/has-inspector/);
     await expect(modal).toBeHidden();
 
     await page.getByTestId('knowledge-base-term').first().getByTestId('kh-term-rel').click();
     await expect(panel).toHaveClass(/has-inspector/);
     await expect(page.getByTestId('kh-inspector')).toBeVisible();
     await expect(page.getByTestId('knowledge-relation-inspector')).not.toContainText('点击词条');
+    await expect(page.getByTestId('knowledge-relation-inspector')).toBeVisible();
+    await expect(page.getByTestId('kh-card-preview')).toBeHidden();
     await expect(modal).toBeHidden();
 
     await page.getByTestId('kh-list-crumb').click();
@@ -178,5 +185,25 @@ test.describe('Knowledge Hub explorer', () => {
     await page.goto('/knowledge-hub.html?mode=review');
     await expect(page.getByTestId('kh-review-pane')).toBeVisible();
     await expect(page.getByTestId('kh-review-card').or(page.getByTestId('kh-review-done'))).toBeVisible();
+    await expect(page.getByTestId('kh-inspector')).toBeHidden();
+  });
+
+  test('10 移动端分类抽屉与上下文抽屉互斥', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/knowledge-hub.html');
+    const panel = page.getByTestId('knowledge-base-panel');
+    await expect(page.getByTestId('kh-inspector')).toBeHidden();
+
+    await page.getByRole('button', { name: '分类与筛选' }).click();
+    await expect(panel).toHaveClass(/local-nav-open/);
+    await expect(panel).not.toHaveClass(/has-inspector/);
+    await page.keyboard.press('Escape');
+    await expect(panel).not.toHaveClass(/local-nav-open/);
+
+    await page.getByTestId('knowledge-base-term').first().locator('.kh-term-main').click();
+    await expect(panel).toHaveClass(/has-inspector/);
+    await page.getByRole('button', { name: '分类与筛选' }).click();
+    await expect(panel).toHaveClass(/local-nav-open/);
+    await expect(panel).not.toHaveClass(/has-inspector/);
   });
 });
