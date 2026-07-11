@@ -1,0 +1,183 @@
+:root {
+  color-scheme: light;
+
+  --color-bg-canvas: #f7f8fa;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f1f3f5;
+  --color-text-primary: #172033;
+  --color-text-secondary: #566074;
+  --color-text-tertiary: #7a8496;
+  --color-text-disabled: #a7afbc;
+  --color-text-inverse: #ffffff;
+  --color-border: #dde2e9;
+  --color-border-strong: #c6ced9;
+  --color-focus: #2563eb;
+  --color-overlay: rgb(17 24 39 / 48%);
+  --color-skeleton: #e8ebf0;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-subtle: #eaf1ff;
+  --color-success: #0f8a5f;
+  --color-success-subtle: #e7f7f1;
+  --color-warning: #b76508;
+  --color-warning-subtle: #fff3dc;
+  --color-danger: #c43b4d;
+  --color-danger-subtle: #fff0f2;
+  --color-info: #087ea4;
+  --color-info-subtle: #e8f6fb;
+  --color-data-purple: #7c3aed;
+
+  --color-lang-en: #2563eb;
+  --color-lang-ja: #7c3aed;
+  --color-lang-zh: #0d9488;
+  --color-card-trilingual-surface: #eef4ff;
+  --color-card-trilingual-border: #6ea4ff;
+  --color-card-trilingual-text: #1d4ed8;
+  --color-card-grammar-surface: #e8f8f6;
+  --color-card-grammar-border: #69cfc4;
+  --color-card-grammar-text: #0f766e;
+  --color-card-scenario-surface: #fff4dc;
+  --color-card-scenario-border: #eeb34f;
+  --color-card-scenario-text: #8a4b08;
+  --color-card-scenario-strong: #c96f0b;
+
+  --color-obs-bg: #111827;
+  --color-obs-surface: #1c2637;
+  --color-obs-border: #34445b;
+  --color-obs-text: #e8eef7;
+  --color-obs-muted: #9cabc0;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-modal: 12px;
+  --radius-full: 999px;
+  --shadow-sm: 0 1px 2px rgb(17 24 39 / 7%), 0 3px 10px rgb(17 24 39 / 4%);
+  --shadow-md: 0 8px 24px rgb(17 24 39 / 10%);
+  --shadow-modal: 0 20px 56px rgb(17 24 39 / 20%);
+
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-ja: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+  --font-serif: Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+
+  /* Transitional aliases. Task 8 removes these after all consumers migrate. */
+  --bg: var(--color-bg-canvas);
+  --card: var(--color-bg-surface);
+  --accent: var(--color-primary);
+  --accent-2: var(--color-info);
+  --border: var(--color-border);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-tertiary);
+  --shadow: var(--shadow-modal);
+  --font-ui: var(--font-sans);
+  --font-display: var(--font-sans);
+  --bg-canvas: var(--color-bg-canvas);
+  --bg-card: var(--color-bg-surface);
+  --text-ink: var(--color-text-primary);
+  --text-slate: var(--color-text-secondary);
+  --text-muted: var(--color-text-tertiary);
+  --accent-en: var(--color-lang-en);
+  --accent-jp: var(--color-lang-ja);
+  --accent-cn: var(--color-lang-zh);
+  --border-subtle: var(--color-border);
+  --shadow-card: var(--shadow-md);
+  --bg-page: var(--color-bg-canvas);
+  --border-color: var(--color-border);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --color-accent: var(--color-primary);
+  --color-error: var(--color-danger);
+  --color-purple: var(--color-data-purple);
+  --bg-elevated: var(--color-bg-elevated);
+  --bg-accent-soft: var(--color-primary-subtle);
+  --bg-muted: var(--color-bg-subtle);
+  --sci-bg: var(--color-obs-bg);
+  --sci-card-bg: var(--color-obs-surface);
+  --sci-border: var(--color-obs-border);
+  --sci-text-main: var(--color-obs-text);
+  --sci-text-muted: var(--color-obs-muted);
+  --neon-blue: var(--color-primary);
+  --neon-purple: var(--color-data-purple);
+  --neon-green: var(--color-success);
+  --neon-amber: var(--color-warning);
+  --neon-red: var(--color-danger);
+  --glow-shadow: var(--shadow-sm);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg-canvas: #15181d;
+  --color-bg-surface: #1d2128;
+  --color-bg-elevated: #242932;
+  --color-bg-subtle: #292f39;
+  --color-text-primary: #f2f4f7;
+  --color-text-secondary: #c1c8d2;
+  --color-text-tertiary: #929cab;
+  --color-text-disabled: #697382;
+  --color-text-inverse: #14171c;
+  --color-border: #343b46;
+  --color-border-strong: #46505e;
+  --color-focus: #78a8ff;
+  --color-overlay: rgb(0 0 0 / 66%);
+  --color-skeleton: #303641;
+  --color-primary: #78a8ff;
+  --color-primary-hover: #9abfff;
+  --color-primary-subtle: #23334f;
+  --color-success: #5fd1a5;
+  --color-success-subtle: #19392f;
+  --color-warning: #f0b35e;
+  --color-warning-subtle: #443019;
+  --color-danger: #ff8794;
+  --color-danger-subtle: #48242b;
+  --color-info: #67c8e8;
+  --color-info-subtle: #173846;
+  --color-data-purple: #b99bff;
+  --color-lang-en: #82adff;
+  --color-lang-ja: #c0a3ff;
+  --color-lang-zh: #5fd4c7;
+  --color-card-trilingual-surface: #202f4b;
+  --color-card-trilingual-border: #5b87d6;
+  --color-card-trilingual-text: #a8c7ff;
+  --color-card-grammar-surface: #193b39;
+  --color-card-grammar-border: #4fa89f;
+  --color-card-grammar-text: #82ddd4;
+  --color-card-scenario-surface: #43321d;
+  --color-card-scenario-border: #c68d37;
+  --color-card-scenario-text: #f0c477;
+  --color-card-scenario-strong: #ffb14a;
+  --color-obs-bg: #0f1217;
+  --color-obs-surface: #191e26;
+  --color-obs-border: #323b48;
+  --color-obs-text: #edf1f7;
+  --color-obs-muted: #98a4b5;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 25%);
+  --shadow-md: 0 10px 26px rgb(0 0 0 / 28%);
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 48%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
