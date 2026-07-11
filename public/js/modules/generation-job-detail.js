@@ -161,12 +161,13 @@ function ensureModal() {
                     <div class="queue-job-modal-eyebrow">Generation Job</div>
                     <h3 class="queue-job-modal-title">任务详情</h3>
                 </div>
-                <button type="button" class="queue-job-modal-close" data-testid="queue-job-detail-close" aria-label="关闭">×</button>
+                <button type="button" class="queue-job-modal-close" data-testid="queue-job-detail-close" aria-label="关闭"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <div class="queue-job-modal-body"></div>
         </div>
     `;
     document.body.appendChild(overlayEl);
+    window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
     cardEl = overlayEl.querySelector('.queue-job-modal-card');
     closeBtnEl = overlayEl.querySelector('.queue-job-modal-close');
     bodyEl = overlayEl.querySelector('.queue-job-modal-body');

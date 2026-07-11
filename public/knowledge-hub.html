@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Knowledge Hub - Three LANS</title>
+    <script src="js/theme-init.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
     <link rel="shortcut icon" href="/favicon-lan.svg" />
     <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="modern-card.css">
     <link rel="stylesheet" href="css/dashboard.css">
@@ -175,7 +177,7 @@
             <div class="kh-inspector" id="khInspector" data-testid="kh-inspector" aria-hidden="true">
                 <div class="kh-inspector-head">
                     <div class="kh-nav-title">Relation Inspector</div>
-                    <button id="khInspectorClose" class="kh-inspector-close" type="button" aria-label="收起关系面板">✕</button>
+                    <button id="khInspectorClose" class="kh-inspector-close" type="button" aria-label="收起关系面板"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
                 <div id="knowledgeRelationInspector" class="knowledge-summary-body kh-scroll" data-testid="knowledge-relation-inspector">
                     <div class="empty-hint">点击词条 / 洞察项查看关系</div>
@@ -189,12 +191,14 @@
     <div id="khCardModal" class="kh-card-modal" data-testid="kh-card-modal"
          role="dialog" aria-modal="true" aria-label="卡片预览 Card preview">
         <div class="kh-card-dialog">
-            <button id="khCardClose" class="kh-card-close" type="button" aria-label="关闭卡片预览">✕</button>
+            <button id="khCardClose" class="kh-card-close" type="button" aria-label="关闭卡片预览"><i data-lucide="x" aria-hidden="true"></i></button>
             <div id="khCardSpinner" class="kh-card-spinner" aria-hidden="true"><div class="kh-spin"></div></div>
             <iframe id="khCardFrame" class="kh-card-frame" title="card preview"></iframe>
         </div>
     </div>
 
+    <script src="vendor/lucide.min.js"></script>
+    <script type="module" src="js/modules/app-shell.js"></script>
     <script type="module" src="js/modules/dashboard.js"></script>
 </body>
 </html>

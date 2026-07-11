@@ -1,0 +1,153 @@
+.ui-button,
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font: 500 14px/1 var(--font-sans);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.ui-button { padding: 0 var(--space-3); }
+.ui-icon-button { width: 36px; height: 36px; padding: 0; flex: 0 0 36px; }
+.ui-button:hover,
+.ui-icon-button:hover { border-color: var(--color-border-strong); background: var(--color-bg-subtle); color: var(--color-text-primary); }
+.ui-button:disabled,
+.ui-icon-button:disabled { color: var(--color-text-disabled); cursor: not-allowed; opacity: 0.72; }
+
+.ui-button-primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.ui-button-primary:hover { border-color: var(--color-primary-hover); background: var(--color-primary-hover); color: var(--color-text-inverse); }
+
+.ui-button-danger { color: var(--color-danger); }
+.ui-icon-button svg,
+.ui-button svg { width: 18px; height: 18px; stroke-width: 1.8; }
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-focus) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font: 500 12px/1 var(--font-sans);
+}
+
+.ui-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-disabled);
+}
+
+.ui-status-dot[data-state="online"] { background: var(--color-success); }
+.ui-status-dot[data-state="degraded"] { background: var(--color-warning); }
+.ui-status-dot[data-state="offline"] { background: var(--color-danger); }
+
+.ui-menu {
+  position: absolute;
+  z-index: 1200;
+  min-width: 190px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.ui-menu[hidden] { display: none; }
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: 500 13px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-menu-item:hover,
+.ui-menu-item[aria-checked="true"] { background: var(--color-primary-subtle); color: var(--color-primary); }
+.ui-menu-item svg { width: 16px; height: 16px; }
+
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  position: absolute;
+  z-index: 1400;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-text-primary);
+  color: var(--color-text-inverse);
+  content: attr(data-tooltip);
+  font: 12px/1.3 var(--font-sans);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+  white-space: nowrap;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+
+.ui-drawer-backdrop {
+  position: fixed;
+  z-index: 1250;
+  inset: 0;
+  background: var(--color-overlay);
+}
+
+.ui-drawer {
+  position: fixed;
+  z-index: 1260;
+  top: 0;
+  bottom: 0;
+  width: min(340px, calc(100vw - 48px));
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-modal);
+}
+
+.ui-drawer[data-side="left"] { left: 0; }
+.ui-drawer[data-side="right"] { right: 0; }
+.ui-drawer[hidden],
+.ui-drawer-backdrop[hidden] { display: none; }
+
+.theme-control-host { position: fixed; z-index: 1100; right: 16px; bottom: 16px; }
+.theme-menu { right: 0; bottom: calc(100% + 8px); }
+
+html.kh-embed .theme-control-host { display: none; }
+
+@media (max-width: 600px) {
+  .theme-control-host { right: 12px; bottom: 12px; }
+}

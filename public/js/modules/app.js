@@ -1059,7 +1059,7 @@ function renderMarkdownWithAudioButtons(markdown, options = {}) {
     const html = marked.parse(normalized);
     const processedHtml = html.replace(/<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>/gi, (match, pre, quote, src) => {
         const folderAttr = folder ? ` data-folder="${folder}"` : '';
-        return `<button class="audio-btn" data-src="${src}"${folderAttr}>▶</button>`;
+        return `<button class="audio-btn" type="button" aria-label="播放语音" data-src="${src}"${folderAttr}><i data-lucide="play" aria-hidden="true"></i></button>`;
     });
     return sanitizeHtml(processedHtml);
 }
@@ -2843,7 +2843,7 @@ function renderCardModal(markdown, title, options = {}) {
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel">
-            <button class="mc-delete" id="mcDeleteBtn" type="button" title="Delete Record" aria-label="Delete Record" data-testid="card-delete-trigger">🗑️</button>
+            <button class="mc-delete" id="mcDeleteBtn" type="button" title="Delete Record" aria-label="Delete Record" data-testid="card-delete-trigger"><i data-lucide="trash-2" aria-hidden="true"></i></button>
             <div class="mc-delete-popover hidden" id="mcDeletePopover" role="dialog" aria-live="polite" aria-label="删除确认">
                 <div class="mc-delete-popover-title">删除此学习卡片？</div>
                 <div class="mc-delete-popover-desc">将删除卡片、音频和关联记录，此操作不可恢复。</div>
@@ -2852,7 +2852,7 @@ function renderCardModal(markdown, title, options = {}) {
                     <button class="mc-delete-popover-confirm" id="mcDeleteConfirmBtn" type="button" data-testid="card-delete-confirm">确认删除</button>
                 </div>
             </div>
-            <button class="mc-close" id="mcCloseBtn" data-testid="card-modal-close">×</button>
+            <button class="mc-close" id="mcCloseBtn" type="button" aria-label="关闭学习卡片" data-testid="card-modal-close"><i data-lucide="x" aria-hidden="true"></i></button>
 
             <div class="mc-header">
                 <div class="mc-heading-main">
@@ -2884,6 +2884,7 @@ function renderCardModal(markdown, title, options = {}) {
         </div>
     `;
     applyDynamicMetricStyles(els.modalContainer);
+    window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
 
     // 绑定删除按钮
     const deleteBtn = document.getElementById('mcDeleteBtn');

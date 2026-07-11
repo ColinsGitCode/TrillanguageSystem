@@ -130,4 +130,42 @@ test.describe.serial('UI visual regression', () => {
     await expect(page.getByTestId('card-modal')).toBeVisible();
     await expectPageScreenshot(page, 'card-scenario_phrase-mobile.png');
   });
+
+  test('dark theme across all primary pages and card types', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+    const targets = [
+      { path: '/', name: 'workspace', ready: 'phrase-input' },
+      { path: '/dashboard.html', name: 'mission-control', ready: 'mission-control-page' },
+      { path: '/knowledge-ops.html', name: 'knowledge-ops', ready: 'knowledge-ops-page' },
+      { path: '/knowledge-hub.html', name: 'knowledge-hub', ready: 'knowledge-hub-page' }
+    ];
+    const viewports = [
+      { width: 1440, height: 1000, name: 'desktop' },
+      { width: 1024, height: 768, name: 'tablet' },
+      { width: 390, height: 844, name: 'mobile' }
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const target of targets) {
+        await page.goto(target.path, { waitUntil: 'domcontentloaded' });
+        await expect(page.getByTestId(target.ready)).toBeVisible();
+        await expectPageScreenshot(page, `${target.name}-${viewport.name}-dark.png`);
+      }
+    }
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('folder-list').locator('button').first().click();
+    for (const fixture of CARD_FIXTURES) {
+      const card = page.getByTestId('file-list').locator('button').filter({ hasText: fixture.title }).first();
+      await card.click();
+      await expect(page.getByTestId('card-modal')).toBeVisible();
+      await expectPageScreenshot(page, `card-${fixture.cardType}-desktop-dark.png`);
+      await page.getByTestId('card-modal-close').click();
+      await expect(page.getByTestId('card-modal')).toBeHidden();
+    }
+  });
 });

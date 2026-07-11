@@ -4,12 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trilingual Records Viewer</title>
+    <script src="js/theme-init.js"></script>
     <!-- Embedded card-only mode (Knowledge Hub card-preview iframe): flag the
          document before paint so the chrome is hidden with no flash. -->
     <script>try{if(new URLSearchParams(location.search).get('embed')==='1')document.documentElement.classList.add('kh-embed');}catch(e){}</script>
     <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
     <link rel="shortcut icon" href="/favicon-lan.svg" />
     <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="modern-card.css" />
     <script src="vendor/marked.min.js"></script>
@@ -44,15 +46,15 @@
             <button id="heroTaskQueueRetryBtn" class="hero-queue-retry hidden" type="button" data-testid="hero-queue-retry">Retry Failed</button>
           </div>
           <div class="dashboard-links">
-            <a href="dashboard.html" class="dashboard-link" target="_blank">🚀 Mission Control</a>
-            <a href="knowledge-ops.html" class="dashboard-link" target="_blank">🧠 Knowledge OPS</a>
-            <a href="knowledge-hub.html" class="dashboard-link" target="_blank">🕸️ Knowledge Hub</a>
+            <a href="dashboard.html" class="dashboard-link" target="_blank"><i data-lucide="gauge" aria-hidden="true"></i>Mission Control</a>
+            <a href="knowledge-ops.html" class="dashboard-link" target="_blank"><i data-lucide="workflow" aria-hidden="true"></i>Knowledge OPS</a>
+            <a href="knowledge-hub.html" class="dashboard-link" target="_blank"><i data-lucide="network" aria-hidden="true"></i>Knowledge Hub</a>
           </div>
         </div>
 <!--        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>-->
         <section id="todayLearningBar" class="today-learning-bar is-loading" data-testid="today-learning-bar" aria-live="polite">
           <div class="today-learning-cell streak">
-            <span class="today-learning-icon" aria-hidden="true">🔥</span>
+            <span class="today-learning-icon" aria-hidden="true"><i data-lucide="flame"></i></span>
             <div>
               <div id="todayLearningStreak" class="today-learning-value" data-testid="today-learning-streak">开始你的第一天</div>
               <div id="todayLearningStreakHint" class="today-learning-label">今日学习</div>
@@ -125,7 +127,7 @@
               <!-- 文本输入 -->
               <div class="input-mode">
                 <div class="mode-header">
-                  <span class="mode-icon">📝</span>
+                  <span class="mode-icon"><i data-lucide="file-text" aria-hidden="true"></i></span>
                   <span>文本输入</span>
                 </div>
                 <textarea id="phraseInput" placeholder="输入短语或句子..." data-testid="phrase-input"></textarea>
@@ -135,7 +137,7 @@
               <!-- 图片识别 -->
               <div class="input-mode">
                 <div class="mode-header">
-                  <span class="mode-icon">🖼️</span>
+                  <span class="mode-icon"><i data-lucide="image" aria-hidden="true"></i></span>
                   <span>图片识别</span>
                 </div>
                 <div id="imageDropZone" class="image-drop-zone" data-testid="image-drop-zone">
@@ -298,13 +300,15 @@
       <!-- 右键菜单 -->
       <div id="contextMenu" class="context-menu hidden">
         <div class="context-menu-item" data-action="delete">
-          <span class="context-menu-icon">🗑️</span>
+          <span class="context-menu-icon"><i data-lucide="trash-2" aria-hidden="true"></i></span>
           <span>删除记录</span>
         </div>
       </div>
     </div>
     <!-- Libraries -->
     <script src="vendor/d3.v7.min.js"></script>
+    <script src="vendor/lucide.min.js"></script>
+    <script type="module" src="js/modules/app-shell.js"></script>
     <script type="module" src="js/modules/app.js"></script>
   </body>
 </html>

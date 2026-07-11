@@ -25,7 +25,7 @@ export class AudioPlayer {
         // UI 更新
         if (this.currentBtn) {
             this.currentBtn.classList.add('playing');
-            this.currentBtn.textContent = '||'; // Pause icon
+            this.setButtonIcon(this.currentBtn, 'pause', '暂停语音');
         }
 
         this.currentAudio.play().catch(e => {
@@ -41,7 +41,7 @@ export class AudioPlayer {
 
         this.currentAudio.onerror = () => {
             console.error('Audio load error');
-            if (this.currentBtn) this.currentBtn.style.color = 'red';
+            if (this.currentBtn) this.currentBtn.classList.add('has-error');
             this.resetBtn();
         };
     }
@@ -64,15 +64,21 @@ export class AudioPlayer {
 
     resetBtn() {
         if (this.currentBtn) {
-            this.currentBtn.classList.remove('playing');
-            this.currentBtn.textContent = '▶'; // Play icon
+            this.currentBtn.classList.remove('playing', 'has-error');
+            this.setButtonIcon(this.currentBtn, 'play', '播放语音');
             this.currentBtn = null;
         }
         // 清除所有播放状态（防止UI不同步）
         document.querySelectorAll('.audio-btn').forEach(b => {
-            b.classList.remove('playing');
-            b.textContent = '▶';
+            b.classList.remove('playing', 'has-error');
+            this.setButtonIcon(b, 'play', '播放语音');
         });
+    }
+
+    setButtonIcon(button, icon, label) {
+        button.innerHTML = `<i data-lucide="${icon}" aria-hidden="true"></i>`;
+        button.setAttribute('aria-label', label);
+        window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
     }
 }
 
