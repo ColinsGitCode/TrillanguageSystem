@@ -1,11 +1,13 @@
-# Style-Bert-VITS2 POC
+# Style-Bert-VITS2 POC (Archived)
 
-This optional service is the Japanese TTS quality POC. It is not started by the default Compose stack.
+This optional service is archived. The measured system overhead is high and the quality gain is limited for the current learning-card workload, so normal Japanese TTS should use VOICEVOX.
+
+The files remain in the repository only for historical comparison and future research.
 
 ## Start
 
 ```bash
-docker compose -p npm-audit-deps --profile sbv2 up -d --build tts-ja-sbv2
+docker compose --profile archived-sbv2 up -d --build tts-ja-sbv2
 ```
 
 First startup downloads the configured JVNV model assets and Japanese BERT resources into the `sbv2_models` volume.

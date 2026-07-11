@@ -62,9 +62,10 @@
 - `Docs/Features/Modern_Card_UI_Design.md`
 - `Docs/Features/Knowledge_Hub_and_Semantic_Classification.md`（语义分类两轴分类法 + Knowledge Hub 三栏浏览器 + 卡片嵌入弹窗）
 - `Docs/Features/Knowledge_Hub_UI_Redesign.md`（Knowledge Hub 三栏空间重排 + 学习者友好视觉，P1/P2/P3 已实施；P4 待实施）
-- `Docs/Features/Engagement_and_Retention_System.md`（首页「今日学习」条：streak / 每日目标 / 掌握度 / 时区聚合，设计方案/待实施）
-- `Docs/Features/UI_Modernization_Design_System.md`（全站 UI 现代化：统一 tokens.css + 暗色模式 + 左侧边栏 App Shell + 组件层，专业克制 SaaS，设计方案/待实施）
+- `Docs/Features/Engagement_and_Retention_System.md`（首页「今日学习」条：streak / 每日目标 / 掌握度 / 时区聚合，P1 已实施；P2/P3 为后续扩展）
+- `Docs/Features/UI_Modernization_Design_System.md`（全站 UI 正式横向基线：学习优先信息架构 + 统一 tokens + 明暗主题 + App Shell + 组件与视觉回归门禁，修订方案/待实施）
 - `Docs/superpowers/plans/2026-06-19-engagement-retention-system.md`（激励留存 P1 详细执行任务清单）
+- `Docs/superpowers/plans/2026-07-11-ui-modernization.md`（全站 UI 现代化与 Markdown-first 学习卡的 25 项分阶段开发计划）
 
 ### 5. 测试与验收
 

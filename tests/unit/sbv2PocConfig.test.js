@@ -11,18 +11,36 @@ function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-test.describe('Style-Bert-VITS2 POC container scaffold', () => {
-  test.it('declares an opt-in Compose service and persistent model cache', () => {
+test.describe('Archived Style-Bert-VITS2 POC container scaffold', () => {
+  test.it('declares an archived opt-in Compose service and persistent model cache', () => {
     const compose = readRepoFile('docker-compose.yml');
 
     assert.match(compose, /^\s{2}tts-ja-sbv2:/m);
-    assert.match(compose, /^\s{4}profiles:\s*\["sbv2"\]/m);
+    assert.match(compose, /^\s{4}profiles:\s*\["archived-sbv2"\]/m);
+    assert.doesNotMatch(compose, /^\s{4}profiles:\s*\["sbv2"\]/m);
     assert.match(compose, /context:\s*\.\/tts\/style-bert-vits2/);
     assert.match(compose, /SBV2_MODEL_REPO=\$\{SBV2_MODEL_REPO:-litagin\/style_bert_vits2_jvnv\}/);
     assert.match(compose, /SBV2_MODEL_FILE=\$\{SBV2_MODEL_FILE:-jvnv-F1-jp\/jvnv-F1-jp_e160_s14000\.safetensors\}/);
     assert.match(compose, /sbv2_models:\/models/);
     assert.match(compose, /"\$\{SBV2_HOST_PORT:-15000\}:5000"/);
     assert.match(compose, /^\s{2}sbv2_models:/m);
+  });
+
+  test.it('documents VOICEVOX as default and SBV2 as archived due to overhead', () => {
+    const envExample = readRepoFile('.env.example');
+    const sbv2Readme = readRepoFile('tts/style-bert-vits2/README.md');
+
+    assert.match(envExample, /Japanese -> VOICEVOX Engine \(default\)/);
+    assert.match(envExample, /Style-Bert-VITS2 is archived/);
+    assert.match(envExample, /system overhead is high/);
+    assert.match(envExample, /quality gain is limited/);
+    assert.match(envExample, /--profile archived-sbv2/);
+    assert.doesNotMatch(envExample, /future default/);
+
+    assert.match(sbv2Readme, /Archived/);
+    assert.match(sbv2Readme, /system overhead is high/);
+    assert.match(sbv2Readme, /quality gain is limited/);
+    assert.match(sbv2Readme, /--profile archived-sbv2/);
   });
 
   test.it('provides a FastAPI wrapper with the expected health, model, and voice APIs', () => {

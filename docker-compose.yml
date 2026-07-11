@@ -82,7 +82,8 @@ services:
     restart: unless-stopped
 
   tts-ja-sbv2:
-    profiles: ["sbv2"]
+    # Archived experiment: retained for reference only. Use VOICEVOX for normal Japanese TTS.
+    profiles: ["archived-sbv2"]
     build:
       context: ./tts/style-bert-vits2
     container_name: trilingual-tts-ja-sbv2

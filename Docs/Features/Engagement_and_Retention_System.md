@@ -155,7 +155,7 @@ PUT /api/srs/goal  { goal }  → { success: true, goal: 25 }
 - 中：今日目标进度条（`reviewed / goal`，可点击改目标 → `PUT /api/srs/goal`）
 - 右：已掌握（`mastered / eligibleTotal`）+「开始复习」按钮
 
-**「开始复习」跳转**：跳 `/knowledge-hub.html?mode=review`。Knowledge Hub **当前不读 URL 进 review**（`dashboard.js` 的 `setKhMode` 仅按钮触发，已核实），需新增：启动时解析 `?mode=review` → 调 `setKhMode('review')`。落地清单（§8）已含此项（评审 Open Q）。
+**「开始复习」跳转**：跳 `/knowledge-hub.html?mode=review`。Knowledge Hub 已在启动时解析 `?mode=review` 并调用 `enterKhReview()`，`tests/e2e/knowledge-hub.spec.js` 已覆盖直达复习模式。该能力是现有基线，后续 UI 改造只做保留和回归验证，不再列为待实施依赖。
 
 **文案去歧义**（评审 Open Q）：「今日新学」指今日首次复习的句式（§4 口径），为避免被理解成"生成了新卡"，首页文案用「今日新掌握 N 句」或「今日新句式 N」，不用裸"新学"。
 
@@ -195,7 +195,7 @@ PUT /api/srs/goal  { goal }  → { success: true, goal: 25 }
 | `public/index.html` | hero 内「今日学习」条 DOM |
 | `public/styles.css` | 今日条样式（含空状态） |
 | `public/js/modules/app.js` · `api.js` | 加载/刷新逻辑 + 接口封装 |
-| `public/js/modules/dashboard.js` | 启动解析 `?mode=review` → 进复习模式（首页 CTA 落点，评审 Open Q） |
+| `public/js/modules/dashboard.js` | **已实现** `?mode=review` 直达复习模式；后续仅保留行为与 E2E 回归 |
 | `Docs/README.md` | 登记本文 + 补登 `Knowledge_Hub_UI_Redesign.md`（两份方案当前均未登记，评审 P2） |
 
 后端聚合、前端展示闭环，不动生成/知识分析子系统。
