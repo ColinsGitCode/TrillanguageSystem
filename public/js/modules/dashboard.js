@@ -7,6 +7,7 @@ import { escapeHtml, escapeHtmlAttr, formatNumber, formatQueueTime, formatDurati
 import { initInfoModal, bindInfoButtons } from './info-modal.js';
 import { api } from './api.js';
 import { openGenerationJobDetailModal } from './generation-job-detail.js';
+import { subscribeHealth } from './shell-health.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
@@ -72,7 +73,6 @@ function initVisibilityRefresh() {
     if (typeof document === 'undefined') return;
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
-        fetchInfrastructureStatus().catch(() => {});
         if (state.queueTimerId) {
             refreshQueueTelemetry().catch(() => {});
         }
@@ -93,8 +93,7 @@ function initDashboard() {
     initKnowledgeOps();
     initKnowledgeBaseBrowse();
 
-    fetchInfrastructureStatus();
-    setInterval(() => { if (!isPageHidden()) fetchInfrastructureStatus(); }, 30000);
+    subscribeHealth(renderInfrastructureStatus);
     initVisibilityRefresh();
 
     if (isMissionPage) {
@@ -128,48 +127,21 @@ function updateTimestamp() {
     if (el) el.textContent = now.toLocaleTimeString();
 }
 
-async function fetchInfrastructureStatus() {
-    try {
-        const res = await fetch('/api/health');
-        if (!res.ok) throw new Error('Health check failed');
-        const data = await res.json();
-
-        const services = data.services || [];
-        renderServiceMatrix(services);
-
-        const storageService = services.find(s => s.type === 'storage' || s.name === 'Storage');
-        renderStorage(storageService?.details || data.storage);
-
-        updateTimestamp();
-        const statusDot = document.querySelector('.status-dot');
-        const statusText = document.getElementById('systemStatusText');
-        const overallStatus = data?.system?.overallStatus || 'online';
-        const criticalServices = Array.isArray(data?.system?.criticalServices) ? data.system.criticalServices : [];
-        const criticalIssue = criticalServices.find((service) => service.status !== 'online');
-
-        if (overallStatus === 'online') {
-            if (statusDot) statusDot.style.backgroundColor = 'var(--color-success)';
-            if (statusText) statusText.textContent = 'System Operational';
-        } else {
-            if (statusDot) {
-                statusDot.style.backgroundColor = 'var(--color-danger)';
-                statusDot.style.animation = 'none';
-            }
-            if (statusText) {
-                statusText.textContent = criticalIssue
-                    ? `${criticalIssue.name} Alert`
-                    : 'System Alert';
-            }
-        }
-    } catch (err) {
-        console.error('Infra fetch error:', err);
-        const statusDot = document.querySelector('.status-dot');
-        const statusText = document.getElementById('systemStatusText');
-        if (statusDot) {
-            statusDot.style.backgroundColor = 'var(--color-danger)';
-            statusDot.style.animation = 'none';
-        }
-        if (statusText) statusText.textContent = 'System Alert';
+function renderInfrastructureStatus(health) {
+    if (!health || health.state === 'loading') return;
+    const services = health.services || [];
+    renderServiceMatrix(services);
+    const storageService = services.find((service) => service.type === 'storage' || service.name === 'Storage');
+    renderStorage(storageService?.details);
+    updateTimestamp();
+    const statusDot = document.querySelector('.system-status-dot');
+    const statusText = document.getElementById('systemStatusText');
+    const criticalIssue = services.find((service) => service.status !== 'online');
+    if (statusDot) statusDot.dataset.state = health.state;
+    if (statusText) {
+        statusText.textContent = health.state === 'online'
+            ? 'System Operational'
+            : (criticalIssue ? `${criticalIssue.name} Alert` : 'System Alert');
     }
 }
 

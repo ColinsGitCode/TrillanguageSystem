@@ -81,4 +81,63 @@ test.describe('shared theme and shell primitives', () => {
     expect(result.secondary).toBeGreaterThanOrEqual(4.5);
     expect(Number.parseFloat(result.transition)).toBeLessThanOrEqual(0.00001);
   });
+
+  test('navigation active state respects library and review query modes', async ({ page }) => {
+    const cases = [
+      ['/', 'workspace'],
+      ['/?view=library', 'library'],
+      ['/knowledge-hub.html', 'knowledge-hub'],
+      ['/knowledge-hub.html?mode=review', 'review'],
+      ['/dashboard.html', 'mission-control'],
+      ['/knowledge-ops.html', 'knowledge-ops']
+    ];
+    for (const [path, key] of cases) {
+      await page.goto(path);
+      await expect(page.locator(`[data-nav-key="${key}"]`)).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('.app-nav-link[aria-current="page"]')).toHaveCount(1);
+    }
+    await page.goto('/?view=library');
+    await expect(page.locator('#librarySection')).toBeFocused();
+  });
+
+  test('mobile drawer traps focus, closes with Escape and returns focus', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    const toggle = page.getByRole('button', { name: '打开主导航' });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(page.locator('body')).toHaveClass(/shell-nav-open/);
+    await expect(page.locator('#appSidebarMount')).toHaveAttribute('aria-hidden', 'false');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).not.toHaveClass(/shell-nav-open/);
+    await expect(toggle).toBeFocused();
+  });
+
+  test('tablet shell collapses to a stable 64px icon rail', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/knowledge-ops.html');
+    await expect(page.locator('#appSidebarMount')).toHaveCSS('width', '64px');
+    await expect(page.locator('.app-nav-label').first()).toBeHidden();
+    await expect(page.locator('[data-nav-key="knowledge-ops"]')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('health endpoint has one owner per full page and none in embed', async ({ page, request }) => {
+    let count = 0;
+    await page.route('**/api/health', async (route) => {
+      count += 1;
+      await route.continue();
+    });
+    await page.goto('/');
+    await expect.poll(() => count).toBe(1);
+    await page.waitForTimeout(500);
+    expect(count).toBe(1);
+
+    const created = await request.post('/api/generate', { data: { phrase: 'embed health owner', cardType: 'trilingual' } });
+    const payload = await created.json();
+    count = 0;
+    await page.goto(`/?card=${payload.generationId}&embed=1`);
+    await expect(page.getByTestId('card-modal')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(count).toBe(0);
+  });
 });

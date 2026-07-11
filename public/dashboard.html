@@ -10,16 +10,21 @@
     <!-- Styles -->
     <link rel="stylesheet" href="css/tokens.css">
     <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/app-shell.css">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="modern-card.css">
     <link rel="stylesheet" href="css/dashboard.css">
     <!-- Libraries -->
     <script src="vendor/d3.v7.min.js"></script>
 </head>
-<body data-dashboard-page="mission-control" data-testid="mission-control-page">
+<body data-page="mission-control" data-page-title="Mission Control" data-dashboard-page="mission-control" data-testid="mission-control-page">
+    <div class="app-shell">
+        <aside id="appSidebarMount" class="app-sidebar" aria-label="主导航"></aside>
+        <div class="app-main">
+            <main class="app-content">
     <div class="dashboard-container">
         <!-- 1. Header -->
-        <header class="system-page-header">
+        <header class="system-page-header app-topbar">
             <div class="system-page-header-main">
                 <a href="/" class="system-back-link">
                     <span class="system-back-icon">←</span> TERMINAL
@@ -41,7 +46,7 @@
                 </div>
                 <div class="hud-ticker" id="lastUpdatedTime">--:--:--</div>
                 <div class="system-status">
-                    <span class="status-dot system-status-dot"></span>
+                    <span class="status-dot system-status-dot ui-status-dot" data-state="loading"></span>
                     <span id="systemStatusText" class="system-status-text">SYSTEM ONLINE</span>
                 </div>
             </div>
@@ -150,6 +155,9 @@
             </div>
 
         </main>
+    </div>
+            </main>
+        </div>
     </div>
     <script src="vendor/lucide.min.js"></script>
     <script type="module" src="js/modules/app-shell.js"></script>

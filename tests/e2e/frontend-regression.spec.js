@@ -269,9 +269,9 @@ test.describe.serial('前端综合回归', () => {
     await page.goto('/knowledge-hub.html');
     await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-hub-title')).toContainText('KNOWLEDGE HUB');
+    await expect(page.getByTestId('knowledge-hub-title')).toContainText('Knowledge Hub');
     await expect(page.getByTestId('knowledge-hub-counts')).toBeVisible();
-    await expect(page.getByTestId('knowledge-relation-inspector')).toBeVisible();
+    await expect(page.getByTestId('knowledge-relation-inspector')).toBeHidden();
 
     await expectNoDiagnostics(diagnostics);
   });

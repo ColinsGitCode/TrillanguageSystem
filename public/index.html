@@ -12,19 +12,24 @@
     <link rel="shortcut icon" href="/favicon-lan.svg" />
     <link rel="stylesheet" href="css/tokens.css" />
     <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/app-shell.css" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="modern-card.css" />
     <script src="vendor/marked.min.js"></script>
     <script src="vendor/purify.min.js"></script>
   </head>
-  <body>
+  <body data-page="workspace" data-page-title="学习工作台">
+    <div class="app-shell">
+      <aside id="appSidebarMount" class="app-sidebar" aria-label="主导航"></aside>
+      <div class="app-main">
+        <main class="app-content">
     <div class="page">
       <header class="hero">
-        <div class="hero-topbar">
+        <div class="hero-topbar app-topbar">
           <div class="hero-brand">
             <p class="eyebrow">Trilingual Records</p>
           </div>
-          <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status">
+          <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status" data-shell-actions>
             <div class="hero-queue-main">
               <span class="hero-queue-dot" aria-hidden="true"></span>
               <span id="heroTaskQueueState" class="hero-queue-state" data-testid="hero-queue-state">IDLE</span>
@@ -88,7 +93,7 @@
       </header>
 
       <section class="grid">
-        <article class="card folders" aria-label="Folders">
+        <article id="librarySection" class="card folders" aria-label="卡片库">
           <!-- Generation Panel -->
           <div class="gen-panel">
             <p class="label">New Card</p>
@@ -303,6 +308,9 @@
           <span class="context-menu-icon"><i data-lucide="trash-2" aria-hidden="true"></i></span>
           <span>删除记录</span>
         </div>
+      </div>
+    </div>
+        </main>
       </div>
     </div>
     <!-- Libraries -->

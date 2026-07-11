@@ -31,7 +31,7 @@
 
 /* Card Header */
 .mc-header {
-  padding: 1rem 3rem 0.25rem;
+  padding: 0.75rem 3rem 0.2rem;
   background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-canvas) 100%);
   border-bottom: 1px solid var(--color-border);
   text-align: center;
@@ -72,7 +72,7 @@
 
 .mc-phrase {
   font-family: var(--font-serif);
-  font-size: 2em;
+  font-size: 1.7em;
   font-weight: 700;
   line-height: 1.05;
   margin-bottom: 0.35rem;

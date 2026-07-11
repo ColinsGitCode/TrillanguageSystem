@@ -7,6 +7,7 @@ import { player } from './audio-player.js';
 import { escapeHtml, sanitizeHtml, formatTime, formatDate, debounce } from './utils.js';
 import { initInfoModal, createInfoBtn, bindInfoButtons } from './info-modal.js';
 import { openGenerationJobDetailModal } from './generation-job-detail.js';
+import { refreshHealth, subscribeHealth } from './shell-health.js';
 
 // DOM Elements
 const els = {
@@ -118,7 +119,6 @@ const infrastructureState = {
     health: null,
     generationBlockedReason: ''
 };
-const INFRA_HEALTH_POLL_INTERVAL_MS = 15000;
 const CARD_TYPE_CONFIG = {
     trilingual: {
         key: 'trilingual',
@@ -172,7 +172,6 @@ let timerInterval = null;
 let timerStartTime = null;
 let heroTaskQueueElapsedTimerId = null;
 let heroTaskQueueElapsedTaskId = null;
-let infraHealthPollTimer = null;
 let todayLearningRefreshPromise = null;
 
 // ==========================================
@@ -213,6 +212,14 @@ function init() {
 
     // 加载初始数据
     loadFolders();
+    if (params?.get('view') === 'library') {
+        requestAnimationFrame(() => {
+            const library = document.getElementById('librarySection');
+            library?.scrollIntoView({ block: 'start' });
+            library?.setAttribute('tabindex', '-1');
+            library?.focus({ preventScroll: true });
+        });
+    }
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
@@ -327,22 +334,13 @@ function initEmbeddedCard(cardId) {
 function initInfrastructureHealthMonitor() {
     if (els.infraAlertRefreshBtn) {
         els.infraAlertRefreshBtn.onclick = () => {
-            refreshInfrastructureHealth().catch((err) => {
-                console.warn('[Infra] refresh failed:', err.message);
-            });
+            refreshHealth();
         };
     }
-
-    refreshInfrastructureHealth().catch((err) => {
-        console.warn('[Infra] init failed:', err.message);
+    subscribeHealth((health) => {
+        if (health.state === 'loading') return;
+        applyInfrastructureHealth(health);
     });
-
-    if (infraHealthPollTimer) clearInterval(infraHealthPollTimer);
-    infraHealthPollTimer = setInterval(() => {
-        refreshInfrastructureHealth().catch((err) => {
-            console.warn('[Infra] poll failed:', err.message);
-        });
-    }, INFRA_HEALTH_POLL_INTERVAL_MS);
 }
 
 function getInfrastructureService(services, name) {
@@ -426,16 +424,9 @@ function applyInfrastructureGuardToInputs() {
     }
 }
 
-async function refreshInfrastructureHealth() {
-    try {
-        const health = await api.checkHealth();
-        infrastructureState.health = health;
-        infrastructureState.generationBlockedReason = buildGenerationBlockedReason(health);
-        renderInfrastructureAlert(buildInfrastructureAlertState(health));
-        applyInfrastructureGuardToInputs();
-        return health;
-    } catch (error) {
-        infrastructureState.health = null;
+function applyInfrastructureHealth(health) {
+    infrastructureState.health = health;
+    if (health.state === 'offline' && health.services.length === 0) {
         infrastructureState.generationBlockedReason = '无法获取系统健康状态，新的生成任务暂不可提交。';
         renderInfrastructureAlert({
             visible: true,
@@ -443,8 +434,11 @@ async function refreshInfrastructureHealth() {
             text: '无法获取系统健康状态，请刷新后重试。'
         });
         applyInfrastructureGuardToInputs();
-        throw error;
+        return;
     }
+    infrastructureState.generationBlockedReason = buildGenerationBlockedReason(health);
+    renderInfrastructureAlert(buildInfrastructureAlertState(health));
+    applyInfrastructureGuardToInputs();
 }
 
 // ==========================================
