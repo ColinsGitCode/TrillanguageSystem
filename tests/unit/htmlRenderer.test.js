@@ -141,6 +141,16 @@ test.describe('buildAudioTasksFromMarkdown', () => {
     assert.equal(japaneseTask.text, '今日はどこですか。');
   });
 
+  test.it('strips a kanji reading when another kanji word follows immediately', () => {
+    const markdown = scenarioMarkdown(1).replace(
+      '今日(きょう)はどこですか。',
+      '全額(ぜんがく)借主負担ですか？'
+    );
+
+    const japaneseTask = buildAudioTasksFromMarkdown(markdown).find((task) => task.lang === 'ja');
+    assert.equal(japaneseTask.text, '全額借主負担ですか？');
+  });
+
   test.it('extracts scenario audio tasks from a numbered heading without title text', () => {
     const markdown = [
       '# 空港で道を尋ねる',

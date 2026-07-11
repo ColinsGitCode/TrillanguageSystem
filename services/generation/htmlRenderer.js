@@ -32,7 +32,7 @@ function stripKatakanaReadings(text) {
 
 function applyExplicitRuby(text) {
   return String(text || '').replace(
-    /([\u3400-\u9FFF々〆ヵヶ]+)\s*[（(]([\u3041-\u3096\u30A1-\u30FA\u30FC]+)[）)](?=[\u3041-\u3096\u30A1-\u30FA\u30FC々〆ヵヶ」』“”"'’、。！？，；：\s<]|$)/g,
+    /([\u3400-\u9FFF々〆ヵヶ]+)\s*[（(]([\u3041-\u3096\u30A1-\u30FA\u30FC]+)[）)](?=[\u3041-\u3096\u30A1-\u30FA\u30FC\u3400-\u9FFF々〆ヵヶ」』“”"'’、。！？，；：\s<]|$)/g,
     '<ruby>$1<rt>$2</rt></ruby>'
   );
 }

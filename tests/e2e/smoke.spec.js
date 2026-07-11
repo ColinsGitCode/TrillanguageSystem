@@ -211,7 +211,7 @@ test.describe.serial('Playwright smoke', () => {
     await waitForQueueIdle(page);
     await expect(page.getByTestId('queue-audit-timeline')).toContainText('SUCCESS');
     await page.getByTestId('queue-panel-backdrop').click({ position: { x: 4, y: 4 } });
-    await expect(page.getByTestId('queue-panel')).toBeHidden();
+    await expect(page.locator('.gen-queue-panel')).toBeHidden();
 
     await openTodayFolder(page);
     await expect(page.getByTestId('file-list').locator('button').filter({ hasText: autoBackoffPhrase })).toBeVisible();
