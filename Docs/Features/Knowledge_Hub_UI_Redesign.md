@@ -1,11 +1,61 @@
 # Knowledge Hub UI 重设计方案（学习者友好 · 三栏空间重排）
 
-> 状态：**P1/P2/P3 已实施；P4 左栏精简待实施** · 2026-06
+> 状态：**P1/P2/P3 已实施；2026-07 P4 上下文面板 + 左栏精简待实施**
 > 调性决策：**学习者友好** · 第一阶段：**三栏空间重排**
-> 关联：[Knowledge Hub 与语义分类](Knowledge_Hub_and_Semantic_Classification.md) · [Modern Card UI](Modern_Card_UI_Design.md)
+> 关联：[UI Modernization Design System](UI_Modernization_Design_System.md) · [Knowledge Hub 与语义分类](Knowledge_Hub_and_Semantic_Classification.md) · [Modern Card UI](Modern_Card_UI_Design.md)
 > 影响文件：`public/knowledge-hub.html` · `public/css/dashboard.css` · `public/js/modules/dashboard.js` · `tests/e2e/knowledge-hub.spec.js`
 
 本文是 `knowledge-hub.html`（三栏知识浏览器）一次 UI 重设计的真源说明。先固化方案与样式规范，再落地代码，避免结构大改后返工。
+
+## 0. 2026-07 P4 与全站 App Shell 集成决策
+
+本节是 Knowledge Hub P4 的当前权威基线。下文 §1-§9 保留已实施 P1/P2/P3 的设计与验收记录；与本节冲突时，P4 实施以本节为准。全站导航、token、主题和响应式仍以 `UI_Modernization_Design_System.md` 为准。
+
+### 0.1 三个职责区，不引入“文件夹”假概念
+
+Knowledge Hub 的左侧结构是**语义空间/分类树**，不是文件系统文件夹。桌面宽屏由三个职责区组成：
+
+```text
+语义空间 / 筛选  ->  词条与卡片主列表  ->  上下文面板
+     248px                   minmax(0, 1fr)          360px
+```
+
+- **左栏**：轴切换、复习/计划入口、搜索、必要筛选、语义分类和洞察入口。P4 将低频筛选折叠到“更多筛选”，不创建第二套全站导航。
+- **中栏**：`browse / insight / review / plan` 四模式主舞台，保留现有 `setKhMode()` 状态机。
+- **右栏**：一个上下文面板，不同时堆叠卡片预览和关系数据。
+
+### 0.2 右侧上下文面板的模式所有权
+
+| 主模式 | 右侧内容 | 打开规则 |
+|----------|----------|----------|
+| `browse` | **当前卡片预览**：短标题、卡型、摘要、难度、“打开学习卡”和“查看关系” | 列表加载后默认选中首张可用卡，避免宽屏出现空白栏；点列表项只更新预览 |
+| `browse` 的“查看关系” | **Relation Inspector** | 在同一右侧面板内切换到关系视图；返回后恢复卡片预览 |
+| `insight` | **Relation Inspector** | 进入 insight 时显示，点洞察项后更新关系内容 |
+| `review / plan` | 无 | 右栏收起，中栏扩展，避免复习/计划被挤压 |
+
+完整学习卡仍使用 `/?card=<id>&embed=1` 弹窗打开。预览区不复制完整 Markdown 学习卡，不创建第二套 SRS 评分 UI。
+
+### 0.3 Inspector 兼容契约
+
+- 保留 `#khInspector`、`data-testid="kh-inspector"`、`.has-inspector`、`setKhInspectorOpen()` 和现有关系渲染逻辑。
+- `.has-inspector` 在 P4 表示“右侧上下文面板正显示 Relation Inspector”，而不是新建第四列。
+- `knowledge-hub.spec.js` 中现有 Inspector 用例继续成立；browse 增加预览模式、预览↔Inspector 切换和返回预览用例。
+- review / plan 必须清理 `.has-inspector`，不保留隐形右栏宽度。
+
+### 0.4 响应式降级
+
+- `> 1100px`：显示三个职责区；Browse 预览有默认内容。
+- `761px..1100px`：右侧上下文面板变为右侧抽屉，不压缩中栏。
+- `<= 760px`：语义左栏与右侧上下文面板分别使用导航抽屉/上下文抽屉；两者不得同时打开。
+- 抽屉支持遮罩、Escape、焦点约束、焦点归还和 `prefers-reduced-motion`。
+
+### 0.5 P4 验收补充
+
+- browse 列表选择、当前卡片预览、打开 embed 学习卡全链路通过。
+- browse 预览↔Relation Inspector 切换不丢失当前选中卡。
+- insight 使用 Relation Inspector，review / plan 无右栏残留。
+- 左栏精简后轴、复习、计划、搜索、分类和洞察入口仍可达。
+- 1440x1000、1024x768、390x844 下无横向溢出，两类抽屉键盘契约通过。
 
 ---
 

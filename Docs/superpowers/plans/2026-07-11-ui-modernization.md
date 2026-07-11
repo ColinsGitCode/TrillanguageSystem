@@ -20,7 +20,7 @@
 ## 2. 不可破坏的行为
 
 - `.md` 文件仍是学习卡真源，不要求历史卡片迁移为 JSON。
-- `renderMarkdownWithAudioButtons()` 的 `marked -> audio button -> DOMPurify` 安全链路必须保留，DOMPurify 缺失时 fail closed。
+- `renderMarkdownWithAudioButtons()` 的 `marked -> audio button -> DOMPurify` 顺序必须保留。**当前 DOMPurify 缺失时是 fail-open，这是已知安全缺口；Task 19 必须将其改为 fail-closed。**
 - 音频只支持英文和日文，不生成中文 TTS。
 - 日语只对汉字使用 `<ruby><rt>` 注音，不恢复整句假名行。
 - 学习卡 Tabs 只有 `Content / Intel / Knowledge`，Knowledge 按卡型和 `generationId` 条件显示，不恢复已删除的 Train / Review 子系统。
@@ -75,6 +75,7 @@ Gate 0 可重复基线
 - [ ] 使用 E2E 隔离服务（端口 3310）和 `seed-knowledge` 固定数据。
 - [ ] 为工作台、Mission Control、Knowledge OPS、Knowledge Hub 建立 1440x1000、1024x768、390x844 截图用例。
 - [ ] 遮罩时钟、运行时长、轮询时间和其他动态文字，禁用非必要动画。
+- [ ] 在 visual spec 中阻断 `fonts.googleapis.com` / `fonts.gstatic.com` 请求，并等待 `document.fonts.ready`，使 Gate 0 从首次截图起就使用封闭、可重复的系统字体。
 - [ ] 截图存入 Playwright 默认 snapshot 目录并纳入版本管理。
 - [ ] 运行 `npx playwright test tests/e2e/ui-visual-regression.spec.js --update-snapshots`。
 - [ ] 再运行一次不带 `--update-snapshots`，确认截图可重复。
@@ -187,7 +188,7 @@ Gate 0 可重复基线
 - [ ] 将 HTML 内联布局样式改为有语义的 class，目标 `style` 属性为 0。
 - [ ] 将 `app.js` / `dashboard.js` 模板中的静态布局和颜色改为 class。
 - [ ] 将 rank、进度、图表等动态值改为 `data-*` 状态或 CSS 自定义属性，不在 JS 中选择主题颜色。
-- [ ] 删除 emoji 操作图标的新增用法；存量图标在 Task 10 统一。
+- [ ] 本任务不处理图标换代，避免 P1 出现 emoji 半迁移状态；所有存量操作图标统一在 Task 10 处理。
 - [ ] 运行 `node --test tests/unit/designTokens.test.js`。
 - [ ] 运行 `npx playwright test tests/e2e/ui-quality-regression.spec.js`。
 
@@ -462,11 +463,14 @@ Gate 0 可重复基线
 - Modify: `tests/e2e/knowledge-hub.spec.js`
 - Modify: `tests/e2e/ui-visual-regression.spec.js`
 
-- [ ] 按专题文档落地知识空间/文件夹、卡片浏览、当前卡片预览三栏结构。
+- [ ] 按 `Knowledge_Hub_UI_Redesign.md` §0 落地“语义空间/分类树 + 词条与卡片主列表 + 上下文面板”三个职责区；不把语义分类称为文件夹。
 - [ ] 完成 P4 左栏精简，不生成第二套全站导航。
 - [ ] 保留 browse / insight / review / plan 状态机和 `mode=review` 直达。
-- [ ] 右侧预览提供打开学习卡与加入复习入口，保留 embed 焦点归还。
+- [ ] browse 模式右侧显示当前卡片预览，列表加载后选中首张可用卡；预览提供打开 embed 学习卡与查看关系入口。
+- [ ] browse 的“查看关系”和 insight 模式在同一右侧上下文面板中复用 Relation Inspector；保留 `#khInspector`、`.has-inspector`、`setKhInspectorOpen()` 和已有 test ID。
+- [ ] review / plan 收起右栏并让主舞台扩展；<=1100px 右栏改为抽屉，<=760px 左侧导航抽屉和右侧上下文抽屉不同时打开。
 - [ ] 复习视图只保留一套评分 UI，打开嵌入卡不增加第二 Footer。
+- [ ] 扩展 `knowledge-hub.spec.js`，覆盖 browse 预览、预览↔Inspector 切换、insight Inspector、review/plan 无右栏和移动抽屉。
 - [ ] 运行 `npx playwright test tests/e2e/knowledge-hub.spec.js tests/e2e/engagement-retention.spec.js`。
 
 **建议提交**：`feat: modernize knowledge hub workspace`
