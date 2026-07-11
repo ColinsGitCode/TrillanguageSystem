@@ -106,7 +106,7 @@ test.describe.serial('UI quality regression', () => {
       },
       {
         url: '/knowledge-hub.html',
-        ids: ['knowledge-hub-page', 'knowledge-base-panel', 'knowledge-relation-inspector']
+        ids: ['knowledge-hub-page', 'knowledge-base-panel', 'knowledge-base-term-list']
       }
     ];
     const viewports = [

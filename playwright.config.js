@@ -9,7 +9,12 @@ module.exports = defineConfig({
   workers: 1,
   timeout: 60_000,
   expect: {
-    timeout: 10_000
+    timeout: 10_000,
+    toHaveScreenshot: {
+      animations: 'disabled',
+      caret: 'hide',
+      maxDiffPixelRatio: 0.005
+    }
   },
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'output/playwright/report' }]],
   outputDir: 'output/playwright/test-results',

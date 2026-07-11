@@ -69,9 +69,10 @@ test.describe('Playwright page smoke', () => {
   test('04 Knowledge Hub 页面可加载', async ({ page }) => {
     await page.goto('/knowledge-hub.html');
     await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-hub-title')).toContainText('KNOWLEDGE HUB');
+    await expect(page.getByTestId('knowledge-hub-title')).toContainText('Knowledge Hub Explorer');
     await expect(page.getByTestId('knowledge-hub-counts')).toBeVisible();
-    await expect(page.getByTestId('knowledge-relation-inspector')).toBeVisible();
+    await expect(page.getByTestId('knowledge-base-panel')).toBeVisible();
+    await expect(page.getByTestId('knowledge-relation-inspector')).toBeHidden();
   });
 
   test('05 OCR fixture 上传、清洗与回填输入框', async ({ page }) => {
