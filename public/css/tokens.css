@@ -76,48 +76,6 @@
   --font-ja: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
   --font-serif: Georgia, "Noto Serif CJK SC", "Songti SC", serif;
 
-  /* Transitional aliases. Task 8 removes these after all consumers migrate. */
-  --bg: var(--color-bg-canvas);
-  --card: var(--color-bg-surface);
-  --accent: var(--color-primary);
-  --accent-2: var(--color-info);
-  --border: var(--color-border);
-  --text: var(--color-text-primary);
-  --muted: var(--color-text-tertiary);
-  --shadow: var(--shadow-modal);
-  --font-ui: var(--font-sans);
-  --font-display: var(--font-sans);
-  --bg-canvas: var(--color-bg-canvas);
-  --bg-card: var(--color-bg-surface);
-  --text-ink: var(--color-text-primary);
-  --text-slate: var(--color-text-secondary);
-  --text-muted: var(--color-text-tertiary);
-  --accent-en: var(--color-lang-en);
-  --accent-jp: var(--color-lang-ja);
-  --accent-cn: var(--color-lang-zh);
-  --border-subtle: var(--color-border);
-  --shadow-card: var(--shadow-md);
-  --bg-page: var(--color-bg-canvas);
-  --border-color: var(--color-border);
-  --text-primary: var(--color-text-primary);
-  --text-secondary: var(--color-text-secondary);
-  --color-accent: var(--color-primary);
-  --color-error: var(--color-danger);
-  --color-purple: var(--color-data-purple);
-  --bg-elevated: var(--color-bg-elevated);
-  --bg-accent-soft: var(--color-primary-subtle);
-  --bg-muted: var(--color-bg-subtle);
-  --sci-bg: var(--color-obs-bg);
-  --sci-card-bg: var(--color-obs-surface);
-  --sci-border: var(--color-obs-border);
-  --sci-text-main: var(--color-obs-text);
-  --sci-text-muted: var(--color-obs-muted);
-  --neon-blue: var(--color-primary);
-  --neon-purple: var(--color-data-purple);
-  --neon-green: var(--color-success);
-  --neon-amber: var(--color-warning);
-  --neon-red: var(--color-danger);
-  --glow-shadow: var(--shadow-sm);
 }
 
 :root[data-theme="dark"] {

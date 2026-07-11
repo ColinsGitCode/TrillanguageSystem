@@ -152,7 +152,7 @@ async function fetchInfrastructureStatus() {
             if (statusText) statusText.textContent = 'System Operational';
         } else {
             if (statusDot) {
-                statusDot.style.backgroundColor = 'var(--color-error)';
+                statusDot.style.backgroundColor = 'var(--color-danger)';
                 statusDot.style.animation = 'none';
             }
             if (statusText) {
@@ -166,7 +166,7 @@ async function fetchInfrastructureStatus() {
         const statusDot = document.querySelector('.status-dot');
         const statusText = document.getElementById('systemStatusText');
         if (statusDot) {
-            statusDot.style.backgroundColor = 'var(--color-error)';
+            statusDot.style.backgroundColor = 'var(--color-danger)';
             statusDot.style.animation = 'none';
         }
         if (statusText) statusText.textContent = 'System Alert';
@@ -712,10 +712,11 @@ function renderKnowledgeJobs(jobs) {
                     <span>${progress.text}</span>
                     <span>${startedAt !== '-' ? `Start ${startedAt}` : `Create ${createdAt}`}</span>
                 </div>
-                <div class="knowledge-job-progress"><span style="width:${progress.percent}%;"></span></div>
+                <div class="knowledge-job-progress"><span data-progress="${progress.percent}"></span></div>
             </div>
         `;
     }).join('');
+    applyProgressWidths(container);
 }
 
 async function renderSelectedKnowledgeJobDetail(jobs, token = state.knowledgeDetailToken) {
@@ -767,7 +768,7 @@ function renderKnowledgeSummary(summary) {
     const observations = Array.isArray(summary.qualityObservations) ? summary.qualityObservations.slice(0, 3) : [];
 
     container.innerHTML = `
-        <div style="margin-bottom:8px;">${escapeHtml(summary.overview || '-')}</div>
+        <div class="knowledge-summary-overview">${escapeHtml(summary.overview || '-')}</div>
         <div class="knowledge-inline-tags">
             ${topTopics.length
                 ? topTopics.map((item) => `<span class="tag">${escapeHtml(item.topic)} · ${Number(item.count || 0)}</span>`).join('')
@@ -1599,7 +1600,7 @@ function renderKhPlan(plan, axis) {
         const sp = st.total ? Math.round((st.learned / st.total) * 100) : 0;
         const isRec = summary.recommendedStage && summary.recommendedStage === st.clusterKey;
         const b = st.breakdown || {};
-        const seg = (n, cls) => (Number(n || 0) > 0 ? `<span class="kh-plan-seg ${cls}" style="flex:${Number(n)}"></span>` : '');
+        const seg = (n, cls) => (Number(n || 0) > 0 ? `<span class="kh-plan-seg ${cls}" data-flex="${Number(n)}"></span>` : '');
         return `
             <div class="kh-plan-stage ${isRec ? 'recommended' : ''}" data-testid="kh-plan-stage">
                 <div class="kh-plan-stage-head">
@@ -1608,7 +1609,7 @@ function renderKhPlan(plan, axis) {
                     <span class="kh-diff ${st.difficultyLevel}">${diffLabel[st.difficultyLevel] || ''}</span>
                     ${isRec ? '<span class="kh-plan-rec">建议</span>' : ''}
                 </div>
-                <div class="kh-plan-progress"><div class="kh-plan-progress-bar" style="width:${sp}%"></div></div>
+                <div class="kh-plan-progress"><div class="kh-plan-progress-bar" data-progress="${sp}"></div></div>
                 <div class="kh-plan-stage-meta">已掌握 ${st.learned}/${st.total} · 到期 ${st.due} · 新 ${st.newCount}</div>
                 <div class="kh-plan-mix">${seg(b.easy, 'easy')}${seg(b.medium, 'medium')}${seg(b.hard, 'hard')}</div>
                 <button class="ko-start-btn kh-plan-study" type="button" data-plan-cluster="${escapeHtml(st.clusterKey)}" data-plan-axis="${escapeHtml(st.taxonomy || axis || 'all')}">学这组 →</button>
@@ -1616,6 +1617,10 @@ function renderKhPlan(plan, axis) {
     }).join('');
 
     body.innerHTML = head + `<div class="kh-plan-stages">${stageHtml}</div>`;
+    applyProgressWidths(body);
+    body.querySelectorAll('[data-flex]').forEach((segment) => {
+        segment.style.flexGrow = String(Math.max(0, Number(segment.dataset.flex) || 0));
+    });
 }
 
 function setKhActionStatus(message, clearAfterMs = 0) {
@@ -1962,8 +1967,7 @@ function renderKnowledgeBaseTags(overview) {
     const active = state.knowledgeBase.tag;
     node.innerHTML = tags.map((row) => {
         const isActive = active && active === row.tag;
-        const style = `cursor:pointer;${isActive ? 'background:#3b82f6;color:#fff;' : ''}`;
-        return `<span class="tag" data-tag="${escapeHtml(row.tag)}" style="${style}">${escapeHtml(row.tag)} ${Number(row.count || 0)}</span>`;
+        return `<button type="button" class="tag tag-button ${isActive ? 'active' : ''}" data-tag="${escapeHtml(row.tag)}">${escapeHtml(row.tag)} ${Number(row.count || 0)}</button>`;
     }).join('');
 }
 
@@ -2229,9 +2233,9 @@ function renderErrorMonitor(errors) {
 
     const summary = document.createElement('div');
     summary.className = 'error-summary';
-    const color = total === 0 ? 'var(--color-success)' : 'var(--color-error)';
+    const tone = total === 0 ? 'tone-success' : 'tone-danger';
     summary.innerHTML = `
-        <span class="error-total" style="color:${color};">${total}</span>
+        <span class="error-total ${tone}">${total}</span>
         <span class="error-rate">${rate}% error rate</span>
     `;
     container.appendChild(summary);
@@ -2269,10 +2273,10 @@ function renderQualityMini(trend, records, days) {
     }
 
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const color = avg >= 85 ? 'var(--color-success)' : avg >= 70 ? 'var(--color-warning)' : 'var(--color-error)';
+    const tone = avg >= 85 ? 'tone-success' : avg >= 70 ? 'tone-warning' : 'tone-danger';
 
     container.innerHTML = `
-        <div class="qm-score" style="color:${color};">${avg.toFixed(1)}</div>
+        <div class="qm-score ${tone}">${avg.toFixed(1)}</div>
         <div class="qm-label">Avg Score (${days}d)</div>
         <div class="qm-note">Template compliance check, not content quality</div>
     `;
@@ -2344,32 +2348,35 @@ function renderRecent(records) {
     container.innerHTML = '';
 
     if (!records.length) {
-        container.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">No recent records</div>';
+        container.innerHTML = '<div class="live-feed-empty">No recent records</div>';
         return;
     }
 
     const top = records.slice(0, 10);
     top.forEach(r => {
         const div = document.createElement('div');
-        div.style.padding = '8px';
-        div.style.borderBottom = '1px solid rgba(0,0,0,0.05)';
-        div.style.display = 'flex';
-        div.style.justifyContent = 'space-between';
-        div.style.alignItems = 'center';
+        div.className = 'live-feed-item';
 
         const score = r.quality_score || 0;
-        const color = score >= 80 ? 'var(--color-success)' : score >= 60 ? 'var(--color-warning)' : 'var(--color-error)';
+        const tone = score >= 80 ? 'tone-success' : score >= 60 ? 'tone-warning' : 'tone-danger';
 
         div.innerHTML = `
-            <div style="display:flex; flex-direction:column;">
-                <span style="color:var(--text-primary); font-weight:600;">${escapeHtml(r.phrase)}</span>
-                <span style="font-size:10px; color:var(--text-secondary);">${formatDate(r.created_at)}</span>
+            <div class="live-feed-copy">
+                <span class="live-feed-phrase">${escapeHtml(r.phrase)}</span>
+                <span class="live-feed-time">${formatDate(r.created_at)}</span>
             </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <span style="font-family:'JetBrains Mono'; color:${color}; font-size:11px;">${formatNumber(score, 0)}</span>
+            <div class="live-feed-score">
+                <span class="${tone}">${formatNumber(score, 0)}</span>
             </div>
         `;
         container.appendChild(div);
+    });
+}
+
+function applyProgressWidths(container) {
+    container.querySelectorAll('[data-progress]').forEach((bar) => {
+        const value = Math.max(0, Math.min(100, Number(bar.dataset.progress) || 0));
+        bar.style.width = `${value}%`;
     });
 }
 

@@ -50,17 +50,13 @@ test.describe('UI design-system migration inventory', () => {
   test.it('reports the current migration surface without hiding it', (t) => {
     const values = inventory();
     t.diagnostic(JSON.stringify(values));
-    assert.ok(values.rootBlocks >= 1);
+    assert.ok(values.rootBlocks >= 0);
     assert.ok(values.htmlStyleAttributes >= 0);
     assert.ok(values.jsTemplateStyleAttributes >= 0);
     assert.ok(values.legacyTokenReferences >= 0);
   });
 
-  test.it('can enforce the final static gate when requested', (t) => {
-    if (process.env.DESIGN_TOKEN_ENFORCE !== '1') {
-      t.skip('inventory mode until P1 migration is complete');
-      return;
-    }
+  test.it('enforces the final static gate', () => {
     const values = inventory();
     assert.deepEqual(values, {
       rootBlocks: 0,

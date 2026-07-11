@@ -2614,23 +2614,23 @@ function buildIntelHud(metrics, options = {}) {
 
     const score = metrics.quality?.score || 0;
     const rank = score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
-    const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
+    const rankTone = score >= 80 ? 'tone-success' : score >= 60 ? 'tone-warning' : 'tone-danger';
     const tokens = metrics.tokens || { input: 0, output: 0 };
 
     return `
         <div class="intel-hud-grid compare-intel-panel">
-            <div class="hud-card-score" style="border-left-color: ${rankColor};">
+            <div class="hud-card-score ${rankTone}">
                 <div>
                     <div class="intel-label">QUALITY GRADE ${createInfoBtn('QUALITY_GRADE')}</div>
                     <div class="score-value-container">
-                        <div class="score-main" style="color: ${rankColor}; text-shadow: 0 0 20px ${rankColor}66;">${score}</div>
+                        <div class="score-main ${rankTone}">${score}</div>
                         <div class="score-rank">RANK ${rank}</div>
                     </div>
                 </div>
                 <div class="score-meta">
                     <div class="meta-row">
                         <span class="meta-label">PROVIDER</span>
-                        <span class="meta-val" style="color: var(--neon-purple);">${providerLabel}</span>
+                        <span class="meta-val tone-purple">${providerLabel}</span>
                     </div>
                     <div class="meta-row">
                         <span class="meta-label">MODEL</span>
@@ -2646,33 +2646,33 @@ function buildIntelHud(metrics, options = {}) {
             <div class="hud-card">
                 <div class="hud-title">
                     <span>DIMENSIONS ${createInfoBtn('DIMENSIONS')}</span>
-                    <span style="color: var(--neon-green);">4-AXIS</span>
+                    <span class="tone-success">4-AXIS</span>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
-                    ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)', '完整性 - 内容结构完整度')}
-                    ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)', '准确性 - 翻译和定义准确度')}
-                    ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)', '例句质量 - 例句自然度和多样性')}
-                    ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)', '格式化 - HTML 和音频标签正确性')}
+                <div class="dimension-list">
+                    ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'success', '完整性 - 内容结构完整度')}
+                    ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'primary', '准确性 - 翻译和定义准确度')}
+                    ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'purple', '例句质量 - 例句自然度和多样性')}
+                    ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'warning', '格式化 - HTML 和音频标签正确性')}
                 </div>
             </div>
 
             <div class="hud-card">
                 <div class="hud-title">
                     <span>GENERATION CONFIG ${createInfoBtn('GENERATION_CONFIG')}</span>
-                    <span style="color: var(--neon-amber);">PARAMS</span>
+                    <span class="tone-warning">PARAMS</span>
                 </div>
-                <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Template:</span><span>${templateCompliance}</span></div>
+                <div class="intel-config-list">
+                    <div><span>Temperature:</span><strong>${metrics.metadata?.temperature || 0.7}</strong></div>
+                    <div><span>Max Tokens:</span><strong>${metrics.metadata?.maxOutputTokens || 2048}</strong></div>
+                    <div><span>Top P:</span><strong>${metrics.metadata?.topP || 0.95}</strong></div>
+                    <div><span>Template:</span><strong>${templateCompliance}</strong></div>
                 </div>
             </div>
 
             <div class="hud-card">
                 <div class="hud-title">
                     <span>CHRONO SEQUENCE ${createInfoBtn('CHRONO_SEQUENCE')}</span>
-                    <span style="color: var(--neon-blue);">T-MINUS</span>
+                    <span class="tone-primary">T-MINUS</span>
                 </div>
                 <div id="hudTimeline${idSuffix}" class="chart-box"></div>
             </div>
@@ -2680,7 +2680,7 @@ function buildIntelHud(metrics, options = {}) {
             <div class="hud-card">
                 <div class="hud-title">
                     <span>TOKEN FLUX ${createInfoBtn('TOKEN_FLUX')}</span>
-                    <span style="color: var(--neon-purple);">USAGE</span>
+                    <span class="tone-purple">USAGE</span>
                 </div>
                 <div id="hudTokens${idSuffix}" class="chart-box"></div>
                 <div class="token-stat-row">
@@ -2693,15 +2693,15 @@ function buildIntelHud(metrics, options = {}) {
             <div class="hud-card hud-card-wide">
                 <div class="hud-title">
                     <span>DIMENSIONAL SCAN ${createInfoBtn('DIMENSIONAL_SCAN')}</span>
-                    <span style="color: var(--neon-green);">RADAR</span>
+                    <span class="tone-success">RADAR</span>
                 </div>
-                <div id="hudRadar${idSuffix}" class="chart-box" style="height: 200px;"></div>
+                <div id="hudRadar${idSuffix}" class="chart-box chart-box-radar"></div>
             </div>
 
             <div class="hud-card hud-card-wide">
                 <div class="hud-title">
                     <span>📄 PROMPT TEXT ${createInfoBtn('PROMPT_TEXT')}</span>
-                    <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
+                    <span class="hud-title-meta">RAW / STRUCT</span>
                 </div>
                 <div class="intel-viewer" data-viewer="prompt">
                     <div class="viewer-tabs">
@@ -2719,7 +2719,7 @@ function buildIntelHud(metrics, options = {}) {
             <div class="hud-card hud-card-wide">
                 <div class="hud-title">
                     <span>📤 LLM OUTPUT ${createInfoBtn('LLM_OUTPUT')}</span>
-                    <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
+                    <span class="hud-title-meta">RAW / STRUCT</span>
                 </div>
                 <div class="intel-viewer" data-viewer="output">
                     <div class="viewer-tabs">
@@ -2734,13 +2734,13 @@ function buildIntelHud(metrics, options = {}) {
                 </div>
             </div>
 
-            <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
+            <div class="hud-card hud-export-card">
                 <div class="hud-title">
                     <span>EXPORT ${createInfoBtn('EXPORT_DATA')}</span>
-                    <span style="color: var(--neon-amber);">DATA</span>
+                    <span class="tone-warning">DATA</span>
                 </div>
-                <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
-                <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
+                <button class="hud-export-btn tone-success" onclick="exportMetrics('json')">EXPORT JSON</button>
+                <button class="hud-export-btn tone-primary" onclick="exportMetrics('csv')">EXPORT CSV</button>
             </div>
         </div>
     `;
@@ -2838,33 +2838,11 @@ function renderCardModal(markdown, title, options = {}) {
         cost: { total: 0 }
     };
 
-    const tokens = metrics.tokens || { input: 0, output: 0 };
     const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'deepseek').toUpperCase();
     const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
 
-    const toText = (val) => {
-        if (val === null || val === undefined) return '';
-        if (typeof val === 'string') return val;
-        try { return JSON.stringify(val, null, 2); } catch (e) { return String(val); }
-    };
-    const promptRawText = toText(metrics.metadata?.promptText);
-    const promptStructText = toText(metrics.metadata?.promptParsed);
-    const outputRawText = toText(metrics.metadata?.rawOutput);
-    let outputStructText = toText(metrics.metadata?.outputStructured);
-    if (!outputStructText && outputRawText) {
-        try { outputStructText = JSON.stringify(JSON.parse(outputRawText), null, 2); } catch (e) {}
-    }
-    const promptDefaultView = promptRawText ? 'raw' : 'structured';
-    const outputDefaultView = outputRawText ? 'raw' : 'structured';
-    
-    // Calculate Rank
-    const score = metrics.quality?.score || 0;
-    const templateCompliance = metrics.quality?.templateCompliance ?? metrics.quality?.checks?.templateCompliance ?? 0;
-    const rank = score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
-    const rankColor = score >= 80 ? 'var(--neon-green)' : score >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
-
     els.modalContainer.innerHTML = `
-        <div class="modern-card glass-panel" style="background: #ffffff;">
+        <div class="modern-card glass-panel">
             <button class="mc-delete" id="mcDeleteBtn" type="button" title="Delete Record" aria-label="Delete Record" data-testid="card-delete-trigger">🗑️</button>
             <div class="mc-delete-popover hidden" id="mcDeletePopover" role="dialog" aria-live="polite" aria-label="删除确认">
                 <div class="mc-delete-popover-title">删除此学习卡片？</div>
@@ -2876,171 +2854,36 @@ function renderCardModal(markdown, title, options = {}) {
             </div>
             <button class="mc-close" id="mcCloseBtn" data-testid="card-modal-close">×</button>
 
-            <div class="mc-header" style="border-bottom: 1px solid var(--sci-border);">
-                <div style="flex:1;">
-                    <h1 class="mc-phrase font-display" style="color: var(--sci-text-main);" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
-                    <div class="mc-meta font-mono" style="color: var(--neon-blue);">
+            <div class="mc-header">
+                <div class="mc-heading-main">
+                    <h1 class="mc-phrase" data-testid="card-modal-title">${escapeHtml(displayTitle)}</h1>
+                    <div class="mc-meta font-mono">
                         <span>${cardTypeConfig.modalMetaLabel}</span>
                         <span>::</span>
                         <span>${new Date().getFullYear()}</span>
                     </div>
                 </div>
 
-                <div class="panel-tabs sub-tabs" style="margin:0; border:none; background: #f3f4f6; border-radius: 8px; padding: 4px;">
-                    <button class="tab-btn active" data-target="cardContent" data-testid="tab-content" style="font-size:12px; padding: 4px 12px;">CONTENT</button>
-                    <button class="tab-btn" data-target="cardIntel" data-testid="tab-intel" style="font-size:12px; padding: 4px 12px; color: var(--neon-purple);">INTEL</button>
-                    ${showKnowledge ? '<button class="tab-btn" data-target="cardKnowledge" data-testid="tab-knowledge" style="font-size:12px; padding: 4px 12px; color: #1d4ed8;">KNOWLEDGE</button>' : ''}
+                <div class="panel-tabs sub-tabs mc-panel-tabs">
+                    <button class="tab-btn active" data-target="cardContent" data-testid="tab-content">CONTENT</button>
+                    <button class="tab-btn tone-purple" data-target="cardIntel" data-testid="tab-intel">INTEL</button>
+                    ${showKnowledge ? '<button class="tab-btn tone-primary" data-target="cardKnowledge" data-testid="tab-knowledge">KNOWLEDGE</button>' : ''}
                 </div>
             </div>
 
             <!-- Content Tab -->
-            <div id="cardContent" class="mc-body mc-content" style="display:block;" data-testid="card-content-panel">
-                <div class="hud-ticker" style="margin-bottom: 10px;">CARD TYPE · ${cardTypeConfig.modalTabLabel}</div>
+            <div id="cardContent" class="mc-body mc-content active" data-testid="card-content-panel">
+                <div class="hud-ticker mc-card-type">CARD TYPE · ${cardTypeConfig.modalTabLabel}</div>
                 ${cardContentHtml}
             </div>
 
             <!-- Intel Tab (HUD) -->
-            <div id="cardIntel" class="mc-body intel-hud-grid" style="display:none;">
+            <div id="cardIntel" class="mc-body">${buildIntelHud(metrics, { providerLabel, modelLabel })}</div>
 
-                <!-- 1. Core Reactor -->
-                <div class="hud-card-score" style="border-left-color: ${rankColor};">
-                    <div>
-                        <div class="intel-label">QUALITY GRADE ${createInfoBtn('QUALITY_GRADE')}</div>
-                        <div class="score-value-container">
-                            <div class="score-main" style="color: ${rankColor}; text-shadow: 0 0 20px ${rankColor}66;">${score}</div>
-                            <div class="score-rank">RANK ${rank}</div>
-                        </div>
-                    </div>
-                    <div class="score-meta">
-                        <div class="meta-row">
-                            <span class="meta-label">PROVIDER</span>
-                            <span class="meta-val" style="color: var(--neon-purple);">${providerLabel}</span>
-                        </div>
-                        <div class="meta-row">
-                            <span class="meta-label">MODEL</span>
-                            <span class="meta-val">${modelLabel}</span>
-                        </div>
-                        <div class="meta-row">
-                            <span class="meta-label">LATENCY</span>
-                            <span class="meta-val">${metrics.performance?.totalTime || 0}ms</span>
-                        </div>
-                    </div>
-                    ${score < 70 ? `<div style="margin-top:12px; padding:8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:4px; font-size:11px; color:#dc2626;">⚠ Quality below threshold. Check dimensions.</div>` : ''}
-                </div>
-
-                <!-- 2. Quality Dimensions (Enhanced) -->
-                <div class="hud-card">
-                    <div class="hud-title">
-                        <span>DIMENSIONS ${createInfoBtn('DIMENSIONS')}</span>
-                        <span style="color: var(--neon-green);">4-AXIS</span>
-                    </div>
-                    <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
-                        ${renderDimensionBar('Completeness', metrics.quality?.dimensions?.completeness || 0, 40, 'var(--neon-green)', '完整性 - 内容结构完整度')}
-                        ${renderDimensionBar('Accuracy', metrics.quality?.dimensions?.accuracy || 0, 30, 'var(--neon-blue)', '准确性 - 翻译和定义准确度')}
-                        ${renderDimensionBar('Example Quality', metrics.quality?.dimensions?.exampleQuality || 0, 20, 'var(--neon-purple)', '例句质量 - 例句自然度和多样性')}
-                        ${renderDimensionBar('Formatting', metrics.quality?.dimensions?.formatting || 0, 10, 'var(--neon-amber)', '格式化 - HTML 和音频标签正确性')}
-                    </div>
-                </div>
-
-                <!-- 3. Config Display -->
-                <div class="hud-card">
-                    <div class="hud-title">
-                        <span>GENERATION CONFIG ${createInfoBtn('GENERATION_CONFIG')}</span>
-                        <span style="color: var(--neon-amber);">PARAMS</span>
-                    </div>
-                    <div style="font-family:'JetBrains Mono'; font-size:11px; margin-top:12px; display:flex; flex-direction:column; gap:6px;">
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Temperature:</span><span>${metrics.metadata?.temperature || 0.7}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Max Tokens:</span><span>${metrics.metadata?.maxOutputTokens || 2048}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Top P:</span><span>${metrics.metadata?.topP || 0.95}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span style="color:var(--sci-text-muted);">Template:</span><span>${templateCompliance}</span></div>
-                    </div>
-                </div>
-
-                <!-- 4. Chrono Waterfall -->
-                <div class="hud-card">
-                    <div class="hud-title">
-                        <span>CHRONO SEQUENCE ${createInfoBtn('CHRONO_SEQUENCE')}</span>
-                        <span style="color: var(--neon-blue);">T-MINUS</span>
-                    </div>
-                    <div id="hudTimeline" class="chart-box"></div>
-                </div>
-
-                <!-- 5. Token Flux -->
-                <div class="hud-card">
-                    <div class="hud-title">
-                        <span>TOKEN FLUX ${createInfoBtn('TOKEN_FLUX')}</span>
-                        <span style="color: var(--neon-purple);">USAGE</span>
-                    </div>
-                    <div id="hudTokens" class="chart-box"></div>
-                    <div class="token-stat-row">
-                        <span class="tooltip-inline">IN: ${tokens.input}</span>
-                        <span class="tooltip-inline">OUT: ${tokens.output}</span>
-                    </div>
-                    <div class="token-cost-tag">COST: $${(metrics.cost?.total || 0).toFixed(6)}</div>
-                </div>
-
-                <!-- 6. Radar Chart -->
-                <div class="hud-card hud-card-wide">
-                    <div class="hud-title">
-                        <span>DIMENSIONAL SCAN ${createInfoBtn('DIMENSIONAL_SCAN')}</span>
-                        <span style="color: var(--neon-green);">RADAR</span>
-                    </div>
-                    <div id="hudRadar" class="chart-box" style="height: 200px;"></div>
-                </div>
-
-                <!-- 7. Prompt Viewer -->
-                <div class="hud-card hud-card-wide">
-                    <div class="hud-title">
-                        <span>📄 PROMPT TEXT ${createInfoBtn('PROMPT_TEXT')}</span>
-                        <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
-                    </div>
-                    <div class="intel-viewer" data-viewer="prompt">
-                        <div class="viewer-tabs">
-                            <button class="viewer-tab ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
-                            <button class="viewer-tab ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
-                            <button class="viewer-copy" type="button">COPY</button>
-                        </div>
-                        <div class="viewer-body">
-                            <pre class="viewer-panel ${promptDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(promptRawText || 'N/A')}</pre>
-                            <pre class="viewer-panel ${promptDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(promptStructText || 'N/A')}</pre>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 8. Output Viewer -->
-                <div class="hud-card hud-card-wide">
-                    <div class="hud-title">
-                        <span>📤 LLM OUTPUT ${createInfoBtn('LLM_OUTPUT')}</span>
-                        <span style="color: var(--sci-text-muted); font-size:11px;">RAW / STRUCT</span>
-                    </div>
-                    <div class="intel-viewer" data-viewer="output">
-                        <div class="viewer-tabs">
-                            <button class="viewer-tab ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">RAW</button>
-                            <button class="viewer-tab ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">STRUCT</button>
-                            <button class="viewer-copy" type="button">COPY</button>
-                        </div>
-                        <div class="viewer-body">
-                            <pre class="viewer-panel ${outputDefaultView === 'raw' ? 'active' : ''}" data-view="raw">${escapeHtml(outputRawText || 'N/A')}</pre>
-                            <pre class="viewer-panel ${outputDefaultView === 'structured' ? 'active' : ''}" data-view="structured">${escapeHtml(outputStructText || 'N/A')}</pre>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 9. Export Controls -->
-                <div class="hud-card" style="display:flex; flex-direction:column; gap:8px;">
-                    <div class="hud-title">
-                        <span>EXPORT ${createInfoBtn('EXPORT_DATA')}</span>
-                        <span style="color: var(--neon-amber);">DATA</span>
-                    </div>
-                    <button onclick="exportMetrics('json')" style="padding:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:4px; color:#059669; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📊 EXPORT JSON</button>
-                    <button onclick="exportMetrics('csv')" style="padding:8px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:4px; color:#2563eb; font-family:'JetBrains Mono'; font-size:11px; cursor:pointer;">📈 EXPORT CSV</button>
-                </div>
-
-            </div>
-
-            ${showKnowledge ? '<div id="cardKnowledge" class="mc-body" style="display:none;"></div>' : ''}
+            ${showKnowledge ? '<div id="cardKnowledge" class="mc-body"></div>' : ''}
         </div>
     `;
+    applyDynamicMetricStyles(els.modalContainer);
 
     // 绑定删除按钮
     const deleteBtn = document.getElementById('mcDeleteBtn');
@@ -3213,21 +3056,27 @@ function bindIntelViewers(container) {
 }
 
 // 渲染质量维度条
-function renderDimensionBar(label, value, maxValue, color, tooltip = '') {
-    const percentage = (value / maxValue) * 100;
-    const barColor = percentage >= 80 ? color : percentage >= 60 ? 'var(--neon-amber)' : 'var(--neon-red)';
-    // const tooltipAttr = tooltip ? `class="tooltip-trigger" data-tooltip="${tooltip}"` : '';
+function renderDimensionBar(label, value, maxValue, tone, tooltip = '') {
+    const percentage = Math.max(0, Math.min(100, (value / maxValue) * 100));
+    const barTone = percentage >= 80 ? tone : percentage >= 60 ? 'warning' : 'danger';
     return `
-        <div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
-                <span style="color:var(--sci-text-muted);">${label}</span>
-                <span style="color:${barColor}; font-family:'JetBrains Mono';">${value}/${maxValue}</span>
+        <div class="dimension-bar"${tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : ''}>
+            <div class="dimension-bar-head">
+                <span>${label}</span>
+                <strong class="tone-${barTone}">${value}/${maxValue}</strong>
             </div>
-            <div style="background:#e5e7eb; height:6px; border-radius:3px; overflow:hidden;">
-                <div style="background:${barColor}; height:100%; width:${percentage}%; box-shadow:0 0 8px ${barColor}; transition:width 0.3s;"></div>
+            <div class="dimension-bar-track">
+                <div class="dimension-bar-fill tone-${barTone}" data-progress="${percentage}"></div>
             </div>
         </div>
     `;
+}
+
+function applyDynamicMetricStyles(container) {
+    container.querySelectorAll('.dimension-bar-fill[data-progress]').forEach((bar) => {
+        const value = Math.max(0, Math.min(100, Number(bar.dataset.progress) || 0));
+        bar.style.width = `${value}%`;
+    });
 }
 
 // 导出指标数据
