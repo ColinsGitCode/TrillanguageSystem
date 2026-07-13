@@ -30,10 +30,12 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   test('P3 desktop composition keeps 2:1 and 1:3 working ratios', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+    const topGrid = await page.locator('.factory-top-grid').boundingBox();
     const composer = await page.locator('.factory-composer').boundingBox();
     const queue = await page.getByTestId('react-queue-status').boundingBox();
     const dates = await page.locator('.date-rail').boundingBox();
     const library = await page.locator('.card-library').boundingBox();
+    expect(topGrid.height).toBeLessThanOrEqual(170);
     expect(composer.width / queue.width).toBeGreaterThan(1.85);
     expect(composer.width / queue.width).toBeLessThan(2.15);
     expect(library.width / dates.width).toBeGreaterThan(2.85);
