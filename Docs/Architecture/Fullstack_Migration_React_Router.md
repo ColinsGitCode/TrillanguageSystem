@@ -1,6 +1,6 @@
 # 全栈架构迁移方案：Cards Factory + React Router v7
 
-> 状态：**实施中：D0、P0 已完成** · 2026-07-13
+> 状态：**架构迁移完成：D0-P6 全部通过验收** · 2026-07-13
 > 目标：先收敛产品边界，再完成前后端架构化改造
 > 主框架：React Router v7 Framework Mode · React · TypeScript · Vite
 > 运行约束：本地单用户 · Docker Compose · 对外端口 3010 · SQLite · 单生成 worker
@@ -79,7 +79,7 @@
       ├─ records filesystem
       └─ one in-process generation worker
 
-迁移前的主要结构问题：
+迁移前的主要结构问题（均已在 D0-P6 解决）：
 
 - app.js 同时持有 DOM、流程和状态，难以组件化测试；
 - routes/generate.js 仍承担过多业务编排；
@@ -178,18 +178,22 @@ P0-P4 曾使用专用探针 `/__rr-poc` 保持双轨验证。P5 已完成根路�
 
 ## 8. Generation use case 与 worker
 
-从 routes/generate.js 提取：
+已从 routes/generate.js 提取：
 
     executeCardGeneration(command, context): Promise<GenerationResult>
 
 use case 负责生成、后处理、验证、Markdown/HTML、TTS、文件、DB 与领域错误；HTTP adapter 只负责 request、限流、status 和 JSON envelope。
 
-worker 分两步迁移：
+最终 worker 链路：
 
-1. use case 与 route parity tests 通过前继续 HTTP self-request；
-2. 通过后改为直接调用 use case，并删除 worker bypass header。
+    POST /api/generation-jobs
+      -> generation_jobs 持久队列
+      -> 原子 UPDATE ... RETURNING claim
+      -> executeGenerationJob adapter
+      -> executeCardGeneration use case
+      -> generation services / files / SQLite
 
-独立 worker 前补齐 SQLite busy_timeout、原子 claim、SQLITE_BUSY 有界重试、单 replica 与重启恢复测试。
+HTTP self-request 与 `X-Generation-Job-Worker` bypass 已删除。SQLite 启用 WAL、`busy_timeout`、`SQLITE_BUSY` 有界指数退避和跨连接原子 claim；启动时恢复遗留 running 任务。SIGTERM/SIGINT 会先停止 HTTP 接入，再等待当前任务排空，最后关闭 SQLite；超时则以非零状态退出且不提前关闭数据库。
 
 ## 9. 分阶段任务
 
@@ -202,7 +206,7 @@ worker 分两步迁移：
 | **P3 Cards Factory（完成）** | 表单、OCR、queue、folder/list | light/dark × 3 viewport；核心 E2E 全绿 |
 | **P4 Card Modal（完成）** | Markdown、ruby、audio、highlight、INTEL | 三类卡、键盘、移动端、XSS 门禁全绿 |
 | **P5 路由切换（完成）** | / owner 切 React，删除 legacy frontend | 3010 容器完整回归 |
-| **P6 Worker** | worker 直调 use case、SQLite 并发门禁 | retry/recovery/race/shutdown 全绿 |
+| **P6 Worker（完成）** | worker 直调 use case、SQLite 并发门禁 | retry/recovery/race/shutdown 全绿 |
 
 ## 10. 后置产品项目
 
@@ -222,4 +226,4 @@ worker 分两步迁移：
 - lint、unit、integration、E2E、visual、smoke、Docker runtime 全绿；
 - 学习辅助与知识图谱仍保持冻结，没有以临时占位方式混入迁移。
 
-当前迁移检查点：P5 已完成，React Router 独占 `/`，旧 browser ESM、`/index.html` 与 `/__rr-poc` 已退役。下一阶段仅剩 P6 worker 直调 use case 与 SQLite 并发门禁。
+架构完成检查点：D0-P6 已全部完成。React Router 独占 `/`，旧 browser ESM、`/index.html` 与 `/__rr-poc` 已退役；generation worker 直接调用应用 use case，SQLite 并发与优雅停机门禁已建立。后续不再有迁移阶段，进入学习辅助 2.0 与知识图谱 2.0 的全新产品设计。

@@ -19,7 +19,6 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
 
   test.it('200 happy path returns the full envelope', async () => {
     const res = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' }, // bypass throttle
       body: { phrase: 'integration happy path' }
     });
     assert.equal(res.status, 200);
@@ -40,7 +39,6 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
       requestedProvider: 'deepseek',
     });
     const http = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
       body: {
         phrase: 'http parity fixture',
         card_type: 'scenario_phrase',
@@ -68,7 +66,6 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
 
   test.it('persists the generation: subsequent /api/history sees it', async () => {
     const created = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
       body: { phrase: 'history visibility check' }
     });
     assert.equal(created.status, 200);
@@ -83,7 +80,6 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
 
   test.it('generates and persists a scenario_phrase card through the E2E fixture', async () => {
     const res = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
       body: {
         phrase: '保育园早上送孩子，说明昨晚有点咳嗽',
         card_type: 'scenario_phrase'
@@ -105,13 +101,11 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     assert.equal(found.card_type, 'scenario_phrase');
   });
 
-  // NOTE: throttle is short-circuited under E2E_TEST_MODE=1 (see lib/throttle.js),
-  // so we don't exercise the 429 path here — that's covered by tests/unit/throttle.test.js.
-  // Instead validate the worker-bypass header is honoured under E2E mode too.
-  test.it('worker bypass header still works in E2E mode (used by job worker)', async () => {
+  // Throttle is short-circuited only by process-level E2E_TEST_MODE; there is
+  // no request header that production clients can use to bypass it.
+  test.it('E2E mode remains deterministic without a production bypass header', async () => {
     const res = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
-      body: { phrase: 'worker bypass path' }
+      body: { phrase: 'test-only throttle bypass path' }
     });
     assert.equal(res.status, 200);
     assert.equal(res.body.success, true);

@@ -46,7 +46,9 @@ router.post('/api/generation-jobs', async (req, res) => {
     return res.json({ success: true, job, summary: generationJobService.getSummary() });
   } catch (err) {
     const message = String(err?.message || 'enqueue generation job failed');
-    const status = message === 'duplicate_active_generation_job' ? 409 : 500;
+    const status = message === 'duplicate_active_generation_job'
+      ? 409
+      : err?.code === 'GENERATION_WORKER_SHUTTING_DOWN' ? 503 : 500;
     return res.status(status).json({ error: message });
   }
 });

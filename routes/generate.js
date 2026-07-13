@@ -16,8 +16,7 @@ const router = express.Router();
 
 router.post('/api/generate', async (req, res) => {
   try {
-    const skipThrottle = req.get('X-Generation-Job-Worker') === '1';
-    const throttle = skipThrottle ? { allowed: true, retryAfterMs: 0 } : checkGenerateThrottle(req);
+    const throttle = checkGenerateThrottle(req);
     if (!throttle.allowed) {
       return res.status(429).json({
         error: 'Rate limit exceeded',

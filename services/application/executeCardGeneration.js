@@ -151,6 +151,7 @@ function createCardGenerationUseCase(customPorts = {}) {
         ports.log.info({ generationId }, 'inserted generation');
       } catch (dbError) {
         ports.log.error({ err: dbError }, 'database insert failed');
+        throw dbError;
       }
 
       return {

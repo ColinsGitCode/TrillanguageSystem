@@ -9,6 +9,9 @@ process.env.LOG_SILENT = '1';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const { DatabaseService } = require('../../services/storage/databaseService');
 
@@ -273,6 +276,13 @@ function buildJobPayload(overrides = {}) {
 }
 
 test.describe('databaseService — generation_jobs lifecycle', () => {
+  test.it('configures a bounded SQLite busy timeout', () => {
+    const db = freshDb();
+    try {
+      assert.equal(db.db.pragma('busy_timeout', { simple: true }), 5000);
+    } finally { db.close(); }
+  });
+
   test.it('fresh schema defaults generation_jobs.llm_provider to DeepSeek', () => {
     const db = freshDb();
     try {
@@ -428,6 +438,48 @@ test.describe('databaseService — generation_jobs lifecycle', () => {
       const events = db.listGenerationJobEvents({ jobId: job.id, limit: 10 });
       assert.equal(events.length, 3);
       assert.deepEqual(events.map((e) => e.eventType), ['queued', 'running', 'success']);
+    } finally { db.close(); }
+  });
+
+  test.it('atomically claims a queued job across two SQLite connections', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'generation-claim-'));
+    const dbPath = path.join(tempDir, 'jobs.db');
+    const first = new DatabaseService(dbPath);
+    const second = new DatabaseService(dbPath);
+    try {
+      const queued = first.createGenerationJob(buildJobPayload({ phraseNormalized: 'atomic-claim' }));
+      const claims = [
+        first.takeNextQueuedGenerationJob(),
+        second.takeNextQueuedGenerationJob(),
+      ].filter(Boolean);
+
+      assert.equal(claims.length, 1);
+      assert.equal(claims[0].id, queued.id);
+      assert.equal(claims[0].status, 'running');
+      assert.equal(claims[0].attempts, 1);
+    } finally {
+      first.close();
+      second.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test.it('requeues stale running jobs and records a restart recovery event', () => {
+    const db = freshDb();
+    try {
+      const queued = db.createGenerationJob(buildJobPayload({ phraseNormalized: 'restart-recovery' }));
+      const running = db.takeNextQueuedGenerationJob();
+      assert.equal(running.id, queued.id);
+      assert.equal(running.status, 'running');
+
+      assert.equal(db.recoverStaleRunningGenerationJobs(), 1);
+      const recovered = db.getGenerationJobById(queued.id);
+      assert.equal(recovered.status, 'queued');
+      assert.equal(recovered.startedAt, null);
+      const events = db.listGenerationJobEvents({ jobId: queued.id, limit: 10 });
+      assert.deepEqual(events.map((event) => event.eventType), ['recovered']);
+      assert.equal(events[0].payload.reason, 'process_restart');
+      assert.equal(events[0].payload.attempts, 1);
     } finally { db.close(); }
   });
 });

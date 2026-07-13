@@ -43,6 +43,8 @@ Compose project name 为 three_lans_system，默认启动 viewer、ocr、tts-en�
 
     Input/OCR
       -> generation queue
+      -> atomic SQLite claim
+      -> executeCardGeneration use case
       -> promptEngine
       -> DeepSeek
       -> Markdown/HTML validation
@@ -73,6 +75,7 @@ Cards Factory 由 React Router v7 + TypeScript 在根路径渲染；同一 `serv
 ## 数据
 
 - SQLite 使用 better-sqlite3 + WAL。
+- 生成 worker 直接调用应用 use case，不再通过 HTTP 调用自身；队列使用 busy timeout、有界重试、原子 claim、重启恢复与优雅停机。
 - 卡片文件写入 RECORDS_PATH，并按日期或目标文件夹组织。
 - RECORDS_PATH 不作为静态目录暴露。
 - HTML 经校验和 DOMPurify 净化；禁止 script、iframe、object、embed。
@@ -95,10 +98,12 @@ Cards Factory 由 React Router v7 + TypeScript 在根路径渲染；同一 `serv
 - TTS_EN_ENDPOINT、TTS_JA_ENDPOINT；
 - OCR_PROVIDER、OCR_TESSERACT_ENDPOINT、OCR_LANGS；
 - LOG_LEVEL、LOG_PRETTY、LOG_SILENT。
+- SQLITE_BUSY_TIMEOUT_MS、SQLITE_BUSY_RETRY_MAX、SQLITE_BUSY_RETRY_BASE_MS、GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS。
 
 ## 文档
 
 - CLAUDE.md：当前代码架构权威索引；
 - Docs/Architecture/Fullstack_Migration_React_Router.md：正式迁移基线；
+- Docs/Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收；
 - Docs/Architecture/TTS_Model_Selection.md：TTS 决策；
 - Docs/README.md：当前文档与历史文档边界。

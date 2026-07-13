@@ -112,8 +112,10 @@ Do not create a second copy of backend services inside the future React app. Rea
 
     user input or OCR
       -> POST /api/generation-jobs
-      -> generation worker
-      -> POST /api/generate with worker bridge
+      -> SQLite persistent queue + atomic claim
+      -> in-process generation worker
+      -> executeGenerationJob adapter
+      -> executeCardGeneration use case
       -> promptEngine
       -> deepseekService
       -> content post-processing and validation
@@ -122,7 +124,7 @@ Do not create a second copy of backend services inside the future React app. Rea
       -> fileManager
       -> databaseService
 
-routes/generate.js still owns too much orchestration. The architecture migration extracts executeCardGeneration(command, context) as an application use case. Until parity tests pass, the worker retains the HTTP self-request bridge.
+routes/generate.js is a thin HTTP adapter. Both that route and the in-process worker call the same executeCardGeneration application use case; the former HTTP self-request bridge and worker bypass header are retired.
 
 ## LLM and TTS
 
@@ -174,7 +176,7 @@ The shell has one product destination: Cards Factory. The card library is part o
 
 ## Persistence
 
-SQLite uses better-sqlite3 with WAL and foreign keys enabled.
+SQLite uses better-sqlite3 with WAL, foreign keys, busy_timeout, bounded SQLITE_BUSY retry, and an atomic UPDATE...RETURNING queue claim. Startup requeues stale running jobs. SIGTERM/SIGINT stops HTTP intake, drains the current worker job, and only then closes SQLite.
 
 Current tables:
 
@@ -211,6 +213,12 @@ Unit tests:
     npm test
 
 They use node:test and in-memory SQLite where applicable.
+
+Complete architecture acceptance:
+
+    npm run test:acceptance
+
+This runs typecheck, lint, unit, integration, architecture ownership, production smoke, and Playwright functional/visual gates. Docker runtime is verified separately with the Compose project `three_lans_system`.
 
 Integration tests:
 
@@ -259,10 +267,10 @@ Knowledge and SRS environment variables are retired and must not be reintroduced
 
 ## Migration rules
 
-1. D0-P5 are complete: retired products and the legacy frontend must not be restored.
+1. D0-P6 are complete: retired products, the legacy frontend, and the HTTP worker bridge must not be restored.
 2. React Router owns `/`; `/__rr-poc` and `/index.html` must remain 404.
 3. Keep root package CommonJS; use an ESM composition root.
 4. Keep existing Express API envelopes stable during UI migration.
 5. Preserve tokens, testids, behavior, and visual gates.
-6. Extract the generation use case before replacing the worker bridge.
+6. Keep the worker on the direct executeGenerationJob -> executeCardGeneration path.
 7. Do not implement new learning or graph features during migration.

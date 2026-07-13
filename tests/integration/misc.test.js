@@ -18,7 +18,6 @@ test.describe('DELETE /api/records/:id', () => {
 
   test.it('DELETE /api/records/:id round-trip: create via /api/generate, delete, then 404', async () => {
     const created = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
       body: { phrase: 'misc delete me' }
     });
     assert.equal(created.status, 200);

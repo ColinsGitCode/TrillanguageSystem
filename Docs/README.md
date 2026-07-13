@@ -18,6 +18,7 @@
 - ../README.md：启动与运行；
 - ../CLAUDE.md：当前架构索引；
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
+- Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。

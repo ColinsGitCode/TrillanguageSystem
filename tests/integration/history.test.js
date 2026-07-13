@@ -10,7 +10,6 @@ test.after(async () => { await closeServer(); });
 // Helper: create a real generation row via the E2E fixture endpoint.
 async function createGeneration(phrase) {
   const res = await api('POST', '/api/generate', {
-    headers: { 'X-Generation-Job-Worker': '1' },
     body: { phrase }
   });
   assert.equal(res.status, 200, `seed phrase=${phrase} expected 200, got ${res.status}`);

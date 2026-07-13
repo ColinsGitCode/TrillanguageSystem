@@ -13,6 +13,10 @@ services:
       - RECORDS_PATH=/data/trilingual_records
       - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
       - DB_PATH=/data/trilingual_records/trilingual_records.db
+      - SQLITE_BUSY_TIMEOUT_MS=${SQLITE_BUSY_TIMEOUT_MS:-5000}
+      - SQLITE_BUSY_RETRY_MAX=${SQLITE_BUSY_RETRY_MAX:-3}
+      - SQLITE_BUSY_RETRY_BASE_MS=${SQLITE_BUSY_RETRY_BASE_MS:-25}
+      - GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS=${GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS:-30000}
       - OCR_PROVIDER=tesseract
       - OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr
       - OCR_LANGS=eng+jpn+chi_sim

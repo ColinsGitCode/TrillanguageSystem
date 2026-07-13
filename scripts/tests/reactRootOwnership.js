@@ -1,6 +1,7 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
+const { once } = require('node:events');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -61,6 +62,7 @@ async function main() {
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let childOutput = '';
+  let shutdownError = null;
   child.stdout.on('data', (chunk) => { childOutput += chunk.toString(); });
   child.stderr.on('data', (chunk) => { childOutput += chunk.toString(); });
 
@@ -78,9 +80,17 @@ async function main() {
     error.message += '\nReact server output:\n' + childOutput;
     throw error;
   } finally {
-    child.kill('SIGTERM');
+    if (child.exitCode === null) {
+      const exited = once(child, 'exit');
+      child.kill('SIGTERM');
+      const [exitCode, signal] = await exited;
+      if (exitCode !== 0) {
+        shutdownError = new Error(`React server did not shut down cleanly: code=${exitCode}, signal=${signal}`);
+      }
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+  if (shutdownError) throw shutdownError;
 }
 
 main().catch((error) => {

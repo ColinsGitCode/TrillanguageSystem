@@ -16,6 +16,12 @@ const generationJobsDomain = require('./db/generationJobs');
 const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
+const { runWithSqliteBusyRetry } = require('./sqliteBusyRetry');
+const {
+  SQLITE_BUSY_TIMEOUT_MS,
+  SQLITE_BUSY_RETRY_MAX,
+  SQLITE_BUSY_RETRY_BASE_MS,
+} = require('../../lib/serverConfig');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -52,11 +58,15 @@ class DatabaseService {
 
     // Route every SQL through the logger at debug level — silent by default,
     // visible with LOG_LEVEL=debug. Stops schema init from flooding stdout.
-    this.db = new Database(dbPath, { verbose: (sql) => log.debug({ sql }, 'sqlite') });
+    this.db = new Database(dbPath, {
+      timeout: SQLITE_BUSY_TIMEOUT_MS,
+      verbose: (sql) => log.debug({ sql }, 'sqlite'),
+    });
 
     // 性能优化
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
+    this.db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 
     this.initializeTables();
 
@@ -250,11 +260,11 @@ class DatabaseService {
    * @returns {number} generationId
    */
   insertGeneration(data) {
-    return generationsDomain.insertGeneration(this.db, data);
+    return this.withBusyRetry(() => generationsDomain.insertGeneration(this.db, data));
   }
 
   insertError(errorData) {
-    return generationsDomain.insertError(this.db, errorData);
+    return this.withBusyRetry(() => generationsDomain.insertError(this.db, errorData));
   }
 
   queryGenerations(filters = {}) {
@@ -499,11 +509,11 @@ class DatabaseService {
   }
 
   createGenerationJob(payload = {}) {
-    return generationJobsDomain.create(this.db, payload);
+    return this.withBusyRetry(() => generationJobsDomain.create(this.db, payload));
   }
 
   appendGenerationJobEvent(jobId, eventType, payload = {}) {
-    return generationJobsDomain.appendEvent(this.db, jobId, eventType, payload);
+    return this.withBusyRetry(() => generationJobsDomain.appendEvent(this.db, jobId, eventType, payload));
   }
 
   listGenerationJobEvents(opts = {}) {
@@ -527,31 +537,41 @@ class DatabaseService {
   }
 
   updateGenerationJob(jobId, patch = {}) {
-    return generationJobsDomain.update(this.db, jobId, patch);
+    return this.withBusyRetry(() => generationJobsDomain.update(this.db, jobId, patch));
   }
 
   recoverStaleRunningGenerationJobs() {
-    return generationJobsDomain.recoverStaleRunning(this.db);
+    return this.withBusyRetry(() => generationJobsDomain.recoverStaleRunning(this.db));
   }
 
   takeNextQueuedGenerationJob() {
-    return generationJobsDomain.takeNextQueued(this.db);
+    return this.withBusyRetry(() => generationJobsDomain.takeNextQueued(this.db));
   }
 
   retryGenerationJob(jobId) {
-    return generationJobsDomain.retry(this.db, jobId);
+    return this.withBusyRetry(() => generationJobsDomain.retry(this.db, jobId));
   }
 
   clearCompletedGenerationJobs() {
-    return generationJobsDomain.clearCompleted(this.db);
+    return this.withBusyRetry(() => generationJobsDomain.clearCompleted(this.db));
   }
 
   cancelGenerationJob(jobId) {
-    return generationJobsDomain.cancel(this.db, jobId);
+    return this.withBusyRetry(() => generationJobsDomain.cancel(this.db, jobId));
   }
 
   getNextQueuedGenerationRetryTs() {
     return generationJobsDomain.getNextQueuedRetryTs(this.db);
+  }
+
+  withBusyRetry(operation) {
+    return runWithSqliteBusyRetry(operation, {
+      maxRetries: SQLITE_BUSY_RETRY_MAX,
+      baseDelayMs: SQLITE_BUSY_RETRY_BASE_MS,
+      onRetry: ({ attempt, delayMs, error }) => {
+        log.warn({ err: error, attempt, delayMs }, 'retrying SQLite busy operation');
+      },
+    });
   }
 
   // Test-only: wipe every project table. Gated by E2E_TEST_MODE at the

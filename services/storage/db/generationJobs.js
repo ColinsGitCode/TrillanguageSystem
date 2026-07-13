@@ -227,48 +227,60 @@ function update(db, jobId, patch = {}) {
 }
 
 function recoverStaleRunning(db) {
-  const affected = db.prepare(`
-    UPDATE generation_jobs
-    SET status = 'queued',
-        error_message = '服务重启后恢复：原执行中任务已重新排队。',
-        retry_after_ts = NULL,
-        started_at = NULL,
-        finished_at = NULL
-    WHERE cleared_at IS NULL
-      AND status = 'running'
-  `).run();
-  return Number(affected.changes || 0);
+  const tx = db.transaction(() => {
+    const rows = db.prepare(`
+      SELECT id, attempts
+      FROM generation_jobs
+      WHERE cleared_at IS NULL
+        AND status = 'running'
+      ORDER BY id ASC
+    `).all();
+    if (!rows.length) return 0;
+    const affected = db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'queued',
+          error_message = '服务重启后恢复：原执行中任务已重新排队。',
+          retry_after_ts = NULL,
+          started_at = NULL,
+          finished_at = NULL
+      WHERE cleared_at IS NULL
+        AND status = 'running'
+    `).run();
+    const insertEvent = db.prepare(`
+      INSERT INTO generation_job_events (job_id, event_type, payload_json)
+      VALUES (?, 'recovered', ?)
+    `);
+    for (const row of rows) {
+      insertEvent.run(row.id, JSON.stringify({ attempts: Number(row.attempts || 0), reason: 'process_restart' }));
+    }
+    return Number(affected.changes || 0);
+  });
+  return tx.immediate();
 }
 
 function takeNextQueued(db) {
-  const tx = db.transaction(() => {
-    const row = db.prepare(`
-      SELECT *
+  const row = db.prepare(`
+    UPDATE generation_jobs
+    SET status = 'running',
+        attempts = attempts + 1,
+        retry_after_ts = NULL,
+        started_at = CURRENT_TIMESTAMP,
+        finished_at = NULL,
+        error_message = NULL
+    WHERE id = (
+      SELECT id
       FROM generation_jobs
       WHERE cleared_at IS NULL
         AND status = 'queued'
         AND (retry_after_ts IS NULL OR retry_after_ts <= CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
       ORDER BY id ASC
       LIMIT 1
-    `).get();
-    if (!row) return null;
-
-    const nextAttempts = Number(row.attempts || 0) + 1;
-    db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'running',
-          attempts = ?,
-          retry_after_ts = NULL,
-          started_at = CURRENT_TIMESTAMP,
-          finished_at = NULL,
-          error_message = NULL
-      WHERE id = ?
-    `).run(nextAttempts, row.id);
-
-    return db.prepare(`SELECT * FROM generation_jobs WHERE id = ? LIMIT 1`).get(row.id);
-  });
-
-  return mapRow(tx());
+    )
+      AND cleared_at IS NULL
+      AND status = 'queued'
+    RETURNING *
+  `).get();
+  return mapRow(row);
 }
 
 function retry(db, jobId) {

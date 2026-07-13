@@ -17,7 +17,6 @@ test.describe('POST /api/_test/reset (mounted only under E2E_TEST_MODE=1)', () =
   test.it('reset wipes prior generations: /api/history goes empty', async () => {
     // Seed
     const created = await api('POST', '/api/generate', {
-      headers: { 'X-Generation-Job-Worker': '1' },
       body: { phrase: 'will be wiped' }
     });
     assert.equal(created.status, 200);
