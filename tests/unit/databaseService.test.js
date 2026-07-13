@@ -118,6 +118,44 @@ test.describe('databaseService — generations CRUD', () => {
     } finally { db.close(); }
   });
 
+  test.it('inserts content hash and admission tags in the generation transaction', () => {
+    const db = freshDb();
+    try {
+      const fixture = buildGenerationFixture();
+      fixture.cardTags = [
+        {
+          namespace: 'lang', value: 'en', normalizedValue: 'en',
+          ruleVersion: 'tagrules-v1', ruleKey: 'lang.characters.latin', evidenceJson: '{}',
+        },
+        {
+          namespace: 'src', value: 'input', normalizedValue: 'input',
+          ruleVersion: 'tagrules-v1', ruleKey: 'src.source-mode.input', evidenceJson: '{}',
+        },
+      ];
+      const id = db.insertGeneration(fixture);
+      const generation = db.getGenerationById(id);
+      assert.match(generation.content_hash, /^[a-f0-9]{64}$/);
+      assert.deepEqual(db.listCardTags(id).map((tag) => `${tag.namespace}:${tag.value}`), ['lang:en', 'src:input']);
+      assert.throws(
+        () => db.db.prepare('UPDATE generations SET content_hash = NULL WHERE id = ?').run(id),
+        /content_hash must be a SHA-256 hash/
+      );
+    } finally { db.close(); }
+  });
+
+  test.it('rolls back the generation when an admission tag is invalid', () => {
+    const db = freshDb();
+    try {
+      const fixture = buildGenerationFixture();
+      fixture.cardTags = [{
+        namespace: 'invalid', value: 'bad', normalizedValue: 'bad',
+        ruleVersion: 'tagrules-v1', ruleKey: 'invalid', evidenceJson: '{}',
+      }];
+      assert.throws(() => db.insertGeneration(fixture), /CHECK constraint failed/);
+      assert.equal(db.getTotalCount(), 0);
+    } finally { db.close(); }
+  });
+
   test.it('deleteGeneration removes the row and cascades audio files', () => {
     const db = freshDb();
     try {
@@ -184,6 +222,19 @@ test.describe('databaseService — query / search / count', () => {
       const hits = db.fullTextSearch('persistent', 10);
       assert.ok(hits.length >= 1);
       assert.ok(hits.some((h) => h.phrase === 'persistent highlight'));
+    } finally { db.close(); }
+  });
+
+  test.it('keeps the external-content FTS index consistent across updates and deletes', () => {
+    const db = freshDb();
+    try {
+      const id = db.insertGeneration(buildGenerationFixture({ generation: { phrase: 'before update' } }));
+      db.db.prepare('UPDATE generations SET phrase = ? WHERE id = ?').run('after update', id);
+      assert.equal(db.fullTextSearch('before', 10).length, 0);
+      assert.ok(db.fullTextSearch('after', 10).some((row) => row.id === id));
+      db.deleteGeneration(id);
+      assert.equal(db.fullTextSearch('after', 10).length, 0);
+      db.db.prepare("INSERT INTO generations_fts(generations_fts) VALUES ('integrity-check')").run();
     } finally { db.close(); }
   });
 });
@@ -254,6 +305,28 @@ test.describe('databaseService — card highlights CRUD', () => {
       assert.equal(dropOne, 1);
       const dropRest = db.deleteCardHighlightByFile('f', 'b');
       assert.equal(dropRest, 1);
+    } finally { db.close(); }
+  });
+});
+
+test.describe('databaseService — card tags', () => {
+  test.it('persists active and suppressed tags without duplicating a value', () => {
+    const db = freshDb();
+    try {
+      const generationId = db.insertGeneration(buildGenerationFixture());
+      const payload = {
+        generationId,
+        namespace: 'tag',
+        value: 'N2',
+        normalizedValue: 'n2',
+        source: 'user',
+        status: 'active',
+      };
+      db.setCardTag(payload);
+      assert.equal(db.listCardTags(generationId).length, 1);
+      db.setCardTag({ ...payload, status: 'suppressed' });
+      assert.equal(db.listCardTags(generationId).length, 0);
+      assert.equal(db.listCardTags(generationId, { includeSuppressed: true }).length, 1);
     } finally { db.close(); }
   });
 });

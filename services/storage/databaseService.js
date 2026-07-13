@@ -16,7 +16,10 @@ const generationJobsDomain = require('./db/generationJobs');
 const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
+const cardTagsDomain = require('./db/cardTags');
+const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
 const { runWithSqliteBusyRetry } = require('./sqliteBusyRetry');
+const { normalizeTagValue } = require('../dataPreparation/rules');
 const {
   SQLITE_BUSY_TIMEOUT_MS,
   SQLITE_BUSY_RETRY_MAX,
@@ -151,6 +154,9 @@ class DatabaseService {
     if (!columnSet.has('source_mode')) {
       migrations.push(`ALTER TABLE generations ADD COLUMN source_mode TEXT`);
     }
+    if (!columnSet.has('content_hash')) {
+      migrations.push(`ALTER TABLE generations ADD COLUMN content_hash TEXT`);
+    }
 
     migrations.forEach((sql) => {
       try {
@@ -159,6 +165,25 @@ class DatabaseService {
         log.warn({ err, sql }, 'migration skipped');
       }
     });
+
+    ensureGenerationsFtsInfrastructure(this.db);
+    cardTagsDomain.ensureSchema(this.db);
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS generations_content_hash_required_insert
+      BEFORE INSERT ON generations
+      WHEN NEW.content_hash IS NULL OR length(trim(NEW.content_hash)) != 64
+      BEGIN
+        SELECT RAISE(ABORT, 'generations.content_hash must be a SHA-256 hash');
+      END;
+      CREATE TRIGGER IF NOT EXISTS generations_content_hash_required_update
+      BEFORE UPDATE OF content_hash ON generations
+      WHEN NEW.content_hash IS NULL OR length(trim(NEW.content_hash)) != 64
+      BEGIN
+        SELECT RAISE(ABORT, 'generations.content_hash must be a SHA-256 hash');
+      END;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_generation_suffix
+        ON audio_files(generation_id, filename_suffix);
+    `);
 
     // card_highlights: 兼容旧库（schema 17）
     this.db.exec(`
@@ -281,6 +306,13 @@ class DatabaseService {
 
   getGenerationByFile(folderName, baseFilename) {
     return generationsDomain.getByFile(this.db, folderName, baseFilename);
+  }
+
+  findDuplicateGenerations(phrase, cardType = 'trilingual') {
+    const normalizedPhrase = normalizeTagValue(phrase);
+    return generationsDomain.listDuplicateCandidates(this.db, cardType).filter(
+      (row) => normalizeTagValue(row.phrase) === normalizedPhrase
+    );
   }
 
   getCardHighlightByFile(folderName, baseFilename, sourceHash) {
@@ -493,6 +525,22 @@ class DatabaseService {
 
   deleteGeneration(id) {
     return generationsDomain.remove(this.db, id);
+  }
+
+  listCardTags(generationId, options = {}) {
+    return cardTagsDomain.listByGeneration(this.db, generationId, options);
+  }
+
+  listActiveCardTagsForGenerations(generationIds = []) {
+    return cardTagsDomain.listActiveForGenerations(this.db, generationIds);
+  }
+
+  setCardTag(tag) {
+    return this.withBusyRetry(() => cardTagsDomain.setTag(this.db, tag));
+  }
+
+  getCardTagCounts() {
+    return cardTagsDomain.counts(this.db);
   }
 
   // ========== Generation jobs ==========

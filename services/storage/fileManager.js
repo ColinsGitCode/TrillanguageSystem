@@ -353,6 +353,74 @@ function saveGeneratedFiles(phrase, content, options = {}) {
     };
 }
 
+function createGenerationStagingArea({ targetDir, folderName, baseName }) {
+    const resolvedTarget = path.resolve(String(targetDir || ''));
+    if (!resolvedTarget.startsWith(baseDir) || !fs.existsSync(resolvedTarget)) {
+        throw new Error('Invalid generation target directory');
+    }
+    const stagingRoot = path.join(resolvedTarget, '.staging');
+    fs.mkdirSync(stagingRoot, { recursive: true });
+    const safePrefix = String(baseName || 'card').replace(/[^\w.-]+/gu, '_').slice(0, 48) || 'card';
+    const stagingDir = fs.mkdtempSync(path.join(stagingRoot, `${safePrefix}-`));
+    return {
+        targetDir: resolvedTarget,
+        folderName,
+        baseName,
+        stagingRoot,
+        stagingDir,
+    };
+}
+
+function publishStagedGeneration(stage) {
+    const entries = fs.readdirSync(stage.stagingDir, { withFileTypes: true });
+    if (!entries.length || entries.some((entry) => !entry.isFile())) {
+        throw new Error('Generation staging area must contain files only');
+    }
+    const moves = entries.map((entry) => ({
+        source: path.join(stage.stagingDir, entry.name),
+        target: path.join(stage.targetDir, entry.name),
+    }));
+    const conflict = moves.find((move) => fs.existsSync(move.target));
+    if (conflict) throw new Error(`Generation target already exists: ${path.basename(conflict.target)}`);
+
+    const publishedPaths = [];
+    try {
+        for (const move of moves) {
+            fs.renameSync(move.source, move.target);
+            publishedPaths.push(move.target);
+        }
+    } catch (error) {
+        for (const publishedPath of publishedPaths.reverse()) {
+            const source = path.join(stage.stagingDir, path.basename(publishedPath));
+            if (fs.existsSync(publishedPath)) fs.renameSync(publishedPath, source);
+        }
+        throw error;
+    }
+
+    fs.rmSync(stage.stagingDir, { recursive: true, force: true });
+    if (fs.existsSync(stage.stagingRoot) && fs.readdirSync(stage.stagingRoot).length === 0) {
+        fs.rmdirSync(stage.stagingRoot);
+    }
+    return {
+        publishedPaths,
+        absPaths: {
+            md: path.join(stage.targetDir, `${stage.baseName}.md`),
+            html: path.join(stage.targetDir, `${stage.baseName}.html`),
+            meta: path.join(stage.targetDir, `${stage.baseName}.meta.json`),
+        },
+    };
+}
+
+function cleanupGenerationArtifacts({ stagingDir, stagingRoot, publishedPaths = [] } = {}) {
+    for (const filePath of publishedPaths) {
+        if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) fs.unlinkSync(filePath);
+    }
+    if (stagingDir) fs.rmSync(stagingDir, { recursive: true, force: true });
+    if (stagingRoot && fs.existsSync(stagingRoot) && fs.readdirSync(stagingRoot).length === 0) {
+        fs.rmdirSync(stagingRoot);
+    }
+}
+
 module.exports = {
     saveGeneratedFiles,
     buildBaseName,
@@ -362,4 +430,7 @@ module.exports = {
     listHtmlFilesInFolder,
     readFileInFolder,
     deleteRecordFiles,
+    createGenerationStagingArea,
+    publishStagedGeneration,
+    cleanupGenerationArtifacts,
 };

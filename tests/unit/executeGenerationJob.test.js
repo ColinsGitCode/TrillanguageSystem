@@ -18,6 +18,7 @@ test.describe('executeGenerationJob', () => {
       jobType: 'scenario_phrase',
       sourceMode: 'OCR',
       targetFolder: ' 2026.07.13 ',
+      duplicatePolicy: 'create-version',
       provider: 'deepseek',
       llmModel: 'deepseek-v4-flash',
     }), {
@@ -25,6 +26,7 @@ test.describe('executeGenerationJob', () => {
       cardType: 'scenario_phrase',
       sourceMode: 'ocr',
       targetFolder: '2026.07.13',
+      duplicatePolicy: 'create-version',
       requestedProvider: 'deepseek',
       modelOverride: 'deepseek-v4-flash',
     });

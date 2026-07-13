@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { api, resetState, closeServer } = require('./_harness');
+const { api, resetState, closeServer, dbService } = require('./_harness');
 const { executeCardGeneration } = require('../../services/application/executeCardGeneration');
 
 test.before(() => resetState());
@@ -29,6 +29,30 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     assert.equal(res.body.card_type, 'trilingual');
     assert.ok(res.body.generationId > 0, 'generationId should be populated');
     assert.ok(res.body.llm_output && res.body.llm_output.markdown_content);
+    assert.equal(res.body.admission.status, 'eligible');
+    assert.equal(res.body.admission.contentHash.length, 64);
+    const persisted = dbService.getGenerationById(res.body.generationId);
+    assert.equal(persisted.content_hash, res.body.admission.contentHash);
+    const tags = dbService.listCardTags(res.body.generationId);
+    assert.equal(tags.filter((tag) => tag.namespace === 'lang').length, 1);
+    assert.equal(tags.filter((tag) => tag.namespace === 'src').length, 1);
+  });
+
+  test.it('rejects a historical duplicate unless create-version is explicit', async () => {
+    const first = await api('POST', '/api/generate', { body: { phrase: 'duplicate admission card' } });
+    assert.equal(first.status, 200);
+
+    const rejected = await api('POST', '/api/generate', { body: { phrase: '  DUPLICATE ADMISSION CARD  ' } });
+    assert.equal(rejected.status, 409);
+    assert.equal(rejected.body.code, 'CARD_DUPLICATE_EXISTS');
+    assert.equal(dbService.getTotalCount(), 1);
+
+    const version = await api('POST', '/api/generate', {
+      body: { phrase: 'duplicate admission card', duplicate_policy: 'create-version' },
+    });
+    assert.equal(version.status, 200);
+    assert.equal(version.body.duplicate_policy, 'create-version');
+    assert.equal(dbService.getTotalCount(), 2);
   });
 
   test.it('keeps HTTP and direct invocation result contracts in parity', async () => {

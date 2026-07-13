@@ -1,6 +1,8 @@
 'use strict';
 
+const path = require('node:path');
 const { cardGenerationPorts } = require('./cardGenerationPorts');
+const { CardAdmissionError, normalizeDuplicatePolicy } = require('./cardAdmission');
 
 class GenerationCommandError extends Error {
   constructor(message) {
@@ -32,6 +34,7 @@ function normalizeCommand(command, ports) {
     cardType: ports.normalizeCardType(command.cardType),
     sourceMode: ports.normalizeSourceMode(command.sourceMode),
     targetFolder: String(command.targetFolder || '').trim(),
+    duplicatePolicy: normalizeDuplicatePolicy(command.duplicatePolicy),
     requestedProvider: command.requestedProvider || ports.activeProvider,
     modelOverride: command.modelOverride || ports.defaultModel,
   };
@@ -60,6 +63,9 @@ function createCardGenerationUseCase(customPorts = {}) {
 
   return async function executeCardGeneration(command, context = {}) {
     let normalizedCommand;
+    let staging = null;
+    let publishedPaths = [];
+    let generationId = null;
     try {
       normalizedCommand = normalizeCommand(command, ports);
       const {
@@ -67,11 +73,14 @@ function createCardGenerationUseCase(customPorts = {}) {
         cardType,
         sourceMode,
         targetFolder,
+        duplicatePolicy,
         requestedProvider,
         modelOverride,
       } = normalizedCommand;
       const perf = context.performanceMonitor || ports.createPerformanceMonitor();
       const e2eTestMode = context.e2eTestMode ?? ports.e2eTestMode;
+      const duplicates = ports.findDuplicateGenerations(phrase, cardType);
+      const duplicateAdmission = ports.assertDuplicatePolicy({ cardType, duplicates, duplicatePolicy });
 
       const generation = e2eTestMode
         ? ports.buildFixtureResult({ phrase, cardType, requestedProvider, sourceMode })
@@ -104,10 +113,11 @@ function createCardGenerationUseCase(customPorts = {}) {
         audioTasks: content.audio_tasks,
       });
 
+      staging = ports.createGenerationStagingArea({ targetDir, folderName, baseName });
       perf.mark('fileSave');
-      const result = ports.saveGeneratedFiles(phrase, content, {
+      const stagedResult = ports.saveGeneratedFiles(phrase, content, {
         baseName,
-        targetDir,
+        targetDir: staging.stagingDir,
         folderName,
         cardType,
         sourceMode,
@@ -116,18 +126,48 @@ function createCardGenerationUseCase(customPorts = {}) {
       let audio = null;
       let persistedAudioTasks = [];
       if (!e2eTestMode && ports.hasTtsEndpoint() && content.audio_tasks.length) {
-        const audioTasks = ports.normalizeAudioTasks(content.audio_tasks, result.baseName);
+        const audioTasks = ports.normalizeAudioTasks(content.audio_tasks, stagedResult.baseName);
         audio = await ports.generateAudioBatch(audioTasks, {
-          outputDir: result.targetDir,
-          baseName: result.baseName,
+          outputDir: stagedResult.targetDir,
+          baseName: stagedResult.baseName,
         });
-        persistedAudioTasks = ports.buildPersistedAudioTasks(audioTasks, audio);
       }
+
+      const normalizedAudioTasks = ports.normalizeAudioTasks(content.audio_tasks, stagedResult.baseName);
+      const admission = ports.validateCardAdmission({
+        generation: {
+          phrase,
+          cardType,
+          sourceMode,
+          markdownContent: content.markdown_content,
+        },
+        audioTasks: normalizedAudioTasks,
+        audio,
+        e2eTestMode,
+        ttsConfigured: ports.hasTtsEndpoint(),
+      });
+
+      const published = ports.publishStagedGeneration(staging);
+      publishedPaths = published.publishedPaths;
+      const result = {
+        ...stagedResult,
+        targetDir,
+        absPaths: published.absPaths,
+      };
+      if (audio) {
+        audio = {
+          ...audio,
+          results: (audio.results || []).map((item) => ({
+            ...item,
+            filePath: path.join(targetDir, path.basename(item.filePath)),
+          })),
+        };
+      }
+      persistedAudioTasks = ports.buildPersistedAudioTasks(normalizedAudioTasks, audio);
 
       perf.mark('audioGenerate');
       observability.performance = perf.end();
 
-      let generationId = null;
       try {
         const dbData = ports.prepareInsertData({
           phrase,
@@ -147,7 +187,17 @@ function createCardGenerationUseCase(customPorts = {}) {
           cardType,
           sourceMode,
         });
+        dbData.cardTags = ports.buildAdmissionTags(dbData.generation);
+        if (dbData.cardTags.some((tag) => tag.namespace === 'qa' && tag.normalizedValue === 'test-artifact-candidate')) {
+          admission.status = 'review-required';
+        }
         generationId = ports.insertGeneration(dbData);
+        ports.validatePersistedAdmission({
+          generation: ports.getGenerationById(generationId),
+          tags: ports.listCardTags(generationId),
+          expectedHash: admission.contentHash,
+          expectedAudioRows: e2eTestMode ? 0 : normalizedAudioTasks.length,
+        });
         ports.log.info({ generationId }, 'inserted generation');
       } catch (dbError) {
         ports.log.error({ err: dbError }, 'database insert failed');
@@ -161,15 +211,37 @@ function createCardGenerationUseCase(customPorts = {}) {
         provider_requested: requestedProvider,
         provider_used: providerUsed,
         fallback: generation.fallback || null,
+        duplicate_policy: duplicateAdmission.policy,
         generationId,
         result,
         audio,
         prompt,
         llm_output: content,
         observability,
+        admission,
       };
     } catch (error) {
-      if (!(error instanceof GenerationCommandError) && !(error instanceof GenerationValidationError)) {
+      if (generationId) {
+        try {
+          ports.deleteGeneration(generationId);
+        } catch (cleanupError) {
+          ports.log.error({ err: cleanupError, generationId }, 'failed to roll back rejected generation');
+        }
+      }
+      try {
+        ports.cleanupGenerationArtifacts({
+          stagingDir: staging?.stagingDir,
+          stagingRoot: staging?.stagingRoot,
+          publishedPaths,
+        });
+      } catch (cleanupError) {
+        ports.log.error({ err: cleanupError }, 'failed to clean rejected generation files');
+      }
+      if (
+        !(error instanceof GenerationCommandError)
+        && !(error instanceof GenerationValidationError)
+        && !(error instanceof CardAdmissionError)
+      ) {
         recordExecutionError(ports, normalizedCommand || command, error);
       }
       throw error;
@@ -184,4 +256,5 @@ module.exports = {
   createCardGenerationUseCase,
   GenerationCommandError,
   GenerationValidationError,
+  CardAdmissionError,
 };

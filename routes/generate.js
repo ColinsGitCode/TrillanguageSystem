@@ -7,6 +7,7 @@ const express = require('express');
 const { checkGenerateThrottle } = require('./_shared');
 const {
   executeCardGeneration,
+  CardAdmissionError,
   GenerationCommandError,
   GenerationValidationError,
 } = require('../services/application/executeCardGeneration');
@@ -30,6 +31,7 @@ router.post('/api/generate', async (req, res) => {
       card_type = 'trilingual',
       source_mode = null,
       target_folder = '',
+      duplicate_policy = 'reject',
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
     const result = await executeCardGeneration({
@@ -37,6 +39,7 @@ router.post('/api/generate', async (req, res) => {
       cardType: card_type,
       sourceMode: source_mode,
       targetFolder: target_folder,
+      duplicatePolicy: duplicate_policy,
     });
     return res.json(result);
   } catch (err) {
@@ -51,6 +54,13 @@ router.post('/api/generate', async (req, res) => {
     }
     if (err instanceof GenerationCommandError) {
       return res.status(400).json({ error: err.message });
+    }
+    if (err instanceof CardAdmissionError) {
+      return res.status(err.status || 422).json({
+        error: err.message,
+        code: err.code,
+        details: err.details,
+      });
     }
     return res.status(500).json({ error: err.message });
   }

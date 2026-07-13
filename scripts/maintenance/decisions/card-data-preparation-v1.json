@@ -1,0 +1,66 @@
+{
+  "version": "card-data-preparation-v1",
+  "reviewed_at": "2026-07-13T16:30:00+09:00",
+  "reviewed_by": "Codex under repository-owner authorization to execute DP0-DP7",
+  "review_basis": "DP1 manifest, canonical Markdown inspection, file existence, structure analysis, and duplicate hash comparison",
+  "content_anomalies": [
+    { "generation_id": 300, "content_hash": "0566299815ee1b1dd5239487cd02505f6a2d3d0eed07abb8e0bfbd077472cca1", "result_content_hash": "2350e64a51a9f74987bd506cdc5fbb71947a238999ac4616dca7ec8acdbed515", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove model/tool narration before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 328, "content_hash": "ef3a2b46b039a21ae706cab707575778dadabdeaa209dd6747b608f6f61b9100", "result_content_hash": "a9e7b34e299f25fd7b8ec2d47d730c95dac034772eaa466a5abf6dbc0341c36d", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove generation planning prose before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 346, "content_hash": "2412a6da55d22b46756cf67bd7e2f7f47293edccbf10107bf6e1e99a48ddc877", "result_content_hash": "9b9c2eb08957c013741cf707cdadfd919b89031be65d23c37576c3ee7c2a90fc", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove generation planning prose before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 383, "content_hash": "cb3fb73d65ea03eebf9186daa15dda5b17cd949bfb4c456e14cec2b76ab62ac1", "result_content_hash": "fba911ae49db87b87e5efea852e46af4a103025f8df11bf64f90e7e6ba630dae", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove repository/tool narration before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 411, "content_hash": "b992faa89cf001a03ebaf39742ee4f5d8b7c1ad41188a3dca172cdafeb50b190", "result_content_hash": "fb1968d4c290edfb4f0470e43e82fd87a42ca9b054804fa6f7cabc20d5849579", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove repository search narration before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 412, "content_hash": "3434cd4381f63511b0e32bb55cdb2f60b0ed6af418c75f0175eb0ed06974d04d", "decision": "quarantine", "reason": "Only a generation acknowledgement exists; no learning content can be recovered without semantic regeneration." },
+    { "generation_id": 413, "content_hash": "e6372ead0d8aa33b4b1423f36c64df9a06990bcd86636cb4f4eceb7b1e665373", "decision": "quarantine", "reason": "Escaped headings, incomplete sections, and no audio make the card unsafe to split or repair mechanically." },
+    { "generation_id": 416, "content_hash": "709f803cf045846b2cb622705782cd7b27f1fa7523a62fda9a248c268020b607", "result_content_hash": "dd63fccfbbaf0fed079b4b441a425fafc29cd3644b5de57f881067b645f2bf05", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove search narration before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 425, "content_hash": "c1c5885a6bc844415cf30ab02e2862f533d2a260931e8ace8b6f47859433ef92", "decision": "quarantine", "reason": "The record contains only a refusal and has no recoverable learning content." },
+    { "generation_id": 438, "content_hash": "ccc4c3f5c8bbbb9ed17fc022edbf229f986750b0f3188ae01f94e2e5ce162b79", "result_content_hash": "7b3bb8ff10a49155560141be68b9a3cad20c50ac0151102782555315d5364372", "decision": "repair", "strategy": "prefix-title-before-first-section", "reason": "Remove script/tool narration before intact numbered card sections and restore the missing H1." },
+    { "generation_id": 459, "content_hash": "55f8b2a5020f725519d0bf12b83daf04c873690d7900c5a15188f398fe79be51", "result_content_hash": "ac60622eed9ab7e03d952fc0d4985bdb54ff61553f23eccaa2b67fa1c7db390e", "decision": "repair", "strategy": "promote-first-heading", "reason": "The complete card uses H2 for its title; promote only that heading to H1." },
+    { "generation_id": 471, "content_hash": "849104ed2454ff0c7614d13a50c10b3427ee0e37b9cfc132ba0ed8cdc79aaab4", "decision": "keep-as-whole-card", "reason": "English and Japanese material is coherent and audio-backed, but the missing Chinese section prevents deterministic splitting." },
+    { "generation_id": 600, "content_hash": "d4ddc9e6d307790101e47002ea49ad3051336e418191387a26e17469f22fcc33", "result_content_hash": "5d2f33b21577f22d8c43f88d433bc00559dffe5d22b61485c87fb30c1aa56474", "decision": "repair", "strategy": "recover-inline-title", "reason": "Remove the MCP status prefix concatenated before the intact H1; preserve all card content." },
+    { "generation_id": 601, "content_hash": "a846e0ef3ee16de5742d8e071a4d124bf737f4c9dbb95fb12960b4dcc419d4b5", "result_content_hash": "f676c9dc4eb7d7be4cd48e6ffb9c7d6821d90fa0769d03ed48ff38367aabe8a3", "decision": "repair", "strategy": "recover-inline-title", "reason": "Remove the MCP status prefix concatenated before the intact H1; preserve all grammar content." },
+    { "generation_id": 699, "content_hash": "3f4bcdd2d446389619fe45f4496ee3cec73ff1b7cac79a7e080666bca17695ff", "decision": "quarantine", "reason": "Japanese examples lost essential words and audio; semantic reconstruction would require regeneration." },
+    { "generation_id": 709, "content_hash": "c2b284fe8aea1b24a9a92329ef41f816f06e12a8644a9cde9c3962cf14c487c4", "decision": "quarantine", "reason": "Japanese examples are semantically incomplete and have no audio; mechanical repair is unsafe." },
+    { "generation_id": 743, "content_hash": "bc9583dcee664d610f209eccf2f6e8dbce9a321b15d1b0d44f5f2a89ca62ac16", "decision": "quarantine", "reason": "Japanese examples are semantically incomplete and have no audio; mechanical repair is unsafe." },
+    { "generation_id": 836, "content_hash": "f619610587c360c82dfc45c2faa399972e5b7794da405fec7f856fa216024fb6", "decision": "quarantine", "reason": "Japanese examples are semantically incomplete and have no audio; mechanical repair is unsafe." }
+  ],
+  "test_candidates": [
+    { "generation_id": 402, "content_hash": "edec30611282c2356a99e96ed0bbe44e1d78630205575767817ab5586e6686fa", "decision": "confirm", "reason": "Known date-handling fixture." },
+    { "generation_id": 467, "content_hash": "3dd5468b31a3eb940543e5ac7fbba005113a97eb4e70e93b3bea02750cd88ca7", "decision": "confirm", "reason": "Explicit OCR test artifact." },
+    { "generation_id": 477, "content_hash": "f79edd640f3a1e74fd18ec26a5fb088602aecc5cff4a29f500ae28131920676d", "decision": "confirm", "reason": "Known rate-limit validation fixture." },
+    { "generation_id": 478, "content_hash": "04d9214bfd188be5b01b8312e4298c3cb0aca37d67ef76b4cca8570c36b5132a", "decision": "confirm", "reason": "Known duplicate rate-limit validation fixture." },
+    { "generation_id": 493, "content_hash": "696e0ea030a0667c22d8f69a71f3f39ce1fc73b4fa59f820a71465e54c5c4472", "decision": "confirm", "reason": "Explicit gateway smoke fixture." },
+    { "generation_id": 496, "content_hash": "1648fc5b0eaf1c1645435bdf822fd2e8c93f5bd41a434d160d035cfa66ad7bf0", "decision": "confirm", "reason": "Explicit load-test artifact." }
+  ],
+  "duplicate_groups": [
+    { "members": [{ "generation_id": 380, "content_hash": "7b57210e8d71bc5381a709dc48c4ad5af2372ee748d433a868b0b124f874e718" }, { "generation_id": 382, "content_hash": "fe212263b5e744e26fa431190d08cc8cd5965ed405872b825dfe762138f81dae" }], "decision": "keep-all", "reason": "Distinct content versions in different archive dates." },
+    { "members": [{ "generation_id": 404, "content_hash": "6d0163946db9bd5aafddbf99c77e985257246b1d9f1404d37b4d13e54a31d318" }, { "generation_id": 653, "content_hash": "c07cfb0d97e8398da3a50e037f9610ca0d8784a0cc49da1fef4376fda9d7e446" }], "decision": "keep-all", "reason": "Distinct content versions generated months apart." },
+    { "members": [{ "generation_id": 424, "content_hash": "6f1ac79e971d1ba8ac7899a83a2b83d8359a201d22e05cbc41e388995bb1df9c" }, { "generation_id": 856, "content_hash": "6d649dde3cd18f59dbf42e99b98665ae2bededa4678a2acdc52b5ab943a744d7" }], "decision": "keep-all", "reason": "The later card belongs to the verified hoikuen import batch and has distinct content." },
+    { "members": [{ "generation_id": 477, "content_hash": "f79edd640f3a1e74fd18ec26a5fb088602aecc5cff4a29f500ae28131920676d" }, { "generation_id": 478, "content_hash": "04d9214bfd188be5b01b8312e4298c3cb0aca37d67ef76b4cca8570c36b5132a" }], "decision": "keep-all", "reason": "Both are retained as excluded test audit artifacts." },
+    { "members": [{ "generation_id": 509, "content_hash": "cfc0e58fef9016f8990e75ea32c1869c0eb4e761d0e48475578c86eb2a9073b2" }, { "generation_id": 510, "content_hash": "cfc0e58fef9016f8990e75ea32c1869c0eb4e761d0e48475578c86eb2a9073b2" }], "decision": "canonical", "canonical_generation_id": 509, "quarantine_alternates": [510], "reason": "Rows share the same canonical content and physical files; retain both DB records but only one may be learning-eligible." },
+    { "members": [{ "generation_id": 521, "content_hash": "a06493d300f942a617c321c9d575f2d775b137249ac461d5d6eb56667db392f2" }, { "generation_id": 549, "content_hash": "1d55469d2695554e232a0eb81a7d0df8a2262dc84c2b96b51ba80b12704c65f1" }], "decision": "keep-all", "reason": "Distinct content versions in different archive dates." },
+    { "members": [{ "generation_id": 610, "content_hash": "7dee4c7306fac1258fdc0d4542bf5b995969fd5796aa745b1b3eb87a3803af26" }, { "generation_id": 611, "content_hash": "347a6dff1e94514cc6ad769223017639d4e1e96d37604dd8fa830de5951c5ade" }], "decision": "keep-all", "reason": "Distinct generated explanations and examples." },
+    { "members": [{ "generation_id": 639, "content_hash": "e1cb1b7e986c12aab7276ab6ff073a232c4538ea40670c33cb5a3d293694ae1b" }, { "generation_id": 640, "content_hash": "e1cb1b7e986c12aab7276ab6ff073a232c4538ea40670c33cb5a3d293694ae1b" }], "decision": "canonical", "canonical_generation_id": 639, "quarantine_alternates": [640], "reason": "Rows share the same canonical content and physical files; retain both DB records but only one may be learning-eligible." },
+    { "members": [{ "generation_id": 644, "content_hash": "93959fcf8b782bdc769510540dc25b32a7ea48c6e4abefb02b856927009283f6" }, { "generation_id": 646, "content_hash": "6f28aed67ad3c06e6119d21b382ff1e0f8bd2ca7d3f135d3492be12d8da37bc9" }], "decision": "delete-selected", "delete_generation_ids": [644], "canonical_generation_id": 646, "reason": "Generation 644 has no Markdown, HTML, meta, or audio files; 646 is a complete same-phrase replacement." },
+    { "members": [{ "generation_id": 883, "content_hash": "1b9dd04cc39f8fa1686bfdac0dbf7fb003b61d88ea3455e37e395d534877781e" }, { "generation_id": 912, "content_hash": "75861de72705ec005e1106eb1dd106ed52c19f5c30f069900711b068408ca048" }, { "generation_id": 954, "content_hash": "92657c190c59bcd63f450acd19491064e2bd79496ab126248d9dbcefa33570c6" }], "decision": "keep-all", "reason": "Distinct content versions across three dates." }
+  ],
+  "topic_long_tail": {
+    "decision": "leave-unclassified",
+    "reason": "Only high-confidence rule topics are accepted in v1; unmatched long-tail cards intentionally remain without topic tags."
+  },
+  "regression_expectations": [
+    { "generation_id": 929, "content_hash": "c96701d0603db99f24032020bbe85531d6ebf3e32f2582c68a5c98815c18c077", "expect": "not-test-artifact", "reason": "The phrase contains validation wording but is a real scenario card." }
+  ],
+  "audio_reference_repairs": [
+    {
+      "generation_id": 485,
+      "content_hash": "8aaf137fd35111e94b709aefc8da9e581b15a959c266163025c566b41ad92ea0",
+      "result_content_hash": "4f7db93efe00f5809fcdf7cf8b35cccf2c78d3607453aeb3c638ba5ae859ae93",
+      "decision": "repair-ruby-corrupted-src",
+      "replacements": [
+        { "from": "<ruby>哈<rt>哈</rt></ruby><ruby>希<rt>まれ</rt></ruby>_ja_1.wav", "to": "哈希_ja_1.wav" },
+        { "from": "<ruby>哈<rt>哈</rt></ruby><ruby>希<rt>まれ</rt></ruby>_ja_2.wav", "to": "哈希_ja_2.wav" }
+      ],
+      "reason": "Both canonical Japanese WAV files exist; only the Markdown src attribute was corrupted by legacy ruby processing."
+    }
+  ]
+}

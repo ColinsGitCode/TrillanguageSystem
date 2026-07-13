@@ -6,6 +6,8 @@
 // Functions take `db` first; databaseService.js wraps these as class methods.
 
 const { safeJsonParse } = require('./helpers');
+const cardTags = require('./cardTags');
+const { contentHash } = require('../../dataPreparation/rules');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 
 function insertGeneration(db, data) {
@@ -15,17 +17,20 @@ function insertGeneration(db, data) {
         INSERT INTO generations (
           phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
           folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
-          markdown_content, en_translation, ja_translation, zh_translation,
+          markdown_content, content_hash, en_translation, ja_translation, zh_translation,
           generation_date, request_id
         ) VALUES (
           @phrase, @phraseLanguage, @cardType, @sourceMode, @llmProvider, @llmModel,
           @folderName, @baseFilename, @mdFilePath, @htmlFilePath, @metaFilePath,
-          @markdownContent, @enTranslation, @jaTranslation, @zhTranslation,
+          @markdownContent, @contentHash, @enTranslation, @jaTranslation, @zhTranslation,
           @generationDate, @requestId
         )
       `);
 
-      const genResult = genInsert.run(genData);
+      const genResult = genInsert.run({
+        ...genData,
+        contentHash: genData.contentHash || contentHash(genData.markdownContent),
+      });
       const generationId = genResult.lastInsertRowid;
 
       const obsInsert = db.prepare(`
@@ -62,6 +67,10 @@ function insertGeneration(db, data) {
         for (const audio of audioData) {
           audioInsert.run({ ttsVoice: null, ...audio, generationId });
         }
+      }
+
+      for (const tag of data.cardTags || []) {
+        cardTags.insertRule(db, { ...tag, generationId });
       }
 
       return generationId;
@@ -190,6 +199,15 @@ function getByFile(db, folderName, baseFilename) {
   return generation || null;
 }
 
+function listDuplicateCandidates(db, cardType) {
+  return db.prepare(`
+    SELECT id, phrase, card_type, content_hash, folder_name, base_filename
+    FROM generations
+    WHERE card_type = ?
+    ORDER BY id DESC
+  `).all(cardType);
+}
+
 function fullTextSearch(db, query, limit = 20) {
   const sql = `
     SELECT g.*,
@@ -231,6 +249,7 @@ module.exports = {
   getTotalCount,
   getById,
   getByFile,
+  listDuplicateCandidates,
   fullTextSearch,
   getRecent,
   remove,

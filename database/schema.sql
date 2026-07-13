@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS generations (
 
   -- 内容
   markdown_content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
 
   -- 翻译内容（提取字段）
   en_translation TEXT,
@@ -83,13 +84,29 @@ CREATE TRIGGER IF NOT EXISTS generations_fts_insert AFTER INSERT ON generations 
 END;
 
 CREATE TRIGGER IF NOT EXISTS generations_fts_delete AFTER DELETE ON generations BEGIN
-  DELETE FROM generations_fts WHERE rowid = old.id;
+  INSERT INTO generations_fts(generations_fts, rowid, phrase, en_translation, ja_translation, zh_translation, markdown_content)
+  VALUES ('delete', old.id, old.phrase, old.en_translation, old.ja_translation, old.zh_translation, old.markdown_content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS generations_fts_update AFTER UPDATE ON generations BEGIN
-  DELETE FROM generations_fts WHERE rowid = old.id;
+  INSERT INTO generations_fts(generations_fts, rowid, phrase, en_translation, ja_translation, zh_translation, markdown_content)
+  VALUES ('delete', old.id, old.phrase, old.en_translation, old.ja_translation, old.zh_translation, old.markdown_content);
   INSERT INTO generations_fts(rowid, phrase, en_translation, ja_translation, zh_translation, markdown_content)
   VALUES (new.id, new.phrase, new.en_translation, new.ja_translation, new.zh_translation, new.markdown_content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS generations_content_hash_required_insert
+BEFORE INSERT ON generations
+WHEN NEW.content_hash IS NULL OR length(trim(NEW.content_hash)) != 64
+BEGIN
+  SELECT RAISE(ABORT, 'generations.content_hash must be a SHA-256 hash');
+END;
+
+CREATE TRIGGER IF NOT EXISTS generations_content_hash_required_update
+BEFORE UPDATE OF content_hash ON generations
+WHEN NEW.content_hash IS NULL OR length(trim(NEW.content_hash)) != 64
+BEGIN
+  SELECT RAISE(ABORT, 'generations.content_hash must be a SHA-256 hash');
 END;
 
 -- ========================================
@@ -132,6 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_audio_generation ON audio_files(generation_id);
 CREATE INDEX IF NOT EXISTS idx_audio_language ON audio_files(language);
 CREATE INDEX IF NOT EXISTS idx_audio_status ON audio_files(status);
 CREATE INDEX IF NOT EXISTS idx_audio_generated ON audio_files(generation_id) WHERE status = 'generated';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_generation_suffix ON audio_files(generation_id, filename_suffix);
 
 -- ========================================
 -- 表 3: observability_metrics（可观测性指标）
@@ -376,6 +394,34 @@ CREATE TABLE IF NOT EXISTS generation_job_events (
 
 CREATE INDEX IF NOT EXISTS idx_gje_job_created ON generation_job_events(job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gje_type_created ON generation_job_events(event_type, created_at DESC);
+
+-- ========================================
+-- 表 20: card_tags（卡片标签）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS card_tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generation_id INTEGER NOT NULL,
+  namespace TEXT NOT NULL,
+  value TEXT NOT NULL,
+  normalized_value TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'user',
+  status TEXT NOT NULL DEFAULT 'active',
+  rule_version TEXT,
+  rule_key TEXT,
+  evidence_json TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CHECK (namespace IN ('topic', 'fn', 'lang', 'src', 'qa', 'tag')),
+  CHECK (source IN ('rule', 'user', 'import')),
+  CHECK (status IN ('active', 'suppressed')),
+  UNIQUE (generation_id, namespace, normalized_value),
+  FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_tags_active_ns_value
+  ON card_tags(namespace, normalized_value) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_card_tags_generation ON card_tags(generation_id);
 
 -- ========================================
 -- 完成初始化

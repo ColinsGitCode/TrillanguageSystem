@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { api, resetState, closeServer } = require('./_harness');
+const { api, resetState, closeServer, dbService } = require('./_harness');
 
 test.before(() => resetState());
 test.after(async () => { await closeServer(); });
@@ -60,6 +60,50 @@ test.describe('/api/generation-jobs/*', () => {
     const detail = await api('GET', `/api/generation-jobs/${created.body.job.id}`);
     assert.equal(detail.status, 200);
     assert.equal(detail.body.job.jobType, 'scenario_phrase');
+  });
+
+  test.it('preflights historical duplicates and persists an explicit version policy', async () => {
+    dbService.insertGeneration({
+      generation: {
+        phrase: 'existing queue card',
+        phraseLanguage: 'en',
+        cardType: 'trilingual',
+        sourceMode: 'input',
+        llmProvider: 'deepseek',
+        llmModel: 'deepseek-v4-pro',
+        folderName: '20260713',
+        baseFilename: 'existing queue card',
+        mdFilePath: '/tmp/existing.md',
+        htmlFilePath: '/tmp/existing.html',
+        metaFilePath: '/tmp/existing.meta.json',
+        markdownContent: '# existing queue card',
+        enTranslation: null,
+        jaTranslation: null,
+        zhTranslation: null,
+        generationDate: '2026-07-13',
+        requestId: 'existing-queue-card',
+      },
+      observability: {
+        tokensInput: 0, tokensOutput: 0, tokensTotal: 0, tokensCached: 0,
+        costInput: 0, costOutput: 0, costTotal: 0, costCurrency: 'USD',
+        quotaUsed: null, quotaLimit: null, quotaRemaining: null, quotaResetAt: null, quotaPercentage: null,
+        performanceTotalMs: 0, performancePhases: '{}', qualityScore: 0, qualityChecks: '[]',
+        qualityDimensions: '{}', qualityWarnings: '[]', promptFull: '', promptParsed: '{}',
+        llmOutput: '{}', llmFinishReason: 'STOP', metadata: '{}',
+      },
+      audioFiles: [],
+    });
+
+    const rejected = await api('POST', '/api/generation-jobs', { body: { phrase: 'EXISTING QUEUE CARD' } });
+    assert.equal(rejected.status, 409);
+    assert.equal(rejected.body.code, 'CARD_DUPLICATE_EXISTS');
+
+    const accepted = await api('POST', '/api/generation-jobs', {
+      body: { phrase: 'existing queue card', duplicate_policy: 'create-version' },
+    });
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.body.job.duplicatePolicy, 'create-version');
+    assert.equal(accepted.body.job.requestPayload.duplicate_policy, 'create-version');
   });
 
   test.it('GET /api/generation-jobs/:id 404 for unknown id', async () => {

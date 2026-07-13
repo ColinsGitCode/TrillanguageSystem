@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   createCardGenerationUseCase,
+  CardAdmissionError,
   GenerationCommandError,
   GenerationValidationError,
 } = require('../../services/application/executeCardGeneration');
@@ -14,6 +15,8 @@ function createHarness(overrides = {}) {
     insertData: null,
     insertedErrors: [],
     generatedOptions: null,
+    cleanupCalls: [],
+    deletedGenerations: [],
   };
   const content = {
     markdown_content: '# Card',
@@ -56,6 +59,15 @@ function createHarness(overrides = {}) {
     resolveCardAudioTasks: (value) => value.audio_tasks,
     prepareMarkdownForCard: async (markdown) => `${markdown}\nprepared`,
     renderHtmlFromMarkdown: async () => '<article>Card</article>',
+    findDuplicateGenerations: () => [],
+    assertDuplicatePolicy: ({ duplicatePolicy, duplicates }) => ({ policy: duplicatePolicy, duplicates }),
+    createGenerationStagingArea: ({ targetDir, folderName, baseName }) => ({
+      targetDir,
+      folderName,
+      baseName,
+      stagingDir: '/tmp/cards/.staging/run',
+      stagingRoot: '/tmp/cards/.staging',
+    }),
     saveGeneratedFiles: (_phrase, _content, options) => ({
       folder: options.folderName,
       baseName: options.baseName,
@@ -67,15 +79,50 @@ function createHarness(overrides = {}) {
         meta: `/tmp/cards/${options.baseName}.meta.json`,
       },
     }),
+    publishStagedGeneration: ({ targetDir, baseName }) => ({
+      publishedPaths: [
+        `${targetDir}/${baseName}.md`,
+        `${targetDir}/${baseName}.html`,
+        `${targetDir}/${baseName}.meta.json`,
+        `${targetDir}/${baseName}_en_1.mp3`,
+      ],
+      absPaths: {
+        md: `${targetDir}/${baseName}.md`,
+        html: `${targetDir}/${baseName}.html`,
+        meta: `${targetDir}/${baseName}.meta.json`,
+      },
+    }),
+    cleanupGenerationArtifacts: (payload) => calls.cleanupCalls.push(payload),
     hasTtsEndpoint: () => true,
     normalizeAudioTasks: (tasks) => tasks,
-    generateAudioBatch: async () => ({ files: [{ success: true, provider: 'kokoro' }] }),
+    generateAudioBatch: async () => ({
+      files: [{ success: true, provider: 'kokoro' }],
+      results: [{ index: 0, filePath: '/tmp/cards/.staging/run/provider-card_en_1.mp3' }],
+      errors: [],
+    }),
+    validateCardAdmission: () => ({
+      status: 'eligible',
+      contentHash: 'a'.repeat(64),
+      structure: { reviewRequired: false },
+      audio: { expected: 1, generated: 1 },
+    }),
     buildPersistedAudioTasks: (tasks) => tasks.map((task) => ({ ...task, status: 'generated' })),
     prepareInsertData: (data) => {
       calls.insertData = data;
       return { generation: data };
     },
+    buildAdmissionTags: () => [
+      { namespace: 'lang', value: 'en', normalizedValue: 'en' },
+      { namespace: 'src', value: 'input', normalizedValue: 'input' },
+    ],
     insertGeneration: () => 42,
+    getGenerationById: () => ({ content_hash: 'a'.repeat(64), audioFiles: [{}] }),
+    listCardTags: () => [
+      { namespace: 'lang', status: 'active' },
+      { namespace: 'src', status: 'active' },
+    ],
+    validatePersistedAdmission: () => true,
+    deleteGeneration: (generationId) => calls.deletedGenerations.push(generationId),
     insertError: (data) => calls.insertedErrors.push(data),
     normalizeCardType: (value) => value || 'trilingual',
     normalizeSourceMode: (value) => value || null,
@@ -96,18 +143,22 @@ test.describe('executeCardGeneration application use case', () => {
 
     assert.deepEqual(Object.keys(result), [
       'success', 'card_type', 'source_mode', 'provider_requested', 'provider_used',
-      'fallback', 'generationId', 'result', 'audio', 'prompt', 'llm_output', 'observability',
+      'fallback', 'duplicate_policy', 'generationId', 'result', 'audio', 'prompt', 'llm_output',
+      'observability', 'admission',
     ]);
     assert.equal(result.success, true);
     assert.equal(result.generationId, 42);
     assert.equal(result.provider_requested, 'deepseek');
     assert.equal(result.provider_used, 'deepseek');
+    assert.equal(result.duplicate_policy, 'reject');
+    assert.equal(result.admission.status, 'eligible');
     assert.equal(result.llm_output.html_content, '<article>Card</article>');
     assert.equal(result.audio.files[0].provider, 'kokoro');
     assert.equal(calls.generatedOptions.targetFolder, 'custom');
     assert.equal(calls.generatedOptions.modelOverride, 'deepseek-v4-pro');
     assert.equal(calls.insertData.audioTasks[0].status, 'generated');
     assert.deepEqual(calls.marks, ['fileSave', 'audioGenerate']);
+    assert.equal(calls.cleanupCalls.length, 0);
   });
 
   test.it('uses deterministic fixtures and skips TTS in E2E context', async () => {
@@ -156,6 +207,7 @@ test.describe('executeCardGeneration application use case', () => {
     );
     assert.equal(saveCalls, 0);
     assert.equal(calls.insertedErrors.length, 0);
+    assert.equal(calls.cleanupCalls.length, 1);
   });
 
   test.it('rejects empty direct commands before invoking provider or persistence', async () => {
@@ -166,6 +218,7 @@ test.describe('executeCardGeneration application use case', () => {
     );
     assert.equal(calls.generatedOptions, null);
     assert.equal(calls.insertedErrors.length, 0);
+    assert.equal(calls.cleanupCalls.length, 1);
   });
 
   test.it('records unexpected execution failures once and rethrows them', async () => {
@@ -178,5 +231,37 @@ test.describe('executeCardGeneration application use case', () => {
     assert.equal(calls.insertedErrors.length, 1);
     assert.equal(calls.insertedErrors[0].phrase, 'failure');
     assert.equal(calls.insertedErrors[0].errorMessage, 'provider unavailable');
+    assert.equal(calls.cleanupCalls.length, 1);
+  });
+
+  test.it('rejects historical duplicates before provider or file work', async () => {
+    const { calls, execute } = createHarness({
+      findDuplicateGenerations: () => [{ id: 9, phrase: 'same', card_type: 'trilingual' }],
+      assertDuplicatePolicy: () => {
+        throw new CardAdmissionError('duplicate', { code: 'CARD_DUPLICATE_EXISTS', status: 409 });
+      },
+    });
+    await assert.rejects(
+      execute({ phrase: 'same' }),
+      (error) => error.code === 'CARD_DUPLICATE_EXISTS' && error.status === 409
+    );
+    assert.equal(calls.generatedOptions, null);
+    assert.equal(calls.insertedErrors.length, 0);
+    assert.equal(calls.cleanupCalls.length, 1);
+  });
+
+  test.it('compensates the DB row and published files when readback admission fails', async () => {
+    const readbackError = new CardAdmissionError('readback failed', {
+      code: 'CARD_ADMISSION_READBACK_FAILED',
+      status: 500,
+    });
+    const { calls, execute } = createHarness({
+      validatePersistedAdmission: () => { throw readbackError; },
+    });
+    await assert.rejects(execute({ phrase: 'readback failure' }), readbackError);
+    assert.deepEqual(calls.deletedGenerations, [42]);
+    assert.equal(calls.cleanupCalls.length, 1);
+    assert.equal(calls.cleanupCalls[0].publishedPaths.length, 4);
+    assert.equal(calls.insertedErrors.length, 0);
   });
 });

@@ -7,7 +7,8 @@ const crypto = require('crypto');
 const path = require('path');
 const { normalizeAudioExtension } = require('../generation/audioFormat');
 const log = require('../../lib/logger').child({ module: 'svc/db-helpers' });
-const { normalizeCardType } = require('../../lib/serverConfig');
+const { normalizeCardType, RECORDS_TIMEZONE } = require('../../lib/serverConfig');
+const { folderNameToGenerationDate } = require('../dataPreparation/rules');
 
 const RECORDS_PATH = process.env.RECORDS_PATH || '/data/trilingual_records';
 const RESOLVED_RECORDS_PATH = path.resolve(RECORDS_PATH);
@@ -61,6 +62,30 @@ function extractTranslation(markdownContent, language) {
   return null;
 }
 
+function computeContentHash(markdownContent) {
+  const normalized = String(markdownContent || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+function dateInRecordsTimezone(now = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: RECORDS_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  } catch (_error) {
+    return now.toISOString().slice(0, 10);
+  }
+}
+
+function resolveGenerationDate(folderName, now = new Date()) {
+  return folderNameToGenerationDate(folderName) || dateInRecordsTimezone(now);
+}
+
 /**
  * 准备生成记录数据
  */
@@ -90,10 +115,11 @@ function prepareGenerationData({
     htmlFilePath: filePaths.html,
     metaFilePath: filePaths.meta,
     markdownContent: content.markdown_content || '',
+    contentHash: computeContentHash(content.markdown_content),
     enTranslation: extractTranslation(content.markdown_content, 'en'),
     jaTranslation: extractTranslation(content.markdown_content, 'ja'),
     zhTranslation: extractTranslation(content.markdown_content, 'zh'),
-    generationDate: new Date().toISOString().split('T')[0],
+    generationDate: resolveGenerationDate(folderName),
     requestId: generateRequestId()
   };
 }
@@ -211,6 +237,8 @@ module.exports = {
   generateRequestId,
   detectLanguage,
   extractTranslation,
+  computeContentHash,
+  resolveGenerationDate,
   prepareGenerationData,
   prepareObservabilityData,
   prepareAudioFilesData,

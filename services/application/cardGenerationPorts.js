@@ -3,12 +3,23 @@
 const { PerformanceMonitor } = require('../observability/observabilityService');
 const { renderHtmlFromMarkdown, prepareMarkdownForCard } = require('../generation/htmlRenderer');
 const { postProcessGeneratedContent } = require('../generation/contentPostProcessor');
-const { saveGeneratedFiles } = require('../storage/fileManager');
+const {
+  cleanupGenerationArtifacts,
+  createGenerationStagingArea,
+  publishStagedGeneration,
+  saveGeneratedFiles,
+} = require('../storage/fileManager');
 const { generateAudioBatch } = require('../generation/ttsService');
 const { generateWithProvider } = require('../generation/cardGenerationService');
 const dbService = require('../storage/databaseService');
 const { prepareInsertData } = require('../storage/databaseHelpers');
 const { buildE2EGenerateResult } = require('../../lib/e2eFixtures');
+const { buildAdmissionTags } = require('../dataPreparation/cardTagging');
+const {
+  assertDuplicatePolicy,
+  validateCardAdmission,
+  validatePersistedAdmission,
+} = require('./cardAdmission');
 const {
   validateGeneratedContent,
   normalizeAudioTasks,
@@ -38,13 +49,24 @@ const cardGenerationPorts = {
   resolveCardAudioTasks,
   prepareMarkdownForCard,
   renderHtmlFromMarkdown,
+  createGenerationStagingArea,
   saveGeneratedFiles,
+  publishStagedGeneration,
+  cleanupGenerationArtifacts,
   hasTtsEndpoint: () => Boolean(process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT),
   normalizeAudioTasks,
   generateAudioBatch,
   buildPersistedAudioTasks,
+  buildAdmissionTags,
+  validateCardAdmission,
+  validatePersistedAdmission,
+  assertDuplicatePolicy,
   prepareInsertData,
   insertGeneration: (data) => dbService.insertGeneration(data),
+  deleteGeneration: (generationId) => dbService.deleteGeneration(generationId),
+  getGenerationById: (generationId) => dbService.getGenerationById(generationId),
+  listCardTags: (generationId) => dbService.listCardTags(generationId, { includeSuppressed: true }),
+  findDuplicateGenerations: (phrase, cardType) => dbService.findDuplicateGenerations(phrase, cardType),
   insertError: (data) => dbService.insertError(data),
   normalizeCardType,
   normalizeSourceMode,

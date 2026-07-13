@@ -2,6 +2,8 @@
 
 const express = require('express');
 const generationJobService = require('../services/generation/generationJobService');
+const dbService = require('../services/storage/databaseService');
+const { assertDuplicatePolicy, normalizeDuplicatePolicy } = require('../services/application/cardAdmission');
 const { DEFAULT_DEEPSEEK_MODEL, normalizeCardType, normalizeSourceMode } = require('../lib/serverConfig');
 
 const router = express.Router();
@@ -18,6 +20,12 @@ router.post('/api/generation-jobs', async (req, res) => {
     const provider = 'deepseek';
     const llmModel = DEFAULT_DEEPSEEK_MODEL;
     const targetFolder = String(req.body?.target_folder || '').trim();
+    const duplicatePolicy = normalizeDuplicatePolicy(req.body?.duplicate_policy);
+    assertDuplicatePolicy({
+      cardType: jobType,
+      duplicates: dbService.findDuplicateGenerations(phrase, jobType),
+      duplicatePolicy,
+    });
     const sourceContext = req.body?.source_context && typeof req.body.source_context === 'object'
       ? req.body.source_context
       : {};
@@ -28,6 +36,7 @@ router.post('/api/generation-jobs', async (req, res) => {
       phraseNormalized: phrase,
       sourceMode,
       targetFolder,
+      duplicatePolicy,
       provider,
       llmModel,
       sourceContext,
@@ -38,6 +47,7 @@ router.post('/api/generation-jobs', async (req, res) => {
         card_type: jobType,
         source_mode: sourceMode,
         target_folder: targetFolder,
+        duplicate_policy: duplicatePolicy,
         llm_model: llmModel,
         source_context: sourceContext
       }
@@ -46,10 +56,10 @@ router.post('/api/generation-jobs', async (req, res) => {
     return res.json({ success: true, job, summary: generationJobService.getSummary() });
   } catch (err) {
     const message = String(err?.message || 'enqueue generation job failed');
-    const status = message === 'duplicate_active_generation_job'
+    const status = message === 'duplicate_active_generation_job' || err?.code === 'CARD_DUPLICATE_EXISTS'
       ? 409
-      : err?.code === 'GENERATION_WORKER_SHUTTING_DOWN' ? 503 : 500;
-    return res.status(status).json({ error: message });
+      : err?.code === 'GENERATION_WORKER_SHUTTING_DOWN' ? 503 : Number(err?.status || 500);
+    return res.status(status).json({ error: message, code: err?.code, details: err?.details });
   }
 });
 

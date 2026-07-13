@@ -13,7 +13,7 @@
 
 2026-07-13 起，当前产品只保留 **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗。
 
-当前实施入口：
+当前实施与设计入口：
 
 - ../README.md：启动与运行；
 - ../CLAUDE.md：当前架构索引；
@@ -21,7 +21,8 @@
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
-- Features/Card_Classification_and_Tagging.md：卡片分类与标签系统专题设计（受控命名空间 + 自定义标签，卡片组织域，兼作 LA 2.0 信号源）；
+- Features/Learning_Assistance_2_0_Data_Preparation_Plan.md：现有卡片备份、审计、同步、标签与音频整备实施基线（DP0-DP7）；
+- Features/Card_Classification_and_Tagging.md：卡片分类与标签系统专题设计（修订待确认；卡片组织域，兼作 LA 2.0 可选信号源）；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。
 

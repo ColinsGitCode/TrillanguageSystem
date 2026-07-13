@@ -343,7 +343,9 @@ class GenerationJobService {
         providerUsed: result?.provider_used || result?.providerUsed || '',
         modelUsed: result?.observability?.metadata?.model || result?.modelUsed || '',
         cardType: result?.card_type || nextJob.jobType,
-        sourceMode: result?.source_mode || nextJob.sourceMode || null
+        sourceMode: result?.source_mode || nextJob.sourceMode || null,
+        admissionStatus: result?.admission?.status || null,
+        duplicatePolicy: result?.duplicate_policy || nextJob.duplicatePolicy || 'reject'
       };
 
       this.dbService.updateGenerationJob(nextJob.id, {

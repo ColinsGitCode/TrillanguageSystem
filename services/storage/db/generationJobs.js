@@ -9,6 +9,7 @@ const { safeJsonParse } = require('./helpers');
 
 function mapRow(row) {
   if (!row) return null;
+  const requestPayload = safeJsonParse(row.request_payload_json, {});
   return {
     id: row.id,
     jobType: row.job_type || 'trilingual',
@@ -16,6 +17,7 @@ function mapRow(row) {
     phraseNormalized: row.phrase_normalized,
     sourceMode: row.source_mode || null,
     targetFolder: row.target_folder || '',
+    duplicatePolicy: requestPayload.duplicate_policy || 'reject',
     provider: row.llm_provider || 'deepseek',
     llmModel: row.llm_model || '',
     enableCompare: Number(row.enable_compare || 0) === 1,
@@ -29,7 +31,7 @@ function mapRow(row) {
     resultGenerationId: row.result_generation_id ? Number(row.result_generation_id) : null,
     resultFolder: row.result_folder || '',
     resultBaseFilename: row.result_base_filename || '',
-    requestPayload: safeJsonParse(row.request_payload_json, {}),
+    requestPayload,
     resultSummary: safeJsonParse(row.result_summary_json, null),
     createdAt: row.created_at,
     startedAt: row.started_at,

@@ -18,6 +18,7 @@ const TABLES_IN_DELETE_ORDER = [
 
   // highlight sidecars
   'card_highlights',
+  'card_tags',
 
   // generation_jobs
   'generation_job_events',

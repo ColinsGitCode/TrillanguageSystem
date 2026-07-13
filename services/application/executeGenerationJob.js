@@ -13,6 +13,7 @@ function commandFromGenerationJob(job = {}) {
     cardType: normalizeCardType(job.jobType),
     sourceMode: normalizeSourceMode(job.sourceMode),
     targetFolder: String(job.targetFolder || '').trim(),
+    duplicatePolicy: String(job.duplicatePolicy || job.requestPayload?.duplicate_policy || 'reject'),
     requestedProvider: String(job.provider || 'deepseek').trim() || 'deepseek',
     modelOverride: String(job.llmModel || DEFAULT_DEEPSEEK_MODEL).trim() || DEFAULT_DEEPSEEK_MODEL,
   };

@@ -217,7 +217,7 @@ HTTP self-request 与 `X-Generation-Job-Worker` bypass 已删除。SQLite 启用
 
 架构迁移完成后按以下顺序重新启动产品设计：
 
-1. **学习辅助 2.0**：先定义学习者任务、复习机制、反馈闭环和成功指标，再定 schema。
+1. **学习辅助 2.0**：已进入产品设计，当前基线见 [`Learning_Assistance_2_0_Design_Baseline.md`](../Features/Learning_Assistance_2_0_Design_Baseline.md)；先定义学习者任务、复习机制、反馈闭环和成功指标，再定 schema。
 2. **知识图谱 2.0**：先定义图谱要回答的问题、节点/边语义、证据与可解释性，再选存储和可视化。
 3. 两者必须通过新的 ADR、用户流程、原型评审和数据模型评审，不复活旧端点或旧表。
 
