@@ -20,6 +20,8 @@
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
+- Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
+- Features/Card_Classification_and_Tagging.md：卡片分类与标签系统专题设计（受控命名空间 + 自定义标签，卡片组织域，兼作 LA 2.0 信号源）；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。
 
@@ -37,7 +39,7 @@ Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析、旧 SRS/复�
 - TestReports/UI_Validation_MissionControl_20260305.md；
 - 所有旧 Knowledge、SRS、TRAIN、review 相关计划与测试报告。
 
-学习辅助 2.0 与知识图谱 2.0 只会在全栈迁移完成后重新启动产品设计，不复活旧 API、旧 schema 或旧页面。
+学习辅助 2.0 已在全栈迁移完成后启动产品设计，当前基线为 `Features/Learning_Assistance_2_0_Design_Baseline.md`；知识图谱 2.0 保持后置，不复活旧 API、旧 schema 或旧页面。
 
 ## 其他历史边界
 
