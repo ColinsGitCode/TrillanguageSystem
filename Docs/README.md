@@ -37,6 +37,7 @@
 - `../README.md`：快速启动、Docker 服务、当前 DeepSeek provider 链与关键环境变量
 - `../CLAUDE.md`：最完整的当前架构索引，覆盖目录结构、任务队列、测试与运行约定
 - `Docs/Architecture/TTS_Model_Selection.md`：英文 / 日文 TTS 选型调研 + 决策（中文不做语音 / 日语默认 VOICEVOX / Style-Bert-VITS2 因开销大且收益有限已封存）
+- `Docs/Architecture/Fullstack_Migration_React_Router.md`：全栈迁移方案（React Router v7 + TypeScript + Vite，保 services/ 内核换 HTTP+UI 外壳；含并存过渡、worker 抽离、多用户接入点），设计方案·待实施
 
 下列架构文档保留为历史参考，不作为当前运行入口：
 
