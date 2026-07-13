@@ -1,10 +1,10 @@
-import type { Route } from './+types/rr-poc';
+import type { Route } from './+types/_index';
 import { CardsFactory } from '../features/factory/CardsFactory';
 
 export const meta: Route.MetaFunction = () => [
   { title: 'Cards Factory - Three LANS' }
 ];
 
-export default function ReactCardsFactoryRoute() {
+export default function CardsFactoryRoute() {
   return <CardsFactory />;
 }

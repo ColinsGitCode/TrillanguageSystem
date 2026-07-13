@@ -67,6 +67,8 @@ export function CardsFactory() {
   const [ocrClean, setOcrClean] = useState('');
   const [notice, setNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mobileNavButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
   const lastSuccessRef = useRef(0);
 
   useEffect(() => {
@@ -75,6 +77,24 @@ export function CardsFactory() {
     setTheme(next);
     document.documentElement.dataset.theme = next;
   }, []);
+
+  useEffect(() => {
+    if (!mobileNav) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    mobileNavRef.current?.querySelector<HTMLElement>('a, button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setMobileNav(false);
+      requestAnimationFrame(() => mobileNavButtonRef.current?.focus());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNav]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -209,14 +229,14 @@ export function CardsFactory() {
 
   return (
     <div className="react-app-shell" data-testid="react-cards-factory">
-      <aside className={`react-sidebar${mobileNav ? ' open' : ''}`}>
+      <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
         <div className="brand-block">
           <span className="brand-bars"><i /><i /><i /></span>
           <div><strong>Three LANS</strong><small>Cards Factory</small></div>
         </div>
         <nav aria-label="主导航">
           <p>学习</p>
-          <a className="active" href="/__rr-poc"><Factory aria-hidden="true" /> Cards Factory</a>
+          <a className="active" href="/" aria-current="page"><Factory aria-hidden="true" /> Cards Factory</a>
         </nav>
         <div className="sidebar-status">
           <span className={healthUnhealthy ? 'offline' : ''} />
@@ -229,7 +249,15 @@ export function CardsFactory() {
 
       <main className="react-workspace">
         <header className="mobile-topbar">
-          <button className="icon-button" type="button" aria-label="打开导航" onClick={() => setMobileNav(!mobileNav)}>
+          <button
+            ref={mobileNavButtonRef}
+            className="icon-button"
+            type="button"
+            aria-label={mobileNav ? '关闭导航' : '打开导航'}
+            aria-controls="react-sidebar"
+            aria-expanded={mobileNav}
+            onClick={() => setMobileNav(!mobileNav)}
+          >
             {mobileNav ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
           </button>
           <strong>Cards Factory</strong>

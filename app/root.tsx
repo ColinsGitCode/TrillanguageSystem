@@ -9,7 +9,7 @@ import {
 } from 'react-router';
 import type { Route } from './+types/root';
 import { createAppQueryClient } from './lib/query-client';
-import '../public/css/tokens.css';
+import './styles/tokens.css';
 import './styles/factory.css';
 import './styles/card-modal.css';
 

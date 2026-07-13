@@ -81,83 +81,6 @@ test.describe.serial('UI visual regression', () => {
 
   test('Cards Factory across desktop, tablet and mobile', async ({ page }) => {
     test.setTimeout(120_000);
-    const targets = [{ path: '/', name: 'workspace', ready: 'phrase-input' }];
-    const viewports = [
-      { width: 1440, height: 1000, name: 'desktop' },
-      { width: 1024, height: 768, name: 'tablet' },
-      { width: 390, height: 844, name: 'mobile' }
-    ];
-
-    for (const viewport of viewports) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      for (const target of targets) {
-        await page.goto(target.path, { waitUntil: 'domcontentloaded' });
-        await expect(page.getByTestId(target.ready)).toBeVisible();
-        await expectPageScreenshot(page, `${target.name}-${viewport.name}.png`);
-      }
-    }
-  });
-
-  test('all card types and scenario mobile modal', async ({ page }) => {
-    test.setTimeout(120_000);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    const folder = page.getByTestId('folder-list').locator('button').first();
-    await expect(folder).toBeVisible();
-    await folder.click();
-
-    for (const fixture of CARD_FIXTURES) {
-      const card = page.getByTestId('file-list').locator('button').filter({ hasText: fixture.title }).first();
-      await expect(card).toBeVisible();
-      await card.click();
-      await expect(page.getByTestId('card-modal')).toBeVisible();
-      await expectPageScreenshot(page, `card-${fixture.cardType}-desktop.png`);
-      await page.getByTestId('card-modal-close').click();
-      await expect(page.getByTestId('card-modal')).toBeHidden();
-    }
-
-    const scenario = page.getByTestId('file-list').locator('button').filter({ hasText: '保育园交接' }).first();
-    await page.setViewportSize({ width: 390, height: 844 });
-    await scenario.click();
-    await expect(page.getByTestId('card-modal')).toBeVisible();
-    await expectPageScreenshot(page, 'card-scenario_phrase-mobile.png');
-  });
-
-  test('dark theme across Cards Factory and all card types', async ({ page }) => {
-    test.setTimeout(120_000);
-    await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
-    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
-    const targets = [{ path: '/', name: 'workspace', ready: 'phrase-input' }];
-    const viewports = [
-      { width: 1440, height: 1000, name: 'desktop' },
-      { width: 1024, height: 768, name: 'tablet' },
-      { width: 390, height: 844, name: 'mobile' }
-    ];
-
-    for (const viewport of viewports) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      for (const target of targets) {
-        await page.goto(target.path, { waitUntil: 'domcontentloaded' });
-        await expect(page.getByTestId(target.ready)).toBeVisible();
-        await expectPageScreenshot(page, `${target.name}-${viewport.name}-dark.png`);
-      }
-    }
-
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.getByTestId('folder-list').locator('button').first().click();
-    for (const fixture of CARD_FIXTURES) {
-      const card = page.getByTestId('file-list').locator('button').filter({ hasText: fixture.title }).first();
-      await card.click();
-      await expect(page.getByTestId('card-modal')).toBeVisible();
-      await expectPageScreenshot(page, `card-${fixture.cardType}-desktop-dark.png`);
-      await page.getByTestId('card-modal-close').click();
-      await expect(page.getByTestId('card-modal')).toBeHidden();
-    }
-  });
-
-  test('React Cards Factory across desktop, tablet and mobile', async ({ page }) => {
-    test.setTimeout(120_000);
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
       { width: 1024, height: 768, name: 'tablet' },
@@ -165,13 +88,13 @@ test.describe.serial('UI visual regression', () => {
     ];
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
       await expectPageScreenshot(page, `react-factory-${viewport.name}.png`);
     }
   });
 
-  test('React Cards Factory dark theme across desktop, tablet and mobile', async ({ page }) => {
+  test('Cards Factory dark theme across desktop, tablet and mobile', async ({ page }) => {
     test.setTimeout(120_000);
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
@@ -182,16 +105,16 @@ test.describe.serial('UI visual regression', () => {
     ];
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
       await expectPageScreenshot(page, `react-factory-${viewport.name}-dark.png`);
     }
   });
 
-  test('React card modal covers all card types and scenario mobile', async ({ page }) => {
+  test('card modal covers all card types and scenario mobile', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     for (const fixture of CARD_FIXTURES) {
       const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();
@@ -207,12 +130,12 @@ test.describe.serial('UI visual regression', () => {
     await expectPageScreenshot(page, 'react-card-scenario_phrase-mobile.png');
   });
 
-  test('React card modal dark theme covers all card types and scenario mobile', async ({ page }) => {
+  test('card modal dark theme covers all card types and scenario mobile', async ({ page }) => {
     test.setTimeout(120_000);
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     for (const fixture of CARD_FIXTURES) {
       const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();

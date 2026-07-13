@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# L5 启动冒烟：拉起 server → /api/health + 几个核心 GET 端点 → exit 0
+# L5 启动冒烟：构建并拉起生产 composition root → React / + 核心 API → exit 0
 # 用法: ./scripts/tests/smoke.sh
 # 用途: post-deploy / 本地变更后快速回归
 #
@@ -26,7 +26,8 @@ export TTS_JA_ENDPOINT=""
 export LOG_SILENT=1
 mkdir -p "$RECORDS_PATH"
 
-node server.js >"$TMP_DIR/server.log" 2>&1 &
+npm run build:react >"$TMP_DIR/build.log" 2>&1
+NODE_ENV=production node server.mjs >"$TMP_DIR/server.log" 2>&1 &
 SRV=$!
 
 # Wait up to 5s for the port to come up
@@ -48,6 +49,7 @@ fi
 # Paths are the real ones from routes/*.js (verified against
 # routes/{health,history,files,generationJobs}.js).
 PROBES=(
+  "/"
   "/api/health"
   "/api/history?page=1&limit=1"
   "/api/statistics"
@@ -59,6 +61,19 @@ fail=0
 for path in "${PROBES[@]}"; do
   if ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT$path"; then
     echo "SMOKE FAIL: $path" >&2
+    fail=1
+  fi
+done
+
+if ! curl -fsS "http://127.0.0.1:$PORT/" | grep -q "创建学习卡"; then
+  echo "SMOKE FAIL: React root marker missing" >&2
+  fail=1
+fi
+
+for retired in "/__rr-poc" "/index.html"; do
+  status="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$retired")"
+  if [ "$status" != "404" ]; then
+    echo "SMOKE FAIL: $retired expected 404, got $status" >&2
     fail=1
   fi
 done

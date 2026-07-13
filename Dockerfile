@@ -12,4 +12,4 @@ RUN npm run build:react && npm prune --omit=dev
 
 ENV RECORDS_PATH=/data/trilingual_records
 EXPOSE 3010
-CMD ["npm", "run", "start:hybrid"]
+CMD ["npm", "start"]

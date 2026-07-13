@@ -19,6 +19,7 @@ Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析与旧 SRS/复�
 本地：
 
     npm install
+    npm run build:react
     npm start
 
 访问 http://127.0.0.1:3010/。
@@ -48,11 +49,13 @@ Compose project name 为 three_lans_system，默认启动 viewer、ocr、tts-en�
       -> TTS + filesystem
       -> SQLite history/observability
 
-当前 Cards Factory 仍由 public/index.html + 浏览器 ESM 渲染；后端是 Express + CommonJS services + better-sqlite3。React Router v7 + TypeScript 的 hybrid composition root 已上线，/__rr-poc 作为独立架构探针，根页面尚未切换 owner。
+Cards Factory 由 React Router v7 + TypeScript 在根路径渲染；同一 `server.mjs` 进程组合 React SSR、Express API、CommonJS services 与 better-sqlite3。旧 `public/index.html` 和浏览器 ESM 前端已删除，`public/` 仅保留 favicon 静态资产。
 
 ### 目录
 
-    server.js          Express bootstrap + generation worker
+    server.mjs         React Router + Express production composition root
+    server.js          API-only integration-test bootstrap
+    app/               React Cards Factory、Card Modal、typed API client、styles
     routes/            generate/jobs/files/history/health/ocr
     services/
       generation/      prompt、后处理、ruby、HTML、TTS、队列
@@ -61,7 +64,7 @@ Compose project name 为 three_lans_system，默认启动 viewer、ocr、tts-en�
       storage/         SQLite 与 records filesystem
       ocr/             Tesseract adapter
       fixtures/        E2E 确定性输出
-    public/            当前 Cards Factory 原生前端
+    public/            favicon 等无逻辑静态资产
     prompts/           三类卡片的活跃 prompt 模板
     database/          当前 SQLite schema
     tests/             unit / integration / Playwright

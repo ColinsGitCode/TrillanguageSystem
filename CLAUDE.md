@@ -42,17 +42,18 @@ The Compose project name is three_lans_system. The user-visible app is http://12
 ## Runtime architecture
 
     Browser
-      -> public/index.html
-      -> public/js/modules/*
+      -> React Router v7 root route
+      -> app/features/*
       -> /api/*
 
-    Express server.js
-      -> route adapters
+    server.mjs composition root
+      -> React Router SSR + hashed client assets
+      -> Express route adapters
       -> generation/llm/ocr/observability/storage services
       -> SQLite + records filesystem
       -> one in-process generation worker
 
-The active Cards Factory frontend is still vanilla browser ESM. The Node 20 container now runs server.mjs as a hybrid composition root: /__rr-poc is React Router v7 SSR, / remains legacy Cards Factory, and /api/* remains Express. The production viewer is an immutable image; do not restore the source or node_modules bind mounts.
+The active Cards Factory frontend is React Router v7 + TypeScript at `/`; `/api/*` remains Express in the same `server.mjs` process. The former `/__rr-poc` route and legacy browser ESM frontend are retired and return 404. The production viewer is an immutable image; do not restore source or node_modules bind mounts.
 
 ## Routes
 
@@ -158,26 +159,18 @@ Required invariants:
 
 Active files:
 
-    public/index.html
-    public/styles.css
-    public/modern-card.css
-    public/css/tokens.css
-    public/css/components.css
-    public/css/app-shell.css
-    public/js/modules/api.js
-    public/js/modules/app-shell.js
-    public/js/modules/app.js
-    public/js/modules/audio-player.js
-    public/js/modules/card-renderer.js
-    public/js/modules/generation-job-detail.js
-    public/js/modules/info-modal.js
-    public/js/modules/shell-health.js
-    public/js/modules/store.js
-    public/js/modules/utils.js
+    app/root.tsx
+    app/routes/_index.tsx
+    app/features/factory/*
+    app/features/card-modal/*
+    app/lib/api/client.ts
+    app/styles/tokens.css
+    app/styles/factory.css
+    app/styles/card-modal.css
 
 The shell has one product destination: Cards Factory. The card library is part of that page, not a separate route.
 
-Vendored marked, DOMPurify, and d3 are served locally under public/vendor. Keep DOMPurify loaded before card rendering. D3 is still used by the INTEL panel.
+`marked`, `DOMPurify`, React Query and Lucide are production npm dependencies bundled into hashed local assets. Card rendering must preserve the Markdown -> audio/ruby adapter -> DOMPurify pipeline.
 
 ## Persistence
 
@@ -266,8 +259,8 @@ Knowledge and SRS environment variables are retired and must not be reintroduced
 
 ## Migration rules
 
-1. Finish deletion and runtime verification before adding React.
-2. Add React Router first on /__rr-poc; do not seize / immediately.
+1. D0-P5 are complete: retired products and the legacy frontend must not be restored.
+2. React Router owns `/`; `/__rr-poc` and `/index.html` must remain 404.
 3. Keep root package CommonJS; use an ESM composition root.
 4. Keep existing Express API envelopes stable during UI migration.
 5. Preserve tokens, testids, behavior, and visual gates.

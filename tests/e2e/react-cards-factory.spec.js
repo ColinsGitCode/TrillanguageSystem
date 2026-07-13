@@ -28,7 +28,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P3 desktop composition keeps 2:1 and 1:3 working ratios', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     const composer = await page.locator('.factory-composer').boundingBox();
     const queue = await page.getByTestId('react-queue-status').boundingBox();
@@ -42,7 +42,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P3 queue opens only from its status card and closes outside', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     await page.getByTestId('react-queue-status').click();
     const dialog = page.getByRole('dialog', { name: '队列管理' });
     await expect(dialog).toBeVisible();
@@ -54,7 +54,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P3 UI enqueues the selected card type and keeps the workspace responsive', async ({ page, request }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     await page.getByTestId('react-card-type-scenario_phrase').click();
     await page.getByTestId('react-phrase-input').fill('React 场景入队验证');
     await page.getByTestId('react-generate-button').click();
@@ -67,7 +67,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P3 OCR uploads, cleans and fills the shared text input', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     const sample = path.resolve(__dirname, 'fixtures/ocr-sample.png');
     await page.getByTestId('react-image-input').setInputFiles(sample);
     await expect(page.getByTestId('react-ocr-button')).toBeEnabled();
@@ -77,15 +77,39 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P3 exposes searchable history without a second product page', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     await page.getByRole('tab', { name: '历史' }).click();
     await page.getByPlaceholder('搜索历史').fill('なくなった');
     await expect(page.locator('.history-items button')).toHaveCount(1);
     await expect(page.locator('.history-items button')).toContainText('〜なくなった');
   });
 
+  test('P3 retries a failed shared-queue job from the centered dialog', async ({ page, request }) => {
+    const phrase = `__E2E_FAIL_ONCE__ React retry ${Date.now()}`;
+    const created = await request.post('/api/generation-jobs', {
+      data: { phrase, card_type: 'trilingual', source_mode: 'input' },
+    });
+    expect(created.ok()).toBeTruthy();
+    const id = (await created.json()).job.id;
+    await expect.poll(async () => {
+      const response = await request.get(`/api/generation-jobs/${id}`);
+      return (await response.json()).job.status;
+    }, { timeout: 15_000 }).toBe('failed');
+
+    await page.goto('/');
+    await page.getByTestId('react-queue-status').click();
+    await page.locator('.queue-job').filter({ hasText: phrase }).click();
+    await expect(page.getByTestId('react-queue-timeline')).toContainText('FAILED');
+    await page.getByRole('button', { name: '重试失败' }).click();
+    await expect.poll(async () => {
+      const response = await request.get(`/api/generation-jobs/${id}`);
+      return (await response.json()).job.status;
+    }, { timeout: 30_000 }).toBe('success');
+    await expect(page.getByTestId('react-queue-timeline')).toContainText('SUCCEEDED');
+  });
+
   test('P4 renders full-height Markdown, kanji-only ruby, audio and INTEL', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
     const modal = page.getByTestId('react-card-modal');
@@ -108,7 +132,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   });
 
   test('P4 persists a selected-text highlight and restores it on reopen', async ({ page }) => {
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
     await page.getByTestId('react-card-content').evaluate((container) => {
@@ -139,7 +163,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
       body: '# hostile\n<style>body{display:none}</style><script>window.__pwned=1</script><img src=x onerror="window.__imgPwned=1">\n## 日本語\n<ruby>漢字<rt>かんじ</rt></ruby>',
     }));
     await page.route('**/api/records/by-file?*', (route) => route.fulfill({ status: 404, json: { error: 'not found' } }));
-    await page.goto('/__rr-poc');
+    await page.goto('/');
     await page.getByTestId('react-file-list').getByRole('button', { name: /hostile/ }).click();
     const content = page.getByTestId('react-card-content');
     await expect(content.locator('ruby')).toHaveCount(1);
@@ -151,7 +175,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
   test('P3/P4 stay inside all supported viewports and modal remains full-height', async ({ page }) => {
     for (const viewport of [{ width: 1440, height: 1100 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
-      await page.goto('/__rr-poc');
+      await page.goto('/');
       await expect(page.getByTestId('react-cards-factory')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
       const scenario = page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' });

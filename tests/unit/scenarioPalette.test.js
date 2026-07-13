@@ -12,15 +12,15 @@ function cssText(relativePath) {
 }
 
 test.describe('scenario card palette', () => {
-  test.it('uses a Hermes-yellow palette distinct from grammar teal in the main file list', () => {
-    const css = cssText('public/styles.css');
+  test.it('uses the Hermes-yellow tokens and stays distinct from grammar teal', () => {
+    const tokens = cssText('app/styles/tokens.css');
+    const factory = cssText('app/styles/factory.css');
 
-    assert.match(css, /\.file-list \.list-item-btn\.card-type-scenario\s*\{[^}]*#f2b84b/s);
-    assert.match(css, /\.file-list \.list-item-btn\.card-type-scenario\.active\s*\{[^}]*#f37021/s);
-    assert.match(css, /\.file-item-corner\.corner-scenario\s*\{[^}]*#9a4f00/s);
-    assert.doesNotMatch(
-      css,
-      /\.file-list \.list-item-btn\.card-type-scenario\s*\{[^}]*#86efac/s
-    );
+    assert.match(tokens, /--color-card-scenario-surface:\s*#fff4dc/);
+    assert.match(tokens, /--color-card-scenario-border:\s*#eeb34f/);
+    assert.match(tokens, /--color-card-scenario-strong:\s*#c96f0b/);
+    assert.match(tokens, /--color-card-grammar-surface:\s*#e8f8f6/);
+    assert.match(factory, /\.file-card\.type-scenario_phrase\s*\{[^}]*var\(--color-card-scenario-border\)[^}]*var\(--color-card-scenario-surface\)/s);
+    assert.match(factory, /\.file-card\.type-grammar_ja\s*\{[^}]*var\(--color-card-grammar-border\)[^}]*var\(--color-card-grammar-surface\)/s);
   });
 });

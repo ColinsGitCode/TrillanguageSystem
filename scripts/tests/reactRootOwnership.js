@@ -19,7 +19,7 @@ function getFreePort() {
 
 async function waitFor(url, child) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    if (child.exitCode !== null) throw new Error('hybrid server exited with ' + child.exitCode);
+    if (child.exitCode !== null) throw new Error('React server exited with ' + child.exitCode);
     try {
       const response = await fetch(url);
       if (response.ok) return;
@@ -28,7 +28,7 @@ async function waitFor(url, child) {
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error('hybrid server did not become ready: ' + url);
+  throw new Error('React server did not become ready: ' + url);
 }
 
 async function assertResponse(baseUrl, route, status, expectedText) {
@@ -44,14 +44,14 @@ async function assertResponse(baseUrl, route, status, expectedText) {
 
 async function main() {
   const port = await getFreePort();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'three-lans-rr-poc-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'three-lans-react-root-'));
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: path.resolve(__dirname, '../..'),
     env: {
       ...process.env,
       NODE_ENV: 'production',
       PORT: String(port),
-      DB_PATH: path.join(tempDir, 'poc.sqlite'),
+      DB_PATH: path.join(tempDir, 'root.sqlite'),
       RECORDS_PATH: path.join(tempDir, 'records'),
       E2E_TEST_MODE: '1',
       TTS_EN_ENDPOINT: '',
@@ -67,14 +67,15 @@ async function main() {
   try {
     const baseUrl = 'http://127.0.0.1:' + port;
     await waitFor(baseUrl + '/api/health', child);
-    await assertResponse(baseUrl, '/', 200, 'Cards Factory');
-    await assertResponse(baseUrl, '/__rr-poc', 200, '创建学习卡');
+    await assertResponse(baseUrl, '/', 200, '创建学习卡');
+    await assertResponse(baseUrl, '/__rr-poc', 404);
+    await assertResponse(baseUrl, '/index.html', 404);
     await assertResponse(baseUrl, '/api/health', 200);
     await assertResponse(baseUrl, '/dashboard.html', 404);
     await assertResponse(baseUrl, '/api/knowledge/jobs', 404);
-    process.stdout.write('React Router Cards Factory OK (' + baseUrl + ')\n');
+    process.stdout.write('React Router root ownership OK (' + baseUrl + ')\n');
   } catch (error) {
-    error.message += '\nHybrid server output:\n' + childOutput;
+    error.message += '\nReact server output:\n' + childOutput;
     throw error;
   } finally {
     child.kill('SIGTERM');

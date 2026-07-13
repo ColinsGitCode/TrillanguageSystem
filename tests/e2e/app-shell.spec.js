@@ -1,37 +1,27 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('shared theme and shell primitives', () => {
-  test('system preference resolves before the page renders', async ({ page }) => {
+test.describe('React root shell', () => {
+  test('root is the only Cards Factory route and legacy entries stay retired', async ({ page, request }) => {
+    await page.goto('/');
+    await expect(page).toHaveTitle(/Cards Factory/);
+    await expect(page.getByTestId('react-cards-factory')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('href', '/');
+    await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('aria-current', 'page');
+
+    for (const path of ['/__rr-poc', '/index.html', '/dashboard.html', '/knowledge-hub.html', '/knowledge-ops.html']) {
+      expect((await request.get(path)).status(), path).toBe(404);
+    }
+  });
+
+  test('system theme resolves after hydration and explicit choice persists', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/');
-    await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'system');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  });
-
-  test('theme menu supports keyboard selection and persistence', async ({ page }) => {
-    await page.goto('/');
-    const trigger = page.getByRole('button', { name: '主题', exact: true });
-    await trigger.click();
-    const system = page.getByRole('menuitemradio', { name: '跟随系统' });
-    await expect(system).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(page.getByRole('menuitemradio', { name: '浅色' })).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('three-lans-theme-v1'))).toBe('dark');
+    await page.getByRole('button', { name: '切换主题' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('three-lans-theme-v1'))).toBe('light');
     await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  });
-
-  test('Escape closes the menu and restores focus', async ({ page }) => {
-    await page.goto('/');
-    const trigger = page.getByRole('button', { name: '主题', exact: true });
-    await trigger.click();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('menu', { name: '主题选择' })).toBeHidden();
-    await expect(trigger).toBeFocused();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
 
   test('dark semantic text tokens meet AA contrast and reduced motion is honored', async ({ page }) => {
@@ -63,54 +53,34 @@ test.describe('shared theme and shell primitives', () => {
       return {
         primary: ratio(parse(root.getPropertyValue('--color-text-primary')), surface),
         secondary: ratio(parse(root.getPropertyValue('--color-text-secondary')), surface),
-        transition: getComputedStyle(document.querySelector('.ui-icon-button')).transitionDuration
+        transition: getComputedStyle(document.querySelector('.icon-button')).transitionDuration,
       };
     });
     expect(result.primary).toBeGreaterThanOrEqual(4.5);
     expect(result.secondary).toBeGreaterThanOrEqual(4.5);
-    expect(Number.parseFloat(result.transition)).toBeLessThanOrEqual(0.00001);
+    expect(Number.parseFloat(result.transition || '0')).toBeLessThanOrEqual(0.00001);
   });
 
-  test('navigation exposes Cards Factory as the single product destination', async ({ page }) => {
-    const cases = [
-      ['/', 'workspace'],
-      ['/?view=library', 'workspace']
-    ];
-    for (const [path, key] of cases) {
-      await page.goto(path);
-      await expect(page.locator(`[data-nav-key="${key}"]`)).toHaveAttribute('aria-current', 'page');
-      await expect(page.locator('.app-nav-link[aria-current="page"]')).toHaveCount(1);
-    }
-    await expect(page.locator('[data-nav-key="library"]')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: '卡片库' })).toHaveCount(0);
-    await expect(page.locator('[data-nav-key="review"]')).toHaveCount(0);
-    await expect(page.locator('[data-nav-key="knowledge-hub"]')).toHaveCount(0);
-    await expect(page.locator('[data-nav-key="mission-control"]')).toHaveCount(0);
-    await expect(page.locator('[data-nav-key="knowledge-ops"]')).toHaveCount(0);
-  });
-
-  test('mobile drawer traps focus, closes with Escape and returns focus', async ({ page }) => {
+  test('mobile navigation closes with Escape and restores focus', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
-    const toggle = page.getByRole('button', { name: '打开主导航' });
-    await expect(toggle).toBeVisible();
+    const toggle = page.getByRole('button', { name: '打开导航' });
     await toggle.click();
-    await expect(page.locator('body')).toHaveClass(/shell-nav-open/);
-    await expect(page.locator('#appSidebarMount')).toHaveAttribute('aria-hidden', 'false');
+    await expect(page.locator('#react-sidebar')).toHaveClass(/open/);
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
     await page.keyboard.press('Escape');
-    await expect(page.locator('body')).not.toHaveClass(/shell-nav-open/);
+    await expect(page.locator('#react-sidebar')).not.toHaveClass(/open/);
     await expect(toggle).toBeFocused();
   });
 
-  test('tablet shell collapses to a stable 64px icon rail', async ({ page }) => {
+  test('tablet shell keeps a stable compact rail', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('/');
-    await expect(page.locator('#appSidebarMount')).toHaveCSS('width', '64px');
-    await expect(page.locator('.app-nav-label').first()).toBeHidden();
-    await expect(page.locator('[data-nav-key="workspace"]')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#react-sidebar')).toHaveCSS('width', '72px');
+    await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  test('health endpoint has one owner on Cards Factory', async ({ page }) => {
+  test('health endpoint has one React owner', async ({ page }) => {
     let count = 0;
     await page.route('**/api/health', async (route) => {
       count += 1;
