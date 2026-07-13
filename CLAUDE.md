@@ -55,6 +55,8 @@ The Compose project name is three_lans_system. The user-visible app is http://12
 
 The active Cards Factory frontend is React Router v7 + TypeScript at `/`; `/api/*` remains Express in the same `server.mjs` process. The former `/__rr-poc` route and legacy browser ESM frontend are retired and return 404. The production viewer is an immutable image; do not restore source or node_modules bind mounts.
 
+`server.js` is not a second production entry. It is the CommonJS API-only bootstrap used by `tests/integration/_harness.js`; both entrypoints delegate Express construction and startup to `lib/httpRuntime`, while only `server.mjs` mounts React Router and runs in Compose.
+
 ## Routes
 
 Active route modules:

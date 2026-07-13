@@ -22,6 +22,8 @@
 
 生产 composition root 为 `server.mjs`。React SSR、hashed client assets、Express adapters、CommonJS services、worker 与 better-sqlite3 在同一 viewer 进程中组合；Compose 项目名为 `three_lans_system`。
 
+仓库另保留 `server.js` 作为 integration test 专用的 CommonJS 启动入口。它通过 `lib/httpRuntime.createApp()` / `startServer()` 启动纯 Express API，不挂载 React Router；`tests/integration/_harness.js` 用它在随机端口和隔离数据库上执行路由集成测试。它不是第二个生产入口，也不参与 Compose 运行链路。
+
 ## 3. P6 验收结果
 
 | 门禁 | 结果 | 证据 |

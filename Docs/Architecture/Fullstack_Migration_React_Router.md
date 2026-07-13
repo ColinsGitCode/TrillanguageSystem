@@ -79,6 +79,11 @@
       ├─ records filesystem
       └─ one in-process generation worker
 
+入口按运行目的分工：
+
+- `server.mjs`：唯一生产 composition root，组合 Express API、React Router SSR/client assets 与 generation worker；
+- `server.js`：integration test 专用 CommonJS 入口，只通过 `lib/httpRuntime` 启动 Express API，由 `tests/integration/_harness.js` 在隔离环境中使用，不进入 Compose 生产链路。
+
 迁移前的主要结构问题（均已在 D0-P6 解决）：
 
 - app.js 同时持有 DOM、流程和状态，难以组件化测试；
