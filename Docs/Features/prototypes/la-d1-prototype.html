@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LA-D1 · 学习辅助 2.0 桌面原型</title>
 <style>
 :root {
@@ -189,6 +194,20 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 .empty-state { text-align:center; padding:44px 20px; color:var(--text3); }
 .empty-state h2 { margin:0 0 6px; font-size:16px; color:var(--text); }
 
+/* 复审修复:P1-3 双语单元 / P1-4 提交语义 / P2-6 交互 / P2-7 低视口 */
+.lang.dual { color:var(--sce-text); background:color-mix(in srgb, var(--sce-text) 12%, transparent); }
+.def { margin:8px 0 0; font-size:13.5px; color:var(--text2); }
+mark.hl { background:color-mix(in srgb, var(--danger) 14%, transparent); color:var(--danger); border-radius:2px; padding:0 2px; }
+.study-card .grades { position:sticky; bottom:8px; background:var(--surface); padding:10px; margin:22px -10px -14px; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-md); }
+.grades.locked .grade { opacity:.45; pointer-events:none; }
+.grade.saving { border-color:var(--primary); color:var(--primary); }
+.dialog { max-width:440px; margin:16px auto; padding:18px 20px; }
+.dialog h2 { margin:0 0 8px; font-size:15px; }
+.dialog p { margin:0 0 14px; font-size:13px; color:var(--text2); }
+.opt:focus-visible, .num:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+button.opt { cursor:pointer; }
+input.num { font:inherit; }
+
 /* 完成态 */
 .done-wrap { max-width:640px; margin:40px auto 0; text-align:center; }
 .done-mark { width:52px; height:52px; margin:0 auto 14px; border-radius:50%; display:grid; place-items:center;
@@ -250,7 +269,7 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
         <div class="qrow"><span class="pill tri">三语</span><span class="lang en">EN</span><span class="ph">技术债务</span><span class="chip due">今日到期</span></div>
         <div class="qrow"><span class="pill gra">语法</span><span class="lang ja">JA</span><span class="ph jp">〜ように〜しています:习惯性地做某事</span><span class="chip due">今日到期</span></div>
         <div class="qrow"><span class="pill tri">三语</span><span class="lang en">EN</span><span class="ph">缓存穿透</span><span class="chip hard">困难重现 · 连续 2 次「重来」</span></div>
-        <div class="qrow"><span class="pill sce">场景</span><span class="lang ja">JA</span><span class="ph jp">配镜验光 · 03 看远处模糊</span><span class="chip new">今日新卡</span></div>
+        <div class="qrow"><span class="pill sce">场景</span><span class="lang dual">EN+JA</span><span class="ph jp">配镜验光 · 03 看远处模糊</span><span class="chip new">今日新卡</span></div>
         <div class="qrow"><span class="pill tri">三语</span><span class="lang en">EN</span><span class="ph">随便吃点</span><span class="chip new">今日新卡</span></div>
       </div>
     </main>
@@ -261,7 +280,7 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 <!-- ═══ S2 首次计划设置 ═══ -->
 <section class="state" id="s2">
 <div class="stage">
-  <p class="note"><b>本页确认点:</b>① 首次进入直达设置而非空仪表盘(LA-D0 §4.1)。② 规模预览必须含 1086 单元与理论天数账(§5.2)。③ 范围筛选维度 = 卡型/学习语言/日期/active 标签。</p>
+  <p class="note"><b>本页确认点:</b>① 首次进入直达设置而非空仪表盘(§4.1)。② 规模预览含单元数与理论天数账(§5.2)。③ 本页<b>可交互</b>:点选语言/卡型、修改数字(目标 5-100,新卡 0-50 自动钳制),右侧预览实时联动;新卡设 0 → 显示「只清到期」。④ 下方对话框 = 修改既有计划范围时的影响确认(§7.2)。</p>
   <div class="frame"><div class="app">
     <aside class="side">
       <div class="brand"><span class="bars"><i></i><i></i><i></i></span><div><b>Three LANS</b><small>LEARNING WORKBENCH</small></div></div>
@@ -281,27 +300,33 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
       <div class="setup">
         <div class="surface" style="padding:18px 20px;">
           <div class="field"><div class="lab">学习语言方向</div>
-            <div class="opts"><span class="opt sel">English</span><span class="opt sel">Japanese</span></div>
+            <div class="opts" id="langOpts"><button class="opt sel" data-lang="en">English</button><button class="opt sel" data-lang="ja">Japanese</button></div>
           </div>
           <div class="field"><div class="lab">学习范围(默认 = 全部合格卡)</div>
-            <div class="opts"><span class="opt sel">全部卡型</span><span class="opt">仅语法卡</span><span class="opt">仅场景卡</span><span class="opt">按日期…</span><span class="opt">按标签 topic:childcare…</span></div>
+            <div class="opts" id="scopeOpts"><button class="opt sel" data-scope="all">全部卡型</button><button class="opt" data-scope="gra">仅语法卡</button><button class="opt" data-scope="sce">仅场景卡</button><button class="opt" data-scope="all">按日期…</button><button class="opt" data-scope="all">按标签…</button></div>
           </div>
-          <div class="field"><div class="lab">每日行动目标</div>
-            <div class="numrow"><span class="num">20</span><span style="font-size:12px;color:var(--text3)">已提交评分数,不是分钟数</span></div>
+          <div class="field"><div class="lab">每日行动目标(5–100)</div>
+            <div class="numrow"><input class="num" id="goalNum" type="number" min="5" max="100" value="20"><span style="font-size:12px;color:var(--text3)">已提交评分数,不是分钟数</span></div>
           </div>
-          <div class="field"><div class="lab">每日新单元上限</div>
-            <div class="numrow"><span class="num">5</span><span style="font-size:12px;color:var(--text3)">可设为 0,只清到期项</span></div>
+          <div class="field"><div class="lab">每日新单元上限(0–50)</div>
+            <div class="numrow"><input class="num" id="capNum" type="number" min="0" max="50" value="5"><span style="font-size:12px;color:var(--text3)">设为 0 = 只清到期项</span></div>
           </div>
           <button class="btn primary">保存并生成今日队列</button>
         </div>
         <div class="surface preview" style="padding:18px 20px;">
-          <p class="eyebrow">当前范围预览</p>
-          <div class="row"><span>合格卡片</span><b>620 张</b></div>
-          <div class="row"><span>展开学习单元</span><b>1 086 个</b></div>
-          <div class="row"><span>预计首日</span><b>新 5 · 到期 0</b></div>
-          <div class="row"><span>按 5 个/天引入全部</span><b>约 218 学习日</b></div>
-          <div class="warn">范围较大:全部引入约需 7 个月。可先缩小范围(如仅日语语法),或调高每日新单元上限。</div>
+          <p class="eyebrow">当前范围预览(实时联动)</p>
+          <div class="row"><span>合格卡片</span><b id="pvCards">620 张</b></div>
+          <div class="row"><span>展开学习单元</span><b id="pvUnits">1 086 个</b></div>
+          <div class="row"><span>预计首日</span><b id="pvFirst">新 5 · 到期 0</b></div>
+          <div class="row"><span>引入全部所需</span><b id="pvDays">约 218 学习日</b></div>
+          <div class="warn" id="pvWarn">范围较大:全部引入约需 7 个月。可先缩小范围(如仅日语语法),或调高每日新单元上限。</div>
         </div>
+      </div>
+      <p class="subcap" style="margin-left:0;">修改既有计划范围时的影响确认(§7.2)</p>
+      <div class="surface dialog" style="margin:6px 0;">
+        <h2>确认修改学习范围?</h2>
+        <p>改为「仅日语语法」将有 <b>903 个学习单元</b>移出当前范围——它们的学习状态与历史<b>完整保留</b>,只是不再进入今日队列;改回范围后恢复排队。</p>
+        <div class="cta-row" style="margin:0;"><button class="btn primary">确认修改</button><button class="btn ghost">取消</button></div>
       </div>
     </main>
   </div></div>
@@ -381,17 +406,18 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
           <div class="answer">
             <span class="cue-label" style="color:var(--lang-en)">English</span>
             <div class="ans-line" style="margin-top:8px;"><button class="play" aria-label="播放英文发音">▶</button>Let's just grab a quick bite.</div>
-            <p class="ex"><b>Ex 1:</b> I'm not that hungry — let's just grab a quick bite. <button class="play" style="width:22px;height:22px" aria-label="播放例句">▶</button><br><span style="font-size:12px;">我不太饿,咱们随便吃点吧。</span></p>
+            <p class="def">A casual way to suggest having a simple, quick meal instead of a proper sit-down one.</p>
+            <p class="ex"><b>Ex 1:</b> I'm not that hungry — let's just <mark class="hl">grab a quick bite</mark>. <button class="play" style="width:22px;height:22px" aria-label="播放例句">▶</button><br><span style="font-size:12px;">我不太饿,咱们随便吃点吧。<span style="color:var(--text3)">(标红 = 你在卡片库标注的重点,只读展示)</span></span></p>
             <p class="ex"><b>Ex 2:</b> We only had time to grab a quick bite before the meeting.<br><span style="font-size:12px;">开会前我们只来得及随便吃了点。</span></p>
-            <p style="font-size:12px;color:var(--text3);margin:10px 0 0;">查看完整三语卡(含日语区/标红) →</p>
+            <p style="font-size:12px;color:var(--text3);margin:10px 0 0;">内容结构与 Cards Factory 的 Markdown 渲染结果一致(解释行/例句/外来语标注);实现阶段由同一 renderer 输出,原型为其静态镜像。查看完整三语卡 →</p>
           </div>
-          <div class="grades">
-            <button class="grade g1"><b>重来</b><small>1 · 没想起来</small></button>
-            <button class="grade g2"><b>困难</b><small>2 · 吃力想起</small></button>
-            <button class="grade g3"><b>记住</b><small>3 · 正常回忆</small></button>
-            <button class="grade g4"><b>简单</b><small>4 · 秒答</small></button>
+          <div class="grades" id="gradeDemo">
+            <button class="grade g1" data-g="重来"><b>重来</b><small>1 · 没想起来</small></button>
+            <button class="grade g2" data-g="困难"><b>困难</b><small>2 · 吃力想起</small></button>
+            <button class="grade g3" data-g="记住"><b>记住</b><small>3 · 正常回忆</small></button>
+            <button class="grade g4" data-g="简单"><b>简单</b><small>4 · 秒答</small></button>
           </div>
-          <div class="explain">上一项:<b>〜ように〜しています</b> 评了「记住」→ 连续第 2 次记住,下次复习 <b>3 天后(7-16)</b>。</div>
+          <div class="explain" id="explainDemo">按 <b>1-4</b> 或点击评分试试:按钮会先进入「保存中…」禁用态,成功后在此处给出调度解释。上一项:<b>〜ように〜しています</b> 评了「记住」→ 下次复习 <b>3 天后(7-16)</b>。</div>
         </div>
       </div>
     </main>
@@ -476,6 +502,7 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
         <div class="surface study-card">
           <span class="cue-label" style="color:var(--lang-ja)">日本語 · 答案面</span>
           <div class="ans-line jp" style="margin-top:8px;"><button class="play" aria-label="播放日语发音">▶</button>ぐっすり<ruby>眠<rt>ねむ</rt></ruby>れました</div>
+          <p class="def jp"><ruby>深<rt>ふか</rt></ruby>く<ruby>安<rt>やす</rt></ruby>らかに<ruby>眠<rt>ねむ</rt></ruby>れたことを<ruby>表<rt>あらわ</rt></ruby>す表現(連絡帳でよく使う)。</p>
           <p class="ex jp"><b>例1:</b> <ruby>昨夜<rt>さくや</rt></ruby>はぐっすり<ruby>眠<rt>ねむ</rt></ruby>れました。 <button class="play" style="width:22px;height:22px" aria-label="播放例句">▶</button><br><span style="font-size:12px;font-family:var(--sans);">昨晚睡得很香。</span></p>
           <p class="ex jp"><b>例2:</b> <ruby>子供<rt>こども</rt></ruby>はお<ruby>昼寝<rt>ひるね</rt></ruby>でぐっすり<ruby>眠<rt>ねむ</rt></ruby>っていました。<br><span style="font-size:12px;font-family:var(--sans);">孩子午睡睡得很沉。</span></p>
           <p style="font-size:12px;color:var(--text3);margin:10px 0 0;">查看完整三语卡(含英语区) →</p>
@@ -643,7 +670,7 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 <!-- ═══ S10 恢复会话 + 提交失败 ═══ -->
 <section class="state" id="s10">
 <div class="stage">
-  <p class="note"><b>本页确认点:</b>① 恢复 = 已提交 8 项安全保存、未提交项不产生事件、从下一未完成项继续(LA-J6/§5.7)。② 提交失败不伪装成功:当前项保留、可重试、<b>不重复记事件</b>(§9.4);提交中四档按钮禁用防双击。</p>
+  <p class="note"><b>本页确认点:</b>① 恢复 = 已提交 8 项安全保存、未提交项不产生事件(LA-J6/§5.7)。② 三种提交语义分离:<b>提交中</b>(全部禁用防双击)/<b>失败待重试</b>(锁评分,只能「重试」或「更改评分」)/正常可评。③ 提前结束 = 确认 → 摘要;剩余项回队列不计失败(§4.4)。</p>
   <p class="subcap">A · 回到今日学习:检测到未完成会话</p>
   <div class="frame"><div class="app crop">
     <main class="work">
@@ -653,26 +680,51 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
       <div class="cta-row"><button class="btn ghost">放弃剩余,重新生成今日队列</button></div>
     </main>
   </div></div>
-  <p class="subcap">B · 会话内:评分提交失败</p>
+  <p class="subcap">B · 会话内:评分提交中(全部禁用,防双击)</p>
   <div class="frame"><div class="app crop">
     <main class="work">
-      <div class="sess-top">
-        <span class="sess-count">9 / 20</span>
-        <div class="progress"><i style="width:45%"></i></div>
-        <span class="chip due">今日到期</span>
-        <span class="pill tri">三语 · English</span>
-      </div>
-      <div class="card-stage" style="margin-top:14px;">
+      <div class="card-stage" style="margin-top:0;">
         <div class="surface study-card" style="padding:20px 26px;">
           <p class="cue" style="font-size:18px;margin:0;">随便吃点 → Let's just grab a quick bite.</p>
-          <div class="banner err" style="margin:14px 0 0;"><span>「记住」未保存(写入失败)。当前项已保留——重试不会重复记录。</span><button class="act">重试提交</button></div>
-          <div class="grades" style="margin-top:14px;">
-            <button class="grade g1"><b>重来</b><small>1</small></button>
-            <button class="grade g2"><b>困难</b><small>2</small></button>
-            <button class="grade g3" style="border-color:var(--primary);color:var(--primary)"><b>记住</b><small>待重试</small></button>
-            <button class="grade g4"><b>简单</b><small>4</small></button>
+          <div class="grades locked" style="margin-top:14px;">
+            <button class="grade g1" disabled><b>重来</b><small>1</small></button>
+            <button class="grade g2" disabled><b>困难</b><small>2</small></button>
+            <button class="grade g3 saving" disabled style="opacity:1;"><b>记住</b><small>保存中…</small></button>
+            <button class="grade g4" disabled><b>简单</b><small>4</small></button>
           </div>
         </div>
+      </div>
+    </main>
+  </div></div>
+  <p class="subcap">C · 会话内:提交失败(评分锁定,只能重试或更改)</p>
+  <div class="frame"><div class="app crop">
+    <main class="work">
+      <div class="card-stage" style="margin-top:0;">
+        <div class="surface study-card" style="padding:20px 26px;">
+          <p class="cue" style="font-size:18px;margin:0;">随便吃点 → Let's just grab a quick bite.</p>
+          <div class="banner err" style="margin:14px 0 0;"><span>「记住」未保存(写入失败)。当前项已保留——重试不会重复记录。</span><span style="display:flex;gap:8px;"><button class="act">重试提交</button><button class="act" style="border-style:dashed;">更改评分</button></span></div>
+          <div class="grades locked" style="margin-top:14px;">
+            <button class="grade g1" disabled><b>重来</b><small>1</small></button>
+            <button class="grade g2" disabled><b>困难</b><small>2</small></button>
+            <button class="grade g3" disabled style="opacity:1;border-color:var(--danger);color:var(--danger)"><b>记住</b><small>待重试</small></button>
+            <button class="grade g4" disabled><b>简单</b><small>4</small></button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div></div>
+  <p class="subcap">D · 主动提前结束:确认 → 摘要</p>
+  <div class="frame"><div class="app crop">
+    <main class="work" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
+      <div class="surface dialog" style="margin:0;">
+        <h2>结束本次会话?</h2>
+        <p>已提交的 <b>9</b> 项将保留;剩余 <b>11</b> 项回到今日队列,<b>不计失败</b>。</p>
+        <div class="cta-row" style="margin:0;"><button class="btn primary">结束并查看摘要</button><button class="btn ghost">继续学习</button></div>
+      </div>
+      <div class="surface dialog" style="margin:0;">
+        <h2>本次会话摘要</h2>
+        <p>提交 9 项 · 用时 6 分钟<br>重来 1 · 困难 2 · 记住 5 · 简单 1<br>剩余 11 项已回到今日队列,今日目标 9/20。</p>
+        <div class="cta-row" style="margin:0;"><button class="btn">回到今日学习</button></div>
       </div>
     </main>
   </div></div>
@@ -733,13 +785,18 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 <!-- ═══ S12 空态与暂停 ═══ -->
 <section class="state" id="s12">
 <div class="stage">
-  <p class="note"><b>本页确认点:</b>① 队列为空的四种原因必须可区分(§4.4):已完成/范围无合格卡/计划暂停/仅未决数据——此处画后三种。② 队列加载失败不连坐 Cards Factory(§7.1)。③ 暂停态保留统计只读,恢复一键。</p>
-  <p class="subcap">A · 计划已暂停</p>
+  <p class="note"><b>本页确认点:</b>① 队列为空的四种原因可区分(§4.4):已完成(页5)/计划暂停(A)/范围无合格卡(B)/<b>仅未决数据(C,独立态,带处理动作)</b>。② 暂停只承诺「不进入自动队列」——到期日如何处理是调度规则,归 LA-D2(权威边界)。③ 暂停/恢复有确认步骤(§7.2)。④ 队列加载失败不连坐 Cards Factory(§7.1)。</p>
+  <p class="subcap">A · 计划已暂停(含暂停确认对话框)</p>
   <div class="frame"><div class="app crop">
     <main class="work">
       <p class="eyebrow">今日学习 · 2026-07-13</p>
       <h1 style="color:var(--text3)">学习计划已暂停</h1>
-      <div class="banner warn2"><span>暂停期间不生成新队列、不累计逾期;历史记录与学习状态完整保留。</span><button class="act">恢复计划</button></div>
+      <div class="banner warn2"><span>暂停期间不进入自动队列;历史记录与学习状态完整保留。到期日的处理规则由 LA-D2 定义。</span><button class="act">恢复计划</button></div>
+      <div class="surface dialog" style="margin:14px 0;">
+        <h2>暂停学习计划?</h2>
+        <p>暂停后不再生成今日队列;所有学习状态与历史保留,可随时恢复。</p>
+        <div class="cta-row" style="margin:0;"><button class="btn primary">确认暂停</button><button class="btn ghost">取消</button></div>
+      </div>
       <div class="stats" style="opacity:.55;">
         <div class="surface stat"><div class="k">学习中</div><div class="v">64</div></div>
         <div class="surface stat"><div class="k">已掌握</div><div class="v">18</div></div>
@@ -748,12 +805,12 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
       </div>
     </main>
   </div></div>
-  <p class="subcap">B · 范围内没有合格卡</p>
+  <p class="subcap">B · 范围内没有合格卡(纯空范围)</p>
   <div class="frame"><div class="app crop">
     <main class="work">
       <div class="surface empty-state" style="max-width:560px;margin:10px auto;">
         <h2>当前范围内没有合格卡片</h2>
-        <p style="margin:0 0 4px;font-size:13px;">范围「场景卡 + topic:finance-biz」筛选后为 0 张;或卡片仍在数据整备的未决/隔离状态。</p>
+        <p style="margin:0 0 4px;font-size:13px;">范围「场景卡 + topic:finance-biz」筛选后为 0 张。</p>
         <div class="cta-row" style="justify-content:center;margin-top:14px;">
           <button class="btn primary">调整计划范围</button>
           <button class="btn">去 Cards Factory 生成卡片</button>
@@ -761,7 +818,20 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
       </div>
     </main>
   </div></div>
-  <p class="subcap">C · 队列加载失败(Cards Factory 不受影响)</p>
+  <p class="subcap">C · 范围内仅有未决数据(独立态,带处理动作)</p>
+  <div class="frame"><div class="app crop">
+    <main class="work">
+      <div class="surface empty-state" style="max-width:560px;margin:10px auto;">
+        <h2>范围内的卡片暂时都在数据未决状态</h2>
+        <p style="margin:0 0 4px;font-size:13px;">27 张卡待处理:测试卡候选 15(需确认/驳回)· 整备未完成 12。<br>处理完成前这些卡不生成学习单元(§9.3)。</p>
+        <div class="cta-row" style="justify-content:center;margin-top:14px;">
+          <button class="btn primary">前往处理未决数据</button>
+          <button class="btn">调整计划范围</button>
+        </div>
+      </div>
+    </main>
+  </div></div>
+  <p class="subcap">D · 队列加载失败(Cards Factory 不受影响)</p>
   <div class="frame"><div class="app crop">
     <main class="work">
       <p class="eyebrow">今日学习 · 2026-07-13</p>
@@ -772,9 +842,72 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 </section>
 
 <script>
-document.querySelectorAll('.pick[data-s]').forEach(p => p.addEventListener('click', () => {
-  document.querySelectorAll('.pick[data-s]').forEach(x => x.setAttribute('aria-pressed', x === p ? 'true' : 'false'));
-  document.querySelectorAll('.state').forEach(s => s.classList.toggle('on', s.id === p.dataset.s));
+function show(id) {
+  document.querySelectorAll('.pick[data-s]').forEach(x => x.setAttribute('aria-pressed', x.dataset.s === id ? 'true' : 'false'));
+  document.querySelectorAll('.state').forEach(s => s.classList.toggle('on', s.id === id));
   window.scrollTo({ top: 0 });
+}
+document.querySelectorAll('.pick[data-s]').forEach(p => p.addEventListener('click', () => show(p.dataset.s)));
+
+/* ── S2 计划设置:本地状态 + 规模联动 + 数值钳制 ── */
+const langs = { en: true, ja: true };
+let scope = 'all';
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || lo));
+function recalc() {
+  const L = (langs.en ? 1 : 0) + (langs.ja ? 1 : 0);
+  let cards, units;
+  if (scope === 'gra') { cards = 183; units = langs.ja ? 183 : 0; }
+  else if (scope === 'sce') { cards = 3; units = L ? 36 : 0; }
+  else { cards = 620; units = 433 * L + (langs.ja ? 183 : 0) + (L ? 37 : 0); }
+  const goal = clamp(document.getElementById('goalNum').value, 5, 100);
+  const cap = clamp(document.getElementById('capNum').value, 0, 50);
+  document.getElementById('goalNum').value = goal;
+  document.getElementById('capNum').value = cap;
+  document.getElementById('pvCards').textContent = `${cards} 张`;
+  document.getElementById('pvUnits').textContent = `${units.toLocaleString()} 个`;
+  document.getElementById('pvFirst').textContent = cap ? `新 ${Math.min(cap, units)} · 到期 0` : '仅到期项';
+  const days = cap ? Math.ceil(units / cap) : 0;
+  document.getElementById('pvDays').textContent = cap ? `约 ${days} 学习日` : '—(新卡 0,只清到期)';
+  const w = document.getElementById('pvWarn');
+  if (!L || !units) { w.textContent = '当前选择没有可学习单元:请至少保留一种语言,或调整范围。'; }
+  else if (!cap) { w.textContent = '只处理到期复习,不引入新单元;随时可调回。'; }
+  else if (days > 180) { w.textContent = `范围较大:全部引入约需 ${Math.round(days / 30)} 个月。可先缩小范围(如仅日语语法),或调高每日新单元上限。`; }
+  else { w.textContent = `节奏预估:按每天 ${cap} 个新单元,约 ${days} 个学习日引入全部。`; }
+}
+document.querySelectorAll('#langOpts .opt').forEach(b => b.addEventListener('click', () => {
+  langs[b.dataset.lang] = !langs[b.dataset.lang]; b.classList.toggle('sel'); recalc();
 }));
+document.querySelectorAll('#scopeOpts .opt').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#scopeOpts .opt').forEach(x => x.classList.remove('sel'));
+  b.classList.add('sel'); scope = b.dataset.scope; recalc();
+}));
+['goalNum', 'capNum'].forEach(id => document.getElementById(id).addEventListener('change', recalc));
+recalc();
+
+/* ── S3 空格揭示 → S4;S4 数字键 1-4 评分演示(保存中 → 解释) ── */
+let grading = false;
+function gradeDemo(i) {
+  if (grading) return;
+  const btns = [...document.querySelectorAll('#gradeDemo .grade')];
+  const g = btns[i - 1]; if (!g) return;
+  grading = true;
+  const box = document.getElementById('gradeDemo');
+  const small = g.querySelector('small'), orig = small.textContent;
+  box.classList.add('locked'); g.classList.add('saving'); g.style.opacity = '1'; small.textContent = '保存中…';
+  setTimeout(() => {
+    box.classList.remove('locked'); g.classList.remove('saving'); g.style.opacity = ''; small.textContent = orig;
+    const next = { 1: '10 分钟后(本会话内重现)', 2: '1 天后(7-14)', 3: '3 天后(7-16)', 4: '7 天后(7-20)' }[i];
+    document.getElementById('explainDemo').innerHTML =
+      `已保存:<b>随便吃点(EN)</b> 评了「${g.dataset.g}」→ 下次复习 <b>${next}</b>。按 1-4 可再试。`;
+    grading = false;
+  }, 700);
+}
+document.querySelectorAll('#gradeDemo .grade').forEach((b, idx) => b.addEventListener('click', () => gradeDemo(idx + 1)));
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (document.getElementById('s3').classList.contains('on') && e.code === 'Space') { e.preventDefault(); show('s4'); }
+  else if (document.getElementById('s4').classList.contains('on') && ['1', '2', '3', '4'].includes(e.key)) gradeDemo(Number(e.key));
+});
 </script>
+
+</html>
