@@ -44,7 +44,7 @@
 最终工程验收（2026-07-13）：
 
 - `npm run lint`：通过；
-- `npm run test:unit`：246/246 通过；
+- `npm run test:unit`：247/247 通过；
 - `npm run test:integration`：44/44 通过；
 - `npm run typecheck:react`：通过；
 - `npm run build:react`：通过；
