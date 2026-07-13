@@ -5,6 +5,19 @@ const assert = require('node:assert/strict');
 
 const { buildPrompt, buildMarkdownPrompt } = require('../../services/generation/promptEngine');
 
+test.describe('promptEngine trilingual language contract', () => {
+  test.it('requires English definitions while preserving Chinese example translations', () => {
+    for (const prompt of [
+      buildMarkdownPrompt({ phrase: 'stuff', cardType: 'trilingual' }),
+      buildPrompt({ phrase: 'stuff', filenameBase: 'stuff', cardType: 'trilingual' }),
+    ]) {
+      assert.match(prompt, /“翻译”“解释”和例句正文必须使用英文/);
+      assert.match(prompt, /英文例句下方的缩进译文保留中文/);
+      assert.match(prompt, /完整中文释义统一放在“## 3\. 中文”中/);
+    }
+  });
+});
+
 test.describe('promptEngine scenario_phrase routing', () => {
   test.it('buildMarkdownPrompt uses the scenario expression template', () => {
     const prompt = buildMarkdownPrompt({

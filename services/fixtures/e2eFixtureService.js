@@ -7,8 +7,8 @@ function buildTrilingualMarkdown(phrase) {
   return `# ${safePhrase}
 
 ## 1. 英文:
-- **翻译**: ${safePhrase}
-- **解释**: E2E 测试模式生成的稳定示例，用于验证 UI、队列与持久化链路。
+- **翻译**: A deterministic English equivalent for the input expression
+- **解释**: A stable E2E sample used to verify the UI, queue, and persistence flow.
 - **例句1**: We use "${safePhrase}" as a deterministic Playwright smoke sample.
   - 我们把“${safePhrase}”作为稳定的 Playwright smoke 测试样本。
 - **例句2**: The generated card for "${safePhrase}" should be safe to delete after the test.
