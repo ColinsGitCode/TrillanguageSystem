@@ -20,7 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.js",
+    "test:e2e:smoke": "playwright test tests/e2e/app-shell.spec.js",
     "test:e2e:pages": "playwright test tests/e2e/pages.spec.js",
     "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
     "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply",
