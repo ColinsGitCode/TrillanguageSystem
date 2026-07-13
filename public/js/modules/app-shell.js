@@ -103,13 +103,8 @@ function mountThemeControl() {
 function getActiveNavKey() {
     const url = new URL(window.location.href);
     if (url.pathname === '/' || url.pathname.endsWith('/index.html')) {
-        return url.searchParams.get('view') === 'library' ? 'library' : 'workspace';
+        return 'workspace';
     }
-    if (url.pathname.endsWith('/knowledge-hub.html')) {
-        return url.searchParams.get('mode') === 'review' ? 'review' : 'knowledge-hub';
-    }
-    if (url.pathname.endsWith('/dashboard.html')) return 'mission-control';
-    if (url.pathname.endsWith('/knowledge-ops.html')) return 'knowledge-ops';
     return '';
 }
 
@@ -134,24 +129,16 @@ function mountShellNavigation() {
     sidebar.dataset.mounted = 'true';
     const activeKey = getActiveNavKey();
     const learning = [
-        { key: 'workspace', href: '/', icon: 'layout-dashboard', label: '学习工作台' },
-        { key: 'library', href: '/?view=library', icon: 'library', label: '卡片库' },
-        { key: 'review', href: '/knowledge-hub.html?mode=review', icon: 'calendar-check', label: '今日复习' },
-        { key: 'knowledge-hub', href: '/knowledge-hub.html', icon: 'network', label: '知识空间' }
-    ];
-    const system = [
-        { key: 'mission-control', href: '/dashboard.html', icon: 'gauge', label: 'Mission Control' },
-        { key: 'knowledge-ops', href: '/knowledge-ops.html', icon: 'workflow', label: 'Knowledge OPS' }
+        { key: 'workspace', href: '/', icon: 'factory', label: 'Cards Factory' }
     ];
     sidebar.innerHTML = `
         <div class="app-sidebar-inner">
-            <a class="app-brand" href="/" aria-label="Three LANS 学习工作台">
+            <a class="app-brand" href="/" aria-label="Three LANS Cards Factory">
                 <span class="lans-rail" aria-hidden="true"><span></span><span></span><span></span></span>
-                <span class="app-brand-copy"><span class="app-brand-name">Three LANS</span><span class="app-brand-subtitle">安静学习工作台</span></span>
+                <span class="app-brand-copy"><span class="app-brand-name">Three LANS</span><span class="app-brand-subtitle">Cards Factory</span></span>
             </a>
             <nav class="app-nav" aria-label="应用导航">
                 <section class="app-nav-group"><h2 class="app-nav-heading">学习</h2>${learning.map((item) => navLink(item, activeKey)).join('')}</section>
-                <section class="app-nav-group"><h2 class="app-nav-heading">系统</h2>${system.map((item) => navLink(item, activeKey)).join('')}</section>
             </nav>
             <div class="app-sidebar-footer">
                 <div class="app-health-summary" data-shell-health><span class="ui-status-dot" data-state="loading"></span><span class="app-health-label">正在检查服务</span></div>

@@ -64,7 +64,7 @@ async function waitForQueueIdle(page, timeout = 30_000) {
 async function openFirstFolder(page) {
   const firstFolder = page.getByTestId('folder-list').locator('button').first();
   await expect(firstFolder).toBeVisible();
-  const folder = await firstFolder.getAttribute('title');
+  const folder = await firstFolder.getAttribute('data-folder');
   await firstFolder.click();
   return folder;
 }
@@ -85,30 +85,14 @@ async function deleteRecord(request, folder, base) {
 test.describe.serial('UI quality regression', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
-    const seedRes = await request.post('/api/_test/seed-knowledge');
-    expect(seedRes.ok()).toBeTruthy();
   });
 
-  test('01 关键页面在桌面、平板、手机视口无横向溢出且核心区块可见', async ({ page }) => {
+  test('01 Cards Factory 在桌面、平板、手机视口无横向溢出且核心区块可见', async ({ page }) => {
     test.setTimeout(120_000);
-    const pages = [
-      {
-        url: '/',
-        ids: ['hero-queue-status', 'phrase-input', 'folder-list', 'file-list']
-      },
-      {
-        url: '/dashboard.html',
-        ids: ['mission-control-page', 'mission-task-queue', 'service-matrix']
-      },
-      {
-        url: '/knowledge-ops.html',
-        ids: ['knowledge-ops-page', 'knowledge-start-btn', 'knowledge-jobs-list']
-      },
-      {
-        url: '/knowledge-hub.html',
-        ids: ['knowledge-hub-page', 'knowledge-base-panel', 'knowledge-base-term-list']
-      }
-    ];
+    const pages = [{
+      url: '/',
+      ids: ['hero-queue-status', 'phrase-input', 'folder-list', 'file-list']
+    }];
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
       { width: 1024, height: 768, name: 'tablet' },

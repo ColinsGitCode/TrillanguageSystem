@@ -2,11 +2,21 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Markdown-first card renderer', () => {
   test('renders sanitized Markdown through a typed idempotent adapter', async ({ page, request }) => {
+    const phrase = 'adapter smoke handoff';
     const created = await request.post('/api/generate', {
-      data: { phrase: 'adapter smoke handoff', cardType: 'trilingual' }
+      data: { phrase, cardType: 'trilingual' }
     });
+    expect(created.ok()).toBeTruthy();
     const payload = await created.json();
-    await page.goto(`/?card=${payload.generationId}`);
+    const folderName = payload.result.folder;
+    const baseName = payload.result.baseName;
+    await page.goto('/');
+    const folder = page.getByTestId('folder-list').locator(`[data-folder="${folderName}"]`);
+    await expect(folder).toBeVisible();
+    await folder.click();
+    const card = page.getByTestId('file-list').locator('button').filter({ hasText: phrase }).first();
+    await expect(card).toBeVisible();
+    await card.click();
     await expect(page.getByTestId('card-modal')).toBeVisible();
     const renderer = page.locator('[data-card-renderer-version="2"]');
     await expect(renderer).toHaveAttribute('data-card-type', 'trilingual');
@@ -25,6 +35,9 @@ test.describe('Markdown-first card renderer', () => {
       };
     });
     expect(idempotent).toEqual({ same: true, wrappers: 1 });
+
+    const deleted = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(folderName)}&base=${encodeURIComponent(baseName)}`);
+    expect(deleted.ok()).toBeTruthy();
   });
 
   test('keeps ruby readings on their kanji and migrates v1 marks onto fresh HTML', async ({ page }) => {
@@ -65,7 +78,7 @@ test.describe('Markdown-first card renderer', () => {
     expect(result.closed).not.toContain('<img src=x');
   });
 
-  test('full-height modal traps focus, hides browse SRS controls and restores its opener', async ({ page, request }) => {
+  test('full-height modal traps focus and restores its opener', async ({ page, request }) => {
     const phrase = `modal focus ${Date.now()}`;
     const created = await request.post('/api/generate', { data: { phrase, cardType: 'trilingual' } });
     expect(created.ok()).toBeTruthy();
@@ -81,7 +94,6 @@ test.describe('Markdown-first card renderer', () => {
     await expect(modal).toBeVisible();
     await expect(modal).toHaveAttribute('aria-labelledby', 'cardModalTitle');
     await expect(page.getByTestId('card-modal-close')).toBeFocused();
-    await expect(page.getByTestId('card-srs-footer')).toHaveCount(0);
     await expect(page.locator('body')).toHaveClass(/card-modal-open/);
     await page.keyboard.press('Escape');
     await expect(modal).toBeHidden();

@@ -25,8 +25,7 @@ select {
 
 .dashboard-link svg,
 .mode-icon svg,
-.context-menu-icon svg,
-.today-learning-icon svg {
+.context-menu-icon svg {
   width: 18px;
   height: 18px;
   stroke-width: 1.8;
@@ -52,8 +51,8 @@ select {
   flex-direction: column;
   justify-content: space-between;
   align-items: stretch;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 0;
 }
 
 .hero-topbar {
@@ -85,6 +84,8 @@ select {
 .infra-alert.hidden {
   display: none;
 }
+
+.infra-alert:not(.hidden) { margin-bottom: 14px; }
 
 .infra-alert-main {
   display: flex;
@@ -300,98 +301,6 @@ select {
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.16);
 }
 
-.today-learning-bar {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.4fr) minmax(220px, 1fr);
-  gap: 12px;
-  align-items: stretch;
-}
-
-.today-learning-cell {
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 12px;
-  padding: 12px 14px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-}
-
-.today-learning-cell.streak,
-.today-learning-cell.mastery {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.today-learning-icon {
-  font-size: 1.35rem;
-  flex: 0 0 auto;
-}
-
-.today-learning-value {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--color-text-primary);
-  line-height: 1.25;
-}
-
-.today-learning-label,
-.today-learning-meta {
-  font-size: 0.78rem;
-  color: var(--color-text-tertiary);
-  line-height: 1.35;
-}
-
-.today-learning-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 7px;
-}
-
-.today-learning-goal,
-.today-learning-review {
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.08);
-  color: var(--color-primary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1;
-  padding: 6px 10px;
-  text-decoration: none;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.today-learning-goal:hover,
-.today-learning-review:hover {
-  border-color: rgba(37, 99, 235, 0.42);
-  background: rgba(59, 130, 246, 0.13);
-}
-
-.today-learning-progress-track {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.18);
-  overflow: hidden;
-}
-
-.today-learning-progress-fill {
-  width: 0%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-success));
-  transition: width 0.2s ease;
-}
-
-.today-learning-bar.is-loading .today-learning-cell {
-  opacity: 0.82;
-}
-
 .dashboard-link {
   color: #5b6472;
   text-decoration: none;
@@ -482,10 +391,12 @@ h1 {
 }
 
 .grid {
+  min-height: 0;
+}
+
+.factory-layout-contents {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
-  grid-template-areas:
-    "folders viewer";
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px;
   height: auto;
   min-height: 0;
@@ -533,8 +444,61 @@ h1 {
   font-size: 14px;
 }
 
-.folders {
-  grid-area: folders;
+.factory-card {
+  grid-column: 1 / 9;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.factory-heading,
+.factory-queue-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.factory-heading h1,
+.factory-queue-heading h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.factory-heading-note,
+.factory-queue-open-hint {
+  color: var(--color-text-tertiary);
+  font: 500 11px/1.3 var(--font-mono);
+  white-space: nowrap;
+}
+
+.factory-queue-card {
+  grid-column: 9 / 13;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.factory-queue-card .hero-queue-meta { gap: 8px; }
+.factory-queue-card .hero-queue-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.factory-queue-card .hero-queue-chip { width: 100%; min-width: 0; }
+.factory-queue-card .hero-queue-retry { align-self: flex-start; margin-top: auto; }
+
+.folder-browser {
+  grid-column: 1 / 4;
+  grid-row: 2;
   overflow-y: visible;
   padding-bottom: 6px;
 }
@@ -559,21 +523,41 @@ h1 {
 .folder-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 7px;
+  gap: 6px;
+}
+
+.compact-date-group .folder-grid {
+  grid-template-columns: repeat(auto-fill, 44px);
+  gap: 5px;
 }
 
 .folder-grid button {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  padding: 7px 8px;
-  border-radius: 9px;
+  min-height: 30px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  font-size: 11px;
   text-align: center;
   letter-spacing: 0.01em;
 }
 
+.compact-date-group .folder-grid button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
 .viewer {
-  grid-area: viewer;
+  grid-column: 4 / 13;
+  grid-row: 2;
   min-height: 420px;
   gap: 12px;
 }
@@ -1098,15 +1082,24 @@ body.card-modal-open { overflow: hidden; }
 }
 
 @media (max-width: 960px) {
-  .grid {
+  .factory-layout-contents {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "folders"
-      "viewer";
+    grid-template-rows: auto auto auto auto;
     height: auto;
     min-height: unset;
   }
+
+  .factory-card,
+  .factory-queue-card,
+  .folder-browser,
+  .viewer {
+    grid-column: 1;
+  }
+
+  .factory-card { grid-row: 1; }
+  .factory-queue-card { grid-row: 2; }
+  .folder-browser { grid-row: 3; }
+  .viewer { grid-row: 4; }
 
   .hero {
     flex-direction: column;
@@ -1126,12 +1119,7 @@ body.card-modal-open { overflow: hidden; }
     gap: 6px;
   }
 
-  .hero-queue-status {
-    min-height: 42px;
-    grid-template-columns: 1fr;
-    gap: 6px;
-    padding: 7px 9px;
-  }
+  .hero-queue-status { min-height: 0; }
 
   .hero-queue-meta {
     flex-direction: column;
@@ -1150,15 +1138,6 @@ body.card-modal-open { overflow: hidden; }
 
   .hero-queue-retry {
     justify-self: start;
-  }
-
-  .today-learning-bar {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .today-learning-cell {
-    padding: 10px 12px;
   }
 
   .page {
@@ -1191,19 +1170,14 @@ body.card-modal-open { overflow: hidden; }
 /* ========== Generation Panel Styles ========== */
 
 .gen-panel {
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.45rem;
-  margin-bottom: 0.45rem;
-}
-
-.gen-panel > .label {
-  margin-bottom: 0.45rem;
+  margin: 0;
 }
 
 .input-modes {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
   gap: 0.6rem;
+  align-items: start;
 }
 
 .input-mode {
@@ -2992,28 +2966,4 @@ body.card-modal-open { overflow: hidden; }
 #cardContent ::selection {
   background: rgba(59, 130, 246, 0.2);
   color: inherit;
-}
-
-/* ===== Embedded card-only mode (Knowledge Hub card-preview iframe) =====
-   Loaded via /?card=<id>&embed=1. The main chrome (.page) is hidden and the
-   card modal overlay — reparented to <body> by app.js — fills the iframe with
-   an opaque backdrop. The modal's own close/delete are hidden; the Knowledge
-   Hub wrapper provides the close affordance. */
-html.kh-embed,
-html.kh-embed body {
-  background: var(--color-bg-surface);
-  margin: 0;
-  overflow: hidden;
-}
-/* Hide every body-level element (.page chrome, the queue float, context menus,
-   etc.) except the card modal overlay, which app.js reparents to <body>. */
-html.kh-embed body > *:not(#modalOverlay) { display: none !important; }
-html.kh-embed #modalOverlay.modal {
-  background: var(--color-bg-surface);
-  padding: 10px 14px;
-  align-items: flex-start;
-}
-html.kh-embed #modalOverlay .mc-close,
-html.kh-embed #modalOverlay .mc-delete {
-  display: none !important;
 }

@@ -38,46 +38,6 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('generate-btn')).toBeDisabled();
   });
 
-  test('01 Mission Control 页面可加载', async ({ page }) => {
-    await page.goto('/dashboard.html');
-    await expect(page.getByTestId('mission-control-page')).toBeVisible();
-    await expect(page.getByTestId('mission-control-title')).toContainText('MISSION CONTROL');
-    await expect(page.getByTestId('mission-task-queue')).toBeVisible();
-    await expect(page.getByTestId('runtime-boundary')).toContainText('DeepSeek V4 Pro');
-    await expect(page.getByTestId('runtime-boundary')).toContainText('VOICEVOX');
-    await expect(page.getByTestId('service-matrix')).toBeVisible();
-  });
-
-  test('02 Knowledge OPS 页面可加载', async ({ page }) => {
-    await page.goto('/knowledge-ops.html');
-    await expect(page.getByTestId('knowledge-ops-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-ops-title')).toContainText('KNOWLEDGE OPS');
-    await expect(page.getByTestId('knowledge-start-btn')).toBeVisible();
-    await expect(page.getByTestId('knowledge-pipeline')).toContainText('音频合成');
-    await expect(page.getByTestId('knowledge-jobs-list')).toBeVisible();
-  });
-
-  test('03 Knowledge OPS 任务可启动并取消', async ({ page }) => {
-    await page.goto('/knowledge-ops.html');
-    await page.getByTestId('knowledge-start-btn').click();
-
-    const firstJob = page.getByTestId('knowledge-job-item').first();
-    await expect(firstJob).toBeVisible();
-    await expect(firstJob).toContainText('summary');
-
-    await firstJob.getByTestId('knowledge-job-cancel').click();
-    await expect(firstJob.getByTestId('knowledge-job-status')).toHaveText('CANCELLED');
-  });
-
-  test('04 Knowledge Hub 页面可加载', async ({ page }) => {
-    await page.goto('/knowledge-hub.html');
-    await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-hub-title')).toContainText('Knowledge Hub Explorer');
-    await expect(page.getByTestId('knowledge-hub-counts')).toBeVisible();
-    await expect(page.getByTestId('knowledge-base-panel')).toBeVisible();
-    await expect(page.getByTestId('knowledge-relation-inspector')).toBeHidden();
-  });
-
   test('05 OCR fixture 上传、清洗与回填输入框', async ({ page }) => {
     await page.goto('/');
     const samplePath = path.resolve(__dirname, 'fixtures/ocr-sample.png');
@@ -99,104 +59,19 @@ test.describe('Playwright page smoke', () => {
     await expect(page.getByTestId('phrase-input')).toHaveValue('Queue state キューに追加する persistent highlight');
   });
 
-  test('06 Mission Control 可展示共享队列失败与重试结果', async ({ page, request }) => {
-    const phrase = `__E2E_FAIL_ONCE__ PW mission retry ${Date.now()}`;
-    const phrase2 = `PW mission second ${Date.now()}`;
-    const scenarioPhrase = `PW mission scenario ${Date.now()}`;
-    const enqueueRes = await request.post('/api/generation-jobs', {
-      data: {
-        phrase,
-        card_type: 'trilingual',
-        source_mode: 'input'
-      }
-    });
-    expect(enqueueRes.ok()).toBeTruthy();
-    const enqueueJson = await enqueueRes.json();
-    const jobId = Number(enqueueJson?.job?.id || 0);
-    expect(jobId).toBeGreaterThan(0);
-
-    await page.goto('/dashboard.html');
-    await expect(page.getByTestId('mission-task-queue')).toBeVisible();
-    await expect(page.getByTestId('mission-queue-failed')).toContainText('1', { timeout: 15_000 });
-    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase);
-    await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('FAILED');
-    await expect(page.getByTestId('mission-queue-audit')).toContainText('FAILED');
-    await page.getByTestId('mission-queue-detail-btn').first().click();
-    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
-    await expect(page.getByTestId('queue-job-detail-request')).toContainText(phrase);
-    await expect(page.getByTestId('queue-job-detail-error')).toContainText('e2e_fixture_forced_retryable_failure');
-    await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('FAILED');
-    await expect(page.getByTestId('queue-job-copy-request')).toBeVisible();
-    await expect(page.getByTestId('queue-job-copy-error')).toBeVisible();
-    await page.getByTestId('queue-job-detail-close').click();
-    await expect(page.getByTestId('queue-job-detail-modal')).toBeHidden();
-
-    const retryRes = await request.post(`/api/generation-jobs/${jobId}/retry`);
-    expect(retryRes.ok()).toBeTruthy();
-
-    await expect(page.getByTestId('mission-queue-success')).toContainText('1', { timeout: 15_000 });
-    await expect(page.getByTestId('mission-queue-failed')).toContainText('0', { timeout: 15_000 });
-    await expect(page.getByTestId('mission-queue-recent-item').first().getByTestId('mission-queue-recent-status')).toHaveText('SUCCESS');
-    await expect(page.getByTestId('mission-queue-audit')).toContainText('SUCCESS');
-
-    const secondRes = await request.post('/api/generation-jobs', {
-      data: {
-        phrase: phrase2,
-        card_type: 'trilingual',
-        source_mode: 'input'
-      }
-    });
-    expect(secondRes.ok()).toBeTruthy();
-
-    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(phrase2, { timeout: 15_000 });
-    const firstItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: phrase }).first();
-    const secondItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: phrase2 }).first();
-
-    await firstItem.click();
-    await expect(page.getByTestId('mission-queue-audit-focus')).toContainText(phrase);
-
-    await secondItem.click();
-    await expect(page.getByTestId('mission-queue-audit-focus')).toContainText(phrase2);
-    await secondItem.getByTestId('mission-queue-detail-btn').click();
-    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
-    await expect(page.getByTestId('queue-job-detail-result')).toContainText('generationId');
-    await expect(page.getByTestId('queue-job-detail-event-section')).toContainText('SUCCESS');
-    await expect(page.getByTestId('queue-job-copy-result')).toBeVisible();
-    await expect(page.getByTestId('queue-job-copy-events')).toBeVisible();
-    await page.getByTestId('queue-job-detail-close').click();
-
-    const scenarioRes = await request.post('/api/generation-jobs', {
-      data: {
-        phrase: scenarioPhrase,
-        card_type: 'scenario_phrase',
-        source_mode: 'input'
-      }
-    });
-    expect(scenarioRes.ok()).toBeTruthy();
-
-    await expect(page.getByTestId('mission-queue-recent-list')).toContainText(scenarioPhrase, { timeout: 15_000 });
-    const scenarioItem = page.getByTestId('mission-queue-recent-item').filter({ hasText: scenarioPhrase }).first();
-    await expect(scenarioItem).toContainText('场景');
-    await scenarioItem.getByTestId('mission-queue-detail-btn').click();
-    await expect(page.getByTestId('queue-job-detail-modal')).toBeVisible();
-    await expect(page.getByTestId('queue-job-detail-meta')).toContainText('场景卡');
-    await page.getByTestId('queue-job-detail-close').click();
-
-    const jobsRes = await request.get('/api/generation-jobs?limit=10');
-    expect(jobsRes.ok()).toBeTruthy();
-    const jobsJson = await jobsRes.json();
-    const jobs = Array.isArray(jobsJson?.jobs) ? jobsJson.jobs : [];
-    for (const currentPhrase of [phrase, phrase2, scenarioPhrase]) {
-      const job = jobs.find((item) => String(item.phraseNormalized || '').trim() === currentPhrase);
-      const resultFolder = String(job?.resultFolder || '').trim();
-      const resultBase = String(job?.resultBaseFilename || '').trim();
-      expect(resultFolder).not.toBe('');
-      expect(resultBase).not.toBe('');
-      const deleteRes = await request.delete(`/api/records/by-file?folder=${encodeURIComponent(resultFolder)}&base=${encodeURIComponent(resultBase)}`);
-      expect(deleteRes.ok()).toBeTruthy();
+  test('06 已退役页面与 API 不再暴露', async ({ request }) => {
+    for (const path of ['/dashboard.html', '/knowledge-hub.html', '/knowledge-ops.html']) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(404);
     }
 
-    const clearRes = await request.post('/api/generation-jobs/clear-done');
-    expect(clearRes.ok()).toBeTruthy();
+    for (const path of [
+      '/api/dashboard/highlight-stats',
+      '/api/knowledge/jobs',
+      '/api/srs/stats'
+    ]) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(404);
+    }
   });
 });

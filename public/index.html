@@ -3,11 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Trilingual Records Viewer</title>
+    <title>Cards Factory - Three LANS</title>
     <script src="js/theme-init.js"></script>
-    <!-- Embedded card-only mode (Knowledge Hub card-preview iframe): flag the
-         document before paint so the chrome is hidden with no flash. -->
-    <script>try{if(new URLSearchParams(location.search).get('embed')==='1')document.documentElement.classList.add('kh-embed');}catch(e){}</script>
     <link rel="icon" type="image/svg+xml" href="/favicon-lan.svg" />
     <link rel="shortcut icon" href="/favicon-lan.svg" />
     <link rel="stylesheet" href="css/tokens.css" />
@@ -18,15 +15,32 @@
     <script src="vendor/marked.min.js"></script>
     <script src="vendor/purify.min.js"></script>
   </head>
-  <body data-page="workspace" data-page-title="学习工作台">
+  <body data-page="workspace" data-page-title="Cards Factory">
     <div class="app-shell">
       <aside id="appSidebarMount" class="app-sidebar" aria-label="主导航"></aside>
       <div class="app-main">
         <main class="app-content">
     <div class="page">
       <header class="hero">
-        <div class="hero-topbar app-topbar">
-          <div id="heroTaskQueueStatus" class="hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status" data-shell-actions>
+        <div id="infraAlertBanner" class="infra-alert hidden" aria-live="polite" data-testid="infra-alert-banner">
+          <div class="infra-alert-main">
+            <span id="infraAlertTitle" class="infra-alert-title">DeepSeek API 离线</span>
+            <span id="infraAlertText" class="infra-alert-text">DeepSeek API 暂不可用，生成任务暂不可提交。</span>
+          </div>
+          <button id="infraAlertRefreshBtn" type="button" class="infra-alert-action">刷新状态</button>
+        </div>
+      </header>
+
+      <section class="grid">
+        <div id="librarySection" class="factory-layout-contents" aria-label="Cards Factory 与卡片库">
+          <aside id="heroTaskQueueStatus" class="card factory-queue-card hero-queue-status is-idle" aria-live="polite" data-testid="hero-queue-status" data-shell-actions>
+            <div class="factory-queue-heading">
+              <div>
+                <p class="label">Task Queue</p>
+                <h2>队列管理</h2>
+              </div>
+              <span class="factory-queue-open-hint">点击查看详情</span>
+            </div>
             <div class="hero-queue-main">
               <span class="hero-queue-dot" aria-hidden="true"></span>
               <span id="heroTaskQueueState" class="hero-queue-state" data-testid="hero-queue-state">IDLE</span>
@@ -46,54 +60,17 @@
               </div>
             </div>
             <button id="heroTaskQueueRetryBtn" class="hero-queue-retry hidden" type="button" data-testid="hero-queue-retry">Retry Failed</button>
-          </div>
-          <div class="dashboard-links">
-            <a href="dashboard.html" class="dashboard-link" target="_blank"><i data-lucide="gauge" aria-hidden="true"></i>Mission Control</a>
-            <a href="knowledge-ops.html" class="dashboard-link" target="_blank"><i data-lucide="workflow" aria-hidden="true"></i>Knowledge OPS</a>
-            <a href="knowledge-hub.html" class="dashboard-link" target="_blank"><i data-lucide="network" aria-hidden="true"></i>Knowledge Hub</a>
-          </div>
-        </div>
-<!--        <div class="pill" id="sourceHint">数据源通过服务端环境变量配置</div>-->
-        <section id="todayLearningBar" class="today-learning-bar is-loading" data-testid="today-learning-bar" aria-live="polite">
-          <div class="today-learning-cell streak">
-            <span class="today-learning-icon" aria-hidden="true"><i data-lucide="flame"></i></span>
-            <div>
-              <div id="todayLearningStreak" class="today-learning-value" data-testid="today-learning-streak">开始你的第一天</div>
-              <div id="todayLearningStreakHint" class="today-learning-label">今日学习</div>
-            </div>
-          </div>
-          <div class="today-learning-cell progress">
-            <div class="today-learning-row">
-              <span class="today-learning-label">今日目标</span>
-              <button id="todayLearningGoalBtn" class="today-learning-goal" type="button" data-testid="today-learning-goal">目标 5</button>
-            </div>
-            <div class="today-learning-progress-track" aria-hidden="true">
-              <div id="todayLearningProgressFill" class="today-learning-progress-fill"></div>
-            </div>
-            <div id="todayLearningProgress" class="today-learning-meta" data-testid="today-learning-progress">0 / 5</div>
-          </div>
-          <div class="today-learning-cell mastery">
-            <div>
-              <div id="todayLearningMastery" class="today-learning-value" data-testid="today-learning-mastery">0 / 0</div>
-              <div class="today-learning-label">已掌握</div>
-            </div>
-            <a id="todayLearningReview" class="today-learning-review" href="knowledge-hub.html?mode=review" data-testid="today-learning-review">开始复习</a>
-          </div>
-        </section>
-        <div id="infraAlertBanner" class="infra-alert hidden" aria-live="polite" data-testid="infra-alert-banner">
-          <div class="infra-alert-main">
-            <span id="infraAlertTitle" class="infra-alert-title">DeepSeek API 离线</span>
-            <span id="infraAlertText" class="infra-alert-text">DeepSeek API 暂不可用，生成任务暂不可提交。</span>
-          </div>
-          <button id="infraAlertRefreshBtn" type="button" class="infra-alert-action">刷新状态</button>
-        </div>
-      </header>
+          </aside>
 
-      <section class="grid">
-        <article id="librarySection" class="card folders" aria-label="卡片库">
           <!-- Generation Panel -->
-          <div class="gen-panel">
-            <p class="label">创建学习卡</p>
+          <article class="gen-panel factory-card" aria-label="Cards Factory">
+            <div class="factory-heading">
+              <div>
+                <p class="label">Cards Factory</p>
+                <h1>创建学习卡</h1>
+              </div>
+              <span class="factory-heading-note">Markdown · English / 日本語</span>
+            </div>
 
             <div class="selector-row">
               <div class="card-type-selector" id="cardTypeSelector">
@@ -223,9 +200,10 @@
               </div>
               <p id="progressStatus" class="progress-status"></p>
             </div>
-          </div>
+          </article>
 
           <!-- 资源区 Tabs -->
+          <article class="card folder-browser" aria-label="文件夹与历史记录">
           <div class="panel-tabs sub-tabs">
             <button class="tab-btn active" data-tab="folders">文件夹</button>
             <button class="tab-btn" data-tab="history">历史记录</button>
@@ -270,8 +248,7 @@
               <button id="historyNextBtn" class="btn-text" disabled>下一页 →</button>
             </div>
           </div>
-        </article>
-
+          </article>
         <article class="card viewer" aria-label="Viewer">
 <!--          <div class="card-header">-->
 <!--            <div>-->
@@ -291,6 +268,7 @@
             <div class="list file-list" id="fileList" role="listbox" aria-label="file list" data-testid="file-list"></div>
           </div>
         </article>
+        </div>
       </section>
 
       <div id="modalOverlay" class="modal hidden" aria-modal="true" role="dialog" data-testid="card-modal">

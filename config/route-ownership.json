@@ -1,0 +1,5 @@
+{
+  "/": "legacy",
+  "/__rr-poc": "react",
+  "/api/*": "express"
+}

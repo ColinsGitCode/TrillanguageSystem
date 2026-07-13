@@ -1,234 +1,230 @@
-# 全栈迁移方案：React Router v7 · TypeScript（保内核，换外壳）
+# 全栈架构迁移方案：Cards Factory + React Router v7
+
+> 状态：**实施中：D0、P0 已完成** · 2026-07-13
+> 目标：先收敛产品边界，再完成前后端架构化改造
+> 主框架：React Router v7 Framework Mode · React · TypeScript · Vite
+> 运行约束：本地单用户 · Docker Compose · 对外端口 3010 · SQLite · 单生成 worker
+
+## 0. 产品决策
+
+当前阶段只保留 **Cards Factory**：
+
+- 三语卡、日语语法卡、场景表达卡生成；
+- DeepSeek 生成、OCR、英文/日文 TTS；
+- 服务端共享生成队列、失败重试与审计详情；
+- 文件夹、历史卡片、删除与标红；
+- Markdown-first 学习卡弹窗的 CONTENT / INTEL。
+
+下列产品域于 2026-07-13 正式退役并彻底删除：
+
+- Mission Control；
+- Knowledge Hub；
+- Knowledge OPS；
+- 旧知识分析、关系、分类、同义边界与问题审计；
+- 旧 SRS、复习、每日目标、学习计划与难度分级；
+- 卡片 KNOWLEDGE tab、SRS footer 与 Knowledge Hub embed 模式。
+
+旧学习辅助与知识图谱的 UI、API、schema 和算法**不是未来设计基线**。前后端迁移完成后，二者作为新的产品项目重新进行用户目标、信息架构、领域模型和技术方案设计。
+
+## 1. 决策摘要
+
+| 议题 | 决策 | 本阶段不做 |
+|---|---|---|
+| 产品面 | 只迁移 Cards Factory 一个真实页面 | 不为已退役页面建立 React 占位页 |
+| React 形态 | React Router v7 Framework Mode + TypeScript | 不一次性重写后端 |
+| HTTP API | 现有 Express contract 暂时保持 | 不批量改成 resource routes |
+| 模块系统 | React 使用 TS/ESM；后端继续 CJS | 不在根 package 设置 type: module |
+| Server state | TanStack Query 统一缓存、轮询与 mutation | 不重复放进 loader 和全局 store |
+| Client state | local state/reducer 优先 | 暂不引入 Zustand |
+| 样式 | 复用现有 tokens 与视觉规范 | 不继承旧页面 selector |
+| 后台任务 | 抽 generation use case 后让 worker 直调 | 不保留 HTTP self-request 作为目标架构 |
+| 数据库 | SQLite + WAL + 单 worker | 不做多用户、Postgres 或横向扩容 |
+
+## 2. 退役完成标准
+
+退役不是隐藏导航，必须同时满足：
+
+1. 删除 dashboard.html、knowledge-hub.html、knowledge-ops.html。
+2. 删除对应浏览器模块、CSS、Express routes 和 services。
+3. 删除 Knowledge/SRS 数据访问模块与 schema 创建语句。
+4. 应用启动时 DROP 所有旧 Knowledge/SRS/preferences 表。
+5. 删除旧 E2E fixture、测试与视觉快照。
+6. 旧页面和旧 API 返回 404。
+7. README、CLAUDE 与 Docs 不再把旧子系统列为当前能力。
+
+历史文档可以保留，但必须标为“退役历史参考”，不得进入当前功能导航或指导新实现。
+
+## 3. 当前架构基线
+
+    Browser
+      └─ public/index.html
+           └─ browser ESM modules
+                ├─ Cards Factory
+                ├─ queue/detail
+                ├─ card renderer
+                └─ health/theme
+
+    Express server.js
+      ├─ /api/generate
+      ├─ /api/generation-jobs/*
+      ├─ /api/folders + files + highlights
+      ├─ /api/history + statistics + search + recent
+      ├─ /api/ocr
+      ├─ /api/health
+      └─ DELETE /api/records/*
+
+    Runtime
+      ├─ generation / llm / ocr / tts / observability services
+      ├─ storage services + SQLite
+      ├─ records filesystem
+      └─ one in-process generation worker
+
+迁移前的主要结构问题：
+
+- app.js 同时持有 DOM、流程和状态，难以组件化测试；
+- routes/generate.js 仍承担过多业务编排；
+- worker 通过 HTTP 自请求 /api/generate 执行；
+- CJS 后端与浏览器 ESM 没有显式 composition boundary；
+- 前端 API contract 缺少类型与集中缓存策略。
+
+## 4. 目标架构
+
+    Browser
+      └─ React Router UI
+           ├─ route shell + error boundary
+           ├─ feature/factory
+           ├─ feature/queue
+           ├─ feature/card-modal
+           ├─ feature/ocr
+           └─ typed API client + TanStack Query
 
-> 状态：**设计方案（待实施）** · 2026-07
-> 已定决策：主框架 **React Router v7 (Remix)** · **TypeScript 全栈** · **Vite** · `better-sqlite3` 保留（自用阶段暂不上 Postgres）· **TanStack Query** · **shadcn/ui + 现有 tokens** · **Playwright 全程兜底** · 逐页并存迁移
-> 约束：先产品级化、暂仍自用 · Mac 本地 / Docker · 保护现有测试与生成管线资产
-> 关联：[UI 现代化设计系统](../Features/UI_Modernization_Design_System.md) · [Trilingual Card Generation System](Trilingual_Card_Generation_System.md)
-> 影响面：`server.js` · `routes/`（12 文件 / 55 端点）· `services/`（64 CJS 文件，TS 化）· `public/`（前端全量）· `package.json`（CJS→ESM）· 测试 harness
+    Port 3010: Express composition root
+      ├─ /api/* -> existing Express adapters
+      ├─ React assets/document handler
+      └─ health/static compatibility assets
 
-本文是"引入前端框架 + 全栈化"的真源。**核心原则：全栈重写只碰 HTTP 边界与 UI；`services/` + `db/` + 生成管线 + 单元测试是内核，保留。** 这样"重写"从高风险推倒变成"换外壳、保内核"。
+    Application
+      └─ executeCardGeneration(command, context)
+           ├─ generation domain services
+           ├─ TTS/OCR/provider adapters
+           ├─ persistence ports
+           └─ typed result/errors
 
----
+    Runtime
+      ├─ web process
+      ├─ one generation worker calling the use case directly
+      ├─ SQLite
+      └─ records filesystem
 
-## 0. 与刚完成的 UI 现代化如何衔接（先回答这个）
+### 4.1 模块边界
 
-刚落地的 UI 现代化（`tokens.css` / `app-shell` / `components.css` / 明暗主题）**不是白做**，但要分清哪层保留、哪层被取代：
+- **React route/components**：渲染、交互、可访问性。
+- **Query hooks**：server state、轮询、mutation、失效。
+- **Express routes**：HTTP parsing、状态码、headers、envelope。
+- **Application use case**：完整生成编排和事务边界。
+- **Domain services**：prompt、后处理、校验、ruby、audio task。
+- **Adapters**：DeepSeek、TTS、OCR、SQLite、filesystem。
 
-| UI 现代化产出 | 全栈迁移里的命运 |
-|--------------|-----------------|
-| `tokens.css`（颜色/间距/圆角/字体/明暗主题） | ✅ **保留**，作为 React 组件的样式底座（shadcn/ui 直接消费 CSS 变量） |
-| 设计规范（卡型色、语言色、组件原语定义、无障碍约束） | ✅ **保留**，是 React 组件的验收标准 |
-| `app-shell.js` / `dashboard.js` / `app.js`（命令式 DOM + 模板字符串） | ⛔ **被 React 组件取代**——命令式渲染正是引入框架要消除的 |
-| Playwright e2e + testid | ✅ **保留**，跨框架兜底 |
+React 代码不得直接导入数据库或后端 service；后端 route 不得拼接 React UI 状态。
 
-一句话：**设计系统层保留并迁入 React,实现层(命令式 DOM)被 React 取代。** UI 现代化把"设计语言"沉淀成了 token 与规范,这正是 React 组件化的输入。
+## 5. React Router 与 Express 并存
 
----
+P0 使用专用探针 /__rr-poc，不抢占根路径。验证通过后，唯一真实页面 / 从 legacy 切到 React。
 
-## 1. 现状核实（迁移摩擦点，实测）
+初始所有权：
 
-| 事实 | 数据 | 对迁移的影响 |
-|------|------|-------------|
-| 后端模块系统 | **64 文件纯 CommonJS**（`module.exports`），0 ESM | Remix/Vite 是 ESM，存在 CJS↔ESM 边界（§4.1） |
-| 前端模块系统 | 12 文件 **ESM**（`import/export`） | 前端可较平滑迁入 React |
-| HTTP 面 | **12 route 文件 / 55 端点** | 逐端点迁 loader/action 的工作量基准 |
-| 后台 worker | `generation_jobs` worker **靠给自己发 HTTP**（`X-Generation-Job-Worker:1`）驱动，绑在 `app.listen` | Remix 无常驻 worker 概念（§4.2） |
-| 数据库 | `better-sqlite3` **同步 API** | 在 async loader 里调同步 DB（§4.3） |
-| 测试 | 集成测试 `require('server.js')` boot 真实 Express | 过渡期 harness 要指向 Express + Remix（§9） |
-| package.json | 无 `"type"` → 默认 CommonJS | 迁移后整体切 ESM |
+    /          -> legacy
+    /__rr-poc  -> react
+    /api/*     -> express
 
----
+切换后的所有权：
 
-## 2. 资产命运表（保留 vs 重写）
+    /          -> react
+    /api/*     -> express
 
-| 资产 | 命运 | 说明 |
-|------|------|------|
-| `services/`（cardGeneration、knowledge、srs、observability、storage/db） | ✅ 保留（TS 化 + 转 ESM） | 框架无关业务逻辑；从 Express route 调用改为 loader/action 调用 |
-| `services/storage/db/*` + `better-sqlite3` | ✅ 保留 | 自用阶段维持 SQLite，不碰 Postgres |
-| `lib/`（logger、serverConfig、生成 helpers、throttle） | ✅ 保留（TS 化） | 纯基础设施 |
-| 生成管线 / TTS / Markdown-first 渲染 | ✅ 保留 | `card-renderer` adapter 逻辑平移进 React 组件 |
-| `database/schema.sql` + 迁移 | ✅ 保留 | 不动数据层 |
-| `tests/unit/`（node:test，测 services） | ✅ 保留 | 与 HTTP 框架无关 |
-| `tests/integration/`（boot Express） | 🔧 演进 | harness 指向 Remix handler（§9） |
-| `tests/e2e/`（Playwright） | ✅ 保留 | testid 跨框架不变 |
-| `routes/`（12 文件 / 55 端点） | ⛔ 重写 | 迁成 Remix loader/action |
-| `server.js` | 🔧 改造 | 变成 Remix + Express 并存入口（§3），worker 抽出（§4.2） |
-| `public/*.html` + `public/js/modules/*`（命令式） | ⛔ 重写 | 迁成 React 路由与组件 |
-| `public/css/*` + `tokens.css` | ✅ 保留 | 迁入 React 作样式底座 |
+新增小型 ESM composition root：
 
----
+1. 组合 Express 与 @react-router/express；
+2. 通过 CJS interop 加载现有 route；
+3. development 使用 Vite middleware；
+4. production 加载 React Router server build；
+5. 始终只暴露 3010。
 
-## 3. 核心迁移机制：Remix 挂在 Express 上并存（无痛过渡的钥匙）
+## 6. Cards Factory 前端拆分
 
-React Router v7 / Remix 官方支持 `@react-router/express`——**可作为 middleware 挂在现有 Express app 上**。所以过渡不是"两个 server 互相 proxy"，而是**同一个 Express app 里 Remix 与旧 routes 并存**，逐个端点从旧 `routes/` 迁到 Remix：
+    app/
+      root.tsx
+      routes/
+        _index.tsx
+        __rr-poc.tsx
+      features/
+        factory/
+        queue/
+        card-modal/
+        ocr/
+      lib/api/
+      styles/
 
-```js
-// server.js（过渡期形态）
-app.use(express.static('build/client'));   // Vite 构建产物
-// —— 未迁移的旧端点继续走原 routes ——
-app.use(require('./routes/knowledge'));    // 尚未迁的保持不动
-app.use(require('./routes/srs'));
-// —— 已迁移的页面 + 数据走 Remix handler ——
-app.all('*', createRequestHandler({ build }));
-```
+保留现有设计 tokens、卡型配色、light/dark、响应式约束和 testid 行为契约。迁移是实现替换，不是再次改变已确认的信息架构。
 
-好处：
-- **worker bridge 存活**：`server.js` 的 Express app 仍在，`generation_jobs` worker 过渡期不受影响。
-- **逐端点迁移**：55 个端点一次迁几个，每迁一批跑一次 e2e，随时可回退。
-- **无停机、无双服务**：一个进程、一个端口（3010）。
+## 7. Markdown-first 卡片契约
 
----
+    Markdown -> marked -> ruby/audio adapter -> DOMPurify -> React wrapper
 
-## 4. 三个必须处理的摩擦点（核实驱动）
+必须保持：
 
-### 4.1 CJS → ESM 统一（"保留 services/" 的隐藏工序）
+- DOMPurify 缺失时 fail closed；
+- 日语只给汉字加 ruby 注音；
+- 英文 MP3、日文 WAV 与播放按钮不变；
+- highlight 迁移、保存、恢复不变；
+- CONTENT / INTEL 两个 tab；
+- 三种卡型和场景短标题规则；
+- 桌面与移动端弹窗满高、focus trap、Escape 与焦点归还。
 
-后端 64 个 CJS 文件与 Remix 的 ESM 不同源。"保留 services/" **不是零改动**——要统一模块系统。方案：**TS 化时一并转 ESM**（`tsc` 输出 ESM，或源码直接 `import/export`），`package.json` 设 `"type": "module"`。`better-sqlite3` 是 CJS 原生模块，ESM 里 `import Database from 'better-sqlite3'`（default import）可用，已验证兼容。
+明确删除：KNOWLEDGE tab、SRS footer、?card=&embed=1。
 
-> 这是有意的一次性工序，不是隐性债务；TS 化本来就要逐文件过，顺带转 ESM 边际成本低。
+## 8. Generation use case 与 worker
 
-### 4.2 worker bridge → 独立 worker（消除 HTTP 自请求 hack，正面收益）
+从 routes/generate.js 提取：
 
-现状：`generation_jobs` worker 靠**给自己发 HTTP 请求**（带 `X-Generation-Job-Worker:1` 跳过限流）来复用生成代码路径——这是 Express 单体下的权宜之计。全栈迁移正好是消除它的机会：
+    executeCardGeneration(command, context): Promise<GenerationResult>
 
-- 把 worker 抽成**独立入口** `worker.js`（或 Remix 自定义 server 启动钩子里拉起的后台 loop），**直接调用 `services/generation/*`**，不再走 HTTP 自请求。
-- 好处：worker 与 HTTP 层解耦，多实例/云化时 worker 可独立伸缩（对接 §10 的 pg-boss 天然）。
-- 过渡期：worker 可继续用旧 HTTP 方式，直到该端点迁移完成再切直调。
+use case 负责生成、后处理、验证、Markdown/HTML、TTS、文件、DB 与领域错误；HTTP adapter 只负责 request、限流、status 和 JSON envelope。
 
-### 4.3 同步 SQLite 在 async loader（自用 OK，多用户随 Postgres 解决）
+worker 分两步迁移：
 
-`better-sqlite3` 同步 API 在 Remix 的 async loader/action 里可直接调用（Node 单线程，同步 SQLite 极快，自用并发下不构成阻塞）。**转多用户高并发时**，同步 DB 会阻塞事件循环——那时随 §10 的 SQLite→Postgres（异步驱动）自然解决。当前不处理，留位。
+1. use case 与 route parity tests 通过前继续 HTTP self-request；
+2. 通过后改为直接调用 use case，并删除 worker bypass header。
 
----
+独立 worker 前补齐 SQLite busy_timeout、原子 claim、SQLITE_BUSY 有界重试、单 replica 与重启恢复测试。
 
-## 5. 目标栈与目录结构
+## 9. 分阶段任务
 
-```
-TypeScript（全栈）
-React Router v7 (Remix) · Vite · 一体化
-app/
-  routes/                      # 文件路由：工作台/概览/知识库/OPS/复习
-    _index.tsx                 # Cards Factory
-    dashboard.tsx              # Mission Control
-    knowledge-hub.tsx
-    knowledge-ops.tsx
-    api.*.ts                   # resource routes（迁自 routes/*.js）
-  features/                    # 按功能域组织（承接上一轮评审建议）
-    factory/ queue/ library/ card-modal/ review/ knowledge-explorer/ ocr/
-  components/                  # shadcn/ui + 自研原语（消费 tokens.css）
-  lib/ services -> 复用根 services/（TS+ESM 化）
-  styles/tokens.css            # 保留的设计系统
-server/
-  worker.ts                    # 抽出的 generation_jobs worker（§4.2）
-services/  db/  lib/           # 保留内核（TS+ESM）
-tests/unit  integration  e2e   # 保留 + 演进
-```
+| 阶段 | 范围 | 完成门禁 |
+|---|---|---|
+| **D0 退役（完成）** | 删除 Mission/Knowledge/SRS 全栈实现与数据 | 旧 URL/API 404；旧表不存在；核心测试全绿 |
+| **P0 架构探针（完成）** | route ownership、React Router composition POC、不可变 viewer 镜像 | dev/prod/container 的 /__rr-poc 可用 |
+| **P1 React 基础** | root、tokens、Query、error boundary、测试框架 | 不接管 /；现有 Cards Factory 无回归 |
+| **P2 生成应用层** | 抽 executeCardGeneration 与 ports | HTTP/直接调用 parity 全绿 |
+| **P3 Cards Factory** | 表单、OCR、queue、folder/list | light/dark × 3 viewport；核心 E2E 全绿 |
+| **P4 Card Modal** | Markdown、ruby、audio、highlight、INTEL | 三类卡、键盘、移动端、XSS 门禁全绿 |
+| **P5 路由切换** | / owner 切 React，删除 legacy frontend | 3010 容器完整回归 |
+| **P6 Worker** | worker 直调 use case、SQLite 并发门禁 | retry/recovery/race/shutdown 全绿 |
 
-- **服务端数据**：TanStack Query（替 `shell-health.js` / 手写 fetch / 轮询）。
-- **客户端 UI 状态**：少量 Zustand（替 `store.js` 的 Pub/Sub）。
-- **组件**：shadcn/ui 复制进仓库，消费 `tokens.css` 的 CSS 变量，明暗主题沿用。
+## 10. 后置产品项目
 
----
+架构迁移完成后按以下顺序重新启动产品设计：
 
-## 6. TypeScript 化策略（先内核，框架无关）
+1. **学习辅助 2.0**：先定义学习者任务、复习机制、反馈闭环和成功指标，再定 schema。
+2. **知识图谱 2.0**：先定义图谱要回答的问题、节点/边语义、证据与可解释性，再选存储和可视化。
+3. 两者必须通过新的 ADR、用户流程、原型评审和数据模型评审，不复活旧端点或旧表。
 
-1. **先 TS 化 `services/` + `lib/` + `db/`**——框架无关、零 UI 风险、`node:test` 立即验证。同步转 ESM（§4.1）。
-2. 为 `services/` 的公共边界补类型（生成结果、audio task、SRS 状态、knowledge 输出），loader/action 直接受益。
-3. 再 TS 化前端（随 React 组件新写，不回填旧命令式代码——它们本就要删）。
+## 11. 完成定义
 
----
-
-## 7. 逐页迁移顺序（并存过渡）
-
-按"独立性 + 价值"排序，每页迁完 e2e 全绿再下一页：
-
-1. **Knowledge OPS**（最独立、纯表格/任务，React 练手最佳）
-2. **Mission Control**（观测面板，数据只读，风险低）
-3. **Knowledge Hub**（三栏 + 复习/计划 + embed 卡片弹窗，最复杂，放中段）
-4. **Cards Factory 首页**（生成流程 + 队列 + OCR + 卡片弹窗，最核心，最后迁）
-5. **学习卡弹窗 + card-renderer**（跨页共享原语，随 Factory 收尾统一）
-
-每步：旧 `routes/` 对应端点迁成 `api.*.ts` resource route → 页面迁 React → Playwright 跑该页 spec。
-
----
-
-## 8. 前端渲染契约（Markdown-first 不变）
-
-`marked → audio-btn 替换 → DOMPurify` 管线保留，只是从命令式挪进 React：
-
-- `card-renderer.js` 的 adapter 逻辑 → React 组件（`dangerouslySetInnerHTML` 承接净化后的 HTML）。
-- DOMPurify 缺失 fail-closed 契约保留。
-- ruby / 音频按钮 / 标红 / `#cardContent` 作用域 → 组件内等价实现，testid 不变。
-
----
-
-## 9. 测试策略
-
-- **`tests/unit/`（node:test，测 services）**：TS 化后继续跑，是迁移期最稳的安全网（内核不变）。
-- **`tests/integration/`**：过渡期 harness 同时能打 Express（旧端点）与 Remix handler（新端点）；迁移完成后统一到 Remix 的 `createRemixRequestHandler` 测试入口。
-- **`tests/e2e/`（Playwright）**：全程兜底，每迁一页跑对应 spec，testid 保留；是跨框架回归的主防线。
-- **补测前置**（承接上一轮前端评审的 P1）：迁移前给要动的页面补 e2e 快乐路径覆盖（Factory 生成、队列、OCR、复习各一条），别在零覆盖上重写。
-
----
-
-## 10. 未来转多用户的接入点（留位，不实施）
-
-目标栈已为"真对外多用户"留好位，届时增量加，不推翻：
-
-| 能力 | 接入点 |
-|------|--------|
-| 数据库 | `db/` 换 **Drizzle**（SQL-first，贴近现有手写 SQL）+ **PostgreSQL** |
-| 多租户 | 各表加 `user_id`，loader/action 注入当前用户做行级隔离 |
-| 认证 | **Lucia** / Auth.js，Remix 的 session 机制天然承接 |
-| 队列 | worker（§4.2）对接 **pg-boss**（Postgres 即队列，不引 Redis） |
-| 文件 | 音频从本地 `records/` → 对象存储（R2/S3） |
-
----
-
-## 11. 分阶段实施
-
-| 阶段 | 范围 | 门禁 |
-|------|------|------|
-| **P0** | 补迁移前 e2e 覆盖；起 Remix+Vite 骨架挂在 Express 上（空壳并存） | 现有 55 端点与四页行为不变，e2e 全绿 |
-| **P1** | TS + ESM 化 `services/`/`lib/`/`db/`（框架无关） | `node:test` 全绿；`start` 正常 |
-| **P2** | 迁 Knowledge OPS + Mission Control（含对应 resource routes） | 两页 React 化，e2e 绿 |
-| **P3** | 迁 Knowledge Hub（三栏 + 复习/计划 + embed） | Hub e2e + embed 卡片弹窗绿 |
-| **P4** | 迁 Cards Factory + 学习卡弹窗 + card-renderer；worker 抽独立进程 | 全站 React，生成/队列/OCR/弹窗/标红全绿 |
-| **P5** | 删除 `routes/` 旧端点、旧 `public/js` 命令式模块、Express 冗余 | 仅 Remix；lint/unit/integration/e2e/visual 全绿 |
-| **Future** | （转多用户时）Postgres/Drizzle/Auth/pg-boss/对象存储 | 独立立项 |
-
----
-
-## 12. 风险与回滚
-
-- **并存过渡是回滚保险**：任何一页迁移失败，该页保留旧 Express route + 旧 HTML，不阻塞其它页。
-- **worker 迁移风险**：抽独立进程前，保留 HTTP 自请求方式作 fallback，直到直调路径验证稳定。
-- **CJS→ESM 风险**：TS 化按文件推进，每转一批跑 `node:test`；`better-sqlite3` 等原生模块 default import 已验证。
-- **最大风险仍是零前端单测**：迁移期唯一函数级安全网靠新写的 React 组件测试 + e2e；P0 的补测前置不可跳过。
-
----
-
-## 附录 A：React Router v7 (Remix) vs TanStack Start
-
-| 维度 | **React Router v7 (Remix)** ★主推 | TanStack Start |
-|------|-----------------------------------|----------------|
-| 构建 | Vite 原生 | Vite 原生 |
-| 成熟度 | 高（Remix 血统，社区大） | 较新（2025 稳定），上升快 |
-| 数据模型 | `loader`/`action`，从 REST 迁移心智最小 | loader + server functions，类型安全更极致 |
-| 与现有 Express 并存 | `@react-router/express` 官方支持，**最平滑** | 可行，生态案例较少 |
-| 类型安全 | 好 | 极致（端到端推断） |
-| 适合本项目 | ✅ 从 Express+REST+55 端点渐进迁移 | 若追求极致类型安全、愿吃较新生态 |
-
-**推荐 React Router v7 (Remix)**：它的 Express 并存能力（§3）是本项目"逐页无痛迁移"的关键，且从现有 REST 端点迁 loader/action 的心智负担最小。TanStack Start 作为强备选，若更看重端到端类型安全可选。
-
----
-
-## 13. 验收 / 完成定义
-
-- [ ] 四页全部 React 化，共用设计系统 token、shell 组件、明暗主题
-- [ ] `services/` / `db/` / 生成管线 / node:test 内核保留并 TS+ESM 化，单测全绿
-- [ ] `generation_jobs` worker 抽为独立进程，不再靠 HTTP 自请求
-- [ ] Markdown-first 渲染、ruby、英日音频、标红 v1/v2、embed 卡片弹窗行为不回归
-- [ ] `routes/` 旧端点与旧 `public/js` 命令式模块清除
-- [ ] lint / unit / integration / e2e / visual regression 全绿；Docker 3010 真实环境验收通过
-- [ ] 多用户接入点（Postgres/Auth/多租户）在文档与目录结构中留位，未实施
+- 运行时只存在 Cards Factory 产品入口；
+- 旧页面/API/表/后台任务不再存在；
+- React Router 接管根页面，Express API contract 稳定；
+- generation route 已收敛为薄 adapter；
+- worker 不再通过 HTTP 调自身；
+- lint、unit、integration、E2E、visual、smoke、Docker runtime 全绿；
+- 学习辅助与知识图谱仍保持冻结，没有以临时占位方式混入迁移。

@@ -26,7 +26,7 @@ test.describe('shared theme and shell primitives', () => {
   });
 
   test('Escape closes the menu and restores focus', async ({ page }) => {
-    await page.goto('/dashboard.html');
+    await page.goto('/');
     const trigger = page.getByRole('button', { name: '主题', exact: true });
     await trigger.click();
     await page.keyboard.press('Escape');
@@ -34,21 +34,10 @@ test.describe('shared theme and shell primitives', () => {
     await expect(trigger).toBeFocused();
   });
 
-  test('embedded cards do not mount shell controls', async ({ page, request }) => {
-    const result = await request.post('/api/generate', {
-      data: { phrase: 'embed theme baseline', cardType: 'trilingual' }
-    });
-    expect(result.ok()).toBeTruthy();
-    const payload = await result.json();
-    await page.goto(`/?card=${payload.generationId}&embed=1`);
-    await expect(page.locator('[data-theme-control]')).toHaveCount(0);
-    await expect(page.getByTestId('card-modal')).toBeVisible();
-  });
-
   test('dark semantic text tokens meet AA contrast and reduced motion is honored', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-    await page.goto('/knowledge-hub.html');
+    await page.goto('/');
     const result = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
       const parse = (value) => {
@@ -82,22 +71,22 @@ test.describe('shared theme and shell primitives', () => {
     expect(Number.parseFloat(result.transition)).toBeLessThanOrEqual(0.00001);
   });
 
-  test('navigation active state respects library and review query modes', async ({ page }) => {
+  test('navigation exposes Cards Factory as the single product destination', async ({ page }) => {
     const cases = [
       ['/', 'workspace'],
-      ['/?view=library', 'library'],
-      ['/knowledge-hub.html', 'knowledge-hub'],
-      ['/knowledge-hub.html?mode=review', 'review'],
-      ['/dashboard.html', 'mission-control'],
-      ['/knowledge-ops.html', 'knowledge-ops']
+      ['/?view=library', 'workspace']
     ];
     for (const [path, key] of cases) {
       await page.goto(path);
       await expect(page.locator(`[data-nav-key="${key}"]`)).toHaveAttribute('aria-current', 'page');
       await expect(page.locator('.app-nav-link[aria-current="page"]')).toHaveCount(1);
     }
-    await page.goto('/?view=library');
-    await expect(page.locator('#librarySection')).toBeFocused();
+    await expect(page.locator('[data-nav-key="library"]')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '卡片库' })).toHaveCount(0);
+    await expect(page.locator('[data-nav-key="review"]')).toHaveCount(0);
+    await expect(page.locator('[data-nav-key="knowledge-hub"]')).toHaveCount(0);
+    await expect(page.locator('[data-nav-key="mission-control"]')).toHaveCount(0);
+    await expect(page.locator('[data-nav-key="knowledge-ops"]')).toHaveCount(0);
   });
 
   test('mobile drawer traps focus, closes with Escape and returns focus', async ({ page }) => {
@@ -115,13 +104,13 @@ test.describe('shared theme and shell primitives', () => {
 
   test('tablet shell collapses to a stable 64px icon rail', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
-    await page.goto('/knowledge-ops.html');
+    await page.goto('/');
     await expect(page.locator('#appSidebarMount')).toHaveCSS('width', '64px');
     await expect(page.locator('.app-nav-label').first()).toBeHidden();
-    await expect(page.locator('[data-nav-key="knowledge-ops"]')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('[data-nav-key="workspace"]')).toHaveAttribute('aria-current', 'page');
   });
 
-  test('health endpoint has one owner per full page and none in embed', async ({ page, request }) => {
+  test('health endpoint has one owner on Cards Factory', async ({ page }) => {
     let count = 0;
     await page.route('**/api/health', async (route) => {
       count += 1;
@@ -131,13 +120,5 @@ test.describe('shared theme and shell primitives', () => {
     await expect.poll(() => count).toBe(1);
     await page.waitForTimeout(500);
     expect(count).toBe(1);
-
-    const created = await request.post('/api/generate', { data: { phrase: 'embed health owner', cardType: 'trilingual' } });
-    const payload = await created.json();
-    count = 0;
-    await page.goto(`/?card=${payload.generationId}&embed=1`);
-    await expect(page.getByTestId('card-modal')).toBeVisible();
-    await page.waitForTimeout(500);
-    expect(count).toBe(0);
   });
 });

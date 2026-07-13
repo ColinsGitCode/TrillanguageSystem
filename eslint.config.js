@@ -14,6 +14,8 @@ module.exports = [
   {
     ignores: [
       'node_modules/**',
+      'build/**',
+      '.react-router/**',
       'public/**',         // browser code, different globals
       'tests/e2e/**',      // covered by Playwright
       'Docs/**',           // archived diagrams + visualization mjs
@@ -52,6 +54,16 @@ module.exports = [
       'no-control-regex': 'off',
       'no-useless-escape': 'warn',
       'no-async-promise-executor': 'warn',
+    },
+  },
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
     },
   },
   {

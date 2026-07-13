@@ -53,7 +53,6 @@ function visualMasks(page) {
   return [
     page.locator('#heroTaskQueueElapsed'),
     page.locator('.queue-event-time'),
-    page.locator('.mission-queue-updated'),
     page.locator('time')
   ];
 }
@@ -71,8 +70,6 @@ async function expectPageScreenshot(page, name) {
 test.describe.serial('UI visual regression', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
-    const seeded = await request.post('/api/_test/seed-knowledge');
-    expect(seeded.ok()).toBeTruthy();
     for (const fixture of CARD_FIXTURES) {
       await enqueueAndWait(request, fixture);
     }
@@ -82,14 +79,9 @@ test.describe.serial('UI visual regression', () => {
     await installDeterministicPage(page);
   });
 
-  test('four primary pages across desktop, tablet and mobile', async ({ page }) => {
+  test('Cards Factory across desktop, tablet and mobile', async ({ page }) => {
     test.setTimeout(120_000);
-    const targets = [
-      { path: '/', name: 'workspace', ready: 'phrase-input' },
-      { path: '/dashboard.html', name: 'mission-control', ready: 'mission-control-page' },
-      { path: '/knowledge-ops.html', name: 'knowledge-ops', ready: 'knowledge-ops-page' },
-      { path: '/knowledge-hub.html', name: 'knowledge-hub', ready: 'knowledge-hub-page' }
-    ];
+    const targets = [{ path: '/', name: 'workspace', ready: 'phrase-input' }];
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
       { width: 1024, height: 768, name: 'tablet' },
@@ -101,13 +93,6 @@ test.describe.serial('UI visual regression', () => {
       for (const target of targets) {
         await page.goto(target.path, { waitUntil: 'domcontentloaded' });
         await expect(page.getByTestId(target.ready)).toBeVisible();
-        if (target.name === 'knowledge-hub') {
-          await expect(page.getByTestId('knowledge-base-term').first()).toBeVisible();
-          if (viewport.width > 1100) {
-            await expect(page.getByTestId('kh-card-preview')).toBeVisible();
-            await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
-          }
-        }
         await expectPageScreenshot(page, `${target.name}-${viewport.name}.png`);
       }
     }
@@ -138,16 +123,11 @@ test.describe.serial('UI visual regression', () => {
     await expectPageScreenshot(page, 'card-scenario_phrase-mobile.png');
   });
 
-  test('dark theme across all primary pages and card types', async ({ page }) => {
+  test('dark theme across Cards Factory and all card types', async ({ page }) => {
     test.setTimeout(120_000);
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
-    const targets = [
-      { path: '/', name: 'workspace', ready: 'phrase-input' },
-      { path: '/dashboard.html', name: 'mission-control', ready: 'mission-control-page' },
-      { path: '/knowledge-ops.html', name: 'knowledge-ops', ready: 'knowledge-ops-page' },
-      { path: '/knowledge-hub.html', name: 'knowledge-hub', ready: 'knowledge-hub-page' }
-    ];
+    const targets = [{ path: '/', name: 'workspace', ready: 'phrase-input' }];
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
       { width: 1024, height: 768, name: 'tablet' },
@@ -159,13 +139,6 @@ test.describe.serial('UI visual regression', () => {
       for (const target of targets) {
         await page.goto(target.path, { waitUntil: 'domcontentloaded' });
         await expect(page.getByTestId(target.ready)).toBeVisible();
-        if (target.name === 'knowledge-hub') {
-          await expect(page.getByTestId('knowledge-base-term').first()).toBeVisible();
-          if (viewport.width > 1100) {
-            await expect(page.getByTestId('kh-card-preview')).toBeVisible();
-            await expect(page.getByTestId('knowledge-base-panel')).toHaveClass(/has-inspector/);
-          }
-        }
         await expectPageScreenshot(page, `${target.name}-${viewport.name}-dark.png`);
       }
     }

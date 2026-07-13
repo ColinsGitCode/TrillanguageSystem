@@ -1,5 +1,7 @@
 # Engagement and Retention System Implementation Plan
 
+> **已退役（2026-07-13）**：对应运行时、API 与数据库结构已删除。本文仅作历史记录，不得作为当前实现或未来 2.0 设计基线；后续学习辅助/知识图谱将在架构迁移完成后重新设计。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a homepage "今日学习" engagement bar driven by SRS data, with timezone-correct daily aggregation, streak state, daily goal persistence, mastery metrics, and a review entry point.

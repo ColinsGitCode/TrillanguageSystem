@@ -1,81 +1,51 @@
 # Docs 文档入口
 
-当前文档按用途分为 4 类：
+## 当前权威基线
 
-- `Docs/Architecture/`：系统架构、数据库、Observability、测试架构
-- `Docs/Features/`：仍在使用的功能设计
-- `Docs/Operations/`：运行、DeepSeek/current LLM runtime、知识任务、模型配置与排障
-- `Docs/TestReports/`：测试报告与验收产物
+按以下优先级判断系统现状：
 
-## 现状以何处为准
+1. 根目录 CLAUDE.md；
+2. 实际代码与 database/schema.sql；
+3. Docs/Architecture/Fullstack_Migration_React_Router.md；
+4. 其他设计、运营和测试文档。
 
-项目的"当前现状"（目录结构、provider 链、persistence、background jobs、frontend 模块、测试与环境变量等）请直接参考：
+## 当前产品边界
 
-- **`CLAUDE.md`**（项目根目录）：持续维护的架构索引，是最权威的入口
-- **代码本身**：`routes/`、`services/`、`services/storage/db/`、`services/knowledge/`、`lib/`、`public/js/modules/`
-- **`database/schema.sql`**：数据库结构
+2026-07-13 起，当前产品只保留 **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗。
 
-历史上的 `Docs/Status/` 目录（IMPLEMENTATION_STATUS / BACKEND / FRONTEND / API / repo_status 等）已废弃并删除，不再代表当前状态；如需查阅可从 git 历史恢复。
+当前实施入口：
 
-## 已移除子系统（2026-05-28）
+- ../README.md：启动与运行；
+- ../CLAUDE.md：当前架构索引；
+- Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
+- Architecture/TTS_Model_Selection.md：TTS 决策；
+- Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
+- Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。
 
-**训练包（training pack）、few-shot / golden examples、实验追踪（experiment tracking）、人工评审（review）** 子系统已整体删除。相关代码（`trainingPackService`、`goldenExamplesService`、`exampleReviewService`、`fewShotMetricsService`、`experimentTrackingService`、`/api/training`、`/api/review`、`/api/experiments`、卡片 TRAIN/REVIEW 页）、数据库表（`few_shot_*`、`experiment_*`、`teacher_references`、`example_*`、`review_*`、`card_training_assets`）均已移除，启动时会自动 DROP 旧库中的这些表。
+## 已退役：Mission / Knowledge / SRS
 
-下列历史文档中关于这些子系统的章节**仅作历史参考，不代表当前实现**：
+Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析、旧 SRS/复习/学习计划已于 2026-07-13 从运行时代码、API、数据库 schema 和测试基线中删除。旧数据库会在启动时自动 DROP 对应表。
 
-- `Docs/Architecture/数据库设计方案.md`（含已删除的 few_shot / experiment / review / training 表）
-- `Docs/Architecture/Observability/AI_Observability_Roadmap.md`（few-shot 效果面板）
-- 旧 LLM proxy/server queue redesign 架构文档
-- `Docs/TestReports/`（TRAIN / review_scoring 相关报告与图表）
+下列文档只保留为**历史决策记录**，不得作为当前实现或未来 2.0 设计基线：
 
-旧 LLM proxy operations 文档已从 active navigation 中移除；当前运行入口以根目录 `CLAUDE.md`、`.env.example` 和本文件的 Operations 导航为准。
+- Architecture/Knowledge/*；
+- Operations/Knowledge_Local_Analysis_Development_Execution.md；
+- Features/Knowledge_Hub_UI_Redesign.md；
+- Features/Knowledge_Hub_and_Semantic_Classification.md；
+- Features/Engagement_and_Retention_System.md；
+- TestReports/UI_Validation_MissionControl_20260305.md；
+- 所有旧 Knowledge、SRS、TRAIN、review 相关计划与测试报告。
 
-## 主题导航
+学习辅助 2.0 与知识图谱 2.0 只会在全栈迁移完成后重新启动产品设计，不复活旧 API、旧 schema 或旧页面。
 
-### 1. 当前系统入口
+## 其他历史边界
 
-- `../README.md`：快速启动、Docker 服务、当前 DeepSeek provider 链与关键环境变量
-- `../CLAUDE.md`：最完整的当前架构索引，覆盖目录结构、任务队列、测试与运行约定
-- `Docs/Architecture/TTS_Model_Selection.md`：英文 / 日文 TTS 选型调研 + 决策（中文不做语音 / 日语默认 VOICEVOX / Style-Bert-VITS2 因开销大且收益有限已封存）
-- `Docs/Architecture/Fullstack_Migration_React_Router.md`：全栈迁移方案（React Router v7 + TypeScript + Vite，保 services/ 内核换 HTTP+UI 外壳；含并存过渡、worker 抽离、多用户接入点），设计方案·待实施
+2026-05-28 已删除 training pack、few-shot/golden examples、experiment tracking 和人工 review 子系统。旧 Gemini proxy/CLI 方案也已退出运行链路。相关架构与测试文档仅供 git 历史追溯。
 
-下列架构文档保留为历史参考，不作为当前运行入口：
+## 测试资料
 
-- `Docs/Architecture/Trilingual_Card_Generation_System.md`（早期 Gemini/Piper 方案）
-- `Docs/Architecture/数据库设计方案.md`（含已删除/已迁移表结构说明）
+- TestReports/UI_MODERNIZATION_REGRESSION_20260711.md：Cards Factory 现代化基线；
+- TestReports/UI_FULL_REGRESSION_20260601.md：历史全站回归，仅作背景；
+- TestReports/TEST_PLAN_20260518.md 与 TEST_RUN_20260518.md：历史测试计划与结果。
 
-### 2. Knowledge / 知识系统
-
-- `Docs/Architecture/Knowledge/Knowledge_Local_Analysis_System_Design.md`
-- `Docs/Architecture/Knowledge/Knowledge_System_Upgrade_Strategy.md`
-- `Docs/Architecture/Knowledge/Smart_Knowledge_Base_Upgrade.md`
-- `Docs/Operations/Knowledge_Local_Analysis_Development_Execution.md`
-
-### 3. DeepSeek / 当前 LLM Runtime
-
-- `CLAUDE.md`（根目录，provider 链、环境变量、Docker 服务）
-- `.env.example`（DeepSeek、可选本地 LLM/OCR、知识 LLM 兜底配置）
-
-`Docs/Operations/vLLM_Recommended_Config.md` 是历史本地模型/few-shot 验证参考，不属于当前 DeepSeek 运行链路。
-
-### 4. UI / Card 功能
-
-- `Docs/Features/Modern_Card_UI_Design.md`
-- `Docs/Features/Knowledge_Hub_and_Semantic_Classification.md`（语义分类两轴分类法 + Knowledge Hub 三栏浏览器 + 卡片嵌入弹窗）
-- `Docs/Features/Knowledge_Hub_UI_Redesign.md`（Knowledge Hub 三栏空间重排 + 学习者友好视觉，P1/P2/P3 已实施；P4 待实施）
-- `Docs/Features/Engagement_and_Retention_System.md`（首页「今日学习」条：streak / 每日目标 / 掌握度 / 时区聚合，P1 已实施；P2/P3 为后续扩展）
-- `Docs/Features/UI_Modernization_Design_System.md`（全站 UI 正式横向基线：学习优先信息架构 + 统一 tokens + 明暗主题 + App Shell + 组件与视觉回归门禁，修订方案/待实施）
-- `Docs/superpowers/plans/2026-06-19-engagement-retention-system.md`（激励留存 P1 详细执行任务清单）
-- `Docs/superpowers/plans/2026-07-11-ui-modernization.md`（全站 UI 现代化与 Markdown-first 学习卡的 25 项分阶段开发计划）
-
-### 5. 测试与验收
-
-- `Docs/Architecture/Testing/Playwright_E2E_Testing_Design.md`
-- `Docs/TestReports/TRAIN_QUALITY_ACCEPTANCE_20260308.md`
-- `Docs/TestReports/TRAIN_REFINEMENT_EXECUTION_20260308.md`
-- `Docs/TestReports/UI_Validation_MissionControl_20260305.md`
-- `Docs/TestReports/UI_Validation_TRAIN_Selection_20260309.md`
-- `Docs/TestReports/TEST_PLAN_20260518.md`
-- `Docs/TestReports/TEST_RUN_20260518.md`
-
-> 历史归档（里程碑日志、退役功能设计、历史测试报告、过期现状快照、历史资源资产）已于 2026-05-29 整体删除，如需查阅可从 git 历史恢复。
+测试命令和当前覆盖范围以 CLAUDE.md 与 package.json 为准。

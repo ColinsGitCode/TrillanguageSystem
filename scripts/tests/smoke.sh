@@ -46,14 +46,14 @@ fi
 
 # Core probes — each must return 2xx on an empty DB.
 # Paths are the real ones from routes/*.js (verified against
-# routes/{health,history,dashboard,files,knowledge}.js).
+# routes/{health,history,files,generationJobs}.js).
 PROBES=(
   "/api/health"
   "/api/history?page=1&limit=1"
-  "/api/dashboard/highlight-stats"
-  "/api/dashboard/review-stats"
+  "/api/statistics"
   "/api/folders"
-  "/api/knowledge/jobs?limit=1"
+  "/api/generation-jobs?limit=1"
+  "/api/generation-jobs/summary"
 )
 fail=0
 for path in "${PROBES[@]}"; do

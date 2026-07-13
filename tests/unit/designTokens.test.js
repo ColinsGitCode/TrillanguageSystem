@@ -9,19 +9,13 @@ const repoRoot = path.resolve(__dirname, '../..');
 const files = {
   css: [
     'public/styles.css',
-    'public/modern-card.css',
-    'public/css/dashboard.css',
-    'public/observability.css'
+    'public/modern-card.css'
   ],
   html: [
-    'public/index.html',
-    'public/dashboard.html',
-    'public/knowledge-ops.html',
-    'public/knowledge-hub.html'
+    'public/index.html'
   ],
   js: [
-    'public/js/modules/app.js',
-    'public/js/modules/dashboard.js'
+    'public/js/modules/app.js'
   ]
 };
 

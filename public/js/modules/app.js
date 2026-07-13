@@ -70,15 +70,7 @@ const els = {
     infraAlertBanner: document.getElementById('infraAlertBanner'),
     infraAlertTitle: document.getElementById('infraAlertTitle'),
     infraAlertText: document.getElementById('infraAlertText'),
-    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn'),
-    todayLearningBar: document.getElementById('todayLearningBar'),
-    todayLearningStreak: document.getElementById('todayLearningStreak'),
-    todayLearningStreakHint: document.getElementById('todayLearningStreakHint'),
-    todayLearningGoalBtn: document.getElementById('todayLearningGoalBtn'),
-    todayLearningProgressFill: document.getElementById('todayLearningProgressFill'),
-    todayLearningProgress: document.getElementById('todayLearningProgress'),
-    todayLearningMastery: document.getElementById('todayLearningMastery'),
-    todayLearningReview: document.getElementById('todayLearningReview')
+    infraAlertRefreshBtn: document.getElementById('infraAlertRefreshBtn')
 };
 
 let fileListState = null;
@@ -134,8 +126,7 @@ const CARD_TYPE_CONFIG = {
         fileCornerText: '三语卡',
         modalMetaLabel: 'TRILINGUAL',
         modalTabLabel: '三语卡片',
-        historyLabel: '🧩 三语',
-        knowledgeEnabled: true
+        historyLabel: '🧩 三语'
     },
     grammar_ja: {
         key: 'grammar_ja',
@@ -149,8 +140,7 @@ const CARD_TYPE_CONFIG = {
         fileCornerText: '语法卡',
         modalMetaLabel: 'JA GRAMMAR',
         modalTabLabel: '语法卡片',
-        historyLabel: '📘 语法',
-        knowledgeEnabled: true
+        historyLabel: '📘 语法'
     },
     scenario_phrase: {
         key: 'scenario_phrase',
@@ -164,8 +154,7 @@ const CARD_TYPE_CONFIG = {
         fileCornerText: '场景卡',
         modalMetaLabel: 'SCENARIO EXPRESSIONS',
         modalTabLabel: '场景表达卡',
-        historyLabel: '🎭 场景',
-        knowledgeEnabled: false
+        historyLabel: '🎭 场景'
     }
 };
 
@@ -174,7 +163,6 @@ let timerInterval = null;
 let timerStartTime = null;
 let heroTaskQueueElapsedTimerId = null;
 let heroTaskQueueElapsedTaskId = null;
-let todayLearningRefreshPromise = null;
 let modalRestoreFocus = null;
 let modalRestoreScrollY = 0;
 
@@ -183,18 +171,6 @@ let modalRestoreScrollY = 0;
 // ==========================================
 
 function init() {
-    let params;
-    try { params = new URLSearchParams(location.search); } catch (e) { params = null; }
-    const cardId = Number(params?.get('card') || 0);
-
-    // Card-only embed mode (Knowledge Hub preview iframe): /?card=<id>&embed=1.
-    // Skip the full app bootstrap — no folder loading or queue/health pollers —
-    // and just mount the card modal. Big iframe-cost + polling win.
-    if (cardId && params.get('embed') === '1') {
-        initEmbeddedCard(cardId);
-        return;
-    }
-
     initTabs();
     initImageHandlers();
     initCardTypeSelector();
@@ -205,134 +181,12 @@ function init() {
     initInfoModal(); // Initialize Info Modal
     ensureFileListState();
     initInfrastructureHealthMonitor();
-    initTodayLearningBar();
-
-    // Non-embed deep link (e.g. opened in a full tab): open the card over the
-    // normal app.
-    if (cardId) {
-        openRelationCardFromKnowledge({ generationId: cardId });
-        return;
-    }
 
     // 加载初始数据
     loadFolders();
-    if (params?.get('view') === 'library') {
-        requestAnimationFrame(() => {
-            const library = document.getElementById('librarySection');
-            library?.scrollIntoView({ block: 'start' });
-            library?.setAttribute('tabindex', '-1');
-            library?.focus({ preventScroll: true });
-        });
-    }
 
     // 自动刷新
     setInterval(() => loadFolders({ keepSelection: true, refreshFiles: true }), 60000);
-}
-
-function renderTodayLearningBar(engagement) {
-    if (!els.todayLearningBar) return;
-    const data = engagement || {};
-    const streak = data.streak || {};
-    const today = data.today || {};
-    const mastery = data.mastery || {};
-    const goal = Math.max(1, Number(today.goal || 5));
-    const reviewed = Math.max(0, Number(today.reviewed || 0));
-    const progress = Math.max(0, Math.min(100, Math.round((reviewed / goal) * 100)));
-    const days = Number(streak.days || 0);
-    const mastered = Number(mastery.mastered || 0);
-    const eligibleTotal = Number(mastery.eligibleTotal || 0);
-    const newLearned = Number(today.newLearned || 0);
-
-    els.todayLearningBar.classList.remove('is-loading', 'is-error');
-    if (els.todayLearningStreak) {
-        els.todayLearningStreak.textContent = days > 0 ? `连续 ${days} 天` : '开始你的第一天';
-    }
-    if (els.todayLearningStreakHint) {
-        els.todayLearningStreakHint.textContent = streak.activeToday ? '今日已保持' : (days > 0 ? '今日待保持' : '今日学习');
-    }
-    if (els.todayLearningGoalBtn) {
-        els.todayLearningGoalBtn.textContent = `目标 ${goal}`;
-    }
-    if (els.todayLearningProgress) {
-        els.todayLearningProgress.textContent = `${reviewed} / ${goal}${newLearned ? ` · 今日新句式 ${newLearned}` : ''}`;
-    }
-    if (els.todayLearningProgressFill) {
-        els.todayLearningProgressFill.style.width = `${progress}%`;
-    }
-    if (els.todayLearningMastery) {
-        els.todayLearningMastery.textContent = `${mastered} / ${eligibleTotal}`;
-    }
-}
-
-async function refreshTodayLearningBar(options = {}) {
-    if (!els.todayLearningBar) return null;
-    if (todayLearningRefreshPromise) {
-        if (!options.force) return todayLearningRefreshPromise;
-        await todayLearningRefreshPromise;
-    }
-    todayLearningRefreshPromise = api.getSrsEngagement(Boolean(options.force))
-        .then((res) => {
-            renderTodayLearningBar(res.engagement);
-            return res.engagement;
-        })
-        .catch((err) => {
-            console.warn('[Engagement] load failed:', err.message);
-            els.todayLearningBar.classList.add('is-error');
-            if (els.todayLearningStreak) els.todayLearningStreak.textContent = '今日学习';
-            if (els.todayLearningStreakHint) els.todayLearningStreakHint.textContent = '稍后重试';
-            return null;
-        })
-        .finally(() => {
-            todayLearningRefreshPromise = null;
-        });
-    return todayLearningRefreshPromise;
-}
-
-function initTodayLearningBar() {
-    if (!els.todayLearningBar) return;
-    if (els.todayLearningGoalBtn) {
-        els.todayLearningGoalBtn.addEventListener('click', async () => {
-            const current = Number((els.todayLearningGoalBtn.textContent || '').replace(/\D+/g, '')) || 5;
-            const raw = window.prompt('设置每日复习目标（1-200）', String(current));
-            if (raw === null) return;
-            const goal = Number(raw);
-            try {
-                await api.setDailyGoal(goal);
-                await refreshTodayLearningBar({ force: true });
-            } catch (err) {
-                window.alert(err.message || '目标设置失败');
-            }
-        });
-    }
-
-    refreshTodayLearningBar();
-
-    window.addEventListener('pageshow', () => {
-        refreshTodayLearningBar({ force: true });
-    });
-    window.addEventListener('focus', () => {
-        refreshTodayLearningBar({ force: true });
-    });
-    window.addEventListener('popstate', () => {
-        refreshTodayLearningBar({ force: true });
-    });
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) refreshTodayLearningBar({ force: true });
-    });
-}
-
-// Minimal init for the embedded card-only view: only what renderCardModal
-// needs (modal overlay handlers + info-modal). The overlay is reparented to
-// <body> so the embed CSS (which hides every other body child) keeps it visible.
-function initEmbeddedCard(cardId) {
-    document.documentElement.classList.add('kh-embed');
-    document.body.classList.add('kh-embed');
-    initModal();
-    initInfoModal();
-    if (els.modalOverlay && els.modalOverlay.parentElement !== document.body) {
-        document.body.appendChild(els.modalOverlay);
-    }
-    openRelationCardFromKnowledge({ generationId: cardId });
 }
 
 function initInfrastructureHealthMonitor() {
@@ -491,6 +345,17 @@ function pickDefaultFolder(folders) {
 function formatFolderDisplayName(name) {
     const match = String(name || '').match(/^(\d{4})(\d{2})(\d{2})$/);
     if (!match) return name;
+    const day = Number(match[3]);
+    const lastTwo = day % 100;
+    const suffix = lastTwo >= 11 && lastTwo <= 13
+        ? 'th'
+        : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
+    return `${day}${suffix}`;
+}
+
+function formatFolderAccessibleName(name) {
+    const match = String(name || '').match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!match) return name;
     return `${match[1]}.${match[2]}.${match[3]}`;
 }
 
@@ -552,9 +417,9 @@ function renderFolders() {
     });
 
     // 渲染分组
-    const renderGroup = (label, items) => {
+    const renderGroup = (label, items, compactDates = false) => {
         const wrap = document.createElement('div');
-        wrap.className = 'month-group';
+        wrap.className = `month-group${compactDates ? ' compact-date-group' : ''}`;
         wrap.innerHTML = `<div class="month-label">${label}</div>`;
         const grid = document.createElement('div');
         grid.className = 'folder-grid';
@@ -562,7 +427,9 @@ function renderFolders() {
         items.sort((a, b) => b.localeCompare(a)).forEach(name => {
             const btn = document.createElement('button');
             btn.textContent = formatFolderDisplayName(name);
-            btn.title = name;
+            btn.title = formatFolderAccessibleName(name);
+            btn.setAttribute('aria-label', `日期 ${formatFolderAccessibleName(name)}`);
+            btn.dataset.folder = name;
             btn.dataset.testid = `folder-${name}`;
             if (name === selected) btn.classList.add('active');
             btn.onclick = () => selectFolder(name);
@@ -574,7 +441,7 @@ function renderFolders() {
 
     Array.from(groups.keys()).sort((a, b) => b.localeCompare(a)).forEach(key => {
         const g = groups.get(key);
-        renderGroup(g.label, g.items);
+        renderGroup(g.label, g.items, true);
     });
 
     if (misc.length) {
@@ -1517,7 +1384,8 @@ function updateHeroTaskQueueStatus() {
         if (!activeTask.startedAt) {
             activeTask.startedAt = activeTask.createdAt || Date.now();
         }
-        statusEl.className = 'hero-queue-status is-active';
+        statusEl.classList.remove('is-idle', 'is-waiting', 'is-failed');
+        statusEl.classList.add('is-active');
         stateEl.textContent = 'RUNNING';
         taskEl.textContent = `#${activeTask.seq} [${cardType}] ${phrase}`;
         if (elapsedEl) {
@@ -1537,7 +1405,8 @@ function updateHeroTaskQueueStatus() {
     if (queued > 0 || failed > 0 || running > 0) {
         const nextTask = tasks.find((task) => task.status === 'queued') || null;
         const hasOnlyFailed = queued === 0 && failed > 0;
-        statusEl.className = hasOnlyFailed ? 'hero-queue-status is-failed' : 'hero-queue-status is-waiting';
+        statusEl.classList.remove('is-idle', 'is-active', 'is-waiting', 'is-failed');
+        statusEl.classList.add(hasOnlyFailed ? 'is-failed' : 'is-waiting');
         stateEl.textContent = hasOnlyFailed ? 'FAILED' : 'QUEUED';
         const retryWaitSeconds = nextTask ? getRetryWaitSeconds(nextTask) : 0;
         taskEl.textContent = nextTask
@@ -1549,7 +1418,8 @@ function updateHeroTaskQueueStatus() {
         return;
     }
 
-    statusEl.className = 'hero-queue-status is-idle';
+    statusEl.classList.remove('is-active', 'is-waiting', 'is-failed');
+    statusEl.classList.add('is-idle');
     stateEl.textContent = 'IDLE';
     taskEl.textContent = 'Task Queue Idle';
     statusEl.title = '当前无运行任务';
@@ -2443,195 +2313,6 @@ function clearPersistedCardHighlights(storageKey, options = {}) {
     }
 }
 
-async function loadCardKnowledgePanel(options = {}) {
-    const generationId = Number(options.generationId || 0);
-    const container = options.container || document.getElementById('cardKnowledge');
-    if (!container) return;
-    if (!generationId) {
-        container.innerHTML = '<div class="review-empty">当前卡片缺少 generationId，无法加载知识关系。</div>';
-        return;
-    }
-
-    if (container.dataset.loadedGenerationId === String(generationId) && container.dataset.loaded === '1') {
-        return;
-    }
-
-    const requestToken = `${generationId}-${Date.now()}`;
-    container.dataset.requestToken = requestToken;
-    container.dataset.loaded = '0';
-    container.innerHTML = '<div class="review-empty">加载 Knowledge 关系中...</div>';
-
-    try {
-        const data = await api.getKnowledgeCardRelations(generationId, 18);
-        if (container.dataset.requestToken !== requestToken) return;
-        const relations = data?.relations || null;
-        if (!relations) {
-            container.innerHTML = '<div class="review-empty">暂无知识关系数据。</div>';
-            return;
-        }
-
-        const term = relations.term || null;
-        const grammarHits = Array.isArray(relations.grammarHits) ? relations.grammarHits : [];
-        const clusters = Array.isArray(relations.clusters) ? relations.clusters : [];
-        const issues = Array.isArray(relations.issues) ? relations.issues : [];
-        const synonymGroups = Array.isArray(relations.synonymGroups) ? relations.synonymGroups : [];
-        const relatedCards = Array.isArray(relations.relatedCards) ? relations.relatedCards : [];
-
-        const provider = relations.card?.provider || 'unknown';
-        const model = relations.card?.model || 'unknown';
-
-        container.innerHTML = `
-            <div class="card-knowledge-wrap">
-                <div class="card-knowledge-head">
-                    <div class="card-knowledge-title">Knowledge Relations</div>
-                    <div class="card-knowledge-tags">
-                        <span class="tag">provider ${escapeHtml(provider)}</span>
-                        <span class="tag">model ${escapeHtml(model)}</span>
-                        <span class="tag">patterns ${grammarHits.length}</span>
-                        <span class="tag">clusters ${clusters.length}</span>
-                        <span class="tag">issues ${issues.length}</span>
-                        <span class="tag">related ${relatedCards.length}</span>
-                    </div>
-                </div>
-
-                <div class="card-knowledge-grid">
-                    ${renderCardKnowledgeSection('Term Index', term ? [term] : [], (item) => `
-                        <strong>${escapeHtml(item.phrase || '-')}</strong>
-                        <span class="mono">score ${Number(item.score || 0)} · ${escapeHtml(item.langProfile || '-')}</span>
-                        <span class="mono">EN ${escapeHtml(item.enHeadword || '-')} · JA ${escapeHtml(item.jaHeadword || '-')} · ZH ${escapeHtml(item.zhHeadword || '-')}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Grammar Hits', grammarHits, (item) => `
-                        <strong>${escapeHtml(item.pattern || '-')}</strong>
-                        <span class="mono">confidence ${Number(item.confidence || 0).toFixed(2)}</span>
-                        <span>${escapeHtml(item.sentence || '-')}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Clusters', clusters, (item) => `
-                        <strong>${escapeHtml(item.label || item.clusterKey || '-')}</strong>
-                        <span class="mono">key ${escapeHtml(item.clusterKey || '-')} · score ${Number(item.score || 0).toFixed(2)}</span>
-                        <span>${escapeHtml(item.description || '-')}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Open Issues', issues, (item) => `
-                        <strong>${escapeHtml(item.issueType || '-')} · ${escapeHtml(item.severity || 'medium')}</strong>
-                        <span class="mono">${escapeHtml(item.updatedAt || '-')}</span>
-                        <span>${escapeHtml(JSON.stringify(item.detail || {}))}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Synonym Groups', synonymGroups, (item) => `
-                        <strong>${escapeHtml(item.groupKey || '-')}</strong>
-                        <span class="mono">${escapeHtml(item.misuseRisk || '-')} · conf ${Number(item.confidence || 0).toFixed(2)}</span>
-                        <span>${escapeHtml((item.members || []).map((m) => `${m.term}(${m.lang})`).join(', ') || '-')}</span>
-                    `)}
-
-                    ${renderCardKnowledgeSection('Related Cards', relatedCards, (item) => `
-                        <div class="card-knowledge-row-head">
-                            <strong>${escapeHtml(item.phrase || '-')}</strong>
-                            <button
-                                class="card-knowledge-open"
-                                type="button"
-                                data-generation-id="${Number(item.generationId || 0)}"
-                                data-folder="${escapeHtml(item.folderName || '')}"
-                                data-base="${escapeHtml(item.baseName || '')}"
-                                data-phrase="${escapeHtml(item.phrase || '')}"
-                                data-card-type="${escapeHtml(item.cardType || 'trilingual')}"
-                            >
-                                Open
-                            </button>
-                        </div>
-                        <span class="mono">#${Number(item.generationId || 0)} · ${escapeHtml(item.folderName || '-')} / ${escapeHtml(item.baseName || '-')}</span>
-                        <span>${escapeHtml((item.reasons || []).join(', ') || '-')}</span>
-                    `)}
-                </div>
-            </div>
-        `;
-
-        container.dataset.loadedGenerationId = String(generationId);
-        container.dataset.loaded = '1';
-
-        container.querySelectorAll('.card-knowledge-open').forEach((btn) => {
-            btn.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const target = event.currentTarget;
-                await openRelationCardFromKnowledge({
-                    generationId: Number(target.dataset.generationId || 0),
-                    folderName: target.dataset.folder || '',
-                    baseName: target.dataset.base || '',
-                    phrase: target.dataset.phrase || '',
-                    cardType: target.dataset.cardType || 'trilingual'
-                });
-            });
-        });
-    } catch (err) {
-        if (container.dataset.requestToken !== requestToken) return;
-        container.innerHTML = `<div class="review-empty">加载关系失败: ${escapeHtml(err.message)}</div>`;
-    }
-}
-
-function renderCardKnowledgeSection(title, rows, rowRenderer) {
-    const list = Array.isArray(rows) ? rows : [];
-    return `
-        <section class="card-knowledge-section">
-            <div class="card-knowledge-section-title">${escapeHtml(title)}</div>
-            ${list.length
-                ? `<div class="card-knowledge-list">${list.map((item) => `<div class="card-knowledge-item">${rowRenderer(item)}</div>`).join('')}</div>`
-                : '<div class="review-empty">No data</div>'}
-        </section>
-    `;
-}
-
-async function openRelationCardFromKnowledge(payload = {}) {
-    let folder = String(payload.folderName || '').trim();
-    let baseName = String(payload.baseName || '').trim();
-    let phrase = String(payload.phrase || '').trim();
-    const generationId = Number(payload.generationId || 0);
-    let cardType = normalizeCardType(payload.cardType || 'trilingual');
-    let metrics = null;
-
-    try {
-        if (folder && baseName) {
-            try {
-                const fileRecord = await api.getRecordByFile(folder, baseName);
-                metrics = fileRecord?.record || null;
-                if (metrics) {
-                    cardType = normalizeCardType(metrics.card_type || cardType);
-                    phrase = phrase || metrics.phrase || '';
-                }
-            } catch (err) {
-                console.warn('Load relation record by file failed:', err.message);
-            }
-        }
-
-        if ((!folder || !baseName) && generationId > 0) {
-            const detail = await api.getHistoryDetail(generationId);
-            const record = detail?.record || null;
-            if (record) {
-                folder = String(record.folder_name || '').trim();
-                baseName = String(record.base_filename || '').trim();
-                phrase = phrase || record.phrase || '';
-                metrics = record;
-                cardType = normalizeCardType(record.card_type || cardType);
-            }
-        }
-
-        if (!folder || !baseName) {
-            throw new Error('missing folder/base');
-        }
-
-        const mdContent = await api.getFileContent(folder, `${baseName}.md`);
-        renderCardModal(mdContent, phrase || baseName, {
-            folder,
-            baseName,
-            generationId,
-            metrics,
-            cardType
-        });
-    } catch (err) {
-        alert(`打开关联卡片失败: ${err.message}`);
-    }
-}
-
 function buildIntelHud(metrics, options = {}) {
     const idSuffix = options.idSuffix ? `-${options.idSuffix}` : '';
     const providerLabel = (options.providerLabel || metrics.metadata?.provider || 'deepseek').toUpperCase();
@@ -2800,7 +2481,6 @@ function renderCardModal(markdown, title, options = {}) {
         'trilingual'
     );
     const cardTypeConfig = getCardTypeConfig(cardType);
-    const showKnowledge = Boolean(generationId && cardTypeConfig.knowledgeEnabled);
     const contentHighlightContext = buildCardHighlightContext({
         folder,
         baseName: options.baseName || '',
@@ -2883,7 +2563,6 @@ function renderCardModal(markdown, title, options = {}) {
 
     const providerLabel = (metrics.metadata?.provider || rawMetrics?.llm_provider || store.get('llmProvider') || 'deepseek').toUpperCase();
     const modelLabel = metrics.metadata?.model || rawMetrics?.llm_model || 'UNKNOWN';
-    const showSrsFooter = options.reviewOwner === 'modal' && generationId > 0;
 
     els.modalContainer.innerHTML = `
         <div class="modern-card glass-panel">
@@ -2913,7 +2592,6 @@ function renderCardModal(markdown, title, options = {}) {
             <div class="panel-tabs sub-tabs mc-panel-tabs" role="tablist" aria-label="学习卡片视图">
                 <button class="tab-btn active" role="tab" aria-selected="true" data-target="cardContent" data-testid="tab-content">CONTENT</button>
                 <button class="tab-btn tone-purple" role="tab" aria-selected="false" data-target="cardIntel" data-testid="tab-intel">INTEL</button>
-                ${showKnowledge ? '<button class="tab-btn tone-primary" role="tab" aria-selected="false" data-target="cardKnowledge" data-testid="tab-knowledge">KNOWLEDGE</button>' : ''}
             </div>
 
             <!-- Content Tab -->
@@ -2934,13 +2612,6 @@ function renderCardModal(markdown, title, options = {}) {
             <!-- Intel Tab (HUD) -->
             <div id="cardIntel" class="mc-body">${buildIntelHud(metrics, { providerLabel, modelLabel })}</div>
 
-            ${showKnowledge ? '<div id="cardKnowledge" class="mc-body"></div>' : ''}
-            ${showSrsFooter ? `<footer class="mc-srs-footer" data-testid="card-srs-footer">
-                <button type="button" data-card-grade="again" data-testid="card-grade-again">重来</button>
-                <button type="button" data-card-grade="hard" data-testid="card-grade-hard">困难</button>
-                <button type="button" data-card-grade="good" data-testid="card-grade-good">记住</button>
-                <button type="button" data-card-grade="easy" data-testid="card-grade-easy">简单</button>
-            </footer>` : ''}
         </div>
     `;
     applyDynamicMetricStyles(els.modalContainer);
@@ -2957,20 +2628,6 @@ function renderCardModal(markdown, title, options = {}) {
         deletePopover.classList.toggle('hidden', !visible);
         deleteBtn?.setAttribute('aria-expanded', visible ? 'true' : 'false');
     };
-
-    els.modalContainer.querySelectorAll('[data-card-grade]').forEach((button) => {
-        button.addEventListener('click', async () => {
-            if (button.disabled) return;
-            els.modalContainer.querySelectorAll('[data-card-grade]').forEach((item) => { item.disabled = true; });
-            try {
-                await api.reviewSrs(generationId, button.dataset.cardGrade);
-                closeModal();
-            } catch (error) {
-                els.modalContainer.querySelectorAll('[data-card-grade]').forEach((item) => { item.disabled = false; });
-                window.alert(error.message || '复习提交失败');
-            }
-        });
-    });
 
     deleteCancelBtn?.addEventListener('click', () => {
         setDeletePopoverVisible(false);
@@ -3060,22 +2717,12 @@ function renderCardModal(markdown, title, options = {}) {
             const targetId = btn.dataset.target;
             els.modalContainer.querySelector('#cardContent').style.display = targetId === 'cardContent' ? 'block' : 'none';
             const intelTab = els.modalContainer.querySelector('#cardIntel');
-            const knowledgeTab = els.modalContainer.querySelector('#cardKnowledge');
 
             if (targetId === 'cardIntel') {
                 intelTab.style.display = 'grid';
                 requestAnimationFrame(() => renderIntelCharts(metrics));
             } else {
                 intelTab.style.display = 'none';
-            }
-
-            if (knowledgeTab) {
-                if (targetId === 'cardKnowledge') {
-                    knowledgeTab.style.display = 'block';
-                    loadCardKnowledgePanel({ generationId, container: knowledgeTab });
-                } else {
-                    knowledgeTab.style.display = 'none';
-                }
             }
 
             activateModalSelection(targetId);

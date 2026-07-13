@@ -7,9 +7,8 @@
 //
 // Tables are listed children-first so DELETE works even if a future schema
 // change tightens a FK to RESTRICT. The order is hand-maintained; if you
-// add a new knowledge_* table to schema.sql or to databaseService's inline
-// CREATE TABLE statements, add it here (children before parents) and bump
-// the unit test.
+// add a new project table to schema.sql or databaseService's inline CREATE
+// statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
   // generations + observability children
@@ -20,30 +19,11 @@ const TABLES_IN_DELETE_ORDER = [
   // highlight sidecars
   'card_highlights',
 
-  // spaced-repetition (children of generations)
-  'card_reviews',
-  'card_srs',
-
-  // knowledge_* (children before parents)
-  'knowledge_grammar_refs',
-  'knowledge_grammar_patterns',
-  'knowledge_cluster_cards',
-  'knowledge_clusters',
-  'knowledge_synonym_members',
-  'knowledge_synonym_candidates',
-  'knowledge_synonym_jobs_meta',
-  'knowledge_synonym_groups',
-  'knowledge_terms_index',
-  'knowledge_issues',
-  'knowledge_outputs_raw',
-  'knowledge_jobs',
-
   // generation_jobs
   'generation_job_events',
   'generation_jobs',
 
   // background tables (counters that accumulate across tests)
-  'user_preferences',
   'model_statistics',
   'system_health',
 

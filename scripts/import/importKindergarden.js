@@ -12,8 +12,7 @@
  *   node scripts/import/importKindergarden.js --apply      # 正式入队
  *   node scripts/import/importKindergarden.js --apply --server=http://localhost:3010
  *
- * 生成完成后，在 Knowledge Hub 依次点击：
- *   「重建索引」→「重建分类」完成语义归类。
+ * 生成完成后，可直接在 Cards Factory 的文件夹与卡片列表中浏览。
  */
 
 // ─── 卡片数据：27 张三语词汇卡 + 3 张日语语法卡 = 30 张 ───────────────────────
@@ -153,10 +152,8 @@ async function main() {
 
   if (stats.queued > 0) {
     console.log('\n  后续步骤：');
-    console.log('  1. 在 Dashboard / Generation Jobs 面板等待生成完成');
-    console.log('  2. 打开 Knowledge Hub → 「重建索引」（index job）');
-    console.log('  3. Knowledge Hub → 「重建分类」（cluster job）完成语义归类');
-    console.log(`  4. 在 Knowledge Hub 切到「主题领域」或「句式功能」轴浏览 ${TARGET_FOLDER} 卡片`);
+    console.log('  1. 在 Cards Factory 顶部队列管理中等待生成完成');
+    console.log(`  2. 在 Cards Factory 文件夹列表中打开 ${TARGET_FOLDER} 浏览卡片`);
   }
   if (stats.error > 0) {
     process.exit(1);

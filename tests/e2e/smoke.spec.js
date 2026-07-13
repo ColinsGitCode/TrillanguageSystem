@@ -16,7 +16,8 @@ async function waitForQueueIdle(page) {
 async function openTodayFolder(page) {
   const firstFolder = page.getByTestId('folder-list').locator('button').first();
   await expect(firstFolder).toBeVisible();
-  baseFolder = await firstFolder.getAttribute('title');
+  baseFolder = await firstFolder.getAttribute('data-folder');
+  expect(baseFolder).toBeTruthy();
   await firstFolder.click();
   return baseFolder;
 }

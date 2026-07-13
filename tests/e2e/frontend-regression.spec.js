@@ -32,7 +32,7 @@ async function waitForQueueIdle(page, timeout = 30_000) {
 async function openFirstFolder(page) {
   const firstFolder = page.getByTestId('folder-list').locator('button').first();
   await expect(firstFolder).toBeVisible();
-  const folder = await firstFolder.getAttribute('title');
+  const folder = await firstFolder.getAttribute('data-folder');
   await firstFolder.click();
   return folder;
 }
@@ -77,7 +77,9 @@ test.describe.serial('前端综合回归', () => {
     const diagnostics = collectDiagnostics(page);
 
     await page.goto('/');
-    await expect(page).toHaveTitle(/Trilingual Records Viewer/);
+    await expect(page).toHaveTitle(/Cards Factory/);
+    await expect(page.locator('[data-nav-key="workspace"]')).toContainText('Cards Factory');
+    await expect(page.getByTestId('today-learning-bar')).toHaveCount(0);
     await expect(page.getByTestId('hero-queue-state')).toHaveText('IDLE');
     await expect(page.getByTestId('phrase-input')).toBeVisible();
     await expect(page.getByTestId('generate-btn')).toHaveText('Generate');
@@ -248,31 +250,10 @@ test.describe.serial('前端综合回归', () => {
     await expectNoDiagnostics(diagnostics);
   });
 
-  test('05 Dashboard / Knowledge OPS / Knowledge Hub 基础页面无前端错误', async ({ page }) => {
-    const diagnostics = collectDiagnostics(page);
-
-    await page.goto('/dashboard.html');
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('mission-control-page')).toBeVisible();
-    await expect(page.getByTestId('mission-control-title')).toContainText('MISSION CONTROL');
-    await expect(page.getByTestId('mission-task-queue')).toBeVisible();
-    await expect(page.getByTestId('mission-queue-total')).toBeVisible();
-    await expect(page.getByTestId('service-matrix')).toBeVisible();
-
-    await page.goto('/knowledge-ops.html');
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('knowledge-ops-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-ops-title')).toContainText('KNOWLEDGE OPS');
-    await expect(page.getByTestId('knowledge-start-btn')).toBeEnabled();
-    await expect(page.getByTestId('knowledge-jobs-list')).toBeVisible();
-
-    await page.goto('/knowledge-hub.html');
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('knowledge-hub-page')).toBeVisible();
-    await expect(page.getByTestId('knowledge-hub-title')).toContainText('Knowledge Hub');
-    await expect(page.getByTestId('knowledge-hub-counts')).toBeVisible();
-    await expect(page.getByTestId('knowledge-relation-inspector')).toBeHidden();
-
-    await expectNoDiagnostics(diagnostics);
+  test('05 已退役的 Mission Control 与 Knowledge 页面保持不可访问', async ({ request }) => {
+    for (const path of ['/dashboard.html', '/knowledge-ops.html', '/knowledge-hub.html']) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(404);
+    }
   });
 });

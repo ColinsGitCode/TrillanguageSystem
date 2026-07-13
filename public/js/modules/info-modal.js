@@ -135,32 +135,6 @@ export const METRIC_DEFINITIONS = {
             </ul>
             <p>该数据来自后端持久化表 <code>generation_jobs / generation_job_events</code>，不再依赖浏览器本地队列。</p>
         `
-    },
-    "KNOWLEDGE_SUMMARY": {
-        title: "知识摘要 (Knowledge Summary)",
-        content: `
-            <p>展示最近一次 summary 知识任务的归纳结论，作为 Mission Control 上的只读知识健康快照。</p>
-            <ul>
-                <li><strong>Overview</strong>: 当前卡片库的总体观察。</li>
-                <li><strong>Top Topics</strong>: 最近分析中最突出的主题分布。</li>
-                <li><strong>Quality Observations</strong>: 自动识别出的质量现象与风险提示。</li>
-                <li><strong>Action Items</strong>: 建议优先处理的后续动作。</li>
-            </ul>
-            <p>Mission Control 只展示摘要结果；任务操作与详细关系排查仍在 Knowledge OPS / Knowledge Hub 内完成。</p>
-        `
-    },
-    "KNOWLEDGE_OPS": {
-        title: "知识任务中心 (Knowledge Ops)",
-        content: `
-            <p>用于手动触发卡片库的结构化分析任务，并将结果写回知识表。</p>
-            <ul>
-                <li><strong>Task</strong>: 选择分析类型（summary/index/issues 等）。</li>
-                <li><strong>Scope</strong>: 可按日期目录、卡片类型、样本数量限制分析范围。</li>
-                <li><strong>Jobs</strong>: 查看任务状态、进度、失败批次与执行时序。</li>
-                <li><strong>Latest Summary</strong>: 展示最近一次 summary 任务输出，便于快速确认库健康度。</li>
-            </ul>
-            <p>该模块由后端任务队列执行，数据落库后可被后续检索、质量治理与报告功能复用。</p>
-        `
     }
 };
 

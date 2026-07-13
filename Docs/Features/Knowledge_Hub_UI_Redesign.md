@@ -1,5 +1,7 @@
 # Knowledge Hub UI 重设计方案（学习者友好 · 三栏空间重排）
 
+> **已退役（2026-07-13）**：对应运行时、API 与数据库结构已删除。本文仅作历史记录，不得作为当前实现或未来 2.0 设计基线；后续学习辅助/知识图谱将在架构迁移完成后重新设计。
+
 > 状态：**P1/P2/P3 已实施；2026-07 P4 上下文面板 + 左栏精简待实施**
 > 调性决策：**学习者友好** · 第一阶段：**三栏空间重排**
 > 关联：[UI Modernization Design System](UI_Modernization_Design_System.md) · [Knowledge Hub 与语义分类](Knowledge_Hub_and_Semantic_Classification.md) · [Modern Card UI](Modern_Card_UI_Design.md)

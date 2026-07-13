@@ -23,11 +23,4 @@ test.describe('scenario card palette', () => {
       /\.file-list \.list-item-btn\.card-type-scenario\s*\{[^}]*#86efac/s
     );
   });
-
-  test.it('uses the same scenario palette in Knowledge Hub pills', () => {
-    const css = cssText('public/css/dashboard.css');
-
-    assert.match(css, /\.kh-pill\.card-scenario\s*\{[^}]*#fff0c2/s);
-    assert.match(css, /\.kh-pill\.card-scenario\s*\{[^}]*#9a4f00/s);
-  });
 });

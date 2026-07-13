@@ -16,7 +16,6 @@ const {
 const { generateAudioBatch } = require('../services/generation/ttsService');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('../services/generation/htmlRenderer');
 const { postProcessGeneratedContent } = require('../services/generation/contentPostProcessor');
-const knowledgeJobService = require('../services/knowledge/knowledgeJobService');
 const generationJobService = require('../services/generation/generationJobService');
 const { normalizeAudioExtension, stripKnownAudioExtension } = require('../services/generation/audioFormat');
 const { TokenCounter, PerformanceMonitor, QualityChecker, PromptParser } = require('../services/observability/observabilityService');
@@ -27,10 +26,6 @@ const serverConfig = require('../lib/serverConfig');
 const { checkGenerateThrottle } = require('../lib/throttle');
 const {
   buildE2EGenerateResult,
-  getE2EKnowledgeJob,
-  listE2EKnowledgeJobs,
-  createE2EKnowledgeJob,
-  cancelE2EKnowledgeJob,
   resetE2EFixtures,
 } = require('../lib/e2eFixtures');
 const {
@@ -57,7 +52,6 @@ module.exports = {
   buildAudioTasksFromMarkdown,
   prepareMarkdownForCard,
   postProcessGeneratedContent,
-  knowledgeJobService,
   generationJobService,
   normalizeAudioExtension,
   stripKnownAudioExtension,
@@ -87,10 +81,6 @@ module.exports = {
   normalizeDeepSeekThinking: serverConfig.normalizeDeepSeekThinking,
   checkGenerateThrottle,
   buildE2EGenerateResult,
-  getE2EKnowledgeJob,
-  listE2EKnowledgeJobs,
-  createE2EKnowledgeJob,
-  cancelE2EKnowledgeJob,
   resetE2EFixtures,
   generateWithProvider,
   validateGeneratedContent,

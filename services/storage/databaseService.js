@@ -15,17 +15,7 @@ const log = require('../../lib/logger').child({ module: 'svc/database' });
 const generationJobsDomain = require('./db/generationJobs');
 const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
-const knowledgeJobsDomain = require('./db/knowledgeJobs');
-const knowledgeIssuesDomain = require('./db/knowledgeIssues');
-const knowledgeGrammarDomain = require('./db/knowledgeGrammar');
-const knowledgeClustersDomain = require('./db/knowledgeClusters');
-const knowledgeTermsIndexDomain = require('./db/knowledgeTermsIndex');
-const knowledgeSynonymsDomain = require('./db/knowledgeSynonyms');
-const knowledgeRelationsDomain = require('./db/knowledgeRelations');
-const cardSrsDomain = require('./db/cardSrs');
-const learningPlanDomain = require('./db/learningPlan');
 const testResetDomain = require('./db/testReset');
-const userPreferencesDomain = require('./db/userPreferences');
 
 const DEFAULT_DB_PATH = process.env.DB_PATH || './data/trilingual_records.db';
 
@@ -92,13 +82,27 @@ class DatabaseService {
     log.info('database tables initialized');
   }
 
-  // One-shot cleanup of the retired training / few-shot / review subsystem.
-  // These tables are no longer created by schema.sql; this drops them from
-  // databases provisioned before the removal. Child tables are dropped before
-  // their parents; foreign_keys is toggled off for the duration so dangling
-  // references can't block the drops.
+  // One-shot cleanup of retired product domains. These tables are no longer
+  // created by schema.sql. Child tables are listed before parents and foreign
+  // keys are disabled for the transaction so legacy databases can converge to
+  // the current Cards Factory schema on startup.
   dropDeprecatedTables() {
     const deprecated = [
+      'knowledge_grammar_refs',
+      'knowledge_cluster_cards',
+      'knowledge_synonym_members',
+      'knowledge_synonym_candidates',
+      'knowledge_synonym_jobs_meta',
+      'knowledge_outputs_raw',
+      'knowledge_terms_index',
+      'knowledge_issues',
+      'knowledge_grammar_patterns',
+      'knowledge_clusters',
+      'knowledge_synonym_groups',
+      'knowledge_jobs',
+      'card_reviews',
+      'card_srs',
+      'user_preferences',
       'few_shot_examples',
       'few_shot_runs',
       'experiment_rounds',
@@ -213,306 +217,6 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_gje_type_created ON generation_job_events(event_type, created_at DESC);
     `);
 
-    // knowledge analysis tables: 兼容旧库（schema 18+）
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS knowledge_jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_type TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'queued',
-        scope_json TEXT,
-        batch_size INTEGER DEFAULT 50,
-        total_batches INTEGER DEFAULT 0,
-        done_batches INTEGER DEFAULT 0,
-        error_batches INTEGER DEFAULT 0,
-        result_summary_json TEXT,
-        error_message TEXT,
-        engine_version TEXT DEFAULT 'local-v1',
-        triggered_by TEXT DEFAULT 'owner',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        started_at DATETIME,
-        finished_at DATETIME
-      );
-      CREATE INDEX IF NOT EXISTS idx_kj_status_created ON knowledge_jobs(status, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_kj_type_created ON knowledge_jobs(job_type, created_at DESC);
-
-      CREATE TABLE IF NOT EXISTS knowledge_outputs_raw (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_id INTEGER NOT NULL,
-        batch_no INTEGER NOT NULL DEFAULT 1,
-        input_digest TEXT,
-        status TEXT NOT NULL DEFAULT 'ok',
-        output_json TEXT NOT NULL,
-        error_message TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_kor_job ON knowledge_outputs_raw(job_id, batch_no);
-
-      CREATE TABLE IF NOT EXISTS knowledge_terms_index (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        generation_id INTEGER NOT NULL UNIQUE,
-        phrase TEXT NOT NULL,
-        card_type TEXT,
-        folder_name TEXT,
-        lang_profile TEXT,
-        en_headword TEXT,
-        ja_headword TEXT,
-        zh_headword TEXT,
-        aliases_json TEXT,
-        tags_json TEXT,
-        score REAL DEFAULT 0,
-        last_job_id INTEGER,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE,
-        FOREIGN KEY (last_job_id) REFERENCES knowledge_jobs(id) ON DELETE SET NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_kti_phrase ON knowledge_terms_index(phrase);
-      CREATE INDEX IF NOT EXISTS idx_kti_lang_profile ON knowledge_terms_index(lang_profile);
-      CREATE INDEX IF NOT EXISTS idx_kti_updated ON knowledge_terms_index(updated_at DESC);
-
-      CREATE TABLE IF NOT EXISTS knowledge_issues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        issue_type TEXT NOT NULL,
-        severity TEXT NOT NULL DEFAULT 'medium',
-        generation_id INTEGER,
-        phrase TEXT,
-        fingerprint TEXT NOT NULL,
-        detail_json TEXT,
-        resolved INTEGER DEFAULT 0,
-        last_job_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(issue_type, fingerprint),
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL,
-        FOREIGN KEY (last_job_id) REFERENCES knowledge_jobs(id) ON DELETE SET NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_ki_type_resolved ON knowledge_issues(issue_type, resolved, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_ki_generation ON knowledge_issues(generation_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_synonym_groups (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        group_key TEXT NOT NULL,
-        pair_key TEXT,
-        term_a TEXT,
-        term_b TEXT,
-        tone TEXT,
-        register_text TEXT,
-        collocation_note TEXT,
-        misuse_risk TEXT DEFAULT 'medium',
-        risk_level TEXT,
-        recommendation TEXT,
-        actionable_hint TEXT,
-        confidence REAL DEFAULT 0,
-        coverage_ratio REAL DEFAULT 0,
-        model TEXT,
-        prompt_version TEXT,
-        schema_version TEXT,
-        evidence_hash TEXT,
-        result_json TEXT,
-        context_split_json TEXT,
-        misuse_risks_json TEXT,
-        jp_nuance_json TEXT,
-        boundary_tags_a_json TEXT,
-        boundary_tags_b_json TEXT,
-        parse_status TEXT DEFAULT 'ok',
-        version_job_id INTEGER NOT NULL,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_ksg_active_key ON knowledge_synonym_groups(is_active, group_key);
-      CREATE INDEX IF NOT EXISTS idx_ksg_version ON knowledge_synonym_groups(version_job_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_synonym_members (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        group_id INTEGER NOT NULL,
-        generation_id INTEGER,
-        term TEXT NOT NULL,
-        lang TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (group_id) REFERENCES knowledge_synonym_groups(id) ON DELETE CASCADE,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_ksm_group ON knowledge_synonym_members(group_id);
-      CREATE INDEX IF NOT EXISTS idx_ksm_generation ON knowledge_synonym_members(generation_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_synonym_candidates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_id INTEGER NOT NULL,
-        pair_key TEXT NOT NULL,
-        term_a TEXT NOT NULL,
-        term_b TEXT NOT NULL,
-        candidate_score REAL DEFAULT 0,
-        evidence_hash TEXT,
-        evidence_snapshot_json TEXT,
-        status TEXT DEFAULT 'queued',
-        llm_latency_ms INTEGER DEFAULT 0,
-        llm_error TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(job_id, pair_key),
-        FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_ksc_job_score ON knowledge_synonym_candidates(job_id, candidate_score DESC);
-      CREATE INDEX IF NOT EXISTS idx_ksc_status ON knowledge_synonym_candidates(status, updated_at DESC);
-
-      CREATE TABLE IF NOT EXISTS knowledge_synonym_jobs_meta (
-        job_id INTEGER PRIMARY KEY,
-        model TEXT,
-        prompt_version TEXT,
-        schema_version TEXT,
-        min_candidate_score REAL DEFAULT 0.62,
-        max_pairs INTEGER DEFAULT 120,
-        max_llm_pairs INTEGER DEFAULT 24,
-        llm_enabled INTEGER DEFAULT 0,
-        candidate_count INTEGER DEFAULT 0,
-        success_count INTEGER DEFAULT 0,
-        failed_count INTEGER DEFAULT 0,
-        json_parse_rate REAL DEFAULT 0,
-        avg_latency_ms REAL DEFAULT 0,
-        p95_latency_ms REAL DEFAULT 0,
-        options_json TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_ksjm_updated ON knowledge_synonym_jobs_meta(updated_at DESC);
-
-      CREATE TABLE IF NOT EXISTS knowledge_grammar_patterns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pattern TEXT NOT NULL,
-        explanation_zh TEXT,
-        confidence REAL DEFAULT 0,
-        version_job_id INTEGER NOT NULL,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_kgp_active_pattern ON knowledge_grammar_patterns(is_active, pattern);
-      CREATE INDEX IF NOT EXISTS idx_kgp_version ON knowledge_grammar_patterns(version_job_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_grammar_refs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pattern_id INTEGER NOT NULL,
-        generation_id INTEGER NOT NULL,
-        sentence_excerpt TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(pattern_id, generation_id, sentence_excerpt),
-        FOREIGN KEY (pattern_id) REFERENCES knowledge_grammar_patterns(id) ON DELETE CASCADE,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_kgr_pattern ON knowledge_grammar_refs(pattern_id);
-      CREATE INDEX IF NOT EXISTS idx_kgr_generation ON knowledge_grammar_refs(generation_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_clusters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cluster_key TEXT NOT NULL,
-        label TEXT NOT NULL,
-        description TEXT,
-        keywords_json TEXT,
-        confidence REAL DEFAULT 0,
-        version_job_id INTEGER NOT NULL,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (version_job_id) REFERENCES knowledge_jobs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_kc_active_label ON knowledge_clusters(is_active, label);
-      CREATE INDEX IF NOT EXISTS idx_kc_version ON knowledge_clusters(version_job_id);
-
-      CREATE TABLE IF NOT EXISTS knowledge_cluster_cards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cluster_id INTEGER NOT NULL,
-        generation_id INTEGER NOT NULL,
-        score REAL DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(cluster_id, generation_id),
-        FOREIGN KEY (cluster_id) REFERENCES knowledge_clusters(id) ON DELETE CASCADE,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_kcc_cluster ON knowledge_cluster_cards(cluster_id);
-      CREATE INDEX IF NOT EXISTS idx_kcc_generation ON knowledge_cluster_cards(generation_id);
-
-      CREATE TABLE IF NOT EXISTS card_srs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        generation_id INTEGER NOT NULL UNIQUE,
-        ease_factor REAL NOT NULL DEFAULT 2.5,
-        interval_days INTEGER NOT NULL DEFAULT 0,
-        repetitions INTEGER NOT NULL DEFAULT 0,
-        lapses INTEGER NOT NULL DEFAULT 0,
-        due_date TEXT,
-        last_grade TEXT,
-        last_reviewed_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_card_srs_due ON card_srs(due_date);
-
-      CREATE TABLE IF NOT EXISTS card_reviews (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        generation_id INTEGER NOT NULL,
-        grade TEXT NOT NULL,
-        interval_before INTEGER DEFAULT 0,
-        interval_after INTEGER DEFAULT 0,
-        ease_after REAL DEFAULT 0,
-        reviewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_card_reviews_at ON card_reviews(reviewed_at);
-
-      CREATE TABLE IF NOT EXISTS user_preferences (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 'function' (japanese grammar axis) | 'topic' (vocab axis) — see
-    // services/knowledge/taxonomy.js. Additive: legacy rows stay NULL.
-    ensureTableColumns(this.db, 'knowledge_clusters', [
-      'taxonomy TEXT'
-    ]);
-
-    ensureTableColumns(this.db, 'knowledge_synonym_groups', [
-      'pair_key TEXT',
-      'term_a TEXT',
-      'term_b TEXT',
-      'risk_level TEXT',
-      'actionable_hint TEXT',
-      'model TEXT',
-      'prompt_version TEXT',
-      'schema_version TEXT',
-      'evidence_hash TEXT',
-      'result_json TEXT',
-      'context_split_json TEXT',
-      'misuse_risks_json TEXT',
-      'jp_nuance_json TEXT',
-      'boundary_tags_a_json TEXT',
-      'boundary_tags_b_json TEXT',
-      "parse_status TEXT DEFAULT 'ok'"
-    ]);
-
-    ensureTableColumns(this.db, 'knowledge_synonym_candidates', [
-      'llm_latency_ms INTEGER DEFAULT 0',
-      'llm_error TEXT',
-      "status TEXT DEFAULT 'queued'",
-      'evidence_hash TEXT',
-      'evidence_snapshot_json TEXT',
-      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
-    ]);
-
-    ensureTableColumns(this.db, 'knowledge_synonym_jobs_meta', [
-      'max_llm_pairs INTEGER DEFAULT 24',
-      'json_parse_rate REAL DEFAULT 0',
-      'avg_latency_ms REAL DEFAULT 0',
-      'p95_latency_ms REAL DEFAULT 0',
-      'options_json TEXT',
-      'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
-    ]);
-
     ensureTableColumns(this.db, 'generation_jobs', [
       "job_type TEXT NOT NULL DEFAULT 'trilingual'",
       'phrase_raw TEXT',
@@ -534,11 +238,6 @@ class DatabaseService {
     ]);
 
     this.db.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_ksg_pair_schema_hash ON knowledge_synonym_groups(pair_key, schema_version, evidence_hash);
-      CREATE INDEX IF NOT EXISTS idx_ksg_pair_active ON knowledge_synonym_groups(pair_key, is_active, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_ksc_job_score ON knowledge_synonym_candidates(job_id, candidate_score DESC);
-      CREATE INDEX IF NOT EXISTS idx_ksc_status ON knowledge_synonym_candidates(status, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_ksjm_updated ON knowledge_synonym_jobs_meta(updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_gj_phrase_status ON generation_jobs(phrase_normalized, status);
     `);
   }
@@ -853,182 +552,6 @@ class DatabaseService {
 
   getNextQueuedGenerationRetryTs() {
     return generationJobsDomain.getNextQueuedRetryTs(this.db);
-  }
-
-  // ========== Knowledge analysis jobs ==========
-  // Lifecycle (create/status/list/cancel + synonym meta) extracted to
-  // services/db/knowledgeJobs.js. The deeper knowledge_* data tables
-  // (terms/synonym groups/grammar patterns/clusters/relations/index) still
-  // live below until they have their own unit-test layer.
-
-  createKnowledgeJob(payload = {}) {
-    return knowledgeJobsDomain.create(this.db, payload);
-  }
-
-  upsertKnowledgeSynonymJobMeta(jobId, meta = {}) {
-    return knowledgeJobsDomain.upsertSynonymMeta(this.db, jobId, meta);
-  }
-
-  getKnowledgeSynonymJobMeta(jobId) {
-    return knowledgeJobsDomain.getSynonymMeta(this.db, jobId);
-  }
-
-  updateKnowledgeJobStatus(jobId, patch = {}) {
-    return knowledgeJobsDomain.updateStatus(this.db, jobId, patch);
-  }
-
-  getKnowledgeJobById(jobId) {
-    return knowledgeJobsDomain.getById(this.db, jobId);
-  }
-
-  listKnowledgeJobs(limit = 20) {
-    return knowledgeJobsDomain.list(this.db, limit);
-  }
-
-  cancelKnowledgeJob(jobId) {
-    return knowledgeJobsDomain.cancel(this.db, jobId);
-  }
-
-  insertKnowledgeRawOutput(jobId, batchNo, outputData = {}) {
-    return knowledgeRelationsDomain.insertRawOutput(this.db, jobId, batchNo, outputData);
-  }
-
-  getKnowledgeSourceCards(scope = {}) {
-    return knowledgeRelationsDomain.getSourceCards(this.db, scope);
-  }
-
-  upsertKnowledgeTermsIndex(entries = [], jobId = null) {
-    return knowledgeTermsIndexDomain.upsert(this.db, entries, jobId);
-  }
-
-  replaceKnowledgeIssues(issues = [], jobId = null) {
-    return knowledgeIssuesDomain.replace(this.db, issues, jobId);
-  }
-
-  saveKnowledgeSynonymCandidates(jobId, candidates = []) {
-    return knowledgeSynonymsDomain.saveCandidates(this.db, jobId, candidates);
-  }
-
-  replaceKnowledgeSynonymData(groups = [], jobId, options = {}) {
-    return knowledgeSynonymsDomain.replaceData(this.db, groups, jobId, options);
-  }
-
-  replaceKnowledgeGrammarData(patterns = [], jobId) {
-    return knowledgeGrammarDomain.replaceData(this.db, patterns, jobId);
-  }
-
-  replaceKnowledgeClusterData(clusters = [], jobId) {
-    return knowledgeClustersDomain.replaceData(this.db, clusters, jobId);
-  }
-
-  getKnowledgeOverview(filters = {}) {
-    return knowledgeRelationsDomain.getOverview(this.db, filters);
-  }
-
-  _aggregateKnowledgeByGenerationIds(generationIds = [], limit = 12) {
-    return knowledgeRelationsDomain.aggregateByGenerationIds(this.db, generationIds, limit);
-  }
-
-  getKnowledgeCardRelations(generationId, filters = {}) {
-    return knowledgeRelationsDomain.getCardRelations(this.db, generationId, filters);
-  }
-
-  getKnowledgeTermRelations(term, filters = {}) {
-    return knowledgeRelationsDomain.getTermRelations(this.db, term, filters);
-  }
-
-  getKnowledgePatternRelations(pattern, filters = {}) {
-    return knowledgeRelationsDomain.getPatternRelations(this.db, pattern, filters);
-  }
-
-  getKnowledgeClusterRelations(clusterKey, filters = {}) {
-    return knowledgeRelationsDomain.getClusterRelations(this.db, clusterKey, filters);
-  }
-
-  getKnowledgeIndex(filters = {}) {
-    return knowledgeTermsIndexDomain.search(this.db, filters);
-  }
-
-  listKnowledgeBaseTerms(filters = {}) {
-    return knowledgeTermsIndexDomain.list(this.db, filters);
-  }
-
-  getKnowledgeBaseOverview(filters = {}) {
-    return knowledgeTermsIndexDomain.overview(this.db, filters);
-  }
-
-  getKnowledgeSynonymsByPhrase(phrase, limit = 20) {
-    return knowledgeSynonymsDomain.findByPhrase(this.db, phrase, limit);
-  }
-
-  listKnowledgeSynonymBoundaries(filters = {}) {
-    return knowledgeSynonymsDomain.listBoundaries(this.db, filters);
-  }
-
-  getKnowledgeSynonymBoundaryDetail(filters = {}) {
-    return knowledgeSynonymsDomain.getBoundaryDetail(this.db, filters);
-  }
-
-  getKnowledgeGrammarPatterns(filters = {}) {
-    return knowledgeGrammarDomain.listPatterns(this.db, filters);
-  }
-
-  getKnowledgeClusters(limit = 20) {
-    return knowledgeClustersDomain.listClusters(this.db, limit);
-  }
-
-  // ========== Spaced repetition (card_srs / card_reviews) ==========
-
-  reviewCardSrs(generationId, grade) {
-    return cardSrsDomain.review(this.db, generationId, grade);
-  }
-
-  getCardSrsState(generationId) {
-    return cardSrsDomain.getState(this.db, generationId);
-  }
-
-  getSrsQueue(filters = {}) {
-    return cardSrsDomain.getQueue(this.db, filters);
-  }
-
-  getSrsStats(options = {}) {
-    return cardSrsDomain.getStats(this.db, options);
-  }
-
-  getDailyGoal() {
-    return Number(userPreferencesDomain.getPreference(this.db, 'daily_goal', '5'));
-  }
-
-  setDailyGoal(goal) {
-    const parsed = Number(goal);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
-      throw new Error('goal must be an integer between 1 and 200');
-    }
-    userPreferencesDomain.setPreference(this.db, 'daily_goal', String(parsed));
-    return parsed;
-  }
-
-  getSrsEngagement(options = {}) {
-    return cardSrsDomain.getEngagement(this.db, {
-      ...options,
-      goal: this.getDailyGoal()
-    });
-  }
-
-  getLearningPlan(filters = {}) {
-    return learningPlanDomain.getLearningPlan(this.db, filters);
-  }
-
-  getKnowledgeCategories(filters = {}) {
-    return knowledgeClustersDomain.listCategories(this.db, filters);
-  }
-
-  getKnowledgeIssues(filters = {}) {
-    return knowledgeIssuesDomain.list(this.db, filters);
-  }
-
-  getLatestKnowledgeSummary() {
-    return knowledgeRelationsDomain.getLatestSummary(this.db);
   }
 
   // Test-only: wipe every project table. Gated by E2E_TEST_MODE at the
