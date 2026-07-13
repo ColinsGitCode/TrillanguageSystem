@@ -23,7 +23,8 @@
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.js",
     "test:e2e:pages": "playwright test tests/e2e/pages.spec.js",
     "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
-    "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply"
+    "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply",
+    "cards:reassign-kindergarden-date": "node scripts/migrations/reassignFolderDate.js --source=kindergarden --target=20260713 --date=2026-07-13"
   },
   "dependencies": {
     "@react-router/express": "^7.18.1",
