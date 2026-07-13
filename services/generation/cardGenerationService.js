@@ -6,8 +6,8 @@
 //   markdown prompt build → DeepSeek provider call →
 //   normalize response → compute observability (tokens / cost / quality /
 //   metadata).
-// It does NOT touch the DB, save files, or call TTS; that is the caller's
-// responsibility (see routes/generate.js).
+// It does NOT touch the DB, save files, or call TTS; those concerns belong to
+// the executeCardGeneration application use case.
 //
 // Side effects are limited to `perf.mark(...)`. Everything else is a pure
 // transform over inputs + module-scope service singletons.

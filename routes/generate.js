@@ -1,38 +1,20 @@
 'use strict';
 
-// /api/generate — the request-side orchestration around
-// services/generation/cardGenerationService.generateWithProvider. Handles throttle,
-// validation, post-processing, file save, TTS, and DB insert.
+// /api/generate is an HTTP adapter. Generation orchestration lives in the
+// application use case so workers and future route actions can call it directly.
 
 const express = require('express');
+const { checkGenerateThrottle } = require('./_shared');
 const {
-  PerformanceMonitor,
-  renderHtmlFromMarkdown,
-  prepareMarkdownForCard,
-  postProcessGeneratedContent,
-  saveGeneratedFiles,
-  generateAudioBatch,
-  generateWithProvider,
-  validateGeneratedContent,
-  normalizeAudioTasks,
-  resolveCardAudioTasks,
-  buildPersistedAudioTasks,
-  buildE2EGenerateResult,
-  checkGenerateThrottle,
-  dbService,
-  prepareInsertData,
-  normalizeCardType,
-  normalizeSourceMode,
-  E2E_TEST_MODE,
-  DEFAULT_DEEPSEEK_MODEL,
-} = require('./_shared');
+  executeCardGeneration,
+  GenerationCommandError,
+  GenerationValidationError,
+} = require('../services/application/executeCardGeneration');
 const log = require('../lib/logger').child({ module: 'route/generate' });
 
 const router = express.Router();
-const ACTIVE_GENERATE_PROVIDER = 'deepseek';
 
 router.post('/api/generate', async (req, res) => {
-  const perf = new PerformanceMonitor().start();
   try {
     const skipThrottle = req.get('X-Generation-Job-Worker') === '1';
     const throttle = skipThrottle ? { allowed: true, retryAfterMs: 0 } : checkGenerateThrottle(req);
@@ -51,116 +33,27 @@ router.post('/api/generate', async (req, res) => {
       target_folder = '',
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
-    const requestedProvider = ACTIVE_GENERATE_PROVIDER;
-    const cardType = normalizeCardType(card_type);
-    const sourceMode = normalizeSourceMode(source_mode);
-
-    const genResult = E2E_TEST_MODE
-      ? buildE2EGenerateResult({ phrase, cardType, requestedProvider, sourceMode })
-      : await generateWithProvider(phrase, requestedProvider, perf, {
-          targetFolder: target_folder || '',
-          cardType,
-          sourceMode,
-          modelOverride: DEFAULT_DEEPSEEK_MODEL
-        });
-    const { output: content, prompt, observability, baseName, targetDir, folderName } = genResult;
-    const providerUsed = observability?.metadata?.provider || requestedProvider;
-
-    postProcessGeneratedContent(content);
-
-    const validationErrors = validateGeneratedContent(content, { allowMissingHtml: true, cardType });
-    if (validationErrors.length) {
-      return res.status(422).json({ error: 'Validation failed', details: validationErrors, prompt, llm_output: content });
-    }
-
-    content.audio_tasks = resolveCardAudioTasks(content, cardType);
-
-    const preparedMarkdown = await prepareMarkdownForCard(content.markdown_content, { baseName, audioTasks: content.audio_tasks });
-    content.markdown_content = preparedMarkdown;
-    content.html_content = await renderHtmlFromMarkdown(preparedMarkdown, { baseName, audioTasks: content.audio_tasks });
-
-    perf.mark('fileSave');
-    const result = saveGeneratedFiles(phrase, content, {
-      baseName,
-      targetDir,
-      folderName,
-      cardType,
-      sourceMode
+    const result = await executeCardGeneration({
+      phrase,
+      cardType: card_type,
+      sourceMode: source_mode,
+      targetFolder: target_folder,
     });
-
-    let audio = null;
-    let persistedAudioTasks = [];
-    const hasTtsEndpoint = !E2E_TEST_MODE && (process.env.TTS_EN_ENDPOINT || process.env.TTS_JA_ENDPOINT);
-    if (hasTtsEndpoint && content.audio_tasks.length) {
-      const audioTasks = normalizeAudioTasks(content.audio_tasks, result.baseName);
-      audio = await generateAudioBatch(audioTasks, { outputDir: result.targetDir, baseName: result.baseName });
-      persistedAudioTasks = buildPersistedAudioTasks(audioTasks, audio);
-    }
-
-    perf.mark('audioGenerate');
-    observability.performance = perf.end();
-
-    let generationId = null;
-    try {
-      const dbData = prepareInsertData({
-        phrase,
-        provider: providerUsed,
-        model: observability.metadata?.model || providerUsed,
-        folderName,
-        baseName: result.baseName,
-        filePaths: {
-          md: result.absPaths.md,
-          html: result.absPaths.html,
-          meta: result.absPaths.meta
-        },
-        content,
-        observability,
-        prompt,
-        audioTasks: persistedAudioTasks,
-        cardType,
-        sourceMode
-      });
-
-      generationId = dbService.insertGeneration(dbData);
-      log.info({ generationId }, 'inserted generation');
-    } catch (dbError) {
-      log.error({ err: dbError }, 'database insert failed');
-    }
-
-    res.json({
-      success: true,
-      card_type: cardType,
-      source_mode: sourceMode,
-      provider_requested: requestedProvider,
-      provider_used: providerUsed,
-      fallback: genResult.fallback || null,
-      generationId,
-      result,
-      audio,
-      prompt,
-      llm_output: content,
-      observability
-    });
+    return res.json(result);
   } catch (err) {
     log.error({ err, route: '/api/generate' }, 'generate failed');
-
-    try {
-      dbService.insertError({
-        phrase: req.body?.phrase || 'unknown',
-        llmProvider: ACTIVE_GENERATE_PROVIDER,
-        requestId: null,
-        errorType: err.name || 'UnknownError',
-        errorMessage: err.message,
-        errorStack: err.stack,
-        prompt: null,
-        llmResponse: null,
-        validationErrors: null
+    if (err instanceof GenerationValidationError) {
+      return res.status(422).json({
+        error: err.message,
+        details: err.details,
+        prompt: err.prompt,
+        llm_output: err.llmOutput,
       });
-    } catch (dbErr) {
-      log.error({ err: dbErr }, 'error insert failed');
     }
-
-    res.status(500).json({ error: err.message });
+    if (err instanceof GenerationCommandError) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message });
   }
 });
 

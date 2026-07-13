@@ -204,8 +204,8 @@ worker 分两步迁移：
 |---|---|---|
 | **D0 退役（完成）** | 删除 Mission/Knowledge/SRS 全栈实现与数据 | 旧 URL/API 404；旧表不存在；核心测试全绿 |
 | **P0 架构探针（完成）** | route ownership、React Router composition POC、不可变 viewer 镜像 | dev/prod/container 的 /__rr-poc 可用 |
-| **P1 React 基础** | root、tokens、Query、error boundary、测试框架 | 不接管 /；现有 Cards Factory 无回归 |
-| **P2 生成应用层** | 抽 executeCardGeneration 与 ports | HTTP/直接调用 parity 全绿 |
+| **P1 React 基础（完成）** | root、tokens、Query、error boundary、测试框架 | 不接管 /；现有 Cards Factory 无回归 |
+| **P2 生成应用层（完成）** | 抽 executeCardGeneration 与 ports | HTTP/直接调用 parity 全绿 |
 | **P3 Cards Factory** | 表单、OCR、queue、folder/list | light/dark × 3 viewport；核心 E2E 全绿 |
 | **P4 Card Modal** | Markdown、ruby、audio、highlight、INTEL | 三类卡、键盘、移动端、XSS 门禁全绿 |
 | **P5 路由切换** | / owner 切 React，删除 legacy frontend | 3010 容器完整回归 |

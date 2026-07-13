@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { api, resetState, closeServer } = require('./_harness');
+const { executeCardGeneration } = require('../../services/application/executeCardGeneration');
 
 test.before(() => resetState());
 test.after(async () => { await closeServer(); });
@@ -29,6 +30,40 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     assert.equal(res.body.card_type, 'trilingual');
     assert.ok(res.body.generationId > 0, 'generationId should be populated');
     assert.ok(res.body.llm_output && res.body.llm_output.markdown_content);
+  });
+
+  test.it('keeps HTTP and direct invocation result contracts in parity', async () => {
+    const direct = await executeCardGeneration({
+      phrase: 'direct parity fixture',
+      cardType: 'scenario_phrase',
+      sourceMode: 'input',
+      requestedProvider: 'deepseek',
+    });
+    const http = await api('POST', '/api/generate', {
+      headers: { 'X-Generation-Job-Worker': '1' },
+      body: {
+        phrase: 'http parity fixture',
+        card_type: 'scenario_phrase',
+        source_mode: 'input',
+      },
+    });
+
+    assert.equal(http.status, 200);
+    assert.deepEqual(Object.keys(http.body).sort(), Object.keys(direct).sort());
+    assert.equal(http.body.card_type, direct.card_type);
+    assert.equal(http.body.source_mode, direct.source_mode);
+    assert.equal(http.body.provider_requested, direct.provider_requested);
+    assert.equal(http.body.provider_used, direct.provider_used);
+    assert.equal(http.body.fallback, direct.fallback);
+    assert.equal(http.body.audio, direct.audio);
+    assert.deepEqual(
+      Object.keys(http.body.llm_output).sort(),
+      Object.keys(direct.llm_output).sort()
+    );
+    assert.deepEqual(
+      Object.keys(http.body.observability).sort(),
+      Object.keys(direct.observability).sort()
+    );
   });
 
   test.it('persists the generation: subsequent /api/history sees it', async () => {
