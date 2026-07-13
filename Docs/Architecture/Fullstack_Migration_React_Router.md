@@ -129,7 +129,7 @@ React 代码不得直接导入数据库或后端 service；后端 route 不得�
 
 ## 5. React Router 与 Express 并存
 
-P0 使用专用探针 /__rr-poc，不抢占根路径。验证通过后，唯一真实页面 / 从 legacy 切到 React。
+P0 使用专用探针 /__rr-poc，不抢占根路径。P3/P4 已在该路由完成真实 Cards Factory 与 Card Modal 迁移；P5 验证通过后，唯一真实页面 / 再从 legacy 切到 React。
 
 初始所有权：
 
@@ -159,11 +159,11 @@ P0 使用专用探针 /__rr-poc，不抢占根路径。验证通过后，唯一�
         __rr-poc.tsx
       features/
         factory/
-        queue/
         card-modal/
-        ocr/
       lib/api/
       styles/
+
+当前实现中 queue 与 OCR 是 Cards Factory 的内部能力，分别由 `factory/QueuePanel.tsx` 与 `factory/ocr.ts` 承载；待出现第二个明确消费者后再提升为独立 feature，避免为目录对称提前抽象。
 
 保留现有设计 tokens、卡型配色、light/dark、响应式约束和 testid 行为契约。迁移是实现替换，不是再次改变已确认的信息架构。
 
@@ -206,8 +206,8 @@ worker 分两步迁移：
 | **P0 架构探针（完成）** | route ownership、React Router composition POC、不可变 viewer 镜像 | dev/prod/container 的 /__rr-poc 可用 |
 | **P1 React 基础（完成）** | root、tokens、Query、error boundary、测试框架 | 不接管 /；现有 Cards Factory 无回归 |
 | **P2 生成应用层（完成）** | 抽 executeCardGeneration 与 ports | HTTP/直接调用 parity 全绿 |
-| **P3 Cards Factory** | 表单、OCR、queue、folder/list | light/dark × 3 viewport；核心 E2E 全绿 |
-| **P4 Card Modal** | Markdown、ruby、audio、highlight、INTEL | 三类卡、键盘、移动端、XSS 门禁全绿 |
+| **P3 Cards Factory（完成）** | 表单、OCR、queue、folder/list | light/dark × 3 viewport；核心 E2E 全绿 |
+| **P4 Card Modal（完成）** | Markdown、ruby、audio、highlight、INTEL | 三类卡、键盘、移动端、XSS 门禁全绿 |
 | **P5 路由切换** | / owner 切 React，删除 legacy frontend | 3010 容器完整回归 |
 | **P6 Worker** | worker 直调 use case、SQLite 并发门禁 | retry/recovery/race/shutdown 全绿 |
 
@@ -228,3 +228,5 @@ worker 分两步迁移：
 - worker 不再通过 HTTP 调自身；
 - lint、unit、integration、E2E、visual、smoke、Docker runtime 全绿；
 - 学习辅助与知识图谱仍保持冻结，没有以临时占位方式混入迁移。
+
+当前迁移检查点：P3/P4 已完成并由 `/__rr-poc` 承载；`/` 仍由 legacy frontend 持有。这是 P5 切换前的有意双轨状态，不是第二个产品入口。

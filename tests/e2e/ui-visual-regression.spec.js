@@ -155,4 +155,76 @@ test.describe.serial('UI visual regression', () => {
       await expect(page.getByTestId('card-modal')).toBeHidden();
     }
   });
+
+  test('React Cards Factory across desktop, tablet and mobile', async ({ page }) => {
+    test.setTimeout(120_000);
+    const viewports = [
+      { width: 1440, height: 1000, name: 'desktop' },
+      { width: 1024, height: 768, name: 'tablet' },
+      { width: 390, height: 844, name: 'mobile' }
+    ];
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+      await expectPageScreenshot(page, `react-factory-${viewport.name}.png`);
+    }
+  });
+
+  test('React Cards Factory dark theme across desktop, tablet and mobile', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+    const viewports = [
+      { width: 1440, height: 1000, name: 'desktop' },
+      { width: 1024, height: 768, name: 'tablet' },
+      { width: 390, height: 844, name: 'mobile' }
+    ];
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+      await expectPageScreenshot(page, `react-factory-${viewport.name}-dark.png`);
+    }
+  });
+
+  test('React card modal covers all card types and scenario mobile', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+    for (const fixture of CARD_FIXTURES) {
+      const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();
+      await card.click();
+      await expect(page.getByTestId('react-card-modal')).toBeVisible();
+      await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop.png`);
+      await page.getByTestId('react-card-modal-close').click();
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const scenario = page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).first();
+    await scenario.click();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    await expectPageScreenshot(page, 'react-card-scenario_phrase-mobile.png');
+  });
+
+  test('React card modal dark theme covers all card types and scenario mobile', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/__rr-poc', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+    for (const fixture of CARD_FIXTURES) {
+      const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();
+      await card.click();
+      await expect(page.getByTestId('react-card-modal')).toBeVisible();
+      await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop-dark.png`);
+      await page.getByTestId('react-card-modal-close').click();
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const scenario = page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).first();
+    await scenario.click();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    await expectPageScreenshot(page, 'react-card-scenario_phrase-mobile-dark.png');
+  });
 });

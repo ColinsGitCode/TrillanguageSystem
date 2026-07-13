@@ -1,0 +1,88 @@
+.card-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 12px; background: var(--color-overlay); }
+.react-card-modal { position: relative; width: min(1600px, 100%); height: calc(100dvh - 24px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-modal); box-shadow: var(--shadow-modal); }
+.react-card-head { min-height: 106px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 16px; padding: 12px 18px; border-bottom: 1px solid var(--color-border); }
+.react-card-head > div { text-align: center; min-width: 0; }
+.react-card-head h1 { margin: 0; font-size: 42px; line-height: 1.08; overflow-wrap: anywhere; }
+.react-card-head p { margin: 7px 0 0; color: var(--color-text-tertiary); font: 700 12px/1 var(--font-mono); }
+.card-modal-tabs { min-height: 44px; display: flex; align-items: stretch; padding: 0 18px; background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); }
+.card-modal-tabs > button { min-width: 128px; padding: 0 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; font: 700 12px/1 var(--font-mono); }
+.card-modal-tabs > button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.card-modal-tabs .highlight-selection-button { min-width: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--color-danger); }
+.card-modal-tabs .highlight-selection-button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
+.react-card-scroll { min-height: 0; overflow: auto; }
+.modal-state { min-height: 360px; display: grid; place-items: center; color: var(--color-text-tertiary); }
+.modal-state.error { color: var(--color-danger); }
+.card-content-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; align-items: start; gap: 24px; max-width: 1440px; margin: 0 auto; padding: 28px; }
+.react-card-markdown { min-width: 0; }
+.card-study-meta { position: sticky; top: 20px; padding: 14px; background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.card-study-meta dl { margin: 0; }
+.card-study-meta dl > div { padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.card-study-meta dl > div:last-child { border-bottom: 0; }
+.card-study-meta dt { color: var(--color-text-tertiary); font-size: 10px; text-transform: uppercase; }
+.card-study-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 600 11px/1.4 var(--font-mono); }
+
+.react-card-renderer { color: var(--color-text-primary); font-size: 18px; line-height: 1.75; }
+.react-card-renderer > h1:first-child { display: none; }
+.react-card-renderer h2 { margin: 30px 0 16px; padding: 11px 14px; font-size: 15px; color: var(--color-card-trilingual-text); background: var(--color-card-trilingual-surface); border-left: 3px solid var(--color-card-trilingual-border); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.react-card-renderer.card-type-grammar_ja h2 { color: var(--color-card-grammar-text); background: var(--color-card-grammar-surface); border-left-color: var(--color-card-grammar-border); }
+.react-card-renderer.card-type-scenario_phrase h2 { color: var(--color-card-scenario-text); background: var(--color-card-scenario-surface); border-left-color: var(--color-card-scenario-strong); }
+.react-card-renderer h3 { margin: 24px 0 10px; padding-top: 18px; border-top: 1px solid var(--color-border); font-size: 17px; }
+.react-card-renderer p, .react-card-renderer li { overflow-wrap: anywhere; }
+.react-card-renderer strong { color: var(--color-primary); }
+.react-card-renderer blockquote { margin: 16px 0; padding: 8px 16px; color: var(--color-text-secondary); border-left: 3px solid var(--color-border-strong); }
+.react-card-renderer code { padding: 2px 5px; background: var(--color-bg-subtle); border-radius: var(--radius-sm); font-family: var(--font-mono); }
+.react-card-renderer ruby { ruby-position: over; }
+.react-card-renderer rt { color: var(--color-text-tertiary); font: 600 10px/1 var(--font-ja); }
+.react-card-renderer .audio-btn { width: 31px; height: 31px; display: inline-grid; place-items: center; margin-left: 7px; padding: 0; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: 50%; cursor: pointer; font-size: 11px; vertical-align: middle; }
+.react-card-renderer .audio-btn.is-playing { color: var(--color-text-inverse); background: var(--color-primary); border-color: var(--color-primary); }
+.react-card-renderer mark.study-highlight-red { color: inherit; background: color-mix(in srgb, var(--color-danger) 24%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-danger) 65%, transparent); }
+.loanword-block { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.loanword-label, .loanword-tag { padding: 3px 8px; border-radius: var(--radius-full); font-size: 11px; }
+.loanword-label { color: var(--color-text-inverse); background: var(--color-data-purple); }
+.loanword-tag { color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); }
+.safe-render-error { padding: 18px; color: var(--color-danger); background: var(--color-danger-subtle); border-radius: var(--radius-md); }
+
+.intel-grid { max-width: 1320px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 12px; }
+.intel-score-panel, .intel-panel { padding: 16px; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.intel-score-panel { display: grid; place-items: center; align-content: center; min-height: 190px; background: var(--color-obs-bg); color: var(--color-obs-text); }
+.intel-score-panel .eyebrow { color: var(--color-obs-muted); }
+.intel-score-panel strong { font: 700 72px/1 var(--font-mono); }
+.intel-score-panel span { margin-top: 6px; color: var(--color-success); font: 700 12px/1 var(--font-mono); }
+.intel-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.intel-facts div { padding: 9px; background: var(--color-bg-subtle); border-radius: var(--radius-md); }
+.intel-facts dt { color: var(--color-text-tertiary); font-size: 10px; text-transform: uppercase; }
+.intel-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; font: 650 12px/1.4 var(--font-mono); }
+.intel-wide { grid-column: 1 / -1; }
+.intel-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.intel-bar { position: relative; }
+.intel-bar > span { display: block; padding-right: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 11px; }
+.intel-bar > strong { position: absolute; top: 0; right: 0; font: 700 11px/1 var(--font-mono); }
+.intel-bar > div { height: 5px; margin-top: 8px; overflow: hidden; background: var(--color-bg-subtle); border-radius: var(--radius-full); }
+.intel-bar i { display: block; height: 100%; background: var(--color-primary); }
+.intel-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; color: var(--color-obs-text); background: var(--color-obs-bg); border-radius: var(--radius-md); white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 var(--font-mono); }
+
+.delete-confirm { position: absolute; top: 64px; left: 18px; z-index: 4; width: min(340px, calc(100% - 36px)); padding: 16px; background: var(--color-bg-elevated); border: 1px solid var(--color-danger); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.delete-confirm p { color: var(--color-text-secondary); }
+.delete-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
+.delete-confirm button { min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); cursor: pointer; }
+.delete-confirm .danger-button { color: white; background: var(--color-danger); border-color: var(--color-danger); }
+
+@media (max-width: 760px) {
+  .card-modal-backdrop { padding: 0; }
+  .react-card-modal { width: 100%; height: 100dvh; border: 0; border-radius: 0; }
+  .react-card-head { min-height: 90px; gap: 8px; padding: 8px 10px; }
+  .react-card-head h1 { font-size: 26px; }
+  .react-card-head p { font-size: 10px; }
+  .card-modal-tabs { padding: 0 8px; }
+  .card-modal-tabs > button { min-width: 84px; padding: 0 10px; }
+  .highlight-selection-button { font-size: 0 !important; }
+  .highlight-selection-button svg { width: 18px; height: 18px; }
+  .card-content-layout { grid-template-columns: 1fr; padding: 18px 14px; }
+  .card-study-meta { position: static; }
+  .react-card-renderer { font-size: 16px; line-height: 1.7; }
+  .react-card-renderer h2 { margin-top: 24px; }
+  .intel-grid { grid-template-columns: 1fr; padding: 14px; }
+  .intel-wide { grid-column: auto; }
+  .intel-bars { grid-template-columns: 1fr 1fr; }
+  .intel-facts { grid-template-columns: 1fr; }
+}

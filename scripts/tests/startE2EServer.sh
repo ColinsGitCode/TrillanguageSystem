@@ -20,4 +20,6 @@ export GENERATION_JOB_TRANSIENT_RETRY_BASE_MS="${GENERATION_JOB_TRANSIENT_RETRY_
 export GENERATION_JOB_TRANSIENT_RETRY_MAX_MS="${GENERATION_JOB_TRANSIENT_RETRY_MAX_MS:-500}"
 
 cd "$ROOT_DIR"
-exec node server.js
+npm run build:react >/dev/null
+export NODE_ENV=production
+exec node server.mjs

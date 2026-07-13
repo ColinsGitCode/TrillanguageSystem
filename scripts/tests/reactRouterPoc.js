@@ -68,11 +68,11 @@ async function main() {
     const baseUrl = 'http://127.0.0.1:' + port;
     await waitFor(baseUrl + '/api/health', child);
     await assertResponse(baseUrl, '/', 200, 'Cards Factory');
-    await assertResponse(baseUrl, '/__rr-poc', 200, 'React Router architecture probe');
+    await assertResponse(baseUrl, '/__rr-poc', 200, '创建学习卡');
     await assertResponse(baseUrl, '/api/health', 200);
     await assertResponse(baseUrl, '/dashboard.html', 404);
     await assertResponse(baseUrl, '/api/knowledge/jobs', 404);
-    process.stdout.write('React Router P0 OK (' + baseUrl + ')\n');
+    process.stdout.write('React Router Cards Factory OK (' + baseUrl + ')\n');
   } catch (error) {
     error.message += '\nHybrid server output:\n' + childOutput;
     throw error;

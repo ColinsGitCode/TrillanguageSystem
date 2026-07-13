@@ -10,9 +10,12 @@ import {
 import type { Route } from './+types/root';
 import { createAppQueryClient } from './lib/query-client';
 import '../public/css/tokens.css';
-import './styles/poc.css';
+import './styles/factory.css';
+import './styles/card-modal.css';
 
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  { rel: 'icon', type: 'image/svg+xml', href: '/favicon-lan.svg' },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -42,12 +45,12 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const message = error instanceof Error ? error.message : 'Unknown architecture probe error';
+  const message = error instanceof Error ? error.message : 'Unknown application error';
   return (
-    <main className="poc-shell">
-      <section className="poc-panel">
-        <p className="poc-kicker">ARCHITECTURE PROBE</p>
-        <h1>React boundary failed</h1>
+    <main className="react-error-boundary">
+      <section className="surface">
+        <p className="eyebrow">CARDS FACTORY</p>
+        <h1>页面无法继续运行</h1>
         <pre>{message}</pre>
       </section>
     </main>
