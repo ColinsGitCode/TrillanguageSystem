@@ -1,9 +1,9 @@
 # 学习辅助 2.0 领域与数据 ADR（LA-D2）
 
-> ADR 状态：**Accepted / 已实施 LA-P0-P2 学习闭环**
+> ADR 状态：**Accepted / 已实施 LA-P0-P3 学习闭环与反馈指标**
 > 日期：2026-07-13
-> 最近修订：2026-07-14（LA-P2 桌面计划、今日队列与复习会话 UI 完成）
-> 当前阶段：LA-P2 学习闭环已完成；下一阶段为 LA-P3 反馈与指标
+> 最近修订：2026-07-14（LA-P3 只读学习历史与指标完成）
+> 当前阶段：LA-P3 已完成；下一阶段为 LA-P4 语义接缝
 > 上位基线：[学习辅助 2.0 设计基线](../Features/Learning_Assistance_2_0_Design_Baseline.md)
 > 产品权威：[学习辅助 2.0 产品定义](../Features/Learning_Assistance_2_0_Product_Definition.md)
 > 已确认原型：[LA-D1 桌面端原型](../Features/prototypes/la-d1-prototype.html)
@@ -476,6 +476,7 @@ LA-P0/P1 不创建：
 | POST | `/api/learning/sessions/:id/reveal` | 记录工作流揭示状态，不产生 Review Event |
 | POST | `/api/learning/sessions/:id/reviews` | 幂等提交评分并原子更新投影 |
 | GET | `/api/learning/reviews/by-key/:eventKey` | 只读确认不确定提交是否已落库；不存在返回 404 |
+| GET | `/api/learning/history` | 按 7/30/90 天或全部范围只读聚合 Review Event、队列与会话；可按 Study Item kind 筛选 |
 | POST | `/api/learning/sessions/:id/skip` | 跳过当前项，不产生 Review Event |
 | POST | `/api/learning/sessions/:id/end` | 主动结束或完成会话 |
 | GET | `/api/learning/items/:id` | 当前提示/答案 view model、音频与标红引用 |
@@ -692,4 +693,18 @@ LA-P2 在 LA-P1 API contract 上完成桌面学习闭环，不新增 schema 或 
 - E2E-only seed route 只在 `E2E_TEST_MODE` 挂载，用于建立确定性的 eligible cards、admissions 与 Study Items，不进入生产路由；
 - 最终门禁为 lint、280 个 unit、51 个 integration、React typecheck/build、架构 ownership、7 个 smoke probes 和 27 个 Playwright 用例全部通过；浏览器覆盖真实计划创建、只读预览、队列、揭示、四档评分、首次 503 后同 key 重试、提前结束摘要、单一评分所有权、桌面无溢出和 1280x720 固定评分区。`three_lans_system` viewer 已重建，`/learn` 与 `/learn/plan` 在真实 3010 端口无控制台错误；DeepSeek、Kokoro、VOICEVOX、OCR 和 Storage 均为 online，生产 plan 仍为 `null`。
 
-下一阶段是 LA-P3：基于真实 Review Event 和 session 数据交付学习记录、进度、积压、历史与成功指标；不得在 LA-P3 恢复旧 Engagement、SRS 或 Mission 实现。
+## 21. LA-P3 实施记录（2026-07-14）
+
+LA-P3 在现有九表领域模型上交付反馈与指标，不新增 schema、migration 或第二套分析事实：
+
+- `LearningService.getHistory()` 与 `GET /api/learning/history` 按 `learning_day` 聚合真实 Review Event、历史 Daily Queue/entry 和 session，支持 7/30/90 天、全部范围及可选 `unitKind`；GET 路径不创建 profile、plan、queue 或任何事件；
+- Daily Queue 同一学习日可能存在多个 revision，历史分配量按 `study_item_id` 去重，目标取当日最新队列快照；到期完成和新单元转化由 queue entry 与 Review Event 的真实关联判断；
+- 当前逾期量使用当前计划 scope、active 标签、Schedule State 与配置时区的学习日起点实时推导，不使用裸 UTC 日期；
+- 指标返回原始计数与明确分母，包括学习启动、有效会话、每日目标、到期完成、新单元转化、四档评分、重复失败、响应时间、近 7/30 天活跃学习日和前 14 个学习日基线；
+- 按 Study Item kind 筛选时，不计算不可归属到单元的计划级目标、启动率和整场会话完成率，DTO 返回 `null`，前端显示 `--`，不得伪装为 `0%`；
+- `skip` 仍是 session 内临时工作流状态，结束会话后恢复 pending；LA-P3 明示 `historicalSkipMetricsAvailable=false`，不从瞬时 entry 状态反推历史跳过率；
+- React Router 新增 `/learn/history`，桌面侧栏启用“学习记录”；页面包含范围/单元筛选、学习概览、每日完成与积压轨迹、评分分布、单元表现和最近评分，零 Review Event 时只显示诚实空态；
+- 页面只验收桌面工作台，不新增移动端断点或移动端验收范围；未恢复旧 Engagement、SRS、Mission 或 Knowledge 实现。
+- 最终 acceptance 门禁为 lint、280 个 unit、52 个 integration、React typecheck/build、架构 ownership、7 个 production smoke probes 和 28 个 Playwright 用例全部通过；浏览器覆盖真实评分事实进入历史页、范围/单元筛选、前 14 日基线提示和桌面无横向溢出。
+
+下一阶段是 LA-P4：建立 Heuristic Provider 与未来 Graph Provider 的可降级 contract。无图谱、图谱无结果或 provider 失败时，基础队列与复习必须保持可用；LA-P4 不直接启动 Knowledge Graph 2.0 产品实现。

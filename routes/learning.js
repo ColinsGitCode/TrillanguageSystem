@@ -30,6 +30,10 @@ router.post('/api/learning/plan/preview', route((req, res) => send(res, service.
 router.post('/api/learning/plan/pause', route((_req, res) => send(res, service.setPlanStatus('paused'))));
 router.post('/api/learning/plan/resume', route((_req, res) => send(res, service.setPlanStatus('active'))));
 router.get('/api/learning/scope-options', route((_req, res) => send(res, service.getScopeOptions())));
+router.get('/api/learning/history', route((req, res) => send(res, service.getHistory({
+  range: req.query.range,
+  unitKind: req.query.unitKind,
+}))));
 
 router.post('/api/learning/queues/today', route((_req, res) => send(res, { queue: service.ensureTodayQueue() })));
 router.get('/api/learning/queues/today', route((_req, res) => send(res, service.getTodayQueue())));

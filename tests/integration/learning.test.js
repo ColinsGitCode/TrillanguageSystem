@@ -17,7 +17,7 @@ const scope = {
 test.beforeEach(() => resetState());
 test.after(() => closeServer());
 
-test.describe('Learning Assistance 2.0 P1 API', () => {
+test.describe('Learning Assistance 2.0 API', () => {
   test.it('keeps GET plan and GET queue read-only before setup', async () => {
     const plan = await api('GET', '/api/learning/plan');
     assert.equal(plan.status, 200);
@@ -26,7 +26,23 @@ test.describe('Learning Assistance 2.0 P1 API', () => {
     const queue = await api('GET', '/api/learning/queues/today');
     assert.equal(queue.status, 200);
     assert.equal(queue.body.queue, null);
+    const history = await api('GET', '/api/learning/history?range=30');
+    assert.equal(history.status, 200);
+    assert.equal(history.body.overview.totalReviews, 0);
+    assert.equal(history.body.overview.currentOverdue, 0);
+    assert.equal(history.body.daily.length, 30);
+    assert.equal(history.body.dataQuality.historicalSkipMetricsAvailable, false);
     assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_profiles').get().count, 0);
+  });
+
+  test.it('rejects unsupported history filters without writing state', async () => {
+    const invalidRange = await api('GET', '/api/learning/history?range=365');
+    assert.equal(invalidRange.status, 400);
+    assert.equal(invalidRange.body.code, 'LEARNING_INVALID_REQUEST');
+    const invalidKind = await api('GET', '/api/learning/history?unitKind=audio_only');
+    assert.equal(invalidKind.status, 400);
+    assert.equal(invalidKind.body.code, 'LEARNING_INVALID_REQUEST');
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_review_events').get().count, 0);
   });
 
   test.it('previews arbitrary scopes and exposes queue-ready item summaries without writes', async () => {
@@ -136,6 +152,29 @@ test.describe('Learning Assistance 2.0 P1 API', () => {
     assert.equal(reviewed.body.scheduleState.version, 1);
     assert.equal(reviewed.body.queueProgress.actionCount, 1);
     assert.notEqual(reviewed.body.nextEntry.id, entryId);
+
+    const history = await api('GET', '/api/learning/history?range=7&unitKind=trilingual_en');
+    assert.equal(history.status, 200);
+    assert.equal(history.body.range.preset, '7');
+    assert.equal(history.body.range.unitKind, 'trilingual_en');
+    assert.equal(history.body.overview.totalReviews, 1);
+    assert.equal(history.body.overview.activeDays, 1);
+    assert.equal(history.body.overview.queueDays, 1);
+    assert.equal(history.body.overview.startedDays, 1);
+    assert.equal(history.body.overview.newAssigned, 2);
+    assert.equal(history.body.overview.newReviewed, 1);
+    assert.equal(history.body.overview.newConversionRate, 0.5);
+    assert.equal(history.body.overview.goalCompletionRate, null);
+    assert.equal(history.body.overview.sessionCompletionRate, null);
+    assert.equal(history.body.overview.averageResponseMs, 1800);
+    assert.equal(history.body.overview.medianResponseMs, 1800);
+    assert.equal(history.body.overview.baselineEstablished, false);
+    assert.equal(history.body.overview.baselineRemainingDays, 13);
+    assert.equal(history.body.ratings.find((rating) => rating.rating === 4).count, 1);
+    assert.equal(history.body.breakdown[0].unitKind, 'trilingual_en');
+    assert.equal(history.body.breakdown[0].averageRating, 4);
+    assert.equal(history.body.recent[0].eventKey, eventKey);
+    assert.equal(history.body.recent[0].title, 'first item');
     const reviewedItem = await api('GET', `/api/learning/items/${first.studyItemId}`);
     assert.equal(reviewedItem.body.item.expectedScheduleVersion, 1);
     assert.equal(reviewedItem.body.item.scheduleState.lastEventId, reviewed.body.reviewEvent.id);

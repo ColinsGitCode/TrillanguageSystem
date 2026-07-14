@@ -1,8 +1,8 @@
 # 学习辅助 2.0 设计基线
 
-> 状态：**当前正式产品设计基线；LA-D0-D2、LA-P0-P2 已完成**
+> 状态：**当前正式产品设计基线；LA-D0-D2、LA-P0-P3 已完成**
 > 日期：2026-07-13
-> 产品阶段：LA-P2 桌面学习计划与复习闭环已完成；下一阶段为 LA-P3 反馈与指标
+> 产品阶段：LA-P3 学习记录与反馈指标已完成；下一阶段为 LA-P4 语义接缝
 > 上位架构：[全栈架构迁移方案](../Architecture/Fullstack_Migration_React_Router.md)
 > 数据整备专题：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D0 专题：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
@@ -275,6 +275,23 @@ Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.m
 
 指标用于验证产品闭环和未来图谱需求，不等同于对用户的惩罚性 KPI。
 
+### 11.1 LA-P3 指标落地边界（2026-07-14）
+
+LA-P3 不新增分析事实表。`GET /api/learning/history` 只读聚合 `learning_review_events`、Daily Queue 快照、queue entries、sessions 和当前 Schedule State，提供：
+
+- 学习启动、有效会话、每日目标、到期完成与新单元转化的原始计数和比率；
+- 当前计划范围内的逾期量、每日完成行动/剩余到期轨迹；
+- 四档评分分布、重复失败、平均/中位响应时间；
+- 按学习单元和卡型拆分的评分、失败率和响应时间；
+- 最近评分事实、近 7/30 天活跃学习日，以及前 14 个实际学习日的基线提示。
+
+指标边界固定为：
+
+- Review Event 仍是评分事实，读取历史不得写计划、队列、会话或调度投影；
+- 按学习单元筛选时，无法归属到单元的计划级目标、启动率和整场会话完成率显示为不可计算，不伪装成 `0%`；
+- v1 `skip` 会在结束会话时恢复为待处理，当前没有 durable skip event，因此 LA-P3 明示“不提供历史跳过率”；如未来确需该指标，必须先用独立 ADR 定义 append-only 产品事件，不能从瞬时状态反推；
+- 14 个实际学习日之前只建立个人基线，不显示惩罚性结论。
+
 ## 12. 分阶段设计与实施顺序
 
 | 阶段 | 目标 | 完成门禁 |
@@ -285,7 +302,7 @@ Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.m
 | LA-P0 基础契约 | provider 接口、测试 fixtures、迁移与回滚框架 | 不影响 Cards Factory，门禁全绿 |
 | LA-P1 复习核心 | study item、review event、schedule、评分 API | 后端独立复习闭环与幂等门禁全绿（已完成） |
 | LA-P2 学习计划 | 计划范围、每日目标、新卡/复习混排 | 今日队列稳定且可解释（已完成） |
-| LA-P3 反馈与指标 | 进度、积压、历史和成功指标 | 行为数据可用于产品判断 |
+| LA-P3 反馈与指标 | 进度、积压、历史和成功指标 | 行为数据可用于产品判断（已完成） |
 | LA-P4 语义接缝 | Heuristic Provider 与 Graph Provider contract | 无图谱降级测试通过 |
 | KG-D0（后置） | 基于真实复习问题定义图谱 2.0 | 独立立项和 ADR 评审 |
 
@@ -312,8 +329,8 @@ Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.m
 
 1. [学习辅助 2.0 用户任务与成功指标](Learning_Assistance_2_0_Product_Definition.md)（LA-D0 已确认通过）；
 2. 桌面端信息架构与逐页可视化原型（LA-D1 已确认）；
-3. [学习单元与复习调度 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)（LA-D2 Accepted；LA-P0-P2 实施记录）；
+3. [学习单元与复习调度 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)（LA-D2 Accepted；LA-P0-P3 实施记录）；
 4. 数据模型、API contract 和迁移/回滚方案；
 5. 分阶段 task list、测试计划和验收标准。
 
-LA-P0 已按 ADR 创建职责分离的新表、准入投影和 Study Items；LA-P1 已实现全新的 `/api/learning` 后端闭环；LA-P2 已将计划、今日队列、可恢复复习会话和只读完整卡片接入 React Router 桌面 UI。全程没有恢复旧 SRS 表、旧端点或旧页面；LA-P3 反馈与指标及后续阶段不得绕过已确认的领域与数据决策。
+LA-P0 已按 ADR 创建职责分离的新表、准入投影和 Study Items；LA-P1 已实现全新的 `/api/learning` 后端闭环；LA-P2 已将计划、今日队列、可恢复复习会话和只读完整卡片接入 React Router 桌面 UI；LA-P3 已交付 `/learn/history` 和只读指标聚合。全程没有恢复旧 SRS 表、旧端点或旧页面；下一阶段 LA-P4 只建立可降级的 Heuristic/Graph Provider 接缝，不得让图谱反向成为调度依赖。

@@ -2,8 +2,11 @@ import { requestJson } from '../../lib/api/client';
 import type {
   DailyQueue,
   LearningPlan,
+  LearningHistoryRange,
+  LearningHistoryResponse,
   LearningScope,
   LearningSession,
+  LearningUnitKind,
   PlanResponse,
   ReviewResponse,
   ScopeOptionsResponse,
@@ -23,6 +26,11 @@ export const learningApi = {
     body: JSON.stringify({ scope }),
   }),
   scopeOptions: () => requestJson<ScopeOptionsResponse>('/api/learning/scope-options'),
+  history: (range: LearningHistoryRange, unitKind: LearningUnitKind | null) => {
+    const params = new URLSearchParams({ range });
+    if (unitKind) params.set('unitKind', unitKind);
+    return requestJson<LearningHistoryResponse>(`/api/learning/history?${params.toString()}`);
+  },
   savePlan: (payload: {
     expectedRevision: number;
     scope: LearningScope;

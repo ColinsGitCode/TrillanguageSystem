@@ -146,3 +146,92 @@ export type ReviewResponse = {
   queueProgress: QueueProgress;
   session: LearningSession;
 };
+
+export type LearningHistoryRange = '7' | '30' | '90' | 'all';
+
+export type LearningUnitKind =
+  | 'trilingual_en'
+  | 'trilingual_ja'
+  | 'grammar_ja'
+  | 'scenario_bilingual'
+  | 'whole_card';
+
+export type LearningHistoryResponse = {
+  success: true;
+  range: {
+    preset: LearningHistoryRange;
+    startDay: string;
+    endDay: string;
+    timeZone: string;
+    availableStartDay: string | null;
+    availableEndDay: string | null;
+    unitKind: LearningUnitKind | null;
+  };
+  overview: {
+    totalReviews: number;
+    activeDays: number;
+    queueDays: number;
+    startedDays: number;
+    learningStartRate: number | null;
+    totalSessions: number;
+    sessionsWithProgress: number;
+    validSessions: number;
+    sessionCompletionRate: number | null;
+    goalReachedDays: number;
+    goalCompletionRate: number | null;
+    dueAssigned: number;
+    dueCompleted: number;
+    dueCompletionRate: number;
+    newAssigned: number;
+    newReviewed: number;
+    newConversionRate: number;
+    currentOverdue: number;
+    averageResponseMs: number;
+    medianResponseMs: number;
+    repeatedFailureCount: number;
+    repeatedFailureRate: number;
+    recentActiveDays7: number;
+    recentActiveDays30: number;
+    baselineEstablished: boolean;
+    baselineRemainingDays: number;
+  };
+  daily: Array<{
+    learningDay: string;
+    actions: number;
+    actionGoal: number;
+    goalReached: boolean;
+    dueAssigned: number;
+    dueCompleted: number;
+    backlog: number;
+    newAssigned: number;
+    newReviewed: number;
+    averageResponseMs: number;
+    sessionCount: number;
+  }>;
+  ratings: Array<{ rating: number; count: number; percentage: number }>;
+  breakdown: Array<{
+    unitKind: LearningUnitKind;
+    cardType: string;
+    reviews: number;
+    averageRating: number;
+    failureRate: number;
+    averageResponseMs: number;
+  }>;
+  recent: Array<{
+    id: number;
+    eventKey: string;
+    learningDay: string;
+    occurredAtUtc: string;
+    rating: number;
+    responseMs: number;
+    unitKind: LearningUnitKind;
+    unitKey: string;
+    cardType: string;
+    title: string;
+    contentAvailable: boolean;
+  }>;
+  dataQuality: {
+    historicalSkipMetricsAvailable: boolean;
+    notes: string[];
+  };
+};

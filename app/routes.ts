@@ -4,5 +4,6 @@ export default [
   index('routes/_index.tsx'),
   route('learn', 'routes/learn.tsx'),
   route('learn/plan', 'routes/learn-plan.tsx'),
+  route('learn/history', 'routes/learn-history.tsx'),
   route('learn/session', 'routes/learn-session.tsx'),
 ] satisfies RouteConfig;

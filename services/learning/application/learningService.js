@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { Temporal } = require('@js-temporal/polyfill');
 const { isSqliteBusyError } = require('../../storage/sqliteBusyRetry');
 const { TsFsrsScheduler, stableJson } = require('../scheduling/tsFsrsScheduler');
 const { DEFAULT_TIME_ZONE, dayBounds, learningDay, validateTimeZone } = require('../time/learningTime');
@@ -14,6 +15,19 @@ const {
 
 const DEFAULT_ACTION_GOAL = 20;
 const DEFAULT_NEW_LIMIT = 5;
+const HISTORY_PRESETS = new Map([
+  ['7', 7],
+  ['30', 30],
+  ['90', 90],
+  ['all', null],
+]);
+const UNIT_KINDS = new Set([
+  'trilingual_en',
+  'trilingual_ja',
+  'grammar_ja',
+  'scenario_bilingual',
+  'whole_card',
+]);
 
 function parseJson(value, fallback = null) {
   try {
@@ -41,6 +55,35 @@ function isoInstant(value, field = 'instant') {
     throw learningError('LEARNING_INVALID_REQUEST', `${field} must be a valid UTC instant`, 400);
   }
   return parsed.toISOString();
+}
+
+function ratio(numerator, denominator) {
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function round(value, digits = 4) {
+  const factor = 10 ** digits;
+  return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function dateSequence(startDay, endDay) {
+  const days = [];
+  let cursor = Temporal.PlainDate.from(startDay);
+  const end = Temporal.PlainDate.from(endDay);
+  while (Temporal.PlainDate.compare(cursor, end) <= 0) {
+    days.push(cursor.toString());
+    cursor = cursor.add({ days: 1 });
+  }
+  return days;
 }
 
 function mapSchedule(row) {
@@ -875,6 +918,271 @@ class LearningService {
       algorithmVersion: row.algorithm_version,
       parametersHash: row.parameters_hash,
       publicExplanation: parseJson(row.public_explanation_json, {}),
+    };
+  }
+
+  getHistory(input = {}) {
+    const preset = String(input.range || '30');
+    if (!HISTORY_PRESETS.has(preset)) {
+      throw learningError('LEARNING_INVALID_REQUEST', 'range must be one of 7, 30, 90 or all', 400);
+    }
+    const unitKind = input.unitKind ? String(input.unitKind) : null;
+    if (unitKind && !UNIT_KINDS.has(unitKind)) {
+      throw learningError('LEARNING_INVALID_REQUEST', 'unitKind is not supported', 400);
+    }
+
+    const nowUtc = this._now();
+    const profile = this.db.prepare('SELECT * FROM learning_profiles WHERE id = 1').get();
+    const timeZone = profile?.time_zone || DEFAULT_TIME_ZONE;
+    const endDay = learningDay(nowUtc, timeZone);
+    const available = this.db.prepare(`
+      SELECT MIN(day) AS start_day, MAX(day) AS end_day
+      FROM (
+        SELECT learning_day AS day FROM learning_review_events
+        UNION ALL
+        SELECT learning_day AS day FROM learning_daily_queues
+      )
+    `).get();
+    const presetDays = HISTORY_PRESETS.get(preset);
+    const candidateStart = presetDays
+      ? Temporal.PlainDate.from(endDay).subtract({ days: presetDays - 1 }).toString()
+      : (available.start_day || endDay);
+    const startDay = candidateStart > endDay ? endDay : candidateStart;
+    const rangeParameters = [startDay, endDay];
+    const unitClause = unitKind ? ' AND item.unit_kind = ?' : '';
+    const eventRows = this.db.prepare(`
+      SELECT event.id, event.event_key, event.study_item_id, event.session_id,
+             event.queue_entry_id, event.rating, event.response_ms,
+             event.occurred_at_utc, event.learning_day,
+             item.unit_kind, item.unit_key, item.lifecycle, item.generation_id,
+             generation.card_type, generation.phrase AS source_title
+      FROM learning_review_events event
+      JOIN study_items item ON item.id = event.study_item_id
+      LEFT JOIN generations generation ON generation.id = item.generation_id
+      WHERE event.learning_day BETWEEN ? AND ?${unitClause}
+      ORDER BY event.occurred_at_utc DESC, event.id DESC
+    `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
+
+    const queueRows = this.db.prepare(`
+      SELECT queue.id, queue.learning_day, queue.snapshot_json,
+             entry.id AS entry_id, entry.study_item_id, entry.bucket,
+             item.unit_kind,
+             CASE WHEN event.id IS NULL THEN 0 ELSE 1 END AS reviewed
+      FROM learning_daily_queues queue
+      LEFT JOIN learning_queue_entries entry ON entry.queue_id = queue.id
+      LEFT JOIN study_items item ON item.id = entry.study_item_id
+      LEFT JOIN learning_review_events event ON event.queue_entry_id = entry.id
+      WHERE queue.learning_day BETWEEN ? AND ?${unitClause}
+      ORDER BY queue.learning_day, queue.id, entry.id
+    `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
+
+    const sessionRows = this.db.prepare(`
+      SELECT session.id, session.status, queue.learning_day,
+             COUNT(event.id) AS review_count
+      FROM learning_sessions session
+      JOIN learning_daily_queues queue ON queue.id = session.queue_id
+      LEFT JOIN learning_review_events event ON event.session_id = session.id
+      ${unitKind ? 'LEFT JOIN study_items item ON item.id = event.study_item_id' : ''}
+      WHERE queue.learning_day BETWEEN ? AND ?${unitKind ? ' AND (item.unit_kind = ? OR event.id IS NULL)' : ''}
+      GROUP BY session.id
+      ORDER BY session.id
+    `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
+
+    const daily = new Map(dateSequence(startDay, endDay).map((day) => [day, {
+      learningDay: day,
+      actions: 0,
+      actionGoal: 0,
+      goalReached: false,
+      dueAssigned: 0,
+      dueCompleted: 0,
+      backlog: 0,
+      newAssigned: 0,
+      newReviewed: 0,
+      averageResponseMs: 0,
+      sessionCount: 0,
+    }]));
+    const responseByDay = new Map();
+    for (const event of eventRows) {
+      const day = daily.get(event.learning_day);
+      if (!day) continue;
+      day.actions += 1;
+      if (!responseByDay.has(event.learning_day)) responseByDay.set(event.learning_day, []);
+      responseByDay.get(event.learning_day).push(Number(event.response_ms));
+    }
+
+    const latestQueueByDay = new Map();
+    const assignmentsByDay = new Map();
+    for (const row of queueRows) {
+      const previous = latestQueueByDay.get(row.learning_day);
+      if (!previous || Number(row.id) > Number(previous.id)) latestQueueByDay.set(row.learning_day, row);
+      if (!row.entry_id) continue;
+      if (!assignmentsByDay.has(row.learning_day)) assignmentsByDay.set(row.learning_day, new Map());
+      const assignments = assignmentsByDay.get(row.learning_day);
+      const key = Number(row.study_item_id);
+      const current = assignments.get(key) || { bucket: Number(row.bucket), reviewed: false };
+      current.bucket = Math.min(current.bucket, Number(row.bucket));
+      current.reviewed ||= Boolean(row.reviewed);
+      assignments.set(key, current);
+    }
+    for (const [dayKey, row] of latestQueueByDay) {
+      const target = daily.get(dayKey);
+      if (target && !unitKind) target.actionGoal = Number(parseJson(row.snapshot_json, {}).dailyActionGoal || 0);
+    }
+    for (const [dayKey, assignments] of assignmentsByDay) {
+      const target = daily.get(dayKey);
+      if (!target) continue;
+      for (const assignment of assignments.values()) {
+        if (assignment.bucket <= 4) {
+          target.dueAssigned += 1;
+          if (assignment.reviewed) target.dueCompleted += 1;
+        } else if (assignment.bucket === 6) {
+          target.newAssigned += 1;
+          if (assignment.reviewed) target.newReviewed += 1;
+        }
+      }
+      target.backlog = Math.max(0, target.dueAssigned - target.dueCompleted);
+    }
+    for (const session of sessionRows) {
+      const target = daily.get(session.learning_day);
+      if (target) target.sessionCount += 1;
+    }
+    for (const item of daily.values()) {
+      item.goalReached = item.actionGoal > 0 && item.actions >= item.actionGoal;
+      const responses = responseByDay.get(item.learningDay) || [];
+      item.averageResponseMs = responses.length
+        ? Math.round(responses.reduce((sum, value) => sum + value, 0) / responses.length)
+        : 0;
+    }
+
+    const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const breakdownMap = new Map();
+    const previousRatingByItem = new Map();
+    let repeatedFailureCount = 0;
+    for (const event of [...eventRows].reverse()) {
+      const rating = Number(event.rating);
+      ratingCounts[rating] += 1;
+      if (rating === 1 && previousRatingByItem.get(Number(event.study_item_id)) === 1) repeatedFailureCount += 1;
+      previousRatingByItem.set(Number(event.study_item_id), rating);
+      const key = `${event.unit_kind}:${event.card_type || 'unknown'}`;
+      const group = breakdownMap.get(key) || {
+        unitKind: event.unit_kind,
+        cardType: event.card_type || 'unknown',
+        reviews: 0,
+        ratingTotal: 0,
+        failureCount: 0,
+        responseTotal: 0,
+      };
+      group.reviews += 1;
+      group.ratingTotal += rating;
+      group.failureCount += rating === 1 ? 1 : 0;
+      group.responseTotal += Number(event.response_ms);
+      breakdownMap.set(key, group);
+    }
+
+    const planRow = this.db.prepare('SELECT scope_json FROM learning_plans WHERE id = 1').get();
+    const currentScope = parseJson(planRow?.scope_json, DEFAULT_SCOPE);
+    const currentCandidates = this._candidateRows();
+    const currentTags = this._tagsByGeneration(currentCandidates);
+    const todayStart = Date.parse(dayBounds(endDay, timeZone).startUtc);
+    const currentOverdue = currentCandidates.filter((row) => {
+      if (unitKind && row.unit_kind !== unitKind) return false;
+      if (!itemMatchesScope(row, currentScope, currentTags.get(Number(row.generation_id)) || new Set())) return false;
+      return row.due_at_utc && Date.parse(row.due_at_utc) < todayStart;
+    }).length;
+
+    const dailyRows = [...daily.values()];
+    const queueDays = latestQueueByDay.size;
+    const startedDays = dailyRows.filter((day) => day.sessionCount > 0).length;
+    const goalReachedDays = dailyRows.filter((day) => day.goalReached).length;
+    const dueAssigned = dailyRows.reduce((sum, day) => sum + day.dueAssigned, 0);
+    const dueCompleted = dailyRows.reduce((sum, day) => sum + day.dueCompleted, 0);
+    const newAssigned = dailyRows.reduce((sum, day) => sum + day.newAssigned, 0);
+    const newReviewed = dailyRows.reduce((sum, day) => sum + day.newReviewed, 0);
+    const responses = eventRows.map((event) => Number(event.response_ms));
+    const activeDays = new Set(eventRows.map((event) => event.learning_day)).size;
+    const sessionsWithProgress = sessionRows.filter((session) => Number(session.review_count) > 0).length;
+    const validSessions = sessionRows.filter((session) => session.status === 'completed' || Number(session.review_count) > 0).length;
+    const last7Start = Temporal.PlainDate.from(endDay).subtract({ days: 6 }).toString();
+    const last30Start = Temporal.PlainDate.from(endDay).subtract({ days: 29 }).toString();
+    const recentActiveDays7 = new Set(eventRows.filter((event) => event.learning_day >= last7Start).map((event) => event.learning_day)).size;
+    const recentActiveDays30 = new Set(eventRows.filter((event) => event.learning_day >= last30Start).map((event) => event.learning_day)).size;
+
+    const totalReviews = eventRows.length;
+    return {
+      range: {
+        preset,
+        startDay,
+        endDay,
+        timeZone,
+        availableStartDay: available.start_day || null,
+        availableEndDay: available.end_day || null,
+        unitKind,
+      },
+      overview: {
+        totalReviews,
+        activeDays,
+        queueDays,
+        startedDays,
+        learningStartRate: unitKind ? null : round(ratio(startedDays, queueDays)),
+        totalSessions: sessionRows.length,
+        sessionsWithProgress,
+        validSessions,
+        sessionCompletionRate: unitKind ? null : round(ratio(validSessions, sessionRows.length)),
+        goalReachedDays,
+        goalCompletionRate: unitKind ? null : round(ratio(goalReachedDays, queueDays)),
+        dueAssigned,
+        dueCompleted,
+        dueCompletionRate: round(ratio(dueCompleted, dueAssigned)),
+        newAssigned,
+        newReviewed,
+        newConversionRate: round(ratio(newReviewed, newAssigned)),
+        currentOverdue,
+        averageResponseMs: responses.length
+          ? Math.round(responses.reduce((sum, value) => sum + value, 0) / responses.length)
+          : 0,
+        medianResponseMs: Math.round(median(responses)),
+        repeatedFailureCount,
+        repeatedFailureRate: round(ratio(repeatedFailureCount, totalReviews)),
+        recentActiveDays7,
+        recentActiveDays30,
+        baselineEstablished: activeDays >= 14,
+        baselineRemainingDays: Math.max(0, 14 - activeDays),
+      },
+      daily: dailyRows,
+      ratings: [1, 2, 3, 4].map((rating) => ({
+        rating,
+        count: ratingCounts[rating],
+        percentage: round(ratio(ratingCounts[rating], totalReviews)),
+      })),
+      breakdown: [...breakdownMap.values()].map((group) => ({
+        unitKind: group.unitKind,
+        cardType: group.cardType,
+        reviews: group.reviews,
+        averageRating: round(ratio(group.ratingTotal, group.reviews), 2),
+        failureRate: round(ratio(group.failureCount, group.reviews)),
+        averageResponseMs: Math.round(ratio(group.responseTotal, group.reviews)),
+      })).sort((a, b) => b.reviews - a.reviews || a.unitKind.localeCompare(b.unitKind)),
+      recent: eventRows.slice(0, 50).map((event) => ({
+        id: Number(event.id),
+        eventKey: event.event_key,
+        learningDay: event.learning_day,
+        occurredAtUtc: event.occurred_at_utc,
+        rating: Number(event.rating),
+        responseMs: Number(event.response_ms),
+        unitKind: event.unit_kind,
+        unitKey: event.unit_key,
+        cardType: event.card_type || 'unknown',
+        title: event.source_title || event.unit_key,
+        contentAvailable: Boolean(event.generation_id && event.lifecycle !== 'archived'),
+      })),
+      dataQuality: {
+        historicalSkipMetricsAvailable: false,
+        notes: [
+          '跳过是会话内临时状态；当前事实模型不会持久化历史跳过次数。',
+          '按学习单元筛选时，不计算无法归属到单元的计划级目标与整场会话完成率。',
+          '评分、响应时间、会话和队列指标均直接来自学习领域事实。',
+        ],
+      },
     };
   }
 

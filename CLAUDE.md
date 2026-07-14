@@ -16,7 +16,7 @@ Current runtime capabilities:
 - folder/card browsing, history, deletion, and highlights;
 - card modal with CONTENT and INTEL;
 - generation observability and infrastructure health;
-- Learning Assistance 2.0 backend contract for plan, daily queue, resumable session, reveal, skip, end, idempotent review and Study Item view models; no learning UI yet.
+- Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics.
 
 Retired on 2026-07-13:
 
@@ -69,7 +69,7 @@ Active route modules:
 - routes/health.js: /api/health;
 - routes/ocr.js: /api/ocr;
 - routes/misc.js: delete record by id;
-- routes/learning.js: `/api/learning` plan, queue, session, review and Study Item contract;
+- routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.
@@ -166,7 +166,7 @@ Required invariants:
 - scenario cards have an AI-generated title within ten Chinese characters and 12 expression blocks;
 - card modal has CONTENT and INTEL only;
 - highlights persist through card_highlights;
-- desktop/mobile modal height, focus trap, Escape, and focus restoration remain stable.
+- desktop modal height, focus trap, Escape, and focus restoration remain stable.
 
 ## Frontend
 
@@ -174,14 +174,17 @@ Active files:
 
     app/root.tsx
     app/routes/_index.tsx
+    app/routes/learn*.tsx
     app/features/factory/*
     app/features/card-modal/*
+    app/features/learning/*
+    app/components/ProductShell.tsx
     app/lib/api/client.ts
     app/styles/tokens.css
     app/styles/factory.css
     app/styles/card-modal.css
 
-The shell has one product destination: Cards Factory. The card library is part of that page, not a separate route.
+The shell has Cards Factory plus the Learning Workbench. User-visible learning routes are `/learn`, `/learn/plan`, `/learn/session`, and `/learn/history`; the review session is entered from today learning rather than treated as a sidebar destination. The card library is part of Cards Factory, not a separate route.
 
 `marked`, `DOMPurify`, React Query and Lucide are production npm dependencies bundled into hashed local assets. Card rendering must preserve the Markdown -> audio/ruby adapter -> DOMPurify pipeline.
 
@@ -215,7 +218,7 @@ Current tables:
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
 
-Learning Assistance 2.0 is currently at LA-P2: admissions and 1,090 historical Study Items are materialized; online generation materializes eligible Study Items in the same transaction; `/api/learning` implements plan, preview, scope options, queue, session, reveal, skip, end, idempotent review and item view-model contracts. The desktop React routes `/learn`, `/learn/plan`, and `/learn/session` are the sole user-visible learning workflow. The production database can legitimately keep plan/queue/session/review/schedule rows empty until the user creates a plan; merely loading a learning page must remain read-only. Learning history, outcome metrics, and learner feedback remain LA-P3 work.
+Learning Assistance 2.0 is currently at LA-P3: admissions and historical Study Items are materialized; online generation materializes eligible Study Items in the same transaction; `/api/learning` implements plan, preview, scope options, queue, session, reveal, skip, end, idempotent review, item view-model and read-only history/metrics contracts. `/learn/history` derives progress, backlog, rating, response-time and recent-event views from Review Events, queue snapshots and sessions without a new analytics table. Merely loading any learning page or `GET /api/learning/history` must remain read-only. Historical skip counts are intentionally unavailable because skip is currently a temporary session workflow state, not a durable fact. LA-P4 is the next stage and must preserve graph-optional degradation.
 
 dropDeprecatedTables permanently removes legacy training, Knowledge, SRS, card_reviews, and user_preferences tables from existing databases. This destructive cleanup is intentional and part of the approved retirement.
 
@@ -262,7 +265,7 @@ The E2E server uses deterministic generation and OCR fixtures. It does not valid
 - folder and card browsing;
 - CONTENT/INTEL modal;
 - highlights and deletion;
-- theme, keyboard, responsive layout, and visual snapshots;
+- theme, keyboard, desktop layout, and visual snapshots;
 - 404 for retired pages and APIs.
 
 Never update visual baselines without inspecting the images.
@@ -297,4 +300,4 @@ Knowledge and SRS environment variables are retired and must not be reintroduced
 4. Keep existing Express API envelopes stable during UI migration.
 5. Preserve tokens, testids, behavior, and visual gates.
 6. Keep the worker on the direct executeGenerationJob -> executeCardGeneration path.
-7. Do not implement new learning or graph features during migration.
+7. The architecture migration is complete. New learning work must follow the Learning Assistance 2.0 baseline and ADR; graph capabilities remain optional providers rather than scheduling dependencies.

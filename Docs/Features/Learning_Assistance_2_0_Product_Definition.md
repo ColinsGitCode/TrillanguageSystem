@@ -1,12 +1,12 @@
 # 学习辅助 2.0 产品定义（LA-D0）
 
-> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0-P2 已实施（2026-07-14）**
+> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0-P3 已实施（2026-07-14）**
 > 日期：2026-07-13
 > 上位基线：[学习辅助 2.0 设计基线](Learning_Assistance_2_0_Design_Baseline.md)
 > 数据前置：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D1 原型存档：[prototypes/la-d1-prototype.html](prototypes/la-d1-prototype.html)（12 页,浏览器直接打开）
 > 后续产物：[LA-D2 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：本文定义的桌面计划、今日队列和复习闭环已由 LA-P2 实现；不恢复旧 SRS，学习历史与反馈指标留给 LA-P3
+> 当前边界：本文定义的桌面计划、今日队列、复习闭环和只读学习历史已由 LA-P2/P3 实现；不恢复旧 SRS，下一阶段为 LA-P4 语义 provider 接缝
 
 ## 0. 文档定位与权威边界
 
@@ -252,7 +252,7 @@ LA-D1 必须在现有 React Router 桌面侧栏中新增独立学习区域，建
 | 今日学习 | 今日队列概览、开始/继续、积压和完成状态 |
 | 学习计划 | 活动计划范围、目标、新卡上限、暂停/恢复 |
 | 复习会话 | 单项主动回忆、揭示答案、音频和四档反馈 |
-| 学习记录 | 完成量、评分分布、积压变化和历史趋势；可在 P3 后进入 |
+| 学习记录 | 完成量、评分分布、积压变化和历史趋势；已由 LA-P3 启用 |
 
 LA-D1 可以把“今日学习”和“学习计划”组合成同一路由下的不同视图，但不得把完整复习会话塞回 Cards Factory 首屏。
 
@@ -417,6 +417,19 @@ LA-D1 可以把“今日学习”和“学习计划”组合成同一路由下�
 
 Review Event 是学习领域事实；分析事件不得代替 Review Event，也不得反向驱动调度。
 
+### 12.1 LA-P3 产品指标实现说明
+
+LA-P3 先使用已经存在且可审计的领域事实完成产品反馈，不创建第二套 Engagement 事件仓库：
+
+- `review_submitted` 直接使用 append-only Review Event；
+- Daily Queue 快照提供当日目标和被分配的到期/新单元；
+- session 状态与 Review Event 共同判断会话是否产生有效反馈；
+- `learning_day` 是按提交时区写入的事实，历史聚合禁止重新按裸 UTC 切日；
+- `/learn/history` 以 7/30/90 天和全部范围展示完成行动、到期积压、评分、响应时间、单元拆分和最近评分；
+- 前 14 个实际学习日只显示基线剩余天数，不输出好坏判断。
+
+`item_skipped`、`daily_queue_opened` 等产品事件的语义仍保留，但当前领域模型没有持久化 append-only 产品事件。特别是 skip 在结束会话后恢复为待处理，LA-P3 不从 queue entry 的瞬时状态伪造历史跳过率。是否建立 durable analytics event stream 留给独立后续决策，不属于 LA-P3。
+
 ## 13. v1 非目标
 
 - 知识图谱、聚类、同义关系和图可视化；
@@ -475,7 +488,7 @@ LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、M
 
 原型期间确认的交互级决策，LA-D2 与实现必须继承：
 
-1. **复习会话不是导航目的地**：侧栏为「学习」组（今日学习 / 学习计划 / 学习记录-P3 预留）+「生产」组（Cards Factory）；复习会话仅由「开始/继续学习」进入。
+1. **复习会话不是导航目的地**：侧栏为「学习」组（今日学习 / 学习计划 / 学习记录；原型时学习记录为 P3 预留，现已启用）+「生产」组（Cards Factory）；复习会话仅由「开始/继续学习」进入。
 2. **新单元与复习同流程**：新卡不设独立学习模式，首次评「重来/困难」属正常路径（v1）。
 3. **积压时的新卡降额是建议 + 一键采纳**：系统不得静默修改用户的新单元上限配置。
 4. **提交语义三分**：提交中（全禁用）/ 失败待重试（锁定评分，仅重试或显式更改评分）/ 可评分——失败重试不得产生重复事件。
@@ -495,4 +508,4 @@ LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、M
 - [x] 用户确认本文推荐决策
 - [x] LA-D1 逐页可视化原型完成并确认（复审修订版,见 §15.1）
 
-LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API；LA-P2 已把本产品定义和 LA-D1 桌面原型连接到真实 API，交付 `/learn`、`/learn/plan`、`/learn/session`，并完成 Markdown、ruby、音频降级、评分单一所有权和幂等重试的浏览器验收。当前生产数据可在用户首次创建计划前合法保持学习工作流表为空；下一阶段进入 LA-P3 反馈与指标。
+LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API；LA-P2 已把本产品定义和 LA-D1 桌面原型连接到真实 API，交付 `/learn`、`/learn/plan`、`/learn/session`；LA-P3 已交付 `/learn/history`、只读指标 API、基线提示和真实评分/队列/会话聚合。当前生产数据可在用户首次创建计划和复习前合法显示空历史；下一阶段进入 LA-P4 语义 provider 接缝。

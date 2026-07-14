@@ -21,7 +21,7 @@ async function enqueueAndWait(request, phrase, cardType) {
   }, { timeout: 30_000 }).toBe('success');
 }
 
-test.describe.serial('Learning Assistance 2.0 LA-P2 desktop flow', () => {
+test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
@@ -101,5 +101,23 @@ test.describe.serial('Learning Assistance 2.0 LA-P2 desktop flow', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     const strip = await page.locator('.learning-stat-strip').boundingBox();
     expect(strip.height).toBeLessThanOrEqual(100);
+  });
+
+  test('renders LA-P3 history from the committed review fact', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/learn/history');
+    await expect(page.getByRole('link', { name: '学习记录' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('learning-history-page')).toBeVisible();
+    await expect(page.getByText('前 14 个实际学习日用于建立个人基线')).toBeVisible();
+    await expect(page.getByText('〜ていただけませんか', { exact: true })).toBeVisible();
+    await expect(page.locator('.learning-history-stat-strip')).toContainText('1');
+    await expect(page.locator('.learning-load-chart')).toBeVisible();
+    await expect(page.locator('.learning-rating-bars .rating-3 strong')).toHaveText('1');
+
+    await page.getByRole('button', { name: '7 天' }).click();
+    await expect(page.getByRole('button', { name: '7 天' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByLabel('学习单元类型').selectOption('grammar_ja');
+    await expect(page.getByText('〜ていただけませんか', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   });
 });

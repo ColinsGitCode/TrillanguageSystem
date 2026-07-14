@@ -12,7 +12,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { factoryApi } from '../features/factory/factory-api';
 
-export type ProductArea = 'factory' | 'today' | 'plan';
+export type ProductArea = 'factory' | 'today' | 'plan' | 'history';
 
 type Props = {
   active: ProductArea;
@@ -91,9 +91,9 @@ export function ProductShell({ active, title, children }: Props) {
           <a className={active === 'plan' ? 'active' : ''} href="/learn/plan" aria-current={active === 'plan' ? 'page' : undefined}>
             <Settings2 aria-hidden="true" /> 学习计划
           </a>
-          <span className="sidebar-nav-soon" aria-disabled="true">
-            <History aria-hidden="true" /> 学习记录 <em>P3</em>
-          </span>
+          <a className={active === 'history' ? 'active' : ''} href="/learn/history" aria-current={active === 'history' ? 'page' : undefined}>
+            <History aria-hidden="true" /> 学习记录
+          </a>
           <p className="sidebar-production-label">生产</p>
           <a className={active === 'factory' ? 'active' : ''} href="/" aria-current={active === 'factory' ? 'page' : undefined}>
             <Factory aria-hidden="true" /> Cards Factory

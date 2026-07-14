@@ -158,3 +158,72 @@
 .learning-dialog p { color: var(--color-text-secondary); line-height: 1.55; }
 .learning-dialog > div { display: flex; justify-content: flex-end; gap: 8px; }
 .learning-dialog > div > button:not(.learning-primary-button) { min-height: 40px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); cursor: pointer; }
+
+.sr-only { width: 1px; height: 1px; position: absolute; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.learning-history-page { padding-bottom: 28px; }
+.learning-history-head { align-items: center; }
+.learning-history-filters { display: flex; align-items: center; gap: 8px; }
+.learning-range-control { display: inline-flex; padding: 3px; background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.learning-range-control button { min-width: 54px; min-height: 32px; padding: 0 10px; color: var(--color-text-secondary); border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; font-weight: 700; }
+.learning-range-control button.selected { color: var(--color-primary); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
+.learning-history-filters select { min-width: 164px; min-height: 40px; padding: 0 30px 0 10px; color: var(--color-text-secondary); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-weight: 650; }
+.learning-history-empty { margin-top: 28px; }
+.learning-history-stat-strip { min-height: 92px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 14px; overflow: hidden; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.learning-history-stat-strip > div { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; column-gap: 9px; padding: 13px 16px; border-right: 1px solid var(--color-border); }
+.learning-history-stat-strip > div:last-child { border-right: 0; }
+.learning-history-stat-strip svg { grid-row: 1 / 3; align-self: center; width: 19px; height: 19px; color: var(--color-text-tertiary); }
+.learning-history-stat-strip span { color: var(--color-text-tertiary); font-size: 10px; }
+.learning-history-stat-strip strong { margin-top: 4px; font: 700 22px/1 var(--font-mono); }
+.learning-history-stat-strip small { color: var(--color-text-tertiary); font: 500 9px/1 var(--font-mono); }
+.learning-history-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, .75fr); gap: 14px; margin-bottom: 14px; }
+.learning-history-panel { min-width: 0; min-height: 330px; padding: 16px; }
+.learning-history-panel > header, .learning-history-table-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 13px; border-bottom: 1px solid var(--color-border); }
+.learning-history-panel h2, .learning-history-table-panel h2 { margin: 2px 0 0; font-size: 18px; }
+.learning-history-panel > header > strong { font: 700 15px/1 var(--font-mono); }
+.learning-history-panel > header > strong small { color: var(--color-text-tertiary); font-size: 9px; }
+.learning-chart-legend { display: flex; align-items: center; gap: 14px; color: var(--color-text-tertiary); font-size: 10px; }
+.learning-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.learning-chart-legend span::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--color-primary); }
+.learning-chart-legend .backlog::before { border-radius: 50%; background: var(--color-danger); }
+.learning-load-scroll { max-width: 100%; overflow-x: auto; padding: 18px 0 2px; }
+.learning-load-chart { height: 234px; display: grid; grid-template-columns: repeat(auto-fit, minmax(18px, 1fr)); gap: 3px; align-items: end; }
+.learning-load-day { min-width: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 22px; gap: 4px; }
+.learning-load-plot { position: relative; height: 100%; border-bottom: 1px solid var(--color-border-strong); }
+.learning-load-plot i { position: absolute; right: 16%; bottom: 0; left: 16%; height: var(--action-level); min-height: 0; background: var(--color-primary); border-radius: 2px 2px 0 0; opacity: .82; }
+.learning-load-plot b { width: 7px; height: 7px; position: absolute; right: 50%; bottom: calc(var(--backlog-level) - 3px); translate: 50% 0; border: 2px solid var(--color-bg-surface); border-radius: 50%; background: var(--color-danger); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 48%, transparent); }
+.learning-load-day.goal-reached .learning-load-plot i { background: var(--color-success); }
+.learning-load-day time { overflow: hidden; color: var(--color-text-tertiary); font: 600 8px/22px var(--font-mono); text-align: center; white-space: nowrap; }
+.learning-rating-bars { display: grid; gap: 13px; padding: 19px 0 16px; }
+.learning-rating-bars > div { display: grid; grid-template-columns: 42px minmax(0, 1fr) 28px; align-items: center; gap: 9px; }
+.learning-rating-bars span { color: var(--color-text-secondary); font-size: 11px; }
+.learning-rating-bars i { height: 7px; overflow: hidden; background: var(--color-bg-subtle); border-radius: var(--radius-full); }
+.learning-rating-bars i b { display: block; height: 100%; min-width: 0; background: currentcolor; border-radius: inherit; }
+.learning-rating-bars strong { font: 700 11px/1 var(--font-mono); text-align: right; }
+.learning-rating-bars .rating-1 { color: var(--color-danger); }
+.learning-rating-bars .rating-2 { color: var(--color-warning); }
+.learning-rating-bars .rating-3 { color: var(--color-primary); }
+.learning-rating-bars .rating-4 { color: var(--color-success); }
+.learning-history-metric-list { margin: 0; border-top: 1px solid var(--color-border); }
+.learning-history-metric-list > div { min-height: 35px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--color-border); }
+.learning-history-metric-list dt { color: var(--color-text-secondary); font-size: 10px; }
+.learning-history-metric-list dd { margin: 0; font: 700 10px/1 var(--font-mono); }
+.learning-history-table-panel { margin-bottom: 14px; overflow: hidden; }
+.learning-history-table-panel > header { min-height: 68px; padding: 12px 16px; }
+.learning-history-table-panel > header > span { color: var(--color-text-tertiary); font-size: 10px; }
+.learning-history-table-wrap { max-width: 100%; overflow-x: auto; }
+.learning-history-table-panel table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.learning-history-table-panel th, .learning-history-table-panel td { height: 44px; padding: 7px 16px; border-bottom: 1px solid var(--color-border); text-align: left; }
+.learning-history-table-panel th { color: var(--color-text-tertiary); background: var(--color-bg-subtle); font-size: 9px; text-transform: uppercase; }
+.learning-history-table-panel td { color: var(--color-text-secondary); font-size: 11px; }
+.learning-history-table-panel tbody tr:last-child td { border-bottom: 0; }
+.learning-history-table-panel td:not(:first-child), .learning-history-table-panel th:not(:first-child) { font-family: var(--font-mono); }
+.learning-recent-panel th:nth-child(1) { width: 120px; }
+.learning-recent-panel th:nth-child(2) { width: 36%; }
+.learning-recent-panel th:nth-child(4), .learning-recent-panel th:nth-child(5) { width: 90px; }
+.learning-history-title { overflow: hidden; color: var(--color-text-primary) !important; font-family: var(--font-sans) !important; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.learning-history-rating { min-width: 44px; min-height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); font: 700 9px/1 var(--font-sans); }
+.learning-history-rating.rating-1 { color: var(--color-danger); background: var(--color-danger-subtle); }
+.learning-history-rating.rating-2 { color: var(--color-warning); background: var(--color-warning-subtle); }
+.learning-history-rating.rating-3 { color: var(--color-primary); background: var(--color-primary-subtle); }
+.learning-history-rating.rating-4 { color: var(--color-success); background: var(--color-success-subtle); }
+.learning-history-data-note { margin: 0; color: var(--color-text-tertiary); font-size: 10px; text-align: right; }
