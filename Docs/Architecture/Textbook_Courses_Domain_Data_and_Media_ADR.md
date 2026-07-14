@@ -1,11 +1,11 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Proposed；TC-D1 已确认，等待用户确认本 ADR 后进入 TC-P0**
+> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；Track 01 内容确认延后到 TC-P2 校对页面**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
-> 当前边界：本文锁定 TC-D2 的领域与技术 contract；不创建运行时表、不挂载媒体目录、不导入真实教材内容，也不开发正式页面
+> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P1 已创建运行时表、feature-flagged API 和受控媒体接口；不导入真实教材内容，也不开发正式页面
 
 ## 0. 决策状态与权威边界
 
@@ -243,7 +243,7 @@ UNIQUE(track_revision_id, expression_id)
 UNIQUE(track_revision_id, display_ordinal)
 ```
 
-词组、语法、语气和英日对照在 v1 使用有界、版本化的 `analysis_json`，因为它们没有独立发布、删除或复习生命周期；未来出现独立生命周期时才允许正规化成新表。`field_provenance_json` 逐字段记录 `skill-extracted`、`ai-derived` 或 `user-edited` 及上一内容 hash，使 UI 能区分官方来源转写、AI 补充和人工修订。
+词组、语法、语气和英日对照在 v1 使用有界、版本化的 `analysis_json`，因为它们没有独立发布、删除或复习生命周期；未来出现独立生命周期时才允许正规化成新表。`field_provenance_json` 逐字段记录 `official-source`、`skill-extracted`、`ai-derived` 或 `user-edited` 及上一内容 hash，使 UI 能区分教材词汇块、官方来源转写、AI 补充和人工修订。
 
 #### `textbook_card_derivations`
 
@@ -911,9 +911,9 @@ POC 已确认：`defer_foreign_keys=ON` 不能安全完成本次父表替换；�
 
 | 阶段 | 交付 | 硬门禁 |
 |---|---|---|
-| TC-P0 | `import-textbook-track` Skill、Manifest validator、Track 01 dry-run | 数量/配对/ruby/hash/幂等/人工确认 |
+| TC-P0 | `import-textbook-track` Skill、Manifest validator、Track 01 dry-run | 数量/配对/ruby/hash/幂等；内容保持 draft |
 | TC-P1 | migration runner、七表、storage、import use case、媒体服务 | 双真源、FK、Range、路径与事务 |
-| TC-P2 | 教材首页、校对页、Track 学习页 | 真实本地浏览、互斥播放、标红和降级 |
+| TC-P2 | 教材首页、校对页、Track 学习页 | 真实本地浏览、逐条人工确认、互斥播放、标红和降级 |
 | TC-P3 | 派生卡、发布、plan scope v2、复习与历史 | 去重、40 单元、per-unit hash、同一 SRS |
 | TC-P4 | 完整验收、备份、运行手册和文档封板 | lint/unit/integration/build/desktop E2E/Docker/smoke |
 
@@ -933,6 +933,76 @@ TC-P0 不改 schema。TC-P1 先以 feature flag 关闭状态落基础能力。TC
 - [x] API、错误码、事务、幂等和日志边界已定义
 - [x] migration runner 的 FK-off 安全协议已定义并有 POC 依据
 - [x] fresh/migrated 双真源、回滚和测试门禁已闭环
-- [ ] 用户确认本 ADR，允许进入 TC-P0
+- [x] 用户确认本 ADR，允许进入 TC-P0（通过明确要求执行 TC-P0，2026-07-14）
 
-在最后一项确认前，不创建教材运行时表、不修改 `study_items`、不挂载真实媒体目录，也不导入 Track 01。
+TC-D2 门禁已通过。TC-P0 不创建教材运行时表、不修改 `study_items`，也不调用应用 OCR 或 SQLite。
+
+## 18. TC-P0 技术 dry-run 记录（2026-07-14）
+
+TC-P0 已完成以下 Git 内交付：
+
+- `skills/import-textbook-track/`：可自动发现的 Codex Skill、UI metadata、字段 reference；
+- `hash-assets.mjs`：只读资产路径、MIME、字节数和 SHA-256 计算；
+- `validate-manifest.mjs`：strict JSON Schema、路径、资产、表达身份、source span、kanji-only ruby 和三层 hash 校验；
+- `manifest-lib.mjs`：稳定 JSON、source/content/unit/manifest hash 与不含正文的摘要；
+- 合成单测覆盖幂等、逐方向 hash、okurigana 错误、symlink、缺失文件和绝对路径不泄漏；
+- Schema 明确区分 `official-source` 教材词汇块、`ai-derived` 分析和 `user-edited` 内容。
+
+真实 Track 01 只在 Git 外的本地媒体根执行，未写 SQLite、未调用 `/api/ocr`、未进入测试 fixture 或日志。dry-run 只记录以下非正文结果：
+
+| 指标 | 结果 |
+|---|---:|
+| source image | 2 |
+| official audio | 1 |
+| expression pair | 20 |
+| official phrase | 7 |
+| grammar note | 20 |
+| annotated ruby segment | 37 |
+| candidate Study Item | 40（20 EN + 20 JA） |
+| low-confidence item | 1（`expr:20` pairing） |
+
+Hash：
+
+```text
+manifestFileHash  4b3782c87ee99435a2969ecc8dae0075c586f164b281219233f15d11d0a7cf0b
+sourceFingerprint 1f9574a05ea5232212ba19cd7fc8d3d04cf86c45ca67f08022bec02a98e68b6f
+contentHash       8908a25d6442388c1b20f379dd0fb6ff1e4791614258786907b27c5f57a078eb
+```
+
+同一 Manifest 的第二次只读 dry-run 保持 Manifest 与 summary 字节 SHA-256 不变。真实 hash 隔离验证结果：ruby 修改只改变一个 JA unit；中文提示修改改变同表达 EN/JA 两项；分析备注修改不改变 unit hash。
+
+TC-P0 的技术门禁通过。根据 2026-07-14 的产品决定，TC-P1 可将该 Manifest 作为 `draft` 导入，20 组官方转写、中文提示、ruby 和 `expr:20` 非逐字对应说明统一在 TC-P2 校对页面逐条人工确认。官方整轨只用于页面播放和人工对照，不参与自动切分、ASR 或内容覆盖；未经 `verified` 不得创建 generation 投影、发布学习单元或进入 SRS。
+
+## 19. TC-P1 后端基础实施记录（2026-07-14）
+
+TC-P1 已完成 feature-flagged backend foundation，默认 `TEXTBOOK_FEATURE_ENABLED=false`，不显示正式教材 UI，也不发布学习单元。
+
+已落地内容：
+
+- `database/schema.sql` 与 `database/migrations/002_textbook_courses.sql` 同步定义七张教材表、教材表达 FTS、`textbook_en/ja` unit kind 和过滤版 `generations_fts`；
+- `services/storage/db/migrationRunner.js` 支持受控 `-- migration:foreign-keys-off`，用于重建带 CHECK 的父表，并在事务内外执行 `PRAGMA foreign_key_check`；
+- `services/textbooks/manifestContract.mjs` 成为 Skill 与运行时共享的 hash、路径和确定性校验 contract；
+- `services/textbooks/manifestValidator.js` 只接受 source-root-relative Manifest path 与 expected hash，不返回绝对路径或教材正文到日志；
+- `services/storage/db/textbooks.js` 支持 draft 导入、幂等去重、课程/Track 查询、教材表达搜索与资产状态更新；
+- `routes/textbooks.js` 提供 `/api/textbooks` dry-run/import/course/track/search 与官方音频 content API；
+- 官方音频播放通过资产 ID 访问，支持 `GET`/`HEAD`、单 Range、`ETag`、`If-None-Match`、`If-Range`、`416 Content-Range` 和 hash drift 409；
+- `docker-compose.yml` 增加只读 `TEXTBOOK_SOURCE_PATH -> /media/textbooks` 和 `textbook_work` named volume；
+- Cards Factory 的 history/search/recent/statistics/detail 默认排除 `card_type='textbook_track'`，教材搜索走独立端点；
+- `testReset` 在 E2E 模式临时移除不可变 revision/asset 删除触发器，清理后恢复。
+
+仍未落地且不得提前假装完成：
+
+- TC-P2 教材首页、校对页、Track 学习页；
+- 人工确认 Track 01 的 20 组官方转写、中文提示、ruby 与 `expr:20` 说明；
+- `textbook_track` generation 当前投影、发布、materializer、plan scope v2 和 Study Item 物化；
+- 标红、派生卡生成 UI、教材学习历史和真实本地 smoke。
+
+TC-P1 验证结果：
+
+```text
+npm run test:unit        293/293 pass
+npm run test:integration 54/54 pass
+npm run lint             pass
+```
+
+新增集成覆盖包括：draft import 不创建 generation/study_items、重复导入幂等、Cards Factory 默认搜索隔离、官方音频 HEAD/Range/ETag/304/416/hash drift。

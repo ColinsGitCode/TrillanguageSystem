@@ -17,6 +17,7 @@ const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
 const cardTagsDomain = require('./db/cardTags');
+const textbooksDomain = require('./db/textbooks');
 const migrationRunner = require('./db/migrationRunner');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
 const { runWithSqliteBusyRetry } = require('./sqliteBusyRetry');
@@ -332,6 +333,34 @@ class DatabaseService {
     return highlightsDomain.deleteByFile(this.db, folderName, baseFilename, sourceHash);
   }
 
+  importTextbookDraft(payload) {
+    return textbooksDomain.importDraft(this.db, payload);
+  }
+
+  listTextbookCourses() {
+    return textbooksDomain.listCourses(this.db);
+  }
+
+  getTextbookCourse(id) {
+    return textbooksDomain.getCourse(this.db, id);
+  }
+
+  getTextbookTrack(id) {
+    return textbooksDomain.getTrack(this.db, id);
+  }
+
+  searchTextbookExpressions(query, limit) {
+    return textbooksDomain.searchExpressions(this.db, query, limit);
+  }
+
+  getTextbookAsset(id) {
+    return textbooksDomain.getAsset(this.db, id);
+  }
+
+  markTextbookAssetAvailability(id, availability) {
+    return textbooksDomain.markAssetAvailability(this.db, id, availability);
+  }
+
   getHighlightStats(filters = {}) {
     return highlightsDomain.getStats(this.db, filters);
   }
@@ -353,6 +382,7 @@ class DatabaseService {
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        AND g.card_type <> 'textbook_track'
         ${provider ? 'AND g.llm_provider = @provider' : ''}
     `;
     const basicStats = this.db.prepare(basicSql).get({ dateFrom, dateTo, provider });
@@ -364,6 +394,7 @@ class DatabaseService {
         COUNT(*) as count
       FROM generations g
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        AND g.card_type <> 'textbook_track'
       GROUP BY g.llm_provider
     `;
     const providerData = this.db.prepare(providerSql).all({ dateFrom, dateTo });
@@ -381,6 +412,7 @@ class DatabaseService {
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        AND g.card_type <> 'textbook_track'
         ${provider ? 'AND g.llm_provider = @provider' : ''}
       GROUP BY g.generation_date
       ORDER BY g.generation_date DESC
@@ -396,6 +428,7 @@ class DatabaseService {
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        AND g.card_type <> 'textbook_track'
         ${provider ? 'AND g.llm_provider = @provider' : ''}
       GROUP BY g.generation_date
       ORDER BY g.generation_date DESC
@@ -411,6 +444,7 @@ class DatabaseService {
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @dateFrom AND @dateTo
+        AND g.card_type <> 'textbook_track'
         ${provider ? 'AND g.llm_provider = @provider' : ''}
       GROUP BY g.generation_date
       ORDER BY g.generation_date DESC
@@ -457,6 +491,7 @@ class DatabaseService {
       FROM generations g
       LEFT JOIN observability_metrics om ON g.id = om.generation_id
       WHERE g.generation_date BETWEEN @monthStart AND @monthEnd
+        AND g.card_type <> 'textbook_track'
     `;
     const monthTokens = this.db.prepare(monthTokensSql).get({ monthStart, monthEnd });
 

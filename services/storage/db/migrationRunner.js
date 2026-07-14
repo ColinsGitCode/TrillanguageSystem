@@ -21,6 +21,18 @@ const LEARNING_P0_TABLES = Object.freeze([
   'learning_schedule_states',
 ]);
 
+const TEXTBOOK_P1_TABLES = Object.freeze([
+  'textbook_courses',
+  'textbook_tracks',
+  'textbook_track_revisions',
+  'textbook_track_assets',
+  'textbook_expressions',
+  'textbook_expression_revisions',
+  'textbook_card_derivations',
+]);
+
+const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
+
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -61,6 +73,69 @@ function assertLearningP0Postconditions(db) {
   if (missing.length) throw new Error(`Learning P0 migration missing tables: ${missing.join(', ')}`);
 }
 
+function assertTextbookP1Postconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = TEXTBOOK_P1_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Textbook P1 migration missing tables: ${missing.join(', ')}`);
+}
+
+function parseMigrationDirectives(migration) {
+  const lines = String(migration.sql || '').split(/\r?\n/u);
+  const directives = new Set();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = /^--\s*migration:([a-z0-9-]+)\s*$/u.exec(trimmed);
+    if (!match) break;
+    const directive = match[1];
+    if (!SUPPORTED_DIRECTIVES.has(directive)) {
+      throw new Error(`Unsupported migration directive ${directive} in ${migration.filename}`);
+    }
+    directives.add(directive);
+  }
+  const stray = lines.find((line, index) => {
+    if (!/^--\s*migration:/u.test(line.trim())) return false;
+    return index >= directives.size;
+  });
+  if (stray) throw new Error(`Migration directive must appear before SQL in ${migration.filename}`);
+  return directives;
+}
+
+function assertNoForeignKeyViolations(db, filename) {
+  const violations = db.prepare('PRAGMA foreign_key_check').all();
+  if (violations.length) {
+    throw new Error(`Foreign key violations after ${filename}: ${JSON.stringify(violations)}`);
+  }
+}
+
+function applyMigration(db, migration, now) {
+  const directives = parseMigrationDirectives(migration);
+  const foreignKeysOff = directives.has('foreign-keys-off');
+  const transaction = db.transaction(() => {
+    db.exec(migration.sql);
+    assertNoForeignKeyViolations(db, migration.filename);
+    db.prepare(`
+      INSERT INTO schema_migrations(version, name, checksum, is_baseline, applied_at_utc)
+      VALUES (?, ?, ?, 0, ?)
+    `).run(migration.version, migration.name, migration.checksum, now());
+  });
+
+  if (!foreignKeysOff) {
+    transaction();
+    return;
+  }
+
+  try {
+    db.pragma('foreign_keys = OFF');
+    transaction();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+  assertNoForeignKeyViolations(db, migration.filename);
+}
+
 function runMigrations(db, options = {}) {
   const migrationsDir = options.migrationsDir || DEFAULT_MIGRATIONS_DIR;
   const preexistingTables = new Set(options.preexistingTables || []);
@@ -96,18 +171,12 @@ function runMigrations(db, options = {}) {
       continue;
     }
 
-    const apply = db.transaction(() => {
-      db.exec(migration.sql);
-      db.prepare(`
-        INSERT INTO schema_migrations(version, name, checksum, is_baseline, applied_at_utc)
-        VALUES (?, ?, ?, 0, ?)
-      `).run(migration.version, migration.name, migration.checksum, now());
-    });
-    apply();
+    applyMigration(db, migration, now);
     applied.push(migration.version);
   }
 
   assertLearningP0Postconditions(db);
+  assertTextbookP1Postconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
@@ -115,7 +184,9 @@ module.exports = {
   BASELINE_VERSION,
   DEFAULT_MIGRATIONS_DIR,
   LEARNING_P0_TABLES,
+  TEXTBOOK_P1_TABLES,
   assertLearningP0Postconditions,
+  assertTextbookP1Postconditions,
   ensureMigrationTable,
   listMigrationFiles,
   runMigrations,

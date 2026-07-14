@@ -216,7 +216,10 @@
             }
           },
           "then": {
-            "required": ["durationMs"]
+            "required": ["durationMs"],
+            "properties": {
+              "durationMs": true
+            }
           }
         }
       ]
@@ -435,9 +438,30 @@
           "maxLength": 1000
         },
         "source": {
-          "enum": ["ai-derived", "user-edited"]
+          "enum": ["official-source", "ai-derived", "user-edited"]
+        },
+        "sourceSpan": {
+          "$ref": "#/$defs/sourceSpan"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "official-source"
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["sourceSpan"],
+            "properties": {
+              "sourceSpan": true
+            }
+          }
+        }
+      ]
     },
     "importMetadata": {
       "type": "object",

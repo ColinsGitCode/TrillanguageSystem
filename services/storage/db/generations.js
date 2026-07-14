@@ -10,6 +10,8 @@ const cardTags = require('./cardTags');
 const { contentHash } = require('../../dataPreparation/rules');
 const { expandStudyUnits, stableJson } = require('../../learning/application/materializeStudyItems');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
+const CARDS_FACTORY_SCOPE = `g.card_type <> 'textbook_track'`;
+const CARDS_FACTORY_SCOPE_UNQUALIFIED = `card_type <> 'textbook_track'`;
 
 function insertGeneration(db, data) {
   const transaction = db.transaction((genData, obsData, audioData) => {
@@ -153,7 +155,7 @@ function query(db, { page = 1, limit = 20, provider, cardType, dateFrom, dateTo,
       om.quality_score, om.tokens_total, om.cost_total, om.performance_total_ms
     FROM generations g
     LEFT JOIN observability_metrics om ON g.id = om.generation_id
-    WHERE 1=1
+    WHERE ${CARDS_FACTORY_SCOPE}
   `;
 
   const params = {};
@@ -193,7 +195,7 @@ function query(db, { page = 1, limit = 20, provider, cardType, dateFrom, dateTo,
 }
 
 function getTotalCount(db, { provider, cardType, dateFrom, dateTo, search }) {
-  let sql = `SELECT COUNT(*) as total FROM generations WHERE 1=1`;
+  let sql = `SELECT COUNT(*) as total FROM generations WHERE ${CARDS_FACTORY_SCOPE_UNQUALIFIED}`;
   const params = {};
 
   if (provider) { sql += ` AND llm_provider = @provider`; params.provider = provider; }
@@ -210,8 +212,13 @@ function getTotalCount(db, { provider, cardType, dateFrom, dateTo, search }) {
   return db.prepare(sql).get(params).total;
 }
 
-function getById(db, id) {
-  const generation = db.prepare(`SELECT * FROM generations WHERE id = ?`).get(id);
+function getById(db, id, options = {}) {
+  const includeTextbook = options.includeTextbook === true;
+  const generation = db.prepare(`
+    SELECT * FROM generations
+    WHERE id = ?
+      ${includeTextbook ? '' : "AND card_type <> 'textbook_track'"}
+  `).get(id);
   if (!generation) return null;
 
   const observability = db.prepare(`
@@ -241,6 +248,7 @@ function getByFile(db, folderName, baseFilename) {
   const generation = db.prepare(`
     SELECT * FROM generations
     WHERE folder_name = ? AND base_filename = ?
+      AND card_type <> 'textbook_track'
     ORDER BY id DESC
     LIMIT 1
   `).get(folderName, baseFilename);
@@ -253,6 +261,7 @@ function listDuplicateCandidates(db, cardType) {
     SELECT id, phrase, card_type, content_hash, folder_name, base_filename
     FROM generations
     WHERE card_type = ?
+      AND card_type <> 'textbook_track'
     ORDER BY id DESC
   `).all(cardType);
 }
@@ -264,6 +273,7 @@ function fullTextSearch(db, query, limit = 20) {
     FROM generations_fts
     JOIN generations g ON generations_fts.rowid = g.id
     WHERE generations_fts MATCH @query
+      AND g.card_type <> 'textbook_track'
     ORDER BY rank
     LIMIT @limit
   `;
@@ -276,6 +286,7 @@ function getRecent(db, limit = 10) {
       om.quality_score, om.tokens_total
     FROM generations g
     LEFT JOIN observability_metrics om ON g.id = om.generation_id
+    WHERE g.card_type <> 'textbook_track'
     ORDER BY g.created_at DESC
     LIMIT ?
   `;

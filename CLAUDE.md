@@ -17,6 +17,7 @@ Current runtime capabilities:
 - card modal with CONTENT and INTEL;
 - generation observability and infrastructure health;
 - Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics.
+- Textbook Courses TC-P1 backend foundation behind `TEXTBOOK_FEATURE_ENABLED`: draft Manifest import, seven textbook tables, textbook search, and controlled official Track audio streaming. No formal textbook UI or learning publication exists until TC-P2/TC-P3.
 
 Retired on 2026-07-13:
 
@@ -39,6 +40,12 @@ Retired code, routes, schema, tests, and visual snapshots must not be restored d
     docker compose up -d --build
 
 The Compose project name is three_lans_system. The user-visible app is http://127.0.0.1:3010/.
+
+## Local textbook tooling
+
+`skills/import-textbook-track/` is the accepted TC-P0 Codex Skill for turning ordered local textbook screenshots and optional official Track audio into a Git-external draft Manifest. It uses image understanding directly, never the application `/api/ocr` route, and never writes SQLite. Actual textbook text, screenshots, audio, Manifest and dry-run summary must remain outside Git.
+
+TC-P1 runtime support exists behind `TEXTBOOK_FEATURE_ENABLED=false` by default: `database/schema.sql` plus `database/migrations/002_textbook_courses.sql` own the seven textbook tables, `routes/textbooks.js` owns draft import/query/media APIs, and `TEXTBOOK_SOURCE_ROOT` is a controlled read-only media root. Draft imports must not create `textbook_track` generation projections or Study Items; Track 01 content is still confirmed manually in TC-P2.
 
 ## Runtime architecture
 
@@ -70,6 +77,7 @@ Active route modules:
 - routes/ocr.js: /api/ocr;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
+- routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, and official audio content, feature-flagged off by default;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.
@@ -106,6 +114,11 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         domain/
         scheduling/
         time/
+      textbooks/
+        manifestContract.mjs
+        manifestValidator.js
+        textbookImportService.js
+        textbookMediaService.js
       storage/
         databaseService.js
         databaseHelpers.js
@@ -115,6 +128,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
           generations.js
           helpers.js
           highlights.js
+          textbooks.js
           testReset.js
 
 Do not create a second copy of backend services inside the future React app. React server code must call existing backend capabilities through explicit server-only adapters or HTTP contracts.

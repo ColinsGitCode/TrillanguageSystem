@@ -1,0 +1,4 @@
+interface:
+  display_name: "Import Textbook Track"
+  short_description: "Extract and validate bilingual textbook Tracks"
+  default_prompt: "Use $import-textbook-track to turn ordered textbook screenshots and an optional official audio file into a reviewed local draft Manifest."

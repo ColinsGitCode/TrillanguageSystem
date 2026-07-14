@@ -1,11 +1,11 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0、TC-D1 已确认（2026-07-14）；TC-D2 ADR 已完成，待用户确认后进入 TC-P0**
+> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；Track 01 内容确认延后到 TC-P2 校对页面**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：本文定义一个位于 `generations` 上游的教材内容域；不实现 schema、API、页面或 Skill，不恢复旧 Knowledge/OCR/SRS 产品
+> 当前边界：教材运行时 schema、API 和正式页面尚未实现；TC-P0 只提供 Git 内 Skill/校验器与 Git 外 dry-run，不恢复旧 Knowledge/OCR/SRS 产品
 
 ## 0. 文档定位与权威边界
 
@@ -192,7 +192,7 @@ import-textbook-track/
 8. 为字段记录置信度、模型/Skill 版本和证据页；
 9. 运行确定性 schema、编号、重复、ruby、hash 和路径校验；
 10. 输出本地 draft Manifest 和 dry-run 摘要，等待用户确认；
-11. 用户确认后调用正式导入 use case/API，不直接访问 SQLite。
+11. 技术 dry-run 通过后调用正式 import use case/API 写入 `draft`；用户必须在 TC-P2 校对页面逐条确认，Skill 不直接访问 SQLite。
 
 ### 6.4 输出与幂等
 
@@ -566,7 +566,7 @@ TC-D1 必须使用合成语料逐页展示以下桌面状态：
 | TC-D0 | 产品定义 | 用户确认本文推荐决策 |
 | TC-D1 | 桌面交互原型 | 12 个页面/状态逐项确认 |
 | TC-D2 | 领域、数据、Manifest、API 与媒体 ADR，并显式增补 LA-D2 | migration、unit hash、Cards Factory 作用域、unit kind、revision、Range、安全和回滚策略闭环 |
-| TC-P0 | `import-textbook-track` Skill + Track 01 本地 dry-run | 数量、配对、ruby、hash、幂等和人工确认通过 |
+| TC-P0 | `import-textbook-track` Skill + Track 01 本地 dry-run | 数量、配对、ruby、hash 和幂等通过；内容保持 draft |
 | TC-P1 | 教材存储、导入 use case、官方媒体服务 | schema/迁移双真源、路径安全、Range 和事务测试通过 |
 | TC-P2 | 教材首页、校对页、Track 学习页 | 真实本地 Track 浏览、播放器、标红和降级状态通过 |
 | TC-P3 | 派生卡与学习辅助集成 | 去重溯源、40 单元预览、发布、复习和历史通过 |
@@ -593,4 +593,15 @@ TC-D0 与 TC-D1 已确认：
 
 - [x] 用户确认 TC-D1 的 12 个页面/状态和关键交互（2026-07-14）
 
-TC-D2 的领域、数据、Manifest、API 与媒体 contract 已落地于 [`../Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md`](../Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md)。该 ADR 被用户确认前，不创建教材运行时表、不增加 `textbook_track` 卡型、不修改 `study_items`、不挂载真实媒体目录，也不导入 Track 01。
+TC-D2 的领域、数据、Manifest、API 与媒体 contract 已落地于 [`../Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md`](../Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md)。ADR 已确认，TC-P1 可把 Track 01 作为 `draft` 导入；在 TC-P2 校对页面逐条人工确认前，不得创建 `textbook_track` generation 投影、发布学习单元或进入 SRS。
+
+TC-P1 已完成后端基础：
+
+- [x] schema/迁移双真源包含七张教材表、教材表达 FTS 与 `textbook_en/ja` unit kind
+- [x] draft import API 只写教材表，不创建 generation、Study Item 或 SRS 状态
+- [x] Manifest 校验复用 Skill contract，并保持真实教材 Manifest、截图、音频和正文在 Git 外
+- [x] 官方音频通过受控 ID API 播放，支持 HEAD、Range、ETag 与 hash drift 保护
+- [x] Cards Factory 默认历史、搜索、最近和统计排除 `textbook_track`
+- [x] `TEXTBOOK_FEATURE_ENABLED` 默认关闭，TC-P2 之前不显示正式教材入口
+
+TC-P2 待开始：教材首页、校对页、Track 学习页、真实 Track 01 人工确认、官方音频播放器与标红/派生卡交互。

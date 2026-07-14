@@ -13,6 +13,9 @@ services:
       - RECORDS_PATH=/data/trilingual_records
       - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
       - DB_PATH=/data/trilingual_records/trilingual_records.db
+      - TEXTBOOK_FEATURE_ENABLED=${TEXTBOOK_FEATURE_ENABLED:-false}
+      - TEXTBOOK_SOURCE_ROOT=/media/textbooks
+      - TEXTBOOK_WORK_PATH=/data/textbooks
       - SQLITE_BUSY_TIMEOUT_MS=${SQLITE_BUSY_TIMEOUT_MS:-5000}
       - SQLITE_BUSY_RETRY_MAX=${SQLITE_BUSY_RETRY_MAX:-3}
       - SQLITE_BUSY_RETRY_BASE_MS=${SQLITE_BUSY_RETRY_BASE_MS:-25}
@@ -45,6 +48,8 @@ services:
       - "3010:3010"
     volumes:
       - trilingual_records:/data/trilingual_records
+      - ${TEXTBOOK_SOURCE_PATH:-./data/textbook_sources}:/media/textbooks:ro
+      - textbook_work:/data/textbooks
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -113,3 +118,4 @@ volumes:
   kokoro_cache:
   sbv2_models:
   trilingual_records:
+  textbook_work:

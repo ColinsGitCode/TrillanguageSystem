@@ -14,6 +14,7 @@ const { DatabaseService } = databaseModule;
 const {
   BASELINE_VERSION,
   LEARNING_P0_TABLES,
+  TEXTBOOK_P1_TABLES,
   runMigrations,
 } = require('../../services/storage/db/migrationRunner');
 
@@ -30,22 +31,26 @@ function schemaObjects(db) {
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001 on a new database and creates all LA-P0 tables', () => {
+  test.it('registers 001/002 on a new database and creates LA-P0 plus textbook P1 tables', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001'],
+        applied: ['001', '002'],
         skipped: [],
         baselineRegistered: false,
       });
       const versions = service.db.prepare(
         'SELECT version, is_baseline FROM schema_migrations ORDER BY version'
       ).all();
-      assert.deepEqual(versions, [{ version: '001', is_baseline: 0 }]);
+      assert.deepEqual(versions, [
+        { version: '001', is_baseline: 0 },
+        { version: '002', is_baseline: 0 },
+      ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
       ).all().map((row) => row.name));
       LEARNING_P0_TABLES.forEach((table) => assert.ok(tables.has(table), table));
+      TEXTBOOK_P1_TABLES.forEach((table) => assert.ok(tables.has(table), table));
     } finally {
       service.close();
     }
@@ -72,6 +77,7 @@ test.describe('versioned migration runner', () => {
       assert.deepEqual(versions, [
         { version: BASELINE_VERSION, is_baseline: 1 },
         { version: '001', is_baseline: 0 },
+        { version: '002', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {
