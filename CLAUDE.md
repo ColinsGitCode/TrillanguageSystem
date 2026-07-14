@@ -15,7 +15,8 @@ Current runtime capabilities:
 - DB-backed generation queue, retry, recovery, and audit events;
 - folder/card browsing, history, deletion, and highlights;
 - card modal with CONTENT and INTEL;
-- generation observability and infrastructure health.
+- generation observability and infrastructure health;
+- Learning Assistance 2.0 backend contract for plan, daily queue, resumable session, reveal, skip, end, idempotent review and Study Item view models; no learning UI yet.
 
 Retired on 2026-07-13:
 
@@ -68,6 +69,7 @@ Active route modules:
 - routes/health.js: /api/health;
 - routes/ocr.js: /api/ocr;
 - routes/misc.js: delete record by id;
+- routes/learning.js: `/api/learning` plan, queue, session, review and Study Item contract;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.
@@ -97,6 +99,13 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         statisticsService.js
       ocr/
         tesseractOcrService.js
+      learning/
+        application/
+          learningService.js
+          materializeStudyItems.js
+        domain/
+        scheduling/
+        time/
       storage/
         databaseService.js
         databaseHelpers.js
@@ -191,9 +200,22 @@ Current tables:
 - card_highlights;
 - generation_jobs;
 - generation_job_events;
+- card_tags;
+- schema_migrations;
+- learning_profiles;
+- learning_source_admissions;
+- learning_plans;
+- study_items;
+- learning_daily_queues;
+- learning_queue_entries;
+- learning_sessions;
+- learning_review_events;
+- learning_schedule_states;
 - generations_fts virtual table and triggers.
 
-database/schema.sql is the schema source. databaseService initializes it and runs compatibility migrations. SQL domain code lives under services/storage/db.
+database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
+
+Learning Assistance 2.0 is currently at LA-P1: admissions and 1,090 historical Study Items are materialized; online generation now materializes eligible Study Items in the same transaction; `/api/learning` implements plan, queue, session, reveal, skip, end, idempotent review and item view-model contracts. The production database can legitimately keep plan/queue/session/review/schedule rows empty until the user creates a plan. The learning UI is not implemented, so do not describe Learning Assistance as a user-visible feature before LA-P2.
 
 dropDeprecatedTables permanently removes legacy training, Knowledge, SRS, card_reviews, and user_preferences tables from existing databases. This destructive cleanup is intentional and part of the approved retirement.
 

@@ -2,8 +2,8 @@
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const {
+  deleteCard,
   deleteRecordFiles,
   dbService,
 } = require('./_shared');
@@ -162,36 +162,19 @@ router.delete('/api/records/by-file', (req, res) => {
 
         // 1) 尝试按数据库记录删除
         let record = null;
+        let archivedStudyItems = 0;
+        let cleanupErrors = [];
+        let highlightDeleted = 0;
         for (const candidate of baseCandidates) {
             record = dbService.getGenerationByFile(folder, candidate);
             if (record) break;
         }
         if (record) {
-            const recordDetail = dbService.getGenerationById(record.id);
-            const recordFiles = [
-                recordDetail?.md_file_path,
-                recordDetail?.html_file_path,
-                recordDetail?.meta_file_path,
-            ].filter(Boolean);
-
-            if (recordDetail?.audioFiles?.length) {
-                recordDetail.audioFiles.forEach((audio) => {
-                    if (audio.file_path) recordFiles.push(audio.file_path);
-                });
-            }
-
-            recordFiles.forEach((filePath) => {
-                try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                        deletedPaths.add(filePath);
-                    }
-                } catch (err) {
-                    log.warn({ err, filePath }, 'delete: failed to remove file');
-                }
-            });
-
-            dbService.deleteGeneration(record.id);
+            const result = deleteCard(record.id);
+            for (const filePath of result?.deletedPaths || []) deletedPaths.add(filePath);
+            archivedStudyItems = result?.database?.archivedStudyItems || 0;
+            cleanupErrors = result?.cleanupErrors || [];
+            highlightDeleted += result?.highlightDeleted || 0;
         }
 
         // 2) 兜底：按文件名扫描删除
@@ -199,7 +182,6 @@ router.delete('/api/records/by-file', (req, res) => {
         fallbackDeleted.forEach((p) => deletedPaths.add(p));
 
         // 3) 清理卡片标红（兼容 generation_id 缺失场景）
-        let highlightDeleted = 0;
         baseCandidates.forEach((candidate) => {
             highlightDeleted += dbService.deleteCardHighlightByFile(folder, candidate);
         });
@@ -208,7 +190,9 @@ router.delete('/api/records/by-file', (req, res) => {
             success: true,
             deletedFiles: deletedPaths.size,
             recordDeleted: Boolean(record),
-            highlightDeleted
+            highlightDeleted,
+            archivedStudyItems,
+            cleanupErrors
         });
     } catch (err) {
         log.error({ err, route: req.originalUrl }, 'route handler error');

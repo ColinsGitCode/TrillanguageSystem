@@ -11,6 +11,17 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // Learning Assistance 2.0 (projections/events before workflow parents)
+  'learning_schedule_states',
+  'learning_review_events',
+  'learning_sessions',
+  'learning_queue_entries',
+  'learning_daily_queues',
+  'study_items',
+  'learning_plans',
+  'learning_profiles',
+  'learning_source_admissions',
+
   // generations + observability children
   'audio_files',
   'observability_metrics',

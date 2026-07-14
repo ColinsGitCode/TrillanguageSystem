@@ -13,6 +13,7 @@ function createHarness(overrides = {}) {
   const calls = {
     marks: [],
     insertData: null,
+    persistedData: null,
     insertedErrors: [],
     generatedOptions: null,
     cleanupCalls: [],
@@ -115,7 +116,10 @@ function createHarness(overrides = {}) {
       { namespace: 'lang', value: 'en', normalizedValue: 'en' },
       { namespace: 'src', value: 'input', normalizedValue: 'input' },
     ],
-    insertGeneration: () => 42,
+    insertGeneration: (data) => {
+      calls.persistedData = data;
+      return 42;
+    },
     getGenerationById: () => ({ content_hash: 'a'.repeat(64), audioFiles: [{}] }),
     listCardTags: () => [
       { namespace: 'lang', status: 'active' },
@@ -157,6 +161,14 @@ test.describe('executeCardGeneration application use case', () => {
     assert.equal(calls.generatedOptions.targetFolder, 'custom');
     assert.equal(calls.generatedOptions.modelOverride, 'deepseek-v4-pro');
     assert.equal(calls.insertData.audioTasks[0].status, 'generated');
+    assert.deepEqual(calls.persistedData.learningAdmission, {
+      status: 'eligible',
+      contentHash: 'a'.repeat(64),
+      reasons: ['online-admission-passed'],
+      decisionVersion: 'card-admission-v1',
+      stateVersion: 'learning-admission-v1',
+      disposition: 'create-items',
+    });
     assert.deepEqual(calls.marks, ['fileSave', 'audioGenerate']);
     assert.equal(calls.cleanupCalls.length, 0);
   });
@@ -186,6 +198,26 @@ test.describe('executeCardGeneration application use case', () => {
     assert.equal(fixtureCalls, 1);
     assert.equal(ttsCalls, 0);
     assert.equal(result.audio, null);
+  });
+
+  test.it('persists test-artifact candidates as unresolved learning sources', async () => {
+    const { calls, execute } = createHarness({
+      buildAdmissionTags: () => [
+        { namespace: 'lang', value: 'en', normalizedValue: 'en' },
+        { namespace: 'src', value: 'input', normalizedValue: 'input' },
+        { namespace: 'qa', value: 'test-artifact-candidate', normalizedValue: 'test-artifact-candidate' },
+      ],
+    });
+    const result = await execute({ phrase: 'candidate', cardType: 'trilingual', sourceMode: 'input' });
+    assert.equal(result.admission.status, 'review-required');
+    assert.deepEqual(calls.persistedData.learningAdmission, {
+      status: 'unresolved',
+      contentHash: 'a'.repeat(64),
+      reasons: ['test-artifact-review-pending'],
+      decisionVersion: 'card-admission-v1',
+      stateVersion: 'learning-admission-v1',
+      disposition: 'exclude',
+    });
   });
 
   test.it('raises a typed validation error without writing files or error records', async () => {

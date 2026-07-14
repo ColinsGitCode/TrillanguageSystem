@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const { contentHash } = require('../../services/dataPreparation/rules');
+const { LEARNING_P0_TABLES } = require('../../services/storage/db/migrationRunner');
 const { buildAudit, parseArgs } = require('./auditLearningData');
 
 const FORBIDDEN_LEARNING_TABLES = new Set([
@@ -48,7 +49,12 @@ function canonicalHash(record) {
   return record.content_hash || contentHash(record.markdown_content || '');
 }
 
-function assertDecisionState({ generations, tags, audit, decisions, tableNames }) {
+function isForbiddenLearningTable(tableName, allowLearningP0Tables = false) {
+  if (allowLearningP0Tables && LEARNING_P0_TABLES.includes(tableName)) return false;
+  return FORBIDDEN_LEARNING_TABLES.has(tableName) || /^study_/u.test(tableName);
+}
+
+function assertDecisionState({ generations, tags, audit, decisions, tableNames, allowLearningP0Tables = false }) {
   const errors = [];
   const byId = new Map(generations.map((item) => [Number(item.id), item]));
   const tagsById = new Map();
@@ -59,7 +65,7 @@ function assertDecisionState({ generations, tags, audit, decisions, tableNames }
   }
 
   for (const tableName of tableNames) {
-    if (FORBIDDEN_LEARNING_TABLES.has(tableName) || /^study_/u.test(tableName)) {
+    if (isForbiddenLearningTable(tableName, allowLearningP0Tables)) {
       errors.push(`forbidden pre-LA-D2 table exists: ${tableName}`);
     }
   }
@@ -125,7 +131,13 @@ function assertDecisionState({ generations, tags, audit, decisions, tableNames }
   if (errors.length) throw new Error(`DP7 gate failed:\n- ${errors.join('\n- ')}`);
 }
 
-function buildEligibilityReport({ dbPath, recordsPath, decisions, expectedManifest = null }) {
+function buildEligibilityReport({
+  dbPath,
+  recordsPath,
+  decisions,
+  expectedManifest = null,
+  allowLearningP0Tables = false,
+}) {
   const audit = buildAudit({ dbPath, recordsPath });
   if (expectedManifest && audit.run.stateHash !== expectedManifest.run.stateHash) {
     throw new Error(`expected state ${expectedManifest.run.stateHash}, got ${audit.run.stateHash}`);
@@ -138,7 +150,7 @@ function buildEligibilityReport({ dbPath, recordsPath, decisions, expectedManife
     const tags = db.prepare("SELECT * FROM card_tags WHERE status = 'active' ORDER BY generation_id, namespace, normalized_value").all();
     const audioCounts = db.prepare('SELECT generation_id, COUNT(*) AS count FROM audio_files GROUP BY generation_id').all();
     const tableNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
-    assertDecisionState({ generations, tags, audit, decisions, tableNames });
+    assertDecisionState({ generations, tags, audit, decisions, tableNames, allowLearningP0Tables });
 
     const tagMap = new Map();
     for (const tag of tags) {
@@ -234,7 +246,7 @@ function buildEligibilityReport({ dbPath, recordsPath, decisions, expectedManife
         readOnly: true,
         stateHash: audit.run.stateHash,
         decisionsVersion: decisions.version,
-        laD2Materialized: false,
+        laD2Materialized: allowLearningP0Tables,
       },
       summary: {
         cards: cards.length,
@@ -246,7 +258,7 @@ function buildEligibilityReport({ dbPath, recordsPath, decisions, expectedManife
         unreferencedPhysicalAudio: audit.summary.physicalAudioUnregistered,
         highlights: audit.database.highlights,
         highlightMarks: audit.database.highlightMarks,
-        forbiddenLearningTables: tableNames.filter((name) => FORBIDDEN_LEARNING_TABLES.has(name) || /^study_/u.test(name)),
+        forbiddenLearningTables: tableNames.filter((name) => isForbiddenLearningTable(name, allowLearningP0Tables)),
       },
       cards,
     };
@@ -313,6 +325,7 @@ if (require.main === module) {
     recordsPath: path.resolve(String(args.records || process.env.RECORDS_PATH || './trilingual_records')),
     decisions,
     expectedManifest,
+    allowLearningP0Tables: Boolean(args['allow-learning-p0']),
   });
   const outputDir = path.resolve(String(args.output || path.join('.tmp', 'data-preparation', 'eligibility')));
   writeReport(report, outputDir);
@@ -323,5 +336,6 @@ module.exports = {
   FORBIDDEN_LEARNING_TABLES,
   buildEligibilityReport,
   determineEligibility,
+  isForbiddenLearningTable,
   writeReport,
 };

@@ -11,6 +11,16 @@ const dbService = require('../services/storage/databaseService');
 const serverConfig = require('../lib/serverConfig');
 const { checkGenerateThrottle } = require('../lib/throttle');
 const { resetE2EFixtures } = require('../lib/e2eFixtures');
+const { createDeleteCardUseCase } = require('../services/application/deleteCard');
+const log = require('../lib/logger').child({ module: 'app/delete-card' });
+
+const deleteCard = createDeleteCardUseCase({
+  getGenerationById: (id) => dbService.getGenerationById(id),
+  deleteGenerationWithLearningState: (id) => dbService.deleteGenerationWithLearningState(id),
+  deleteCardHighlightByFile: (folder, base) => dbService.deleteCardHighlightByFile(folder, base),
+  deleteRecordFiles,
+  log,
+});
 
 module.exports = {
   tesseractOcrService,
@@ -23,4 +33,5 @@ module.exports = {
   normalizeCardType: serverConfig.normalizeCardType,
   checkGenerateThrottle,
   resetE2EFixtures,
+  deleteCard,
 };

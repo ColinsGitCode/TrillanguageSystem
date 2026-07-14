@@ -132,10 +132,33 @@ test.describe('databaseService — generations CRUD', () => {
           ruleVersion: 'tagrules-v1', ruleKey: 'src.source-mode.input', evidenceJson: '{}',
         },
       ];
+      fixture.learningAdmission = {
+        status: 'eligible',
+        contentHash: 'a'.repeat(64),
+        reasons: ['online-admission-passed'],
+        decisionVersion: 'card-admission-v1',
+        stateVersion: 'learning-admission-v1',
+        disposition: 'create-items',
+      };
+      fixture.generation.contentHash = fixture.learningAdmission.contentHash;
       const id = db.insertGeneration(fixture);
       const generation = db.getGenerationById(id);
       assert.match(generation.content_hash, /^[a-f0-9]{64}$/);
       assert.deepEqual(db.listCardTags(id).map((tag) => `${tag.namespace}:${tag.value}`), ['lang:en', 'src:input']);
+      const learningAdmission = db.db.prepare(
+        'SELECT * FROM learning_source_admissions WHERE generation_id = ?'
+      ).get(id);
+      assert.equal(learningAdmission.status, 'eligible');
+      assert.equal(learningAdmission.materialization_disposition, 'create-items');
+      assert.equal(learningAdmission.identity_anchor_generation_id, id);
+      assert.equal(learningAdmission.admission_source, 'online');
+      assert.deepEqual(
+        db.db.prepare('SELECT unit_key, unit_kind FROM study_items WHERE generation_id = ? ORDER BY unit_key').all(id),
+        [
+          { unit_key: 'en', unit_kind: 'trilingual_en' },
+          { unit_key: 'ja', unit_kind: 'trilingual_ja' },
+        ]
+      );
       assert.throws(
         () => db.db.prepare('UPDATE generations SET content_hash = NULL WHERE id = ?').run(id),
         /content_hash must be a SHA-256 hash/
@@ -156,6 +179,48 @@ test.describe('databaseService — generations CRUD', () => {
     } finally { db.close(); }
   });
 
+  test.it('materializes all 12 scenario Study Items in the online generation transaction', () => {
+    const db = freshDb();
+    try {
+      const fixture = buildGenerationFixture({ generation: { cardType: 'scenario_phrase' } });
+      fixture.learningAdmission = {
+        status: 'eligible',
+        contentHash: 'b'.repeat(64),
+        reasons: ['online-admission-passed'],
+        decisionVersion: 'card-admission-v1',
+        stateVersion: 'learning-admission-v1',
+        disposition: 'create-items',
+      };
+      fixture.generation.contentHash = fixture.learningAdmission.contentHash;
+      const id = db.insertGeneration(fixture);
+      const items = db.db.prepare(`
+        SELECT unit_key, unit_kind FROM study_items WHERE generation_id = ? ORDER BY unit_key
+      `).all(id);
+      assert.equal(items.length, 12);
+      assert.deepEqual(items[0], { unit_key: 'scenario:01', unit_kind: 'scenario_bilingual' });
+      assert.deepEqual(items.at(-1), { unit_key: 'scenario:12', unit_kind: 'scenario_bilingual' });
+    } finally { db.close(); }
+  });
+
+  test.it('rolls back the generation when the learning admission hash is stale', () => {
+    const db = freshDb();
+    try {
+      const fixture = buildGenerationFixture();
+      fixture.learningAdmission = {
+        status: 'eligible',
+        contentHash: '0'.repeat(64),
+        reasons: ['online-admission-passed'],
+        decisionVersion: 'card-admission-v1',
+        stateVersion: 'learning-admission-v1',
+        disposition: 'create-items',
+      };
+      assert.throws(() => db.insertGeneration(fixture), /must match generation content hash/u);
+      assert.equal(db.getTotalCount(), 0);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS count FROM learning_source_admissions').get().count, 0);
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS count FROM study_items').get().count, 0);
+    } finally { db.close(); }
+  });
+
   test.it('deleteGeneration removes the row and cascades audio files', () => {
     const db = freshDb();
     try {
@@ -168,6 +233,29 @@ test.describe('databaseService — generations CRUD', () => {
       // Cascade: audio_files row also gone.
       const remaining = db.db.prepare('SELECT COUNT(*) AS c FROM audio_files WHERE generation_id = ?').get(id);
       assert.equal(remaining.c, 0);
+    } finally { db.close(); }
+  });
+
+  test.it('archives Study Items before deleting their current generation pointer', () => {
+    const db = freshDb();
+    try {
+      const id = db.insertGeneration(buildGenerationFixture());
+      const now = '2026-07-14T00:00:00.000Z';
+      const itemId = Number(db.db.prepare(`
+        INSERT INTO study_items(
+          generation_id, source_generation_id, unit_key, unit_kind, unit_locator_json,
+          content_hash, lifecycle, created_at_utc, updated_at_utc
+        ) VALUES (?, ?, 'en', 'trilingual_en', '{}', ?, 'active', ?, ?)
+      `).run(id, id, db.getGenerationById(id).content_hash, now, now).lastInsertRowid);
+
+      const result = db.deleteGenerationWithLearningState(id);
+      assert.deepEqual(result, { deleted: 1, archivedStudyItems: 1 });
+      assert.equal(db.getGenerationById(id), null);
+      const item = db.db.prepare('SELECT * FROM study_items WHERE id = ?').get(itemId);
+      assert.equal(item.generation_id, null);
+      assert.equal(item.source_generation_id, id);
+      assert.equal(item.lifecycle, 'archived');
+      assert.equal(item.lifecycle_reason, 'source-deleted');
     } finally { db.close(); }
   });
 

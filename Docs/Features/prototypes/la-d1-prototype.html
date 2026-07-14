@@ -6,6 +6,7 @@
 <title>LA-D1 · 学习辅助 2.0 桌面原型</title>
 <style>
 :root {
+  color-scheme:light;
   --canvas:#f7f8fa; --surface:#ffffff; --subtle:#f1f3f5;
   --text:#172033; --text2:#566074; --text3:#7a8496; --disabled:#a7afbc; --inverse:#ffffff;
   --border:#dde2e9; --border-strong:#c6ced9; --focus:#2563eb;
@@ -25,6 +26,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme:dark;
     --canvas:#15181d; --surface:#1d2128; --subtle:#292f39;
     --text:#f2f4f7; --text2:#c1c8d2; --text3:#929cab; --disabled:#697382; --inverse:#14171c;
     --border:#343b46; --border-strong:#46505e; --focus:#78a8ff;
@@ -40,6 +42,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme:dark;
   --canvas:#15181d; --surface:#1d2128; --subtle:#292f39;
   --text:#f2f4f7; --text2:#c1c8d2; --text3:#929cab; --disabled:#697382; --inverse:#14171c;
   --border:#343b46; --border-strong:#46505e; --focus:#78a8ff;
@@ -198,15 +201,28 @@ rt { font-size:10px; color:var(--text3); font-weight:400; }
 .lang.dual { color:var(--sce-text); background:color-mix(in srgb, var(--sce-text) 12%, transparent); }
 .def { margin:8px 0 0; font-size:13.5px; color:var(--text2); }
 mark.hl { background:color-mix(in srgb, var(--danger) 14%, transparent); color:var(--danger); border-radius:2px; padding:0 2px; }
-.study-card .grades { position:sticky; bottom:8px; background:var(--surface); padding:10px; margin:22px -10px -14px; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-md); }
+.study-card .grades { background:var(--surface); padding:10px; margin:22px -10px -14px; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-md); }
 .grades.locked .grade { opacity:.45; pointer-events:none; }
 .grade.saving { border-color:var(--primary); color:var(--primary); }
 .dialog { max-width:440px; margin:16px auto; padding:18px 20px; }
 .dialog h2 { margin:0 0 8px; font-size:15px; }
 .dialog p { margin:0 0 14px; font-size:13px; color:var(--text2); }
+.filter-panel { margin-top:8px; padding:10px 12px; border:1px dashed var(--border-strong); border-radius:6px; background:var(--subtle); }
+.filter-panel label { display:inline-grid; gap:4px; margin-right:8px; color:var(--text2); font-size:11px; }
+.filter-panel input { min-height:34px; padding:0 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); }
+.filter-note { margin:8px 0 0; color:var(--text3); font-size:11px; }
 .opt:focus-visible, .num:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 button.opt { cursor:pointer; }
 input.num { font:inherit; }
+button:disabled { cursor:not-allowed; }
+
+/* 会话正文独立滚动，评分栏固定在会话工作区底部。 */
+:is(#s4, #s6, #s7, #s8) .work { position:relative; height:calc(100vh - 178px); min-height:500px; overflow:hidden; }
+:is(#s4, #s6, #s7, #s8) .card-stage { height:calc(100% - 34px); overflow-y:auto; padding:0 12px 116px; scrollbar-color:var(--border-strong) transparent; }
+:is(#s4, #s6, #s7, #s8) .study-card .grades {
+  position:absolute; z-index:4; left:50%; bottom:14px; width:min(720px, calc(100% - 48px));
+  margin:0; transform:translateX(-50%);
+}
 
 /* 完成态 */
 .done-wrap { max-width:640px; margin:40px auto 0; text-align:center; }
@@ -214,8 +230,10 @@ input.num { font:inherit; }
   background:var(--success-subtle); color:var(--success); font-size:24px; font-weight:700; }
 .done-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:20px 0; }
 </style>
+</head>
+<body>
 
-<div class="bar" role="tablist" aria-label="原型页面">
+<div class="bar" role="toolbar" aria-label="原型页面">
   <span class="tag">LA-D1 原型 · 批次3/3 完整</span>
   <button class="pick" aria-pressed="true"  data-s="s1">1 今日学习</button>
   <button class="pick" aria-pressed="false" data-s="s2">2 计划设置</button>
@@ -280,7 +298,7 @@ input.num { font:inherit; }
 <!-- ═══ S2 首次计划设置 ═══ -->
 <section class="state" id="s2">
 <div class="stage">
-  <p class="note"><b>本页确认点:</b>① 首次进入直达设置而非空仪表盘(§4.1)。② 规模预览含单元数与理论天数账(§5.2)。③ 本页<b>可交互</b>:点选语言/卡型、修改数字(目标 5-100,新卡 0-50 自动钳制),右侧预览实时联动;新卡设 0 → 显示「只清到期」。④ 下方对话框 = 修改既有计划范围时的影响确认(§7.2)。</p>
+  <p class="note"><b>本页确认点:</b>① 首次进入直达设置而非空仪表盘(§4.1)。② 规模预览含单元数与理论天数账(§5.2)。③ 本页<b>可交互</b>:点选语言/卡型、修改数字(目标 5-100,新卡 0-50),右侧预览实时联动;新卡设 0 → 显示「只清到期」。④ 场景单元固定为 EN+JA,缺任一语言时排除并解释。⑤ 日期/标签是可叠加筛选器入口;静态原型不伪造筛选后的数据库计数。⑥ 下方对话框 = 修改既有计划范围时的影响确认(§7.2)。</p>
   <div class="frame"><div class="app">
     <aside class="side">
       <div class="brand"><span class="bars"><i></i><i></i><i></i></span><div><b>Three LANS</b><small>LEARNING WORKBENCH</small></div></div>
@@ -300,24 +318,33 @@ input.num { font:inherit; }
       <div class="setup">
         <div class="surface" style="padding:18px 20px;">
           <div class="field"><div class="lab">学习语言方向</div>
-            <div class="opts" id="langOpts"><button class="opt sel" data-lang="en">English</button><button class="opt sel" data-lang="ja">Japanese</button></div>
+            <div class="opts" id="langOpts" role="group" aria-label="学习语言方向"><button class="opt sel" data-lang="en" aria-pressed="true">English</button><button class="opt sel" data-lang="ja" aria-pressed="true">Japanese</button></div>
           </div>
-          <div class="field"><div class="lab">学习范围(默认 = 全部合格卡)</div>
-            <div class="opts" id="scopeOpts"><button class="opt sel" data-scope="all">全部卡型</button><button class="opt" data-scope="gra">仅语法卡</button><button class="opt" data-scope="sce">仅场景卡</button><button class="opt" data-scope="all">按日期…</button><button class="opt" data-scope="all">按标签…</button></div>
+          <div class="field"><div class="lab">学习卡型(默认 = 全部合格卡)</div>
+            <div class="opts" id="scopeOpts" role="group" aria-label="学习卡型"><button class="opt sel" data-scope="all" aria-pressed="true">全部卡型</button><button class="opt" data-scope="gra" aria-pressed="false">仅语法卡</button><button class="opt" data-scope="sce" aria-pressed="false">仅场景卡</button></div>
           </div>
-          <div class="field"><div class="lab">每日行动目标(5–100)</div>
+          <div class="field"><div class="lab">附加筛选(可叠加)</div>
+            <div class="opts" id="filterOpts" role="group" aria-label="附加筛选"><button class="opt" data-filter="date" aria-pressed="false" aria-controls="filterPanel">日期范围…</button><button class="opt" data-filter="tag" aria-pressed="false" aria-controls="filterPanel">Active 标签…</button></div>
+            <div class="filter-panel" id="filterPanel" hidden>
+              <div data-filter-fields="date" hidden><label>开始日期<input type="date" value="2026-06-01"></label><label>结束日期<input type="date" value="2026-07-13"></label></div>
+              <div data-filter-fields="tag" hidden><label>标签<input type="text" value="topic:childcare" aria-label="Active 标签"></label></div>
+              <p class="filter-note">筛选器结构在 D1 确认;筛选后卡片数由 LA-P2 接入合格卡索引实时计算,本静态原型不伪造结果。</p>
+            </div>
+          </div>
+          <div class="field"><label class="lab" for="goalNum">每日行动目标(5–100)</label>
             <div class="numrow"><input class="num" id="goalNum" type="number" min="5" max="100" value="20"><span style="font-size:12px;color:var(--text3)">已提交评分数,不是分钟数</span></div>
           </div>
-          <div class="field"><div class="lab">每日新单元上限(0–50)</div>
+          <div class="field"><label class="lab" for="capNum">每日新单元上限(0–50)</label>
             <div class="numrow"><input class="num" id="capNum" type="number" min="0" max="50" value="5"><span style="font-size:12px;color:var(--text3)">设为 0 = 只清到期项</span></div>
           </div>
-          <button class="btn primary">保存并生成今日队列</button>
+          <button class="btn primary" id="savePlanBtn">保存并生成今日队列</button>
         </div>
         <div class="surface preview" style="padding:18px 20px;">
           <p class="eyebrow">当前范围预览(实时联动)</p>
           <div class="row"><span>合格卡片</span><b id="pvCards">620 张</b></div>
           <div class="row"><span>展开学习单元</span><b id="pvUnits">1 086 个</b></div>
           <div class="row"><span>预计首日</span><b id="pvFirst">新 5 · 到期 0</b></div>
+          <div class="row"><span>每日行动目标</span><b id="pvGoal">20 行动</b></div>
           <div class="row"><span>引入全部所需</span><b id="pvDays">约 218 学习日</b></div>
           <div class="warn" id="pvWarn">范围较大:全部引入约需 7 个月。可先缩小范围(如仅日语语法),或调高每日新单元上限。</div>
         </div>
@@ -852,36 +879,65 @@ document.querySelectorAll('.pick[data-s]').forEach(p => p.addEventListener('clic
 /* ── S2 计划设置:本地状态 + 规模联动 + 数值钳制 ── */
 const langs = { en: true, ja: true };
 let scope = 'all';
+let activeFilter = null;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || lo));
-function recalc() {
+function recalc(commit = false) {
   const L = (langs.en ? 1 : 0) + (langs.ja ? 1 : 0);
+  const anyLanguage = L > 0;
+  const bothLanguages = langs.en && langs.ja;
   let cards, units;
-  if (scope === 'gra') { cards = 183; units = langs.ja ? 183 : 0; }
-  else if (scope === 'sce') { cards = 3; units = L ? 36 : 0; }
-  else { cards = 620; units = 433 * L + (langs.ja ? 183 : 0) + (L ? 37 : 0); }
-  const goal = clamp(document.getElementById('goalNum').value, 5, 100);
-  const cap = clamp(document.getElementById('capNum').value, 0, 50);
-  document.getElementById('goalNum').value = goal;
-  document.getElementById('capNum').value = cap;
+  if (scope === 'gra') { cards = langs.ja ? 183 : 0; units = langs.ja ? 183 : 0; }
+  else if (scope === 'sce') { cards = bothLanguages ? 3 : 0; units = bothLanguages ? 36 : 0; }
+  else {
+    cards = (anyLanguage ? 433 : 0) + (langs.ja ? 183 : 0) + (bothLanguages ? 3 : 0) + (anyLanguage ? 1 : 0);
+    units = 433 * L + (langs.ja ? 183 : 0) + (bothLanguages ? 36 : 0) + (anyLanguage ? 1 : 0);
+  }
+  const goalInput = document.getElementById('goalNum');
+  const capInput = document.getElementById('capNum');
+  if (!commit && Number(goalInput.value) > 100) goalInput.value = 100;
+  if (!commit && Number(capInput.value) > 50) capInput.value = 50;
+  const goal = clamp(goalInput.value, 5, 100);
+  const cap = clamp(capInput.value, 0, 50);
+  if (commit) {
+    goalInput.value = goal;
+    capInput.value = cap;
+  }
   document.getElementById('pvCards').textContent = `${cards} 张`;
   document.getElementById('pvUnits').textContent = `${units.toLocaleString()} 个`;
   document.getElementById('pvFirst').textContent = cap ? `新 ${Math.min(cap, units)} · 到期 0` : '仅到期项';
+  document.getElementById('pvGoal').textContent = `${goal} 行动`;
   const days = cap ? Math.ceil(units / cap) : 0;
   document.getElementById('pvDays').textContent = cap ? `约 ${days} 学习日` : '—(新卡 0,只清到期)';
   const w = document.getElementById('pvWarn');
-  if (!L || !units) { w.textContent = '当前选择没有可学习单元:请至少保留一种语言,或调整范围。'; }
+  const save = document.getElementById('savePlanBtn');
+  save.disabled = units === 0;
+  if (!anyLanguage) { w.textContent = '当前选择没有可学习单元:请至少保留一种语言。'; }
+  else if (scope === 'sce' && !bothLanguages) { w.textContent = '场景表达是固定 EN+JA 组合单元:请同时启用 English 与 Japanese,或调整卡型范围。'; }
+  else if (!units) { w.textContent = '当前选择没有可学习单元:请调整语言或卡型范围。'; }
   else if (!cap) { w.textContent = '只处理到期复习,不引入新单元;随时可调回。'; }
+  else if (activeFilter) { w.textContent = '日期/标签筛选器结构已配置;静态原型不伪造筛选计数,LA-P2 接入合格卡索引后更新本预览。'; }
+  else if (scope === 'all' && !bothLanguages) { w.textContent = `当前语言方向排除了 3 张固定 EN+JA 场景卡;其余 ${units} 个单元按每天 ${cap} 个新单元引入。`; }
   else if (days > 180) { w.textContent = `范围较大:全部引入约需 ${Math.round(days / 30)} 个月。可先缩小范围(如仅日语语法),或调高每日新单元上限。`; }
   else { w.textContent = `节奏预估:按每天 ${cap} 个新单元,约 ${days} 个学习日引入全部。`; }
 }
 document.querySelectorAll('#langOpts .opt').forEach(b => b.addEventListener('click', () => {
-  langs[b.dataset.lang] = !langs[b.dataset.lang]; b.classList.toggle('sel'); recalc();
+  langs[b.dataset.lang] = !langs[b.dataset.lang]; b.classList.toggle('sel'); b.setAttribute('aria-pressed', String(langs[b.dataset.lang])); recalc();
 }));
 document.querySelectorAll('#scopeOpts .opt').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('#scopeOpts .opt').forEach(x => x.classList.remove('sel'));
-  b.classList.add('sel'); scope = b.dataset.scope; recalc();
+  document.querySelectorAll('#scopeOpts .opt').forEach(x => { x.classList.remove('sel'); x.setAttribute('aria-pressed', 'false'); });
+  b.classList.add('sel'); b.setAttribute('aria-pressed', 'true'); scope = b.dataset.scope; recalc();
 }));
-['goalNum', 'capNum'].forEach(id => document.getElementById(id).addEventListener('change', recalc));
+document.querySelectorAll('#filterOpts .opt').forEach(b => b.addEventListener('click', () => {
+  activeFilter = activeFilter === b.dataset.filter ? null : b.dataset.filter;
+  document.querySelectorAll('#filterOpts .opt').forEach(x => { const on = x.dataset.filter === activeFilter; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on)); });
+  document.getElementById('filterPanel').hidden = !activeFilter;
+  document.querySelectorAll('[data-filter-fields]').forEach(x => { x.hidden = x.dataset.filterFields !== activeFilter; });
+  recalc();
+}));
+['goalNum', 'capNum'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => recalc());
+  document.getElementById(id).addEventListener('change', () => recalc(true));
+});
 recalc();
 
 /* ── S3 空格揭示 → S4;S4 数字键 1-4 评分演示(保存中 → 解释) ── */
@@ -893,9 +949,13 @@ function gradeDemo(i) {
   grading = true;
   const box = document.getElementById('gradeDemo');
   const small = g.querySelector('small'), orig = small.textContent;
-  box.classList.add('locked'); g.classList.add('saving'); g.style.opacity = '1'; small.textContent = '保存中…';
+  box.classList.add('locked'); box.setAttribute('aria-busy', 'true');
+  btns.forEach(b => { b.disabled = true; });
+  g.classList.add('saving'); g.style.opacity = '1'; small.textContent = '保存中…';
   setTimeout(() => {
-    box.classList.remove('locked'); g.classList.remove('saving'); g.style.opacity = ''; small.textContent = orig;
+    box.classList.remove('locked'); box.removeAttribute('aria-busy');
+    btns.forEach(b => { b.disabled = false; });
+    g.classList.remove('saving'); g.style.opacity = ''; small.textContent = orig;
     const next = { 1: '10 分钟后(本会话内重现)', 2: '1 天后(7-14)', 3: '3 天后(7-16)', 4: '7 天后(7-20)' }[i];
     document.getElementById('explainDemo').innerHTML =
       `已保存:<b>随便吃点(EN)</b> 评了「${g.dataset.g}」→ 下次复习 <b>${next}</b>。按 1-4 可再试。`;
@@ -910,4 +970,5 @@ document.addEventListener('keydown', (e) => {
 });
 </script>
 
+</body>
 </html>

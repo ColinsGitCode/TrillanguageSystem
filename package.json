@@ -27,6 +27,7 @@
     "cards:reassign-kindergarden-date": "node scripts/migrations/reassignFolderDate.js --source=kindergarden --target=20260713 --date=2026-07-13"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "@react-router/express": "^7.18.1",
     "@react-router/node": "^7.18.1",
     "@tanstack/react-query": "^5.101.2",
@@ -43,7 +44,8 @@
     "marked": "^9.1.6",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router": "^7.18.1"
+    "react-router": "^7.18.1",
+    "ts-fsrs": "5.4.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

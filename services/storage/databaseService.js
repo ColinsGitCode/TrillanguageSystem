@@ -17,6 +17,7 @@ const generationsDomain = require('./db/generations');
 const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
 const cardTagsDomain = require('./db/cardTags');
+const migrationRunner = require('./db/migrationRunner');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
 const { runWithSqliteBusyRetry } = require('./sqliteBusyRetry');
 const { normalizeTagValue } = require('../dataPreparation/rules');
@@ -87,10 +88,14 @@ class DatabaseService {
       return;
     }
 
+    const preexistingTables = this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).all().map((row) => row.name);
     const schema = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schema);
     this.dropDeprecatedTables();
     this.ensureSchemaMigrations();
+    this.migrationResult = migrationRunner.runMigrations(this.db, { preexistingTables });
 
     log.info('database tables initialized');
   }
@@ -525,6 +530,10 @@ class DatabaseService {
 
   deleteGeneration(id) {
     return generationsDomain.remove(this.db, id);
+  }
+
+  deleteGenerationWithLearningState(id) {
+    return generationsDomain.removeWithLearningState(this.db, id);
   }
 
   listCardTags(generationId, options = {}) {

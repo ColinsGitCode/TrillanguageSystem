@@ -191,6 +191,16 @@ function createCardGenerationUseCase(customPorts = {}) {
         if (dbData.cardTags.some((tag) => tag.namespace === 'qa' && tag.normalizedValue === 'test-artifact-candidate')) {
           admission.status = 'review-required';
         }
+        dbData.learningAdmission = {
+          status: admission.status === 'review-required' ? 'unresolved' : 'eligible',
+          contentHash: admission.contentHash,
+          reasons: admission.status === 'review-required'
+            ? ['test-artifact-review-pending']
+            : ['online-admission-passed'],
+          decisionVersion: 'card-admission-v1',
+          stateVersion: 'learning-admission-v1',
+          disposition: admission.status === 'review-required' ? 'exclude' : 'create-items',
+        };
         generationId = ports.insertGeneration(dbData);
         ports.validatePersistedAdmission({
           generation: ports.getGenerationById(generationId),

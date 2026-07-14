@@ -8,6 +8,7 @@
 const { safeJsonParse } = require('./helpers');
 const cardTags = require('./cardTags');
 const { contentHash } = require('../../dataPreparation/rules');
+const { expandStudyUnits, stableJson } = require('../../learning/application/materializeStudyItems');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 
 function insertGeneration(db, data) {
@@ -27,10 +28,8 @@ function insertGeneration(db, data) {
         )
       `);
 
-      const genResult = genInsert.run({
-        ...genData,
-        contentHash: genData.contentHash || contentHash(genData.markdownContent),
-      });
+      const persistedContentHash = genData.contentHash || contentHash(genData.markdownContent);
+      const genResult = genInsert.run({ ...genData, contentHash: persistedContentHash });
       const generationId = genResult.lastInsertRowid;
 
       const obsInsert = db.prepare(`
@@ -71,6 +70,56 @@ function insertGeneration(db, data) {
 
       for (const tag of data.cardTags || []) {
         cardTags.insertRule(db, { ...tag, generationId });
+      }
+
+      if (data.learningAdmission) {
+        const admission = data.learningAdmission;
+        if (admission.contentHash !== persistedContentHash) {
+          throw new Error('learning admission content hash must match generation content hash');
+        }
+        const timestamp = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO learning_source_admissions(
+            generation_id, status, content_hash, reasons_json, decision_version, state_version,
+            dp_state_hash, materialization_disposition, identity_anchor_generation_id,
+            admission_source, evaluated_at_utc, created_at_utc, updated_at_utc
+          ) VALUES (
+            @generationId, @status, @contentHash, @reasonsJson, @decisionVersion, @stateVersion,
+            NULL, @disposition, @generationId,
+            'online', @timestamp, @timestamp, @timestamp
+          )
+        `).run({
+          generationId,
+          status: admission.status,
+          contentHash: admission.contentHash,
+          reasonsJson: JSON.stringify(admission.reasons || []),
+          decisionVersion: admission.decisionVersion,
+          stateVersion: admission.stateVersion,
+          disposition: admission.disposition,
+          timestamp,
+        });
+        const units = expandStudyUnits({
+          cardType: genData.cardType,
+          recommendation: { status: admission.status },
+        });
+        const insertStudyItem = db.prepare(`
+          INSERT INTO study_items(
+            generation_id, source_generation_id, unit_key, unit_kind, unit_locator_json,
+            content_hash, content_revision, lifecycle, created_at_utc, updated_at_utc
+          ) VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, ?)
+        `);
+        for (const unit of units) {
+          insertStudyItem.run(
+            generationId,
+            generationId,
+            unit.unitKey,
+            unit.unitKind,
+            stableJson(unit.locator),
+            persistedContentHash,
+            timestamp,
+            timestamp
+          );
+        }
       }
 
       return generationId;
@@ -233,13 +282,25 @@ function getRecent(db, limit = 10) {
   return db.prepare(sql).all(limit);
 }
 
+function removeWithLearningState(db, id) {
+  const transaction = db.transaction(() => {
+    const generation = db.prepare('SELECT id FROM generations WHERE id = ?').get(id);
+    if (!generation) throw new Error(`Generation with id ${id} not found`);
+    const archived = db.prepare(`
+      UPDATE study_items
+      SET lifecycle = 'archived', lifecycle_reason = 'source-deleted', updated_at_utc = ?
+      WHERE generation_id = ? AND lifecycle <> 'archived'
+    `).run(new Date().toISOString(), id).changes;
+    const deleted = db.prepare('DELETE FROM generations WHERE id = ?').run(id).changes;
+    return { deleted, archivedStudyItems: archived };
+  });
+  const result = transaction();
+  log.info({ id, ...result }, 'deleted generation with learning state preserved');
+  return result;
+}
+
 function remove(db, id) {
-  const result = db.prepare(`DELETE FROM generations WHERE id = ?`).run(id);
-  if (result.changes === 0) {
-    throw new Error(`Generation with id ${id} not found`);
-  }
-  log.info({ id, changes: result.changes }, 'deleted generation');
-  return result.changes;
+  return removeWithLearningState(db, id).deleted;
 }
 
 module.exports = {
@@ -253,6 +314,7 @@ module.exports = {
   fullTextSearch,
   getRecent,
   remove,
+  removeWithLearningState,
   // alias `safeJsonParse` re-export for the few external callers that pulled
   // it through dbService — keeps the migration lossless.
   safeJsonParse,

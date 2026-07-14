@@ -1,0 +1,65 @@
+{
+  "reviewedAtUtc": "2026-07-14T00:00:00.000Z",
+  "cases": [
+    {
+      "rating": 1,
+      "afterState": {
+        "fsrsState": "learning",
+        "dueAtUtc": "2026-07-14T00:01:00.000Z",
+        "lastReviewedAtUtc": "2026-07-14T00:00:00.000Z",
+        "stability": 0.212,
+        "difficulty": 6.4133,
+        "elapsedDays": 0,
+        "scheduledDays": 0,
+        "reps": 1,
+        "lapses": 0,
+        "step": 0
+      }
+    },
+    {
+      "rating": 2,
+      "afterState": {
+        "fsrsState": "learning",
+        "dueAtUtc": "2026-07-14T00:06:00.000Z",
+        "lastReviewedAtUtc": "2026-07-14T00:00:00.000Z",
+        "stability": 1.2931,
+        "difficulty": 5.11217071,
+        "elapsedDays": 0,
+        "scheduledDays": 0,
+        "reps": 1,
+        "lapses": 0,
+        "step": 0
+      }
+    },
+    {
+      "rating": 3,
+      "afterState": {
+        "fsrsState": "learning",
+        "dueAtUtc": "2026-07-14T00:10:00.000Z",
+        "lastReviewedAtUtc": "2026-07-14T00:00:00.000Z",
+        "stability": 2.3065,
+        "difficulty": 2.11810397,
+        "elapsedDays": 0,
+        "scheduledDays": 0,
+        "reps": 1,
+        "lapses": 0,
+        "step": 1
+      }
+    },
+    {
+      "rating": 4,
+      "afterState": {
+        "fsrsState": "review",
+        "dueAtUtc": "2026-07-22T00:00:00.000Z",
+        "lastReviewedAtUtc": "2026-07-14T00:00:00.000Z",
+        "stability": 8.2956,
+        "difficulty": 1,
+        "elapsedDays": 0,
+        "scheduledDays": 8,
+        "reps": 1,
+        "lapses": 0,
+        "step": 0
+      }
+    }
+  ]
+}

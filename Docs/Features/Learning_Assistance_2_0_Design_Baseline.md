@@ -1,11 +1,12 @@
 # 学习辅助 2.0 设计基线
 
-> 状态：**当前正式产品设计基线；LA-D0 已通过，LA-D1 待开始**
+> 状态：**当前正式产品设计基线；LA-D0-D2、LA-P0-P1 已完成**
 > 日期：2026-07-13
-> 产品阶段：LA-D1 桌面端交互原型
+> 产品阶段：LA-P1 后端闭环已完成；下一阶段为 LA-P2 桌面学习计划与复习 UI
 > 上位架构：[全栈架构迁移方案](../Architecture/Fullstack_Migration_React_Router.md)
 > 数据整备专题：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D0 专题：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
+> LA-D2 专题：[学习辅助 2.0 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > 历史边界：不继承已退役的 SRS、Engagement、Knowledge Hub、Mission Control 方案和 schema
 
 ## 0. 文档定位与权威边界
@@ -282,7 +283,7 @@ Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.m
 | LA-D1 交互原型 | 桌面导航、计划设置、今日队列、复习会话 | 逐页可视化原型确认 |
 | LA-D2 领域与数据 ADR | 学习单元粒度、事件、状态、时区、删除策略 | schema/API contract 评审通过 |
 | LA-P0 基础契约 | provider 接口、测试 fixtures、迁移与回滚框架 | 不影响 Cards Factory，门禁全绿 |
-| LA-P1 复习核心 | study item、review event、schedule、评分 | 可完成独立复习闭环 |
+| LA-P1 复习核心 | study item、review event、schedule、评分 API | 后端独立复习闭环与幂等门禁全绿（已完成） |
 | LA-P2 学习计划 | 计划范围、每日目标、新卡/复习混排 | 今日队列稳定且可解释 |
 | LA-P3 反馈与指标 | 进度、积压、历史和成功指标 | 行为数据可用于产品判断 |
 | LA-P4 语义接缝 | Heuristic Provider 与 Graph Provider contract | 无图谱降级测试通过 |
@@ -298,21 +299,21 @@ Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.m
 | 每日目标 | 行动数；默认 20，默认新单元上限 5 | LA-D0 §5.2 |
 | 新卡、到期和逾期混排 | 逾期与到期优先，困难项其次，新单元最后 | LA-D0 §5.4 |
 | 学习范围和计划数量 | v1 一个活动计划，范围可编辑 | LA-D0 §5.3 |
-| 卡片更新/删除后的产品行为 | 保留历史；更新提示版本变化，删除后归档且停止排队 | LA-D0 §9；技术策略待 LA-D2 |
+| 卡片更新/删除后的产品行为 | 保留历史；更新提示版本变化，删除后归档且停止排队 | LA-D0 §9；LA-D2 §10 已确认 |
 | 标红是否影响调度 | v1 仅作为用户笔记，不自动改变调度 | LA-D0 §5.8 |
 | 场景卡上下文 | 每个表达独立评分，同时保留场景标题、角色和其它表达入口 | LA-D0 §5.1 |
-| 学习日和跨午夜 | 默认 Asia/Shanghai；事件按提交时间归属学习日 | LA-D0 §5.7；精确时间规则待 LA-D2 |
-| v1 调度算法和参数 | 未决，不允许由原型自行决定 | LA-D2 |
-| 页面、路由和导航命名 | 工作名称已定义，最终组合与视觉待确认 | LA-D1 |
+| 学习日和跨午夜 | 默认 Asia/Shanghai；事件按提交时间归属学习日 | LA-D0 §5.7；LA-D2 §7 已确认，LA-P0 Temporal fixture 通过 |
+| v1 调度算法和参数 | FSRS-6；`ts-fsrs@5.4.1`；ADR 固定参数 | LA-D2 §6；LA-P0 golden fixture 通过 |
+| 页面、路由和导航命名 | LA-D1 桌面端 12 页原型已确认 | LA-D1 原型与 LA-D0 §15.1 |
 
 ## 14. 下一批正式产物
 
 本文通过后，按顺序创建：
 
 1. [学习辅助 2.0 用户任务与成功指标](Learning_Assistance_2_0_Product_Definition.md)（LA-D0 已确认通过）；
-2. 桌面端信息架构与逐页可视化原型；
-3. 学习单元与复习调度 ADR；
+2. 桌面端信息架构与逐页可视化原型（LA-D1 已确认）；
+3. [学习单元与复习调度 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)（LA-D2 Accepted；LA-P0/P1 实施记录）；
 4. 数据模型、API contract 和迁移/回滚方案；
 5. 分阶段 task list、测试计划和验收标准。
 
-在上述设计完成前，不创建临时 SRS 表、不恢复旧端点，也不以“先做一个页面”为由绕过领域与数据决策。
+LA-P0 已按 ADR 创建职责分离的新表、准入投影和 Study Items；LA-P1 已实现全新的 `/api/learning` 后端闭环，但没有恢复旧 SRS 表、旧端点或旧页面。学习 UI 仍待 LA-P2；后续阶段不得绕过已确认的领域与数据决策。
