@@ -11,7 +11,12 @@
 
 ## 当前产品边界
 
-2026-07-13 起，当前产品只保留 **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗。
+2026-07-14 当前正式运行产品包含两部分：
+
+- **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗；
+- **学习辅助 2.0**：学习计划、今日队列、可恢复复习会话、四档评分、FSRS 调度、学习记录与可降级 PlanningSignalProvider。
+
+**教材课程**已完成 TC-D0 产品定义和 TC-D1 桌面原型确认；TC-D2 领域、数据、Manifest、API 与媒体 ADR 已完成，当前等待用户确认后进入 TC-P0。尚无运行时 schema、API 或正式页面。知识图谱 2.0 继续后置。
 
 当前实施与设计入口：
 
@@ -26,6 +31,10 @@
 - Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md：已接受的 LA-D2 领域、事件、调度、时区和 API contract，以及 2026-07-14 LA-P0-P4 实施记录；
 - Features/Learning_Assistance_2_0_Data_Preparation_Plan.md：现有卡片备份、审计、同步、标签与音频整备实施基线（DP0-DP7）；
 - Features/Card_Classification_and_Tagging.md：卡片分类与标签专题（T0 数据回填与在线增量打标已完成；T1 API / T2 UI 待实施；兼作 LA 2.0 可选信号源）；
+- Features/Textbook_Courses_Product_Definition.md：已确认的教材课程 TC-D0 产品定义，定义专用 Skill 导入、教材内容诚信、官方音频、Track 页面、派生卡和学习辅助 2.0 接入边界；
+- Features/prototypes/tc-d1-prototype.html：已确认的 TC-D1 桌面端 12 状态可视化原型，使用合成内容并覆盖校对、官方/TTS 音频、派生卡和学习辅助接入；
+- Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md：待用户确认的 TC-D2 ADR，定义教材七表、修订、逐方向 hash、Manifest、API、媒体安全、Cards Factory 隔离和 LA-D2 增补；
+- Architecture/schemas/textbook-track-manifest.v1.schema.json：不含教材原文的 Track Manifest v1 机器校验 contract；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。
 

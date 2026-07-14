@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://three-lans.local/schemas/textbook-track-manifest.v1.schema.json",
+  "title": "Three LANS Textbook Track Manifest v1",
+  "description": "Content-free contract for a locally extracted and human-reviewed textbook Track. Actual textbook content and asset paths remain outside Git.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "course",
+    "track",
+    "revision",
+    "assets",
+    "expressions",
+    "import",
+    "integrity"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "textbook-track-manifest/v1"
+    },
+    "course": {
+      "$ref": "#/$defs/course"
+    },
+    "track": {
+      "$ref": "#/$defs/track"
+    },
+    "revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/asset"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "const": "source_image"
+              }
+            }
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "const": "official_audio"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    },
+    "expressions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/expression"
+      }
+    },
+    "import": {
+      "$ref": "#/$defs/importMetadata"
+    },
+    "integrity": {
+      "$ref": "#/$defs/integrity"
+    }
+  },
+  "$defs": {
+    "course": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "title", "sourceNotice"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "sourceNotice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "displayOrder", "title", "expectedExpressionCount"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "expectedExpressionCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "status"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "const": "draft"
+        },
+        "parentManifestHash": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetKey",
+        "kind",
+        "ordinal",
+        "relativePath",
+        "sha256",
+        "byteSize",
+        "mimeType"
+      ],
+      "properties": {
+        "assetKey": {
+          "type": "string",
+          "pattern": "^(source|official):[0-9]{2,4}$"
+        },
+        "kind": {
+          "enum": ["source_image", "official_audio"]
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\u0000).+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byteSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mimeType": {
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/x-m4a",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/flac"
+          ]
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "official_audio"
+              }
+            }
+          },
+          "then": {
+            "required": ["durationMs"]
+          }
+        }
+      ]
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "ordinal",
+        "official",
+        "derived",
+        "confidence",
+        "unitHashes"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^expr:[0-9]{2,4}$"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "official": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["en", "ja"],
+          "properties": {
+            "en": {
+              "$ref": "#/$defs/officialText"
+            },
+            "ja": {
+              "$ref": "#/$defs/officialText"
+            }
+          }
+        },
+        "derived": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zhCue", "rubySegments", "analysis"],
+          "properties": {
+            "zhCue": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "rubySegments": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/rubySegment"
+              }
+            },
+            "analysis": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["phrases", "grammar", "register", "comparison"],
+              "properties": {
+                "phrases": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "$ref": "#/$defs/analysisItem"
+                  }
+                },
+                "grammar": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "$ref": "#/$defs/analysisItem"
+                  }
+                },
+                "register": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "$ref": "#/$defs/analysisItem"
+                  }
+                },
+                "comparison": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "$ref": "#/$defs/analysisItem"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pairing", "en", "ja", "zhCue", "ruby"],
+          "properties": {
+            "pairing": {
+              "$ref": "#/$defs/confidenceValue"
+            },
+            "en": {
+              "$ref": "#/$defs/confidenceValue"
+            },
+            "ja": {
+              "$ref": "#/$defs/confidenceValue"
+            },
+            "zhCue": {
+              "$ref": "#/$defs/confidenceValue"
+            },
+            "ruby": {
+              "$ref": "#/$defs/confidenceValue"
+            }
+          }
+        },
+        "editorNote": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "unitHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["en", "ja"],
+          "properties": {
+            "en": {
+              "$ref": "#/$defs/sha256"
+            },
+            "ja": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "officialText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "sourceSpan"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "sourceSpan": {
+          "$ref": "#/$defs/sourceSpan"
+        }
+      }
+    },
+    "sourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetKey", "pageOrdinal", "region"],
+      "properties": {
+        "assetKey": {
+          "type": "string",
+          "pattern": "^source:[0-9]{2,4}$"
+        },
+        "pageOrdinal": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "region": {
+          "type": "array",
+          "description": "Normalized x, y, width, height coordinates in [0,1].",
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/normalizedCoordinate"
+            },
+            {
+              "$ref": "#/$defs/normalizedCoordinate"
+            },
+            {
+              "$ref": "#/$defs/normalizedCoordinate"
+            },
+            {
+              "$ref": "#/$defs/normalizedCoordinate"
+            }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        }
+      }
+    },
+    "rubySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reading": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[ぁ-ゖァ-ヺー・]+$"
+        }
+      }
+    },
+    "analysisItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "explanation", "source"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "source": {
+          "enum": ["ai-derived", "user-edited"]
+        }
+      }
+    },
+    "importMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skillName", "skillVersion", "createdAtUtc"],
+      "properties": {
+        "skillName": {
+          "const": "import-textbook-track"
+        },
+        "skillVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceFingerprint", "contentHash"],
+      "properties": {
+        "sourceFingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "confidenceValue": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "normalizedCoordinate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

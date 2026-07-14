@@ -724,3 +724,20 @@ LA-P4 在现有 `provider_score`、`explanation_json` 和 Daily Queue `snapshot_
 - 最终 acceptance 门禁为 lint、287 个 unit、52 个 integration、React typecheck/build、架构 ownership、7 个 production smoke probes 和 28 个桌面 Playwright 用例全部通过。
 
 学习辅助 2.0 的既定 LA-P0-P4 实施序列至此完成。后续若启动 Knowledge Graph 2.0，先进入 KG-D0 定义真实学习者问题和成功指标；不得把 Graph Provider 的可选 reader contract 当作图谱产品已经实施。
+
+## 23. 待确认增补：教材课程 TC-D2（2026-07-14）
+
+教材课程 TC-D2 已形成独立 ADR：[`Textbook_Courses_Domain_Data_and_Media_ADR.md`](Textbook_Courses_Domain_Data_and_Media_ADR.md)。该 ADR 当前为 Proposed；用户确认前，本节不改变运行时 schema 或 LA-D2 已接受不变量。
+
+确认后，教材范围内将显式增补：
+
+- `generations.card_type = textbook_track`；
+- `study_items.unit_kind = textbook_en | textbook_ja`；
+- unit key 为稳定 `expr:NN:en|ja`；
+- 教材 materializer 使用逐表达、逐方向 hash，不复制 Track generation hash；
+- locator v2 通过 Track/expression 稳定 ID 定位；
+- plan scope v2 增加显式 `textbookTrackIds`，默认计划不包含教材；
+- item view-model 从教材结构表读取，不从 Markdown 反向解析；
+- Review Event、Schedule State、Daily Queue、四档评分、FSRS、幂等和学习日语义保持不变。
+
+以上增补只有在 TC-D2 被用户接受，并且 `database/schema.sql`、versioned migration、fresh/migrated schema 测试和实现代码同步落地后，才转为 Accepted 实施事实。
