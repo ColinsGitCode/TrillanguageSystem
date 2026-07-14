@@ -75,7 +75,9 @@
 .learning-queue ol { max-height: 570px; margin: 0; padding: 0; overflow: auto; list-style: none; }
 .learning-queue-row { min-height: 52px; display: grid; grid-template-columns: 70px 54px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 14px; border-bottom: 1px solid var(--color-border); }
 .learning-queue-row:last-child { border-bottom: 0; }
-.learning-queue-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.learning-queue-copy { min-width: 0; display: grid; gap: 2px; }
+.learning-queue-copy strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.learning-queue-copy small { overflow: hidden; color: var(--color-text-tertiary); font: 500 9px/1.2 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .learning-type-pill, .learning-language, .learning-reason, .learning-session-type { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); font: 700 9px/1 var(--font-mono); }
 .learning-type-pill { min-height: 23px; color: var(--color-card-trilingual-text); background: var(--color-card-trilingual-surface); border: 1px solid var(--color-card-trilingual-border); }
 .tone-grammar .learning-type-pill, .learning-session-type.tone-grammar { color: var(--color-card-grammar-text); background: var(--color-card-grammar-surface); border-color: var(--color-card-grammar-border); }

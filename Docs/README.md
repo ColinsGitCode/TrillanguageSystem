@@ -23,7 +23,7 @@
 - Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
 - Features/Learning_Assistance_2_0_Product_Definition.md：已确认的 LA-D0 用户任务、产品术语、回忆方向、学习单元、计划/队列/评分策略与成功指标（含 §15.1 LA-D1 原型确认记录）；
 - Features/prototypes/la-d1-prototype.html：已确认的 LA-D1 桌面端 12 页可视化原型（浏览器直接打开）；
-- Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md：已接受的 LA-D2 领域、事件、调度、时区和 API contract，以及 2026-07-14 LA-P0-P3 实施记录；
+- Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md：已接受的 LA-D2 领域、事件、调度、时区和 API contract，以及 2026-07-14 LA-P0-P4 实施记录；
 - Features/Learning_Assistance_2_0_Data_Preparation_Plan.md：现有卡片备份、审计、同步、标签与音频整备实施基线（DP0-DP7）；
 - Features/Card_Classification_and_Tagging.md：卡片分类与标签专题（T0 数据回填与在线增量打标已完成；T1 API / T2 UI 待实施；兼作 LA 2.0 可选信号源）；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；

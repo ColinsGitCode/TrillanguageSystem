@@ -4,6 +4,11 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { buildQueueCandidates } = require('../../services/learning/application/learningService');
 const { itemMatchesScope, normalizeScope } = require('../../services/learning/domain/planScope');
+const { createDefaultPlanningSignalProvider } = require('../../services/learning/planning/defaultPlanningSignalProvider');
+const {
+  CompositePlanningSignalProvider,
+  PlanningSignalProvider,
+} = require('../../services/learning/planning/planningSignalProvider');
 
 const fullScope = normalizeScope({
   version: 1,
@@ -101,5 +106,60 @@ test.describe('Learning plan scope and queue policy', () => {
     assert.deepEqual(result.entries.map((entry) => entry.studyItemId), [1]);
     assert.equal(result.summary.newAvailable, 1);
     assert.equal(result.summary.new, 0);
+  });
+
+  test.it('applies semantic scores only after selecting the stable base queue set', () => {
+    const rows = [
+      { study_item_id: 1, generation_id: 1, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'short', schedule_version: null },
+      { study_item_id: 2, generation_id: 2, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'x'.repeat(90), schedule_version: null },
+      { study_item_id: 3, generation_id: 3, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'y'.repeat(90), schedule_version: null },
+    ];
+    const result = buildQueueCandidates(
+      rows,
+      new Map(rows.map((row) => [row.generation_id, new Set()])),
+      fullScope,
+      { startUtc: '2026-07-13T16:00:00.000Z', endUtc: '2026-07-14T16:00:00.000Z' },
+      '2026-07-14T01:00:00.000Z',
+      2,
+      20,
+      0,
+      createDefaultPlanningSignalProvider(),
+      new Map()
+    );
+    assert.deepEqual(result.entries.map((entry) => entry.studyItemId), [2, 1]);
+    assert.deepEqual(new Set(result.entries.map((entry) => entry.studyItemId)), new Set([1, 2]));
+    assert.equal(result.entries[0].providerScore, 8);
+    assert.equal(result.planning.diagnostics['graph-contract'].empty, 2);
+  });
+
+  test.it('keeps the exact base set and order when every provider fails', () => {
+    class FailingProvider extends PlanningSignalProvider {
+      constructor() { super({ id: 'failing-graph', version: '1', kind: 'graph' }); }
+      evaluate() { throw new Error('graph unavailable'); }
+    }
+    const provider = new CompositePlanningSignalProvider({ providers: [new FailingProvider()] });
+    const rows = [1, 2, 3].map((id) => ({
+      study_item_id: id,
+      generation_id: id,
+      generation_date: '2026-07-14',
+      card_type: 'trilingual',
+      unit_kind: 'trilingual_en',
+      source_title: `item ${id}`,
+      schedule_version: null,
+    }));
+    const baseArgs = [
+      rows,
+      new Map(rows.map((row) => [row.generation_id, new Set()])),
+      fullScope,
+      { startUtc: '2026-07-13T16:00:00.000Z', endUtc: '2026-07-14T16:00:00.000Z' },
+      '2026-07-14T01:00:00.000Z',
+      2,
+      20,
+      0,
+    ];
+    const base = buildQueueCandidates(...baseArgs);
+    const degraded = buildQueueCandidates(...baseArgs, provider);
+    assert.deepEqual(degraded.entries, base.entries);
+    assert.equal(degraded.planning.diagnostics['failing-graph'].failed, 2);
   });
 });

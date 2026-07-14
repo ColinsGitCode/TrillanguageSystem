@@ -54,7 +54,27 @@ export type QueueEntry = {
   studyItemId: number;
   reason: string;
   bucket: number;
-  explanation: { code?: string; label?: string; recentlyFailed?: boolean };
+  providerScore: number | null;
+  explanation: {
+    code?: string;
+    label?: string;
+    recentlyFailed?: boolean;
+    provider?: {
+      contractVersion?: number;
+      id: string;
+      version: string;
+      score: number | null;
+      sources?: Array<{
+        providerId: string;
+        providerVersion: string;
+        providerKind: string;
+        score: number;
+        groups: string[];
+        reasons: Array<{ code: string; label: string }>;
+        evidence: Array<{ source: string; ruleVersion: string | null; ruleKey: string | null }>;
+      }>;
+    };
+  };
   availableAtUtc: string | null;
   dueAtUtc: string | null;
   status: 'pending' | 'active' | 'deferred' | 'completed' | 'skipped';
@@ -84,6 +104,19 @@ export type DailyQueue = {
     summary?: { due?: number; new?: number; newAvailable?: number; deferredToday?: number };
     dailyActionGoal?: number;
     dailyNewLimit?: number;
+    planning?: {
+      contractVersion: number;
+      providers: Array<{ id: string; version: string; kind: string; maxDurationMs: number }>;
+      diagnostics: Record<string, {
+        id: string;
+        version: string;
+        kind: string;
+        applied: number;
+        empty: number;
+        failed: number;
+        timedOut: number;
+      }>;
+    };
   };
   progress: QueueProgress;
   entries: QueueEntry[];

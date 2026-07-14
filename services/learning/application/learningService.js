@@ -7,6 +7,8 @@ const { TsFsrsScheduler, stableJson } = require('../scheduling/tsFsrsScheduler')
 const { DEFAULT_TIME_ZONE, dayBounds, learningDay, validateTimeZone } = require('../time/learningTime');
 const { learningError } = require('../domain/learningErrors');
 const { DEFAULT_SCOPE, itemMatchesScope, normalizeScope } = require('../domain/planScope');
+const { createDefaultPlanningSignalProvider } = require('../planning/defaultPlanningSignalProvider');
+const { CONTRACT_VERSION, mergePlanningDiagnostics } = require('../planning/planningSignalProvider');
 const {
   extractStudyUnitMarkdown,
   labeledValue,
@@ -133,13 +135,16 @@ function buildQueueCandidates(
   nowUtc,
   dailyNewLimit,
   dailyActionGoal = Number.MAX_SAFE_INTEGER,
-  completedActions = 0
+  completedActions = 0,
+  planningSignalProvider = null,
+  tagSignalsByGeneration = new Map()
 ) {
   const nowMs = Date.parse(nowUtc);
   const startMs = Date.parse(bounds.startUtc);
   const endMs = Date.parse(bounds.endUtc);
   const due = [];
   const fresh = [];
+  const rowsByStudyItem = new Map(rows.map((row) => [Number(row.study_item_id), row]));
 
   for (const row of rows) {
     if (!itemMatchesScope(row, scope, tagsByGeneration.get(Number(row.generation_id)) || new Set())) continue;
@@ -190,22 +195,74 @@ function buildQueueCandidates(
   fresh.sort((a, b) => a.studyItemId - b.studyItemId);
   const remainingGoalSlots = Math.max(0, dailyActionGoal - completedActions - due.length);
   const selectedFresh = fresh.slice(0, Math.min(dailyNewLimit, remainingGoalSlots));
+  const entries = [...due, ...selectedFresh];
+  const providerDiagnostics = planningSignalProvider?.createDiagnostics?.() || {};
+  for (const entry of entries) {
+    if (!planningSignalProvider) continue;
+    const row = rowsByStudyItem.get(entry.studyItemId);
+    const evaluation = planningSignalProvider.evaluate({
+      studyItemId: entry.studyItemId,
+      unitKind: row.unit_kind,
+      cardType: row.card_type,
+      generationDate: row.generation_date,
+      folderName: row.folder_name,
+      sourceTitle: row.source_title,
+      tags: tagSignalsByGeneration.get(Number(row.generation_id)) || [],
+      reviewEvidence: {
+        lastRating: row.last_rating === null || row.last_rating === undefined ? null : Number(row.last_rating),
+        reps: Number(row.reps || 0),
+        lapses: Number(row.lapses || 0),
+        difficulty: row.difficulty === null || row.difficulty === undefined ? null : Number(row.difficulty),
+      },
+    }, {
+      reason: entry.reason,
+      priorityBucket: entry.bucket,
+      nowUtc,
+      dayBounds: bounds,
+    });
+    mergePlanningDiagnostics(providerDiagnostics, evaluation.diagnostics);
+    if (evaluation.score === null) continue;
+    entry.providerScore = evaluation.score;
+    entry.explanation.provider = {
+      contractVersion: CONTRACT_VERSION,
+      id: 'planning-signal-composite',
+      version: '1',
+      score: evaluation.score,
+      sources: evaluation.signals,
+    };
+  }
+  entries.sort((a, b) => a.bucket - b.bucket
+    || String(a.availableAtUtc || '').localeCompare(String(b.availableAtUtc || ''))
+    || String(a.dueAtUtc || '9999').localeCompare(String(b.dueAtUtc || '9999'))
+    || Number(b.providerScore || 0) - Number(a.providerScore || 0)
+    || a.studyItemId - b.studyItemId);
   return {
-    entries: [...due, ...selectedFresh],
+    entries,
     summary: {
       due: due.length,
       new: selectedFresh.length,
       newAvailable: fresh.length,
       deferredToday: due.filter((entry) => Date.parse(entry.availableAtUtc) > nowMs).length,
     },
+    planning: {
+      ...(planningSignalProvider?.describe?.() || { contractVersion: CONTRACT_VERSION, providers: [] }),
+      diagnostics: providerDiagnostics,
+    },
   };
 }
 
 class LearningService {
-  constructor({ db, scheduler = new TsFsrsScheduler(), now = () => new Date().toISOString(), busyRetry } = {}) {
+  constructor({
+    db,
+    scheduler = new TsFsrsScheduler(),
+    planningSignalProvider = createDefaultPlanningSignalProvider(),
+    now = () => new Date().toISOString(),
+    busyRetry,
+  } = {}) {
     if (!db) throw new TypeError('LearningService requires a SQLite database');
     this.db = db;
     this.scheduler = scheduler;
+    this.planningSignalProvider = planningSignalProvider;
     this.now = now;
     this.busyRetry = busyRetry || ((operation) => operation());
   }
@@ -322,6 +379,7 @@ class LearningService {
       SELECT
         si.id AS study_item_id, si.generation_id, si.source_generation_id,
         si.unit_kind, si.lifecycle, g.card_type, g.generation_date,
+        g.folder_name, g.phrase AS source_title,
         ss.fsrs_state, ss.due_at_utc, ss.last_reviewed_at_utc,
         ss.stability, ss.difficulty, ss.elapsed_days, ss.scheduled_days,
         ss.reps, ss.lapses, ss.step, ss.version AS schedule_version,
@@ -347,18 +405,35 @@ class LearningService {
   }
 
   _tagsByGeneration(rows) {
+    return this._tagDataByGeneration(rows).keys;
+  }
+
+  _tagDataByGeneration(rows) {
     const ids = [...new Set(rows.map((row) => Number(row.generation_id)))];
-    const result = new Map(ids.map((id) => [id, new Set()]));
-    if (!ids.length) return result;
+    const keys = new Map(ids.map((id) => [id, new Set()]));
+    const signals = new Map(ids.map((id) => [id, []]));
+    if (!ids.length) return { keys, signals };
     const tags = this.db.prepare(`
-      SELECT generation_id, namespace, normalized_value
+      SELECT generation_id, namespace, value, normalized_value, source,
+             rule_version, rule_key, evidence_json
       FROM card_tags
       WHERE status = 'active' AND generation_id IN (${ids.map(() => '?').join(',')})
+      ORDER BY generation_id, namespace, normalized_value
     `).all(...ids);
     for (const tag of tags) {
-      result.get(Number(tag.generation_id))?.add(`${tag.namespace}:${String(tag.normalized_value).toLowerCase()}`);
+      const generationId = Number(tag.generation_id);
+      keys.get(generationId)?.add(`${tag.namespace}:${String(tag.normalized_value).toLowerCase()}`);
+      signals.get(generationId)?.push({
+        namespace: tag.namespace,
+        value: tag.value,
+        normalizedValue: String(tag.normalized_value).toLowerCase(),
+        source: tag.source,
+        ruleVersion: tag.rule_version,
+        ruleKey: tag.rule_key,
+        evidence: parseJson(tag.evidence_json, null),
+      });
     }
-    return result;
+    return { keys, signals };
   }
 
   _scopePreview(scope) {
@@ -544,7 +619,8 @@ class LearningService {
         LEFT JOIN generations generation ON generation.id = item.generation_id
         WHERE entry.queue_id = ?
         ORDER BY entry.bucket, COALESCE(entry.available_at_utc, ''),
-                 COALESCE(entry.due_at_utc, ''), entry.study_item_id
+                 COALESCE(entry.due_at_utc, ''), COALESCE(entry.provider_score, 0) DESC,
+                 entry.study_item_id
       `).all(row.id).map((entry) => this._entryDto(entry));
     }
     return dto;
@@ -593,7 +669,7 @@ class LearningService {
       }
       const scope = normalizeScope(parseJson(plan.scope_json, DEFAULT_SCOPE));
       const rows = this._candidateRows();
-      const tags = this._tagsByGeneration(rows);
+      const tagData = this._tagDataByGeneration(rows);
       const bounds = dayBounds(day, profile.time_zone);
       const completedActions = Number(this.db.prepare(`
         SELECT COUNT(*) AS count FROM learning_review_events
@@ -601,25 +677,28 @@ class LearningService {
       `).get(day, profile.time_zone).count);
       const selection = buildQueueCandidates(
         rows,
-        tags,
+        tagData.keys,
         scope,
         bounds,
         nowUtc,
         Number(plan.daily_new_limit),
         Number(plan.daily_action_goal),
-        completedActions
+        completedActions,
+        this.planningSignalProvider,
+        tagData.signals
       );
       this.db.prepare(`
         UPDATE learning_daily_queues SET status = 'superseded', updated_at_utc = ?
         WHERE plan_id = 1 AND learning_day = ? AND status = 'ready'
       `).run(nowUtc, day);
       const snapshot = {
-        version: 1,
+        version: 2,
         scope,
         summary: selection.summary,
         dailyActionGoal: Number(plan.daily_action_goal),
         dailyNewLimit: Number(plan.daily_new_limit),
         completedActionsBeforeBuild: completedActions,
+        planning: selection.planning,
         builtAtUtc: nowUtc,
       };
       const result = this.db.prepare(`
@@ -671,7 +750,8 @@ class LearningService {
       SELECT * FROM learning_queue_entries
       WHERE queue_id = ? AND status IN ('pending', 'deferred')
         AND (available_at_utc IS NULL OR available_at_utc <= ?)
-      ORDER BY bucket, COALESCE(available_at_utc, ''), COALESCE(due_at_utc, ''), study_item_id
+      ORDER BY bucket, COALESCE(available_at_utc, ''), COALESCE(due_at_utc, ''),
+               COALESCE(provider_score, 0) DESC, study_item_id
       LIMIT 1
     `).get(queueId, nowUtc) || null;
   }
@@ -1333,12 +1413,14 @@ class LearningService {
       const shortTerm = Boolean(result.publicExplanation.shortTerm);
       this.db.prepare(`
         UPDATE learning_queue_entries SET
-          reason = ?, bucket = ?, explanation_json = ?, available_at_utc = ?, due_at_utc = ?, status = ?,
+          reason = ?, bucket = ?, provider_score = ?, explanation_json = ?,
+          available_at_utc = ?, due_at_utc = ?, status = ?,
           attempts = attempts + 1, last_event_id = ?, updated_at_utc = ?
         WHERE id = ?
       `).run(
         shortTerm ? 'difficult-reappearance' : entry.reason,
         shortTerm ? 5 : entry.bucket,
+        shortTerm ? null : entry.provider_score,
         shortTerm ? stableJson({
           code: 'difficult-reappearance',
           label: '本日再次练习',

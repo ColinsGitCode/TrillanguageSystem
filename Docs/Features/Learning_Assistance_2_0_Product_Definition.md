@@ -1,12 +1,12 @@
 # 学习辅助 2.0 产品定义（LA-D0）
 
-> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0-P3 已实施（2026-07-14）**
+> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0-P4 已实施（2026-07-14）**
 > 日期：2026-07-13
 > 上位基线：[学习辅助 2.0 设计基线](Learning_Assistance_2_0_Design_Baseline.md)
 > 数据前置：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D1 原型存档：[prototypes/la-d1-prototype.html](prototypes/la-d1-prototype.html)（12 页,浏览器直接打开）
 > 后续产物：[LA-D2 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：本文定义的桌面计划、今日队列、复习闭环和只读学习历史已由 LA-P2/P3 实现；不恢复旧 SRS，下一阶段为 LA-P4 语义 provider 接缝
+> 当前边界：本文定义的桌面计划、今日队列、复习闭环、只读学习历史和可降级语义接缝已由 LA-P2/P3/P4 实现；不恢复旧 SRS 或旧知识图谱
 
 ## 0. 文档定位与权威边界
 
@@ -182,7 +182,7 @@ v1 只允许**一个活动计划**：
 5. 困难项重现；
 6. 今日新单元。
 
-同一优先级内由可解释的稳定规则排序，不依赖知识图谱。标签和未来语义 provider 可以提供次级分组/排序分数，但 provider 失败时必须得到相同的基础队列集合。
+同一优先级内由可解释的稳定规则排序，不依赖知识图谱。标签和未来语义 provider 可以提供次级分组/排序分数，但 provider 失败时必须得到相同的基础队列集合。LA-P4 进一步锁定：系统先选定基础集合，再应用 Provider；Provider 只能在相同 `available_at` 和 `due_at` 的 entry 之间按 score 细排，不能替换每日新单元或跨越到期顺序。
 
 v1 不随机打乱整个队列。为避免连续同类疲劳，可以在不破坏到期优先级的前提下交错 English、Japanese、Grammar 和 Scenario。
 
@@ -508,4 +508,4 @@ LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、M
 - [x] 用户确认本文推荐决策
 - [x] LA-D1 逐页可视化原型完成并确认（复审修订版,见 §15.1）
 
-LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API；LA-P2 已把本产品定义和 LA-D1 桌面原型连接到真实 API，交付 `/learn`、`/learn/plan`、`/learn/session`；LA-P3 已交付 `/learn/history`、只读指标 API、基线提示和真实评分/队列/会话聚合。当前生产数据可在用户首次创建计划和复习前合法显示空历史；下一阶段进入 LA-P4 语义 provider 接缝。
+LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API；LA-P2 已把本产品定义和 LA-D1 桌面原型连接到真实 API，交付 `/learn`、`/learn/plan`、`/learn/session`；LA-P3 已交付 `/learn/history`、只读指标 API、基线提示和真实评分/队列/会话聚合；LA-P4 已完成 Heuristic Provider、Graph reader contract、公开解释、快照诊断和无图谱降级。学习辅助 2.0 的既定 P0-P4 阶段已完成；知识图谱 2.0 仍保持后置并从 KG-D0 独立设计。

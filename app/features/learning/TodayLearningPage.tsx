@@ -20,11 +20,17 @@ function queueMetrics(queue: DailyQueue | null) {
 
 function QueueRow({ entry }: { entry: QueueEntry }) {
   const presentation = entryPresentation(entry);
+  const planningReason = entry.explanation.provider?.sources
+    ?.flatMap((source) => source.reasons)
+    .find((reason) => reason.code !== 'active-tag-context');
   return (
     <li className={`learning-queue-row tone-${presentation.tone}`}>
       <span className="learning-type-pill">{presentation.type}</span>
       <span className="learning-language">{presentation.language}</span>
-      <strong>{entry.itemSummary?.title || `学习单元 #${entry.studyItemId}`}</strong>
+      <span className="learning-queue-copy">
+        <strong>{entry.itemSummary?.title || `学习单元 #${entry.studyItemId}`}</strong>
+        {planningReason && <small>{planningReason.label}</small>}
+      </span>
       <span className={`learning-reason reason-${entry.reason}`}>{reasonLabel(entry)}</span>
     </li>
   );

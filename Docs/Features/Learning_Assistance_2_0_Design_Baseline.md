@@ -1,8 +1,8 @@
 # 学习辅助 2.0 设计基线
 
-> 状态：**当前正式产品设计基线；LA-D0-D2、LA-P0-P3 已完成**
+> 状态：**当前正式产品设计基线；LA-D0-D2、LA-P0-P4 已完成**
 > 日期：2026-07-13
-> 产品阶段：LA-P3 学习记录与反馈指标已完成；下一阶段为 LA-P4 语义接缝
+> 产品阶段：LA-P4 语义 Provider 接缝已完成；知识图谱 2.0 仍须从 KG-D0 独立立项
 > 上位架构：[全栈架构迁移方案](../Architecture/Fullstack_Migration_React_Router.md)
 > 数据整备专题：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D0 专题：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
@@ -221,6 +221,14 @@ v1 至少需要支持：
 
 Provider 只返回信号和解释，不拥有计划、队列或复习数据。任何 provider 超时、报错或没有结果时，基础调度必须继续工作。
 
+LA-P4 已将该接缝实现为同步、无副作用的 `PlanningSignalProvider` contract：
+
+- 基础策略先确定范围、六个优先级桶、到期项目和新项目上限，再对已经入选的 entry 求信号；Provider 不能增加、删除或替换基础集合；
+- 同桶排序为 `available_at -> due_at -> provider_score DESC -> study_item_id`，因此信号不会跨桶提升项目，也不会越过更早的到期时间；
+- Heuristic Provider 读取卡型、日期、文件夹、标题长度、active 标签及 Review/Schedule 实证，输出有版本的 score、group 和公开 reason；规则标签只公开 source/rule version/rule key，不泄露内部 evidence 或模型推理；
+- Graph Provider 当前只有 reader contract，没有图谱查询、图谱 schema 或产品实现；reader 缺席等价于 empty signal；
+- Provider 禁止执行网络或持久化 I/O；异常、Promise 返回、空结果或超过单项预算的结果均被隔离，队列退回基础顺序。Daily Queue 快照记录 provider 版本和 applied/empty/failed/timedOut 计数用于审计。
+
 Cards Factory 的[卡片分类与标签系统](Card_Classification_and_Tagging.md)是 v1 Heuristic Provider 的可选信号源。学习辅助只读取 active 标签及其规则证据；标签为空、只有 unknown 或标签服务失败时，仍使用卡型、日期和复习实证完成计划。标签表属于卡片组织域，不得反向引用学习计划、复习状态或事件。
 
 ## 9. 数据设计约束
@@ -303,7 +311,7 @@ LA-P3 不新增分析事实表。`GET /api/learning/history` 只读聚合 `learn
 | LA-P1 复习核心 | study item、review event、schedule、评分 API | 后端独立复习闭环与幂等门禁全绿（已完成） |
 | LA-P2 学习计划 | 计划范围、每日目标、新卡/复习混排 | 今日队列稳定且可解释（已完成） |
 | LA-P3 反馈与指标 | 进度、积压、历史和成功指标 | 行为数据可用于产品判断（已完成） |
-| LA-P4 语义接缝 | Heuristic Provider 与 Graph Provider contract | 无图谱降级测试通过 |
+| LA-P4 语义接缝 | Heuristic Provider 与 Graph Provider contract | 无图谱降级测试通过（已完成） |
 | KG-D0（后置） | 基于真实复习问题定义图谱 2.0 | 独立立项和 ADR 评审 |
 
 ## 13. 开发前问题状态
@@ -329,8 +337,8 @@ LA-P3 不新增分析事实表。`GET /api/learning/history` 只读聚合 `learn
 
 1. [学习辅助 2.0 用户任务与成功指标](Learning_Assistance_2_0_Product_Definition.md)（LA-D0 已确认通过）；
 2. 桌面端信息架构与逐页可视化原型（LA-D1 已确认）；
-3. [学习单元与复习调度 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)（LA-D2 Accepted；LA-P0-P3 实施记录）；
+3. [学习单元与复习调度 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)（LA-D2 Accepted；LA-P0-P4 实施记录）；
 4. 数据模型、API contract 和迁移/回滚方案；
 5. 分阶段 task list、测试计划和验收标准。
 
-LA-P0 已按 ADR 创建职责分离的新表、准入投影和 Study Items；LA-P1 已实现全新的 `/api/learning` 后端闭环；LA-P2 已将计划、今日队列、可恢复复习会话和只读完整卡片接入 React Router 桌面 UI；LA-P3 已交付 `/learn/history` 和只读指标聚合。全程没有恢复旧 SRS 表、旧端点或旧页面；下一阶段 LA-P4 只建立可降级的 Heuristic/Graph Provider 接缝，不得让图谱反向成为调度依赖。
+LA-P0 已按 ADR 创建职责分离的新表、准入投影和 Study Items；LA-P1 已实现全新的 `/api/learning` 后端闭环；LA-P2 已将计划、今日队列、可恢复复习会话和只读完整卡片接入 React Router 桌面 UI；LA-P3 已交付 `/learn/history` 和只读指标聚合；LA-P4 已交付可降级的 Heuristic/Graph Provider contract。全程没有恢复旧 SRS 表、旧端点、旧页面或旧知识图谱实现。学习辅助 2.0 的既定 P0-P4 阶段至此完成；如继续知识图谱 2.0，必须从 KG-D0 基于真实复习问题独立立项。

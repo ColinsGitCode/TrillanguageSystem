@@ -54,8 +54,10 @@ test.describe('Learning Assistance 2.0 API', () => {
       unitKey: 'preview-grammar',
     });
     dbService.db.prepare(`
-      INSERT INTO card_tags(generation_id, namespace, value, normalized_value, source, status)
-      VALUES (?, 'topic', 'work', 'work', 'user', 'active')
+      INSERT INTO card_tags(
+        generation_id, namespace, value, normalized_value, source, status,
+        rule_version, rule_key, evidence_json
+      ) VALUES (?, 'topic', 'work', 'work', 'rule', 'active', 'tags-v2', 'topic-work', '{"source":"fixture"}')
     `).run(english.generationId);
 
     const preview = await api('POST', '/api/learning/plan/preview', {
@@ -77,6 +79,15 @@ test.describe('Learning Assistance 2.0 API', () => {
     const ensured = await api('POST', '/api/learning/queues/today');
     assert.equal(ensured.body.queue.entries[0].itemSummary.title, 'preview English');
     assert.equal(ensured.body.queue.entries[0].itemSummary.unitKind, 'trilingual_en');
+    assert.equal(ensured.body.queue.snapshot.version, 2);
+    assert.equal(ensured.body.queue.snapshot.planning.contractVersion, 1);
+    assert.equal(ensured.body.queue.snapshot.planning.diagnostics['heuristic-v1'].applied, 2);
+    assert.equal(ensured.body.queue.snapshot.planning.diagnostics['graph-contract'].empty, 2);
+    assert.equal(ensured.body.queue.entries[0].providerScore, 0);
+    assert.equal(ensured.body.queue.entries[0].explanation.provider.sources[0].providerId, 'heuristic-v1');
+    assert.deepEqual(ensured.body.queue.entries[0].explanation.provider.sources[0].evidence, [
+      { source: 'rule', ruleVersion: 'tags-v2', ruleKey: 'topic-work' },
+    ]);
   });
 
   test.it('runs plan, queue, resumable session, reveal and idempotent review end to end', async () => {

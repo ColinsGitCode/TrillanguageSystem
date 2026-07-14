@@ -1,9 +1,9 @@
 # 学习辅助 2.0 领域与数据 ADR（LA-D2）
 
-> ADR 状态：**Accepted / 已实施 LA-P0-P3 学习闭环与反馈指标**
+> ADR 状态：**Accepted / 已实施 LA-P0-P4 学习闭环、反馈指标与语义接缝**
 > 日期：2026-07-13
-> 最近修订：2026-07-14（LA-P3 只读学习历史与指标完成）
-> 当前阶段：LA-P3 已完成；下一阶段为 LA-P4 语义接缝
+> 最近修订：2026-07-14（LA-P4 可降级语义 Provider 接缝完成）
+> 当前阶段：LA-P0-P4 已完成；知识图谱 2.0 保持 KG-D0 后置立项
 > 上位基线：[学习辅助 2.0 设计基线](../Features/Learning_Assistance_2_0_Design_Baseline.md)
 > 产品权威：[学习辅助 2.0 产品定义](../Features/Learning_Assistance_2_0_Product_Definition.md)
 > 已确认原型：[LA-D1 桌面端原型](../Features/prototypes/la-d1-prototype.html)
@@ -354,7 +354,7 @@ Daily Queue 是 `(plan_id, learning_day, plan_revision, profile_revision)` 的�
 5. 困难项重现；
 6. 今日新单元。
 
-同桶排序固定为：`available_at` -> `due_at` -> 最近失败优先 -> `study_item_id`。Heuristic / Graph Provider 只能提供次级 score 和 explanation；provider 失败不得改变基础集合和六个优先级桶。
+最近失败已经编码在六个 priority bucket 中。同桶排序固定为：`available_at` -> `due_at` -> `provider_score DESC` -> `study_item_id`。Provider 在基础集合和新单元上限确定后才运行，只能细排相同时间优先级的已选 entry；失败、空结果或超预算时 `provider_score=NULL`，因此得到原有 `study_item_id` 基础顺序。Heuristic / Graph Provider 不得改变基础集合和六个优先级桶。
 
 同一 Study Item 在同一 Daily Queue 中只有一个 entry。Again 或短期 Hard 产生当天短期步骤时，不插入第二行；原 entry 增加 `attempts`、更新 `available_at` 并保持 pending，达到时间后重新出现。下一次 due 已落到当前学习日之外时，该 entry 才完成本日工作流。
 
@@ -707,4 +707,20 @@ LA-P3 在现有九表领域模型上交付反馈与指标，不新增 schema、m
 - 页面只验收桌面工作台，不新增移动端断点或移动端验收范围；未恢复旧 Engagement、SRS、Mission 或 Knowledge 实现。
 - 最终 acceptance 门禁为 lint、280 个 unit、52 个 integration、React typecheck/build、架构 ownership、7 个 production smoke probes 和 28 个 Playwright 用例全部通过；浏览器覆盖真实评分事实进入历史页、范围/单元筛选、前 14 日基线提示和桌面无横向溢出。
 
-下一阶段是 LA-P4：建立 Heuristic Provider 与未来 Graph Provider 的可降级 contract。无图谱、图谱无结果或 provider 失败时，基础队列与复习必须保持可用；LA-P4 不直接启动 Knowledge Graph 2.0 产品实现。
+LA-P3 的下一实施阶段为 LA-P4；其完成记录见下节。该阶段只建立可降级 contract，不直接启动 Knowledge Graph 2.0 产品实现。
+
+## 22. LA-P4 实施记录（2026-07-14）
+
+LA-P4 在现有 `provider_score`、`explanation_json` 和 Daily Queue `snapshot_json` 上完成语义接缝，不新增 schema 或 migration：
+
+- `services/learning/planning` 提供 `PlanningSignalProvider`、`CompositePlanningSignalProvider`、`HeuristicPlanningSignalProvider` 和 `GraphPlanningSignalProvider`；contract 版本为 1；
+- Provider 是同步、无副作用的纯信号端口，禁止网络和持久化 I/O。返回 Promise、抛错、无结果或超过声明预算时，Composite 隔离该结果并继续基础调度；
+- Heuristic v1 使用卡型、单元类型、日期、文件夹、标题长度、active `topic/fn/tag` 标签和 `lapses/difficulty` 实证；分数限制在 `[-100,100]`，只输出稳定公开 reason 与标签 rule reference；
+- Graph Provider 只定义 `readPlanningSignal(studyItem, context)` reader 接口；默认 reader 为 `null`，返回 empty signal，不创建图谱表、不读取旧 Knowledge 数据；
+- `buildQueueCandidates()` 先按 scope、六桶、行动目标和新单元上限选定基础集合，再求 Provider 信号；成功时只在相同基础时间键内排序，失败时集合和顺序都与 base policy 一致；
+- Daily Queue snapshot version 2 记录 contract/provider 版本及 applied/empty/failed/timedOut 计数；entry 持久化 aggregate score 和公开 sources/reasons/evidence reference。短期困难重现由 base policy 接管并清空旧 provider score；
+- 今日学习页在存在非标签类公开 reason 时显示一行简短解释；没有信号时不增加 UI 噪音；移动端继续不在验收范围内；
+- 单测覆盖 score 归一化、公开 evidence、Heuristic 信号、Graph 缺席、异常、异步越界、执行超预算、基础集合不变和同桶排序；integration 覆盖 snapshot、provider score、公开解释和 rule reference 的真实 SQLite/API round trip。
+- 最终 acceptance 门禁为 lint、287 个 unit、52 个 integration、React typecheck/build、架构 ownership、7 个 production smoke probes 和 28 个桌面 Playwright 用例全部通过。
+
+学习辅助 2.0 的既定 LA-P0-P4 实施序列至此完成。后续若启动 Knowledge Graph 2.0，先进入 KG-D0 定义真实学习者问题和成功指标；不得把 Graph Provider 的可选 reader contract 当作图谱产品已经实施。
