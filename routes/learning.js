@@ -26,8 +26,10 @@ function route(handler) {
 
 router.get('/api/learning/plan', route((_req, res) => send(res, service.getPlan())));
 router.put('/api/learning/plan', route((req, res) => send(res, service.putPlan(req.body))));
+router.post('/api/learning/plan/preview', route((req, res) => send(res, service.previewPlan(req.body))));
 router.post('/api/learning/plan/pause', route((_req, res) => send(res, service.setPlanStatus('paused'))));
 router.post('/api/learning/plan/resume', route((_req, res) => send(res, service.setPlanStatus('active'))));
+router.get('/api/learning/scope-options', route((_req, res) => send(res, service.getScopeOptions())));
 
 router.post('/api/learning/queues/today', route((_req, res) => send(res, { queue: service.ensureTodayQueue() })));
 router.get('/api/learning/queues/today', route((_req, res) => send(res, service.getTodayQueue())));

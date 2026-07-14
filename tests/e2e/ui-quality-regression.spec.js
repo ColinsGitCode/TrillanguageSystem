@@ -41,11 +41,10 @@ test.describe.serial('React UI quality regression', () => {
     await enqueueAndWait(request, 'P5 responsive modal fixture');
   });
 
-  test('Cards Factory has no horizontal overflow at supported viewports', async ({ page }) => {
+  test('Cards Factory has no horizontal overflow at supported desktop viewports', async ({ page }) => {
     for (const viewport of [
       { width: 1440, height: 1000, name: 'desktop' },
-      { width: 1024, height: 768, name: 'tablet' },
-      { width: 390, height: 844, name: 'mobile' },
+      { width: 1280, height: 720, name: 'compact-desktop' },
     ]) {
       await page.setViewportSize(viewport);
       await page.goto('/');
@@ -77,7 +76,7 @@ test.describe.serial('React UI quality regression', () => {
     expect(diagnostics).toEqual([]);
   });
 
-  test('queue and full-height card modal stay inside desktop and mobile viewports', async ({ page }) => {
+  test('queue and full-height card modal stay inside the compact desktop viewport', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
     await page.getByTestId('react-queue-status').click();
@@ -92,7 +91,7 @@ test.describe.serial('React UI quality regression', () => {
 
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'P5 responsive modal fixture' });
     await opener.click();
-    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    for (const viewport of [{ width: 1280, height: 900 }]) {
       await page.setViewportSize(viewport);
       box = await page.locator('.react-card-modal').boundingBox();
       expect(box.height).toBeGreaterThan(viewport.height - 30);

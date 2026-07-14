@@ -29,6 +29,40 @@ test.describe('Learning Assistance 2.0 P1 API', () => {
     assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_profiles').get().count, 0);
   });
 
+  test.it('previews arbitrary scopes and exposes queue-ready item summaries without writes', async () => {
+    const english = seedStudyItem(dbService.db, { phrase: 'preview English', unitKey: 'preview-en' });
+    seedStudyItem(dbService.db, {
+      phrase: 'preview grammar',
+      cardType: 'grammar_ja',
+      unitKind: 'grammar_ja',
+      unitKey: 'preview-grammar',
+    });
+    dbService.db.prepare(`
+      INSERT INTO card_tags(generation_id, namespace, value, normalized_value, source, status)
+      VALUES (?, 'topic', 'work', 'work', 'user', 'active')
+    `).run(english.generationId);
+
+    const preview = await api('POST', '/api/learning/plan/preview', {
+      body: { scope: { ...scope, languages: ['en'], cardTypes: ['trilingual'], tags: [{ namespace: 'topic', value: 'work' }] } },
+    });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.body.scopePreview.generationCount, 1);
+    assert.equal(preview.body.scopePreview.studyItemCount, 1);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_plans').get().count, 0);
+
+    const options = await api('GET', '/api/learning/scope-options');
+    assert.equal(options.status, 200);
+    assert.deepEqual(options.body.dateRange, { min: '2026-07-14', max: '2026-07-14' });
+    assert.equal(options.body.tags.find((tag) => tag.namespace === 'topic' && tag.value === 'work').generationCount, 1);
+
+    await api('PUT', '/api/learning/plan', {
+      body: { expectedRevision: 0, scope, dailyActionGoal: 5, dailyNewLimit: 2 },
+    });
+    const ensured = await api('POST', '/api/learning/queues/today');
+    assert.equal(ensured.body.queue.entries[0].itemSummary.title, 'preview English');
+    assert.equal(ensured.body.queue.entries[0].itemSummary.unitKind, 'trilingual_en');
+  });
+
   test.it('runs plan, queue, resumable session, reveal and idempotent review end to end', async () => {
     const first = seedStudyItem(dbService.db, { phrase: 'first item', unitKey: 'en-first' });
     seedStudyItem(dbService.db, { phrase: 'second item', unitKey: 'en-second' });

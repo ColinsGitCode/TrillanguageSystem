@@ -79,12 +79,10 @@ test.describe.serial('UI visual regression', () => {
     await installDeterministicPage(page);
   });
 
-  test('Cards Factory across desktop, tablet and mobile', async ({ page }) => {
+  test('Cards Factory desktop', async ({ page }) => {
     test.setTimeout(120_000);
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
-      { width: 1024, height: 768, name: 'tablet' },
-      { width: 390, height: 844, name: 'mobile' }
     ];
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
@@ -94,14 +92,12 @@ test.describe.serial('UI visual regression', () => {
     }
   });
 
-  test('Cards Factory dark theme across desktop, tablet and mobile', async ({ page }) => {
+  test('Cards Factory dark theme on desktop', async ({ page }) => {
     test.setTimeout(120_000);
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
     const viewports = [
       { width: 1440, height: 1000, name: 'desktop' },
-      { width: 1024, height: 768, name: 'tablet' },
-      { width: 390, height: 844, name: 'mobile' }
     ];
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
@@ -111,7 +107,7 @@ test.describe.serial('UI visual regression', () => {
     }
   });
 
-  test('card modal covers all card types and scenario mobile', async ({ page }) => {
+  test('card modal covers all card types on desktop', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -123,14 +119,9 @@ test.describe.serial('UI visual regression', () => {
       await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop.png`);
       await page.getByTestId('react-card-modal-close').click();
     }
-    await page.setViewportSize({ width: 390, height: 844 });
-    const scenario = page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).first();
-    await scenario.click();
-    await expect(page.getByTestId('react-card-modal')).toBeVisible();
-    await expectPageScreenshot(page, 'react-card-scenario_phrase-mobile.png');
   });
 
-  test('card modal dark theme covers all card types and scenario mobile', async ({ page }) => {
+  test('card modal dark theme covers all card types on desktop', async ({ page }) => {
     test.setTimeout(120_000);
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
@@ -144,10 +135,5 @@ test.describe.serial('UI visual regression', () => {
       await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop-dark.png`);
       await page.getByTestId('react-card-modal-close').click();
     }
-    await page.setViewportSize({ width: 390, height: 844 });
-    const scenario = page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).first();
-    await scenario.click();
-    await expect(page.getByTestId('react-card-modal')).toBeVisible();
-    await expectPageScreenshot(page, 'react-card-scenario_phrase-mobile-dark.png');
   });
 });

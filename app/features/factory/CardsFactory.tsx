@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BookOpen, CalendarDays, Factory, FileText, Image, Languages, Menu,
-  MessagesSquare, Moon, RefreshCw, Search, Sun, Upload, X,
+  BookOpen, CalendarDays, FileText, Image, Languages,
+  MessagesSquare, RefreshCw, Search, Upload, X,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ProductShell } from '../../components/ProductShell';
 import { ApiError } from '../../lib/api/client';
 import { CardModal } from '../card-modal/CardModal';
 import { factoryApi } from './factory-api';
@@ -52,8 +53,6 @@ function queueCounts(jobs: GenerationJob[]) {
 export function CardsFactory() {
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [mobileNav, setMobileNav] = useState(false);
   const [cardType, setCardType] = useState<CardType>('trilingual');
   const [phrase, setPhrase] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('');
@@ -67,41 +66,7 @@ export function CardsFactory() {
   const [ocrClean, setOcrClean] = useState('');
   const [notice, setNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mobileNavButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileNavRef = useRef<HTMLElement>(null);
   const lastSuccessRef = useRef(0);
-
-  useEffect(() => {
-    const stored = localStorage.getItem('three-lans-theme-v1');
-    const next = stored === 'dark' || (!stored && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-  }, []);
-
-  useEffect(() => {
-    if (!mobileNav) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    mobileNavRef.current?.querySelector<HTMLElement>('a, button')?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setMobileNav(false);
-      requestAnimationFrame(() => mobileNavButtonRef.current?.focus());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mobileNav]);
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem('three-lans-theme-v1', next);
-  };
 
   const healthQuery = useQuery({
     queryKey: ['health'], queryFn: factoryApi.health, enabled: hydrated, refetchInterval: 15_000,
@@ -228,44 +193,8 @@ export function CardsFactory() {
     || deepSeekOffline;
 
   return (
-    <div className="react-app-shell" data-testid="react-cards-factory">
-      <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
-        <div className="brand-block">
-          <span className="brand-bars"><i /><i /><i /></span>
-          <div><strong>Three LANS</strong><small>Cards Factory</small></div>
-        </div>
-        <nav aria-label="主导航">
-          <p>学习</p>
-          <a className="active" href="/" aria-current="page"><Factory aria-hidden="true" /> Cards Factory</a>
-        </nav>
-        <div className="sidebar-status">
-          <span className={healthUnhealthy ? 'offline' : ''} />
-          {healthUnhealthy ? '服务异常' : '服务正常'}
-          <button className="icon-button" type="button" aria-label="切换主题" onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-          </button>
-        </div>
-      </aside>
-
-      <main className="react-workspace">
-        <header className="mobile-topbar">
-          <button
-            ref={mobileNavButtonRef}
-            className="icon-button"
-            type="button"
-            aria-label={mobileNav ? '关闭导航' : '打开导航'}
-            aria-controls="react-sidebar"
-            aria-expanded={mobileNav}
-            onClick={() => setMobileNav(!mobileNav)}
-          >
-            {mobileNav ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
-          </button>
-          <strong>Cards Factory</strong>
-          <button className="icon-button" type="button" aria-label="切换主题" onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-          </button>
-        </header>
-
+    <ProductShell active="factory" title="Cards Factory">
+      <div data-testid="react-cards-factory">
         {healthUnhealthy && (
           <div className="react-alert" role="alert">
             <span>生成服务当前不可用，请检查 DeepSeek API 状态。</span>
@@ -421,10 +350,10 @@ export function CardsFactory() {
             {!filesQuery.isLoading && !files.length && <div className="empty-library"><CalendarDays aria-hidden="true" /><strong>这个日期还没有学习卡</strong><span>从上方创建第一张卡片。</span></div>}
           </article>
         </section>
-      </main>
 
-      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} jobs={jobs} summary={summary} />
-      {selectedCard && <CardModal selection={selectedCard} onClose={() => setSelectedCard(null)} />}
-    </div>
+        <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} jobs={jobs} summary={summary} />
+        {selectedCard && <CardModal selection={selectedCard} onClose={() => setSelectedCard(null)} />}
+      </div>
+    </ProductShell>
   );
 }

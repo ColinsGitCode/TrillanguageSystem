@@ -174,8 +174,8 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     expect(await page.evaluate(() => Boolean(window.__pwned || window.__imgPwned))).toBeFalsy();
   });
 
-  test('P3/P4 stay inside all supported viewports and modal remains full-height', async ({ page }) => {
-    for (const viewport of [{ width: 1440, height: 1100 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
+  test('P3/P4 stay inside supported desktop viewports and modal remains full-height', async ({ page }) => {
+    for (const viewport of [{ width: 1440, height: 1100 }, { width: 1280, height: 720 }]) {
       await page.setViewportSize(viewport);
       await page.goto('/');
       await expect(page.getByTestId('react-cards-factory')).toBeVisible();

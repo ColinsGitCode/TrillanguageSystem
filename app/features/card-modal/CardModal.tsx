@@ -14,10 +14,11 @@ import { IntelPanel } from './IntelPanel';
 
 type Props = {
   selection: CardSelection;
+  readOnly?: boolean;
   onClose: () => void;
 };
 
-export function CardModal({ selection, onClose }: Props) {
+export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const queryClient = useQueryClient();
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -156,9 +157,11 @@ export function CardModal({ selection, onClose }: Props) {
     }}>
       <section className="react-card-modal" role="dialog" aria-modal="true" aria-labelledby="react-card-title">
         <header className="react-card-head">
-          <button className="icon-button danger" type="button" aria-label="删除卡片" onClick={() => setConfirmDelete(true)}>
-            <Trash2 aria-hidden="true" />
-          </button>
+          {readOnly ? <span className="card-modal-readonly">READ ONLY</span> : (
+            <button className="icon-button danger" type="button" aria-label="删除卡片" onClick={() => setConfirmDelete(true)}>
+              <Trash2 aria-hidden="true" />
+            </button>
+          )}
           <div>
             <h1 id="react-card-title">{displayTitle}</h1>
             <p>{selection.cardType === 'scenario_phrase' ? 'SCENARIO' : selection.cardType === 'grammar_ja' ? 'GRAMMAR' : 'TRILINGUAL'} · MARKDOWN</p>
@@ -171,7 +174,7 @@ export function CardModal({ selection, onClose }: Props) {
         <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>CONTENT</button>
           <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>INTEL</button>
-          {tab === 'content' && (
+          {tab === 'content' && !readOnly && (
             <button
               className="highlight-selection-button"
               type="button"
@@ -210,7 +213,7 @@ export function CardModal({ selection, onClose }: Props) {
           {tab === 'intel' && <IntelPanel record={cardQuery.data?.record || null} />}
         </div>
 
-        {confirmDelete && (
+        {confirmDelete && !readOnly && (
           <div className="delete-confirm" role="alertdialog" aria-label="确认删除卡片">
             <strong>删除此学习卡片？</strong>
             <p>卡片、音频和关联记录都会被删除。</p>

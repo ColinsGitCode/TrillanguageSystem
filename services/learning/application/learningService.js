@@ -324,7 +324,54 @@ class LearningService {
     const matching = rows.filter((row) => itemMatchesScope(row, scope, tags.get(Number(row.generation_id)) || new Set()));
     const byKind = {};
     for (const row of matching) byKind[row.unit_kind] = (byKind[row.unit_kind] || 0) + 1;
-    return { studyItemCount: matching.length, byKind };
+    return {
+      generationCount: new Set(matching.map((row) => Number(row.generation_id))).size,
+      studyItemCount: matching.length,
+      byKind,
+    };
+  }
+
+  _admissionSummary() {
+    const rows = this.db.prepare(`
+      SELECT status, COUNT(*) AS count
+      FROM learning_source_admissions
+      GROUP BY status
+    `).all();
+    return Object.fromEntries(rows.map((row) => [row.status, Number(row.count)]));
+  }
+
+  previewPlan(input = {}) {
+    const scope = normalizeScope(input.scope || DEFAULT_SCOPE);
+    return {
+      scope,
+      scopePreview: this._scopePreview(scope),
+      admissionSummary: this._admissionSummary(),
+    };
+  }
+
+  getScopeOptions() {
+    const rows = this._candidateRows();
+    const generationIds = [...new Set(rows.map((row) => Number(row.generation_id)))];
+    const tags = generationIds.length ? this.db.prepare(`
+      SELECT namespace, normalized_value AS value, COUNT(DISTINCT generation_id) AS generation_count
+      FROM card_tags
+      WHERE status = 'active' AND generation_id IN (${generationIds.map(() => '?').join(',')})
+      GROUP BY namespace, normalized_value
+      ORDER BY namespace, generation_count DESC, normalized_value
+    `).all(...generationIds) : [];
+    const dates = rows.length ? this.db.prepare(`
+      SELECT MIN(generation_date) AS min_date, MAX(generation_date) AS max_date
+      FROM generations
+      WHERE id IN (${generationIds.map(() => '?').join(',')})
+    `).get(...generationIds) : { min_date: null, max_date: null };
+    return {
+      dateRange: { min: dates?.min_date || null, max: dates?.max_date || null },
+      tags: tags.map((row) => ({
+        namespace: row.namespace,
+        value: row.value,
+        generationCount: Number(row.generation_count),
+      })),
+    };
   }
 
   getPlan() {
@@ -335,6 +382,7 @@ class LearningService {
       plan: this._planDto(plan),
       profile: this._profileDto(profile),
       scopePreview: this._scopePreview(scope),
+      admissionSummary: this._admissionSummary(),
       defaults: { dailyActionGoal: DEFAULT_ACTION_GOAL, dailyNewLimit: DEFAULT_NEW_LIMIT, scope: normalizeScope(DEFAULT_SCOPE) },
     };
   }
@@ -443,10 +491,17 @@ class LearningService {
     };
     if (includeEntries) {
       dto.entries = this.db.prepare(`
-        SELECT id, study_item_id, reason, bucket, provider_score, explanation_json,
-               available_at_utc, due_at_utc, status, attempts, last_event_id
-        FROM learning_queue_entries WHERE queue_id = ?
-        ORDER BY bucket, COALESCE(available_at_utc, ''), COALESCE(due_at_utc, ''), study_item_id
+        SELECT entry.id, entry.study_item_id, entry.reason, entry.bucket,
+               entry.provider_score, entry.explanation_json, entry.available_at_utc,
+               entry.due_at_utc, entry.status, entry.attempts, entry.last_event_id,
+               item.unit_kind, item.unit_key, generation.phrase AS source_title,
+               generation.card_type
+        FROM learning_queue_entries entry
+        JOIN study_items item ON item.id = entry.study_item_id
+        LEFT JOIN generations generation ON generation.id = item.generation_id
+        WHERE entry.queue_id = ?
+        ORDER BY entry.bucket, COALESCE(entry.available_at_utc, ''),
+                 COALESCE(entry.due_at_utc, ''), entry.study_item_id
       `).all(row.id).map((entry) => this._entryDto(entry));
     }
     return dto;
@@ -466,6 +521,12 @@ class LearningService {
       status: row.status,
       attempts: Number(row.attempts),
       lastEventId: row.last_event_id ? Number(row.last_event_id) : null,
+      itemSummary: row.unit_kind ? {
+        unitKind: row.unit_kind,
+        unitKey: row.unit_key,
+        title: row.source_title,
+        cardType: row.card_type,
+      } : null,
     };
   }
 
@@ -596,6 +657,22 @@ class LearningService {
       lastActivityAtUtc: row.last_activity_at_utc,
       endedAtUtc: row.ended_at_utc,
       queueProgress: this._queueProgress(Number(row.queue_id)),
+      reviewSummary: this._sessionReviewSummary(Number(row.id)),
+    };
+  }
+
+  _sessionReviewSummary(sessionId) {
+    const rows = this.db.prepare(`
+      SELECT rating, COUNT(*) AS count
+      FROM learning_review_events
+      WHERE session_id = ?
+      GROUP BY rating
+    `).all(sessionId);
+    const byRating = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    for (const row of rows) byRating[Number(row.rating)] = Number(row.count);
+    return {
+      total: Object.values(byRating).reduce((sum, count) => sum + count, 0),
+      byRating,
     };
   }
 

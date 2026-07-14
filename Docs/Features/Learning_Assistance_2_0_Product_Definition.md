@@ -1,12 +1,12 @@
 # 学习辅助 2.0 产品定义（LA-D0）
 
-> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0 基础契约完成（2026-07-14），尚未进入学习 API/UI 实施**
+> 状态：**LA-D0、LA-D1、LA-D2 已确认；LA-P0-P2 已实施（2026-07-14）**
 > 日期：2026-07-13
 > 上位基线：[学习辅助 2.0 设计基线](Learning_Assistance_2_0_Design_Baseline.md)
 > 数据前置：[学习辅助 2.0 数据整备实施计划](Learning_Assistance_2_0_Data_Preparation_Plan.md)
 > LA-D1 原型存档：[prototypes/la-d1-prototype.html](prototypes/la-d1-prototype.html)（12 页,浏览器直接打开）
 > 后续产物：[LA-D2 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：本文仍只定义产品承诺；LA-P0 已按 ADR 创建新学习域基础表和投影，不恢复旧 SRS，不提供学习 API/UI
+> 当前边界：本文定义的桌面计划、今日队列和复习闭环已由 LA-P2 实现；不恢复旧 SRS，学习历史与反馈指标留给 LA-P3
 
 ## 0. 文档定位与权威边界
 
@@ -457,7 +457,7 @@ LA-D1 必须逐页提供以下桌面端可视化，不得只画理想态：
 11. 提前结束与恢复会话；
 12. 卡片更新、归档、TTS 不可用和空范围状态。
 
-LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、Markdown renderer 输出结构、ruby、音频与标红的视觉和交互契约；它不连接真实 schema，也不得用假 API 或虚构筛选计数掩盖未决领域问题。真实 React Router + Markdown renderer + 音频/标红数据链路的集成验证属于 LA-P1 实施门禁，不能由静态镜像替代。
+LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、Markdown renderer 输出结构、ruby、音频与标红的视觉和交互契约；它不连接真实 schema，也不得用假 API 或虚构筛选计数掩盖未决领域问题。真实 React Router + Markdown renderer + 音频/标红数据链路已在 LA-P2 浏览器门禁中完成验证，不能由静态镜像替代。
 
 ### 15.1 LA-D1 原型记录（2026-07-13，复审修订版已确认）
 
@@ -467,7 +467,7 @@ LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、M
 - 「评分提交中」（全部禁用防双击）、「提交失败」（评分锁定，仅重试/更改评分）、「主动提前结束」（确认 + 摘要）三个状态独立成帧；
 - 「仅有未决数据」从空范围态拆出，独立成态并带处理动作；
 - 场景单元在队列中改为 `EN+JA` 双语标识（不得标单语言，粒度契约 §5.1）；
-- 三语答案面补目标语言解释行，展示标红只读示例；内容结构为 Markdown renderer 输出的静态镜像，**renderer 实链路验证归 LA-P1 实施门禁**（原型不连接真实渲染管线，此为显式递延而非覆盖）；
+- 三语答案面补目标语言解释行，展示标红只读示例；内容结构为 Markdown renderer 输出的静态镜像，**renderer 实链路已由 LA-P2 浏览器门禁验证**（原型本身仍不连接真实渲染管线）；
 - 场景单元固定为 `EN+JA`：只有两个语言方向同时启用时才进入范围，缺任一语言时排除并解释，不允许临时拆成单语言项目；
 - 暂停文案收敛为「不进入自动队列」，到期日处理规则显式归 LA-D2（不在 D1 预定调度语义）；
 - 计划设置可交互：语言/卡型点选、数值钳制（目标 5-100 / 新卡 0-50）、规模预览实时联动、新卡 0 = 只清到期；日期/标签改为可叠加筛选器入口且不伪造计数；范围变更影响确认、暂停确认对话框补齐；
@@ -495,4 +495,4 @@ LA-D1 的自包含静态原型负责镜像当前桌面侧栏、design tokens、M
 - [x] 用户确认本文推荐决策
 - [x] LA-D1 逐页可视化原型完成并确认（复审修订版,见 §15.1）
 
-LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API。当前生产数据尚未创建用户计划或 Review Event，学习 UI 也尚未上线；下一阶段进入 LA-P2，将本产品定义和 LA-D1 桌面原型连接到真实 API。
+LA-D0、LA-D1、LA-D2 已确认；LA-P0 已完成迁移、准入、Study Item、Scheduler/Time POC；LA-P1 已完成 profile/plan、Daily Queue、可恢复 session、揭示/跳过/结束、幂等评分事务和 Study Item view-model API；LA-P2 已把本产品定义和 LA-D1 桌面原型连接到真实 API，交付 `/learn`、`/learn/plan`、`/learn/session`，并完成 Markdown、ruby、音频降级、评分单一所有权和幂等重试的浏览器验收。当前生产数据可在用户首次创建计划前合法保持学习工作流表为空；下一阶段进入 LA-P3 反馈与指标。

@@ -12,6 +12,7 @@ import { createAppQueryClient } from './lib/query-client';
 import './styles/tokens.css';
 import './styles/factory.css';
 import './styles/card-modal.css';
+import './styles/learning.css';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'icon', type: 'image/svg+xml', href: '/favicon-lan.svg' },

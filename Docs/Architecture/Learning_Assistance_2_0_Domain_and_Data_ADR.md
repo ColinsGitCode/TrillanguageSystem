@@ -1,9 +1,9 @@
 # 学习辅助 2.0 领域与数据 ADR（LA-D2）
 
-> ADR 状态：**Accepted / 已实施 LA-P0 + LA-P1 后端闭环**
+> ADR 状态：**Accepted / 已实施 LA-P0-P2 学习闭环**
 > 日期：2026-07-13
-> 最近修订：2026-07-14（LA-P1 profile/plan、队列、会话与幂等评分 API 完成）
-> 当前阶段：LA-P1 后端闭环已完成；学习 UI 尚未实施
+> 最近修订：2026-07-14（LA-P2 桌面计划、今日队列与复习会话 UI 完成）
+> 当前阶段：LA-P2 学习闭环已完成；下一阶段为 LA-P3 反馈与指标
 > 上位基线：[学习辅助 2.0 设计基线](../Features/Learning_Assistance_2_0_Design_Baseline.md)
 > 产品权威：[学习辅助 2.0 产品定义](../Features/Learning_Assistance_2_0_Product_Definition.md)
 > 已确认原型：[LA-D1 桌面端原型](../Features/prototypes/la-d1-prototype.html)
@@ -677,6 +677,19 @@ LA-P1 已在 LA-P0 九表结构上完成，不需要新增 schema 或 `002` migr
 - Cards Factory 删除仍先归档 Study Items，再删除 generation；在线物化后的删除集成回归已覆盖。
 - 最终门禁：lint、280 个 unit、50 个 integration、React typecheck/build、架构 ownership、7 个 smoke probes 和 26 个 Playwright 用例全部通过；`three_lans_system` viewer 已重建，DeepSeek、Kokoro、VOICEVOX、OCR 和 Storage 均为 online；真实 volume 的 637/637/1090 数据量保持不变，读 plan/queue/item 前后六张工作流表仍为 0。
 
-LA-P1 的自动化门禁包括：范围/队列纯函数、Markdown locator、在线物化、事务回滚、plan/profile revision、active session 锁、揭示门禁、schedule 冲突、幂等重试、skip/end 恢复和 API-only Express contract。学习页面、React Query hooks、评分组件和视觉验收属于 LA-P2，不得把本节描述成用户可见学习功能已上线。
+LA-P1 的自动化门禁包括：范围/队列纯函数、Markdown locator、在线物化、事务回滚、plan/profile revision、active session 锁、揭示门禁、schedule 冲突、幂等重试、skip/end 恢复和 API-only Express contract。学习页面、React Query hooks、评分组件和视觉验收由下一节的 LA-P2 交付。
 
-下一阶段是 LA-P2：在已确认的 LA-D1 桌面原型基础上连接真实 `/api/learning` contract，交付学习计划与复习 UI，并完成 Markdown renderer、ruby、音频、标红和评分所有权的浏览器验收。
+## 20. LA-P2 实施记录（2026-07-14）
+
+LA-P2 在 LA-P1 API contract 上完成桌面学习闭环，不新增 schema 或 migration：
+
+- 新增共享 `ProductShell`，将 Cards Factory 与学习区域纳入同一桌面侧栏；学习入口为 `/learn` 与 `/learn/plan`，`/learn/session` 只由开始或继续学习进入，学习记录保持 LA-P3 禁用占位；
+- 学习计划支持语言、卡型、日期范围和 active tag filters；范围预览为只读 API，实时返回 generation、Study Item、单元类型分布和理论引入天数；场景单元在语言不完整时明确排除并解释；
+- 今日学习连接真实 plan、Daily Queue 和 active session，显示完成数、到期/逾期、新单元、困难项及六级排序解释，并覆盖未建计划、暂停、空队列、全部完成和可恢复会话状态；
+- 复习会话坚持“提示面 -> 主动回忆 -> 揭示 -> 四档评分”，揭示前不暴露目标文本和目标音频；评分区在 1280x720 桌面视口固定可见，提交中锁定，失败重试复用同一 `event_key`，显式更改评分才创建新 key；
+- 答案面复用生产 Markdown renderer，保留 kanji-only ruby、音频、标红和 DOMPurify；缺失音频只降级播放能力，不阻塞评分；完整卡片以只读弹窗打开，不出现第二组评分或写入动作；
+- `lib/httpRuntime` 在 API routes 之后只把 `/`、`/learn/*` 与 React Router 内部 manifest 请求交给 React Router，使生产入口和 API-only integration harness 继续共享同一 composition root，同时让退役页面和未知 API 保持安静的 Express 404；
+- E2E-only seed route 只在 `E2E_TEST_MODE` 挂载，用于建立确定性的 eligible cards、admissions 与 Study Items，不进入生产路由；
+- 最终门禁为 lint、280 个 unit、51 个 integration、React typecheck/build、架构 ownership、7 个 smoke probes 和 27 个 Playwright 用例全部通过；浏览器覆盖真实计划创建、只读预览、队列、揭示、四档评分、首次 503 后同 key 重试、提前结束摘要、单一评分所有权、桌面无溢出和 1280x720 固定评分区。`three_lans_system` viewer 已重建，`/learn` 与 `/learn/plan` 在真实 3010 端口无控制台错误；DeepSeek、Kokoro、VOICEVOX、OCR 和 Storage 均为 online，生产 plan 仍为 `null`。
+
+下一阶段是 LA-P3：基于真实 Review Event 和 session 数据交付学习记录、进度、积压、历史与成功指标；不得在 LA-P3 恢复旧 Engagement、SRS 或 Mission 实现。

@@ -30,6 +30,9 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .react-sidebar nav p { margin: 0 8px 8px; color: var(--color-text-tertiary); font-size: 11px; }
 .react-sidebar nav a { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 10px; border-radius: var(--radius-md); color: var(--color-text-secondary); text-decoration: none; font-weight: 650; }
 .react-sidebar nav a.active { color: var(--color-primary); background: var(--color-primary-subtle); }
+.react-sidebar nav .sidebar-production-label { margin-top: 20px; }
+.sidebar-nav-soon { min-height: 42px; display: flex; align-items: center; gap: 12px; padding: 0 10px; color: var(--color-text-disabled); font-weight: 650; cursor: not-allowed; }
+.sidebar-nav-soon em { margin-left: auto; padding: 2px 5px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: 700 9px/1 var(--font-mono); font-style: normal; }
 .sidebar-status { margin-top: auto; display: flex; align-items: center; gap: 8px; color: var(--color-text-tertiary); font-size: 12px; }
 .sidebar-status > span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); }
 .sidebar-status > span.offline { background: var(--color-danger); }

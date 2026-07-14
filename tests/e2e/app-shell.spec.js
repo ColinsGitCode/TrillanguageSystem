@@ -61,25 +61,6 @@ test.describe('React root shell', () => {
     expect(Number.parseFloat(result.transition || '0')).toBeLessThanOrEqual(0.00001);
   });
 
-  test('mobile navigation closes with Escape and restores focus', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/');
-    const toggle = page.getByRole('button', { name: '打开导航' });
-    await toggle.click();
-    await expect(page.locator('#react-sidebar')).toHaveClass(/open/);
-    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#react-sidebar')).not.toHaveClass(/open/);
-    await expect(toggle).toBeFocused();
-  });
-
-  test('tablet shell keeps a stable compact rail', async ({ page }) => {
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await page.goto('/');
-    await expect(page.locator('#react-sidebar')).toHaveCSS('width', '72px');
-    await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('aria-current', 'page');
-  });
-
   test('health endpoint has one React owner', async ({ page }) => {
     let count = 0;
     await page.route('**/api/health', async (route) => {
