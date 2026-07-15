@@ -52,10 +52,10 @@ function LearningAnswer({ item }: { item: StudyItem }) {
 
   useEffect(() => () => audioRef.current?.pause(), []);
 
-  const playSource = (source: string, button?: HTMLElement) => {
+  const playSource = (source: string, button?: HTMLElement, playbackUrl?: string) => {
     audioRef.current?.pause();
     containerRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
-    const audio = new Audio(`/api/folders/${encodeURIComponent(item.source.folder)}/files/${encodeURIComponent(source)}`);
+    const audio = new Audio(playbackUrl || `/api/folders/${encodeURIComponent(item.source.folder)}/files/${encodeURIComponent(source)}`);
     audioRef.current = audio;
     button?.classList.add('is-playing');
     audio.addEventListener('ended', () => button?.classList.remove('is-playing'), { once: true });
@@ -69,7 +69,7 @@ function LearningAnswer({ item }: { item: StudyItem }) {
         const source = button?.dataset.src;
         if (source) playSource(source, button);
       }} dangerouslySetInnerHTML={{ __html: renderedHtml }} />
-      {item.audioFiles.length > 0 && <div className="learning-audio-strip"><span><Volume2 aria-hidden="true" /> 发音核对</span>{item.audioFiles.map((audio) => <button key={audio.id} type="button" disabled={audio.status !== 'success'} onClick={() => playSource(audio.filename_suffix)}><Play aria-hidden="true" /> {audio.language.toUpperCase()} {audio.filename_suffix}</button>)}</div>}
+      {item.audioFiles.length > 0 && <div className="learning-audio-strip"><span><Volume2 aria-hidden="true" /> 发音核对</span>{item.audioFiles.map((audio) => <button key={audio.id} type="button" disabled={!['success', 'generated', 'fallback_generated'].includes(audio.status)} onClick={() => playSource(audio.filename_suffix, undefined, audio.playback_url)}><Play aria-hidden="true" /> {audio.language.toUpperCase()} 发音</button>)}</div>}
       {!item.audioFiles.length && <p className="learning-audio-unavailable">当前单元没有可用音频；文字复习和评分仍可继续。</p>}
     </div>
   );

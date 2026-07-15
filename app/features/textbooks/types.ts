@@ -56,6 +56,34 @@ export type TextbookExpression = {
   lifecycle: 'active' | 'retired';
 };
 
+export type TextbookAudio = {
+  id: number;
+  generation_id: number;
+  language: 'en' | 'ja';
+  text: string;
+  filename_suffix: string;
+  tts_provider: string | null;
+  tts_model: string | null;
+  tts_voice: string | null;
+  file_size?: number | null;
+  format?: string | null;
+  status: string;
+  error_message: string | null;
+  playback_url: string;
+};
+
+export type TextbookHighlight = {
+  id: number;
+  generationId: number;
+  folderName: string;
+  baseFilename: string;
+  sourceHash: string;
+  version: number;
+  htmlContent: string;
+  markCount: number;
+  highlightedChars: number;
+};
+
 export type TextbookTrack = TextbookTrackSummary & {
   course_key: string;
   course_title: string;
@@ -66,6 +94,7 @@ export type TextbookTrack = TextbookTrackSummary & {
   generation_id: number | null;
   expressions: TextbookExpression[];
   assets: TextbookAsset[];
+  tts_audio: TextbookAudio[];
 };
 
 export type TextbookPublishPreview = {

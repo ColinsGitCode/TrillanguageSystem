@@ -37,6 +37,8 @@ test.describe('GenerationJobService', () => {
   test.it('executes a queued row directly and persists success metadata', async () => {
     const db = new DatabaseService(':memory:');
     const calls = [];
+    const synced = [];
+    db.syncTextbookDerivationJobStatus = (jobId) => { synced.push(jobId); return null; };
     const service = new GenerationJobService({
       dbService: db,
       executor: async (job) => {
@@ -58,6 +60,7 @@ test.describe('GenerationJobService', () => {
       await waitFor(() => !service.running);
 
       assert.deepEqual(calls, [job.id]);
+      assert.deepEqual(synced, [job.id]);
       assert.equal(completed.resultGenerationId, null);
       assert.equal(completed.resultFolder, '2026.07.13');
       assert.equal(completed.resultBaseFilename, 'handoff');
@@ -65,6 +68,28 @@ test.describe('GenerationJobService', () => {
         db.listGenerationJobEvents({ jobId: job.id, limit: 10 }).map((event) => event.eventType),
         ['created', 'picked', 'succeeded']
       );
+    } finally {
+      await service.shutdown({ timeoutMs: 100 });
+      db.close();
+    }
+  });
+
+  test.it('syncs a linked textbook derivation after a terminal failure', async () => {
+    const db = new DatabaseService(':memory:');
+    const synced = [];
+    db.syncTextbookDerivationJobStatus = (jobId) => { synced.push(jobId); return null; };
+    const service = new GenerationJobService({
+      dbService: db,
+      executor: async () => { throw new Error('terminal failure'); },
+    });
+    try {
+      const job = service.enqueue(jobPayload('failed textbook selection', { maxRetries: 0 }));
+      const failed = await waitFor(() => {
+        const current = db.getGenerationJobById(job.id);
+        return current.status === 'failed' ? current : null;
+      });
+      assert.equal(failed.errorMessage, 'terminal failure');
+      assert.deepEqual(synced, [job.id]);
     } finally {
       await service.shutdown({ timeoutMs: 100 });
       db.close();

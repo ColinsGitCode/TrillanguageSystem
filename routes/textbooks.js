@@ -5,10 +5,17 @@ const dbService = require('../services/storage/databaseService');
 const generationJobService = require('../services/generation/generationJobService');
 const { TextbookImportService } = require('../services/textbooks/textbookImportService');
 const { TextbookError } = require('../services/textbooks/textbookErrors');
-const { streamOfficialAudio } = require('../services/textbooks/textbookMediaService');
+const { streamGeneratedAudio, streamOfficialAudio } = require('../services/textbooks/textbookMediaService');
+const { TextbookTtsService } = require('../services/textbooks/textbookTtsService');
+const {
+  deleteTrackHighlight,
+  getTrackHighlight,
+  saveTrackHighlight,
+} = require('../services/textbooks/textbookHighlightService');
 const {
   TEXTBOOK_FEATURE_ENABLED,
   TEXTBOOK_SOURCE_ROOT,
+  TEXTBOOK_WORK_PATH,
   DEFAULT_DEEPSEEK_MODEL,
 } = require('../lib/serverConfig');
 
@@ -17,6 +24,14 @@ const importService = new TextbookImportService({
   dbService,
   sourceRoot: TEXTBOOK_SOURCE_ROOT,
 });
+const textbookTtsService = new TextbookTtsService({ dbService, workPath: TEXTBOOK_WORK_PATH });
+
+function textbookDerivationFolder(expression) {
+  const courseKey = String(expression?.course_key || 'course')
+    .replace(/[^a-z0-9._-]+/giu, '-')
+    .replace(/^-+|-+$/gu, '') || 'course';
+  return `Textbook-${courseKey}-Track-${String(expression?.track_number || 0).padStart(2, '0')}`;
+}
 
 function send(res, payload) {
   return res.json({ success: true, ...payload });
@@ -116,6 +131,36 @@ router.post('/api/textbooks/tracks/:id/publish', route((req, res) => {
   return send(res, result);
 }));
 
+router.post('/api/textbooks/tracks/:id/tts', asyncRoute(async (req, res) => {
+  return send(res, await textbookTtsService.generateTrack(req.params.id, {
+    force: Boolean(req.body?.force),
+  }));
+}));
+
+router.get('/api/textbooks/tracks/:id/highlights', route((req, res) => {
+  const { highlight } = getTrackHighlight({ dbService, trackId: req.params.id });
+  return send(res, { highlight });
+}));
+
+router.put('/api/textbooks/tracks/:id/highlights', route((req, res) => {
+  const highlight = saveTrackHighlight({
+    dbService,
+    trackId: req.params.id,
+    html: req.body?.html,
+    updatedBy: req.body?.updatedBy || 'textbook-ui',
+  });
+  return send(res, { highlight });
+}));
+
+router.delete('/api/textbooks/tracks/:id/highlights/:highlightId', route((req, res) => {
+  const deleted = deleteTrackHighlight({
+    dbService,
+    trackId: req.params.id,
+    highlightId: req.params.highlightId,
+  });
+  return send(res, { deleted });
+}));
+
 router.post('/api/textbooks/expressions/:id/derivations/preview', route((req, res) => {
   const preview = dbService.previewTextbookDerivation(req.params.id, req.body || {});
   return send(res, {
@@ -139,13 +184,35 @@ router.post('/api/textbooks/expressions/:id/derivations/preview', route((req, re
 router.post('/api/textbooks/expressions/:id/derivations', route((req, res) => {
   const created = dbService.createTextbookDerivation(req.params.id, req.body || {});
   const { request, expression, derivation } = created;
+  const targetFolder = textbookDerivationFolder(expression);
   if (derivation.target_job_id && ['running', 'completed'].includes(derivation.status)) {
     const existingJob = dbService.getGenerationJobById(derivation.target_job_id);
     if (existingJob) {
       return send(res, { derivation, job: existingJob, reused: true, summary: generationJobService.getSummary() });
     }
   }
-  const targetFolder = `Textbook/${expression.course_key}/Track-${String(expression.track_number).padStart(2, '0')}`;
+  if (derivation.target_job_id && derivation.status === 'pending') {
+    const existingJob = dbService.getGenerationJobById(derivation.target_job_id);
+    if (existingJob?.status === 'failed') {
+      const repairedJob = dbService.updateGenerationJob(existingJob.id, {
+        targetFolder,
+        requestPayload: {
+          ...(existingJob.requestPayload || {}),
+          target_folder: targetFolder,
+        },
+      });
+      const retried = generationJobService.retryJob(repairedJob.id);
+      if (retried) {
+        const linked = dbService.attachTextbookDerivationJob(derivation.id, retried.id);
+        return send(res, {
+          derivation: linked,
+          job: retried,
+          retried: true,
+          summary: generationJobService.getSummary(),
+        });
+      }
+    }
+  }
   const job = generationJobService.enqueue({
     jobType: request.targetCardType,
     phraseRaw: request.targetPhrase,
@@ -203,6 +270,26 @@ router.head('/api/textbooks/assets/:id/content', asyncRoute(async (req, res) => 
     req,
     res,
     assetId: req.params.id,
+  });
+}));
+
+router.get('/api/textbooks/audio/:id/content', asyncRoute(async (req, res) => {
+  return streamGeneratedAudio({
+    dbService,
+    workRoot: TEXTBOOK_WORK_PATH,
+    req,
+    res,
+    audioFileId: req.params.id,
+  });
+}));
+
+router.head('/api/textbooks/audio/:id/content', asyncRoute(async (req, res) => {
+  return streamGeneratedAudio({
+    dbService,
+    workRoot: TEXTBOOK_WORK_PATH,
+    req,
+    res,
+    audioFileId: req.params.id,
   });
 }));
 

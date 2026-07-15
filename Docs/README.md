@@ -11,12 +11,12 @@
 
 ## 当前产品边界
 
-2026-07-14 当前正式运行产品包含两部分：
+2026-07-15 当前正式运行产品包含两部分：
 
 - **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗；
 - **学习辅助 2.0**：学习计划、今日队列、可恢复复习会话、四档评分、FSRS 调度、学习记录与可降级 PlanningSignalProvider。
 
-**教材课程**已完成 TC-D0、TC-D1、TC-D2、TC-P0、TC-P1、TC-P2 与 TC-P3。当前具备 `/textbooks` 桌面校对工作台：Git 外 Manifest 校验、draft 导入、七张教材表、教材表达搜索、受控官方音频播放、浏览器单句预听、表达标红、人工 verified、显式发布到学习辅助、`textbook_en/ja` 学习单元、教材 Track 范围计划、教材复习视图和选区派生卡任务。`TEXTBOOK_FEATURE_ENABLED` 默认开启但仍可关闭；正式单句 TTS 资产和教材高亮持久化留到后续阶段。知识图谱 2.0 继续后置。
+**教材课程**已完成 TC-D0、TC-D1、TC-D2、TC-P0、TC-P1、TC-P2、TC-P3 与 TC-P3.1。当前具备 `/textbooks` 桌面校对工作台：Git 外 Manifest 校验、draft 导入、七张教材表、教材表达搜索、受控官方音频播放、正式 EN/JA 单句 TTS、持久化选区标红、人工 verified、显式发布到学习辅助、`textbook_en/ja` 学习单元、教材 Track 范围计划、教材复习视图，以及会同步完成态的选区派生卡任务。`TEXTBOOK_FEATURE_ENABLED` 默认开启但仍可关闭。知识图谱 2.0 继续后置。
 
 当前实施与设计入口：
 
@@ -31,9 +31,9 @@
 - Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md：已接受的 LA-D2 领域、事件、调度、时区和 API contract，以及 2026-07-14 LA-P0-P4 实施记录；
 - Features/Learning_Assistance_2_0_Data_Preparation_Plan.md：现有卡片备份、审计、同步、标签与音频整备实施基线（DP0-DP7）；
 - Features/Card_Classification_and_Tagging.md：卡片分类与标签专题（T0 数据回填与在线增量打标已完成；T1 API / T2 UI 待实施；兼作 LA 2.0 可选信号源）；
-- Features/Textbook_Courses_Product_Definition.md：已确认的教材课程 TC-D0 产品定义，定义专用 Skill 导入、教材内容诚信、官方音频、Track 页面、派生卡和学习辅助 2.0 接入边界，并记录 TC-P3 学习集成完成状态；
+- Features/Textbook_Courses_Product_Definition.md：已确认的教材课程 TC-D0 产品定义，定义专用 Skill 导入、教材内容诚信、官方音频、Track 页面、派生卡和学习辅助 2.0 接入边界，并记录 TC-P3.1 当前完成状态；
 - Features/prototypes/tc-d1-prototype.html：已确认的 TC-D1 桌面端 12 状态可视化原型，使用合成内容并覆盖校对、官方/TTS 音频、派生卡和学习辅助接入；
-- Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md：已接受的 TC-D2 ADR 及 TC-P0/TC-P1/TC-P2/TC-P3 实施记录，定义教材七表、修订、逐方向 hash、Manifest、API、媒体安全、Cards Factory 隔离和 LA-D2 增补；
+- Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md：已接受的 TC-D2 ADR 及 TC-P0/TC-P1/TC-P2/TC-P3/TC-P3.1 实施记录，定义教材七表、修订、逐方向 hash、Manifest、API、媒体安全、Cards Factory 隔离和 LA-D2 增补；
 - Architecture/schemas/textbook-track-manifest.v1.schema.json：不含教材原文的 Track Manifest v1 机器校验 contract；
 - ../skills/import-textbook-track/SKILL.md：TC-P0 教材 Track 导入 Skill；实际 Manifest、截图、官方音频和 dry-run summary 留在 Git 外；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；

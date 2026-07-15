@@ -3,6 +3,7 @@ import type {
   TextbookCourse,
   TextbookDerivationPreview,
   TextbookImportSummary,
+  TextbookHighlight,
   TextbookPublishPreview,
   TextbookPublishResult,
   TextbookTrack,
@@ -38,6 +39,25 @@ export const textbookApi = {
     method: 'POST',
     body: JSON.stringify(payload),
   }),
+  generateTts: (trackId: number, force = false) => requestJson<{
+    success: true;
+    track: TextbookTrack;
+    summary: { requested: number; generated: number; failed: number; skipped: number };
+  }>(`/api/textbooks/tracks/${trackId}/tts`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  }),
+  highlight: (trackId: number) => requestJson<{ success: true; highlight: TextbookHighlight | null }>(
+    `/api/textbooks/tracks/${trackId}/highlights`
+  ),
+  saveHighlight: (trackId: number, html: string) => requestJson<{ success: true; highlight: TextbookHighlight }>(
+    `/api/textbooks/tracks/${trackId}/highlights`,
+    { method: 'PUT', body: JSON.stringify({ html, updatedBy: 'textbook-ui' }) }
+  ),
+  deleteHighlight: (trackId: number, highlightId: number) => requestJson<{ success: true; deleted: number }>(
+    `/api/textbooks/tracks/${trackId}/highlights/${highlightId}`,
+    { method: 'DELETE' }
+  ),
   previewDerivation: (expressionId: number, payload: {
     selectionText: string;
     selectionLanguage?: 'en' | 'ja';

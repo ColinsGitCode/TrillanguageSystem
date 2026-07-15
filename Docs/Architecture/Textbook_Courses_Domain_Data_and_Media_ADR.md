@@ -1,11 +1,11 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成；TC-P3 学习集成已完成**
+> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成；TC-P3 学习集成已完成；TC-P3.1 教材学习闭环已完成**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
-> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P3 已创建运行时表、API、受控媒体接口、正式校对页面、显式 publish、教材 Study Item 和学习计划范围接入；正式单句 TTS 资产与教材高亮持久化仍后置
+> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P3.1 已创建运行时表、API、受控官方与 TTS 媒体接口、正式校对页面、显式 publish、教材 Study Item、学习计划范围、持久化标红与派生任务完成态同步；官方音频自动句级切分与知识图谱仍后置
 
 ## 0. 决策状态与权威边界
 
@@ -1050,3 +1050,30 @@ TC-P3 已把 verified 教材 Track 接入学习辅助 2.0，但仍保持人工�
 - lint、React typecheck、React build 均作为 TC-P3 回归门禁。
 
 未纳入 TC-P3：正式单句 TTS 资产、教材高亮持久化、generation job 成功后自动把 `textbook_card_derivations.target_generation_id` 回写为 completed。
+
+## 22. TC-P3.1 教材学习闭环实施记录（2026-07-15）
+
+TC-P3.1 完成 TC-P3 明确后置的三项运行时能力，不改变 TC-D2 的表归属、发布门禁或学习调度语义。
+
+完成范围：
+
+- generation job 在成功、最终失败、重试和取消时同步 `textbook_card_derivations`；成功态写入 `target_generation_id`，重复派生优先复用已完成关系；
+- 派生卡使用合法且稳定的单层 Cards Factory 目录 `Textbook-<course>-Track-<NN>`；旧版斜杠目录失败任务会在重试前修正 job 和 request payload；
+- 教材 Track 使用专用 highlights API 与 `card_highlights` 既有存储，服务端以当前 Track projection hash 校验版本，并验证 EN/JA/ZH 官方或派生源文本没有被标红 payload 改写；
+- 通用 `/api/highlights/by-file` 拒绝 `textbook:` 逻辑路径，教材标红不经过 Cards Factory 文件路径解析；
+- `/textbooks` 支持真实选区标红、持久化、清除和重开恢复，学习答案 view-model 合并同一 Track 的个人标红；
+- published Track 可显式生成 EN/JA 单句 TTS；英文复用 Kokoro，日文复用 VOICEVOX，中文不生成 TTS；
+- TTS 资产继续登记在 `audio_files`，教材 API 只返回受控 playback URL，不泄漏文件路径；文字变化时旧登记不会被误判为可复用资产；
+- 生成 TTS 的 Range/HEAD 媒体路由同时执行工作根、realpath 与符号链接约束；
+- 前端 Audio Coordinator 保证官方整轨与单句 TTS 互斥播放，复习页使用同一受控 TTS URL。
+
+回归门禁：
+
+- `npm run lint -- --quiet`；
+- `npm run typecheck:react`；
+- `npm run build:react`；
+- unit 294/294；
+- integration 56/56；
+- 教材集成测试覆盖 TTS 去重与文本变更重生、Range/HEAD、标红保存/版本校验/删除/学习投影，以及派生任务成功态回写。
+
+仍未纳入：官方整轨音频的句级时间轴、强制对齐、口语评分、知识图谱信号和移动端页面。

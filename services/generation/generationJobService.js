@@ -94,6 +94,7 @@ class GenerationJobService {
         maxRetries: job.maxRetries,
         manual: true
       });
+      this.syncLinkedTextbookDerivation(job.id);
       this.scheduleProcess();
     }
     return job;
@@ -110,8 +111,19 @@ class GenerationJobService {
       this.dbService.appendGenerationJobEvent(job.id, 'cancelled', {
         status: job.status
       });
+      this.syncLinkedTextbookDerivation(job.id);
     }
     return job;
+  }
+
+  syncLinkedTextbookDerivation(jobId) {
+    if (typeof this.dbService.syncTextbookDerivationJobStatus !== 'function') return null;
+    try {
+      return this.dbService.syncTextbookDerivationJobStatus(jobId);
+    } catch (err) {
+      log.warn({ err, jobId }, 'textbook derivation status sync failed');
+      return null;
+    }
   }
 
   clearQueueTimer() {
@@ -281,6 +293,7 @@ class GenerationJobService {
         maxRetries: nextJob.maxRetries,
         manual: false
       });
+      this.syncLinkedTextbookDerivation(nextJob.id);
       return;
     }
 
@@ -300,6 +313,7 @@ class GenerationJobService {
       status: transient.status,
       code: transient.code || null
     });
+    this.syncLinkedTextbookDerivation(nextJob.id);
   }
 
   async processQueue() {
@@ -357,6 +371,7 @@ class GenerationJobService {
         resultSummary
       });
       this.dbService.appendGenerationJobEvent(nextJob.id, 'succeeded', resultSummary);
+      this.syncLinkedTextbookDerivation(nextJob.id);
     } catch (err) {
       try {
         this.persistJobFailure(nextJob, err);

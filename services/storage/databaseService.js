@@ -373,6 +373,22 @@ class DatabaseService {
     return this.withBusyRetry(() => textbooksDomain.attachDerivationJob(this.db, derivationId, jobId));
   }
 
+  syncTextbookDerivationJobStatus(jobId) {
+    return this.withBusyRetry(() => textbooksDomain.syncDerivationJobStatus(this.db, jobId));
+  }
+
+  upsertTextbookAudioFiles(generationId, rows = []) {
+    return this.withBusyRetry(() => textbooksDomain.upsertTextbookAudioFiles(this.db, generationId, rows));
+  }
+
+  listTextbookAudioFiles(generationId) {
+    return textbooksDomain.listTextbookAudio(this.db, generationId);
+  }
+
+  getTextbookAudioFile(audioFileId) {
+    return textbooksDomain.getTextbookAudioFile(this.db, audioFileId);
+  }
+
   searchTextbookExpressions(query, limit) {
     return textbooksDomain.searchExpressions(this.db, query, limit);
   }

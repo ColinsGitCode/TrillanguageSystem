@@ -267,18 +267,104 @@ function getTrack(db, id) {
   const track = db.prepare(`
     SELECT t.*, c.course_key, c.title AS course_title,
       r.id AS revision_id, r.revision_number, r.status AS revision_status,
-      r.expression_count, r.manifest_hash, r.source_fingerprint, r.content_hash
+      r.expression_count, r.manifest_hash, r.source_fingerprint, r.content_hash, r.projection_hash
     FROM textbook_tracks t
     JOIN textbook_courses c ON c.id = t.course_id
     LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.current_revision_id, t.pending_revision_id)
     WHERE t.id = ?
   `).get(id);
   if (!track) return null;
+  const expressions = track.revision_id ? listExpressionsByRevision(db, track.revision_id) : [];
   return {
     ...track,
-    expressions: track.revision_id ? listExpressionsByRevision(db, track.revision_id) : [],
+    expressions,
     assets: track.revision_id ? listAssetsByRevision(db, track.revision_id) : [],
+    tts_audio: track.generation_id ? listTextbookAudio(db, track.generation_id).map((audio) => ({
+      id: audio.id,
+      generation_id: audio.generation_id,
+      language: audio.language,
+      text: audio.text,
+      filename_suffix: audio.filename_suffix,
+      tts_provider: audio.tts_provider,
+      tts_model: audio.tts_model,
+      tts_voice: audio.tts_voice,
+      file_size: audio.file_size,
+      format: audio.format,
+      status: audio.status,
+      error_message: audio.error_message,
+      generated_at: audio.generated_at,
+      playback_url: `/api/textbooks/audio/${audio.id}/content`,
+    })) : [],
   };
+}
+
+function listTextbookAudio(db, generationId) {
+  return db.prepare(`
+    SELECT id, generation_id, language, text, filename_suffix, file_path,
+      tts_provider, tts_model, tts_voice, file_size, format, status, error_message,
+      created_at, generated_at
+    FROM audio_files
+    WHERE generation_id = ?
+    ORDER BY filename_suffix
+  `).all(Number(generationId || 0));
+}
+
+function upsertTextbookAudioFiles(db, generationId, rows = []) {
+  const generation = db.prepare(`
+    SELECT id FROM generations WHERE id = ? AND card_type = 'textbook_track'
+  `).get(Number(generationId || 0));
+  if (!generation) throw textbookError('TEXTBOOK_TRACK_NOT_PUBLISHED', 409);
+  const statement = db.prepare(`
+    INSERT INTO audio_files(
+      generation_id, language, text, filename_suffix, file_path,
+      tts_provider, tts_model, tts_voice, file_size, format,
+      status, error_message, generated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(generation_id, filename_suffix) DO UPDATE SET
+      language=excluded.language,
+      text=excluded.text,
+      file_path=excluded.file_path,
+      tts_provider=excluded.tts_provider,
+      tts_model=excluded.tts_model,
+      tts_voice=excluded.tts_voice,
+      file_size=excluded.file_size,
+      format=excluded.format,
+      status=excluded.status,
+      error_message=excluded.error_message,
+      generated_at=excluded.generated_at
+  `);
+  const transaction = db.transaction(() => {
+    for (const row of rows) {
+      const generatedAt = ['generated', 'fallback_generated'].includes(row.status) ? nowIso() : null;
+      statement.run(
+        Number(generationId),
+        row.language,
+        row.text,
+        row.filenameSuffix,
+        row.filePath,
+        row.ttsProvider,
+        row.ttsModel,
+        row.ttsVoice,
+        row.fileSize,
+        row.format,
+        row.status,
+        row.errorMessage,
+        generatedAt
+      );
+    }
+  });
+  transaction();
+  return listTextbookAudio(db, generationId);
+}
+
+function getTextbookAudioFile(db, audioFileId) {
+  return db.prepare(`
+    SELECT af.*
+    FROM audio_files af
+    JOIN generations g ON g.id = af.generation_id AND g.card_type = 'textbook_track'
+    WHERE af.id = ?
+    LIMIT 1
+  `).get(Number(audioFileId || 0)) || null;
 }
 
 function buildProjectionMarkdown(track, expressions) {
@@ -651,6 +737,39 @@ function attachDerivationJob(db, derivationId, jobId) {
   return db.prepare('SELECT * FROM textbook_card_derivations WHERE id = ?').get(Number(derivationId || 0));
 }
 
+function syncDerivationJobStatus(db, jobId) {
+  const numericJobId = Number(jobId || 0);
+  if (!numericJobId) return null;
+  const row = db.prepare(`
+    SELECT d.*, j.status AS job_status, j.result_generation_id
+    FROM textbook_card_derivations d
+    JOIN generation_jobs j ON j.id = d.target_job_id
+    WHERE d.target_job_id = ?
+    LIMIT 1
+  `).get(numericJobId);
+  if (!row) return null;
+
+  let status = row.status;
+  let targetGenerationId = row.target_generation_id ? Number(row.target_generation_id) : null;
+  if (row.job_status === 'success' && row.result_generation_id) {
+    status = 'completed';
+    targetGenerationId = Number(row.result_generation_id);
+  } else if (row.job_status === 'failed' || row.job_status === 'cancelled') {
+    status = 'failed';
+    targetGenerationId = null;
+  } else if (row.job_status === 'queued' || row.job_status === 'running') {
+    status = 'running';
+    targetGenerationId = null;
+  }
+
+  db.prepare(`
+    UPDATE textbook_card_derivations
+    SET status = ?, target_generation_id = ?, updated_at_utc = ?
+    WHERE id = ?
+  `).run(status, targetGenerationId, nowIso(), row.id);
+  return db.prepare('SELECT * FROM textbook_card_derivations WHERE id = ?').get(row.id);
+}
+
 function verifyRevision(db, revisionId, { expectedTrackStatus } = {}) {
   const timestamp = nowIso();
   const txn = db.transaction(() => {
@@ -761,4 +880,8 @@ module.exports = {
   previewDerivation,
   createDerivation,
   attachDerivationJob,
+  syncDerivationJobStatus,
+  upsertTextbookAudioFiles,
+  listTextbookAudio,
+  getTextbookAudioFile,
 };

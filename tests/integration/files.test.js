@@ -29,6 +29,17 @@ test.describe('/api/folders + /api/highlights/by-file + /api/records/by-file', (
     assert.equal(res.body.highlight, null);
   });
 
+  test.it('generic highlight API rejects textbook logical paths', async () => {
+    const get = await api('GET', '/api/highlights/by-file?folder=textbook%3Adaily&base=track-01&sourceHash=h1');
+    assert.equal(get.status, 403);
+    const put = await api('PUT', '/api/highlights/by-file', {
+      body: { folder: 'textbook:daily', base: 'track-01', sourceHash: 'h1', html: '<mark class="study-highlight-red">x</mark>' },
+    });
+    assert.equal(put.status, 403);
+    const del = await api('DELETE', '/api/highlights/by-file?folder=textbook%3Adaily&base=track-01&sourceHash=h1');
+    assert.equal(del.status, 403);
+  });
+
   test.it('PUT then GET round-trip for highlights, with mark count derived from HTML', async () => {
     const put = await api('PUT', '/api/highlights/by-file', {
       body: {

@@ -1,11 +1,11 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；TC-P3 学习集成已完成；Track 01 内容由人工在页面确认**
+> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；TC-P3 学习集成已完成；TC-P3.1 教材学习闭环已完成；Track 01 内容由人工在页面确认**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：教材运行时 schema、API、`/textbooks` 校对页面、显式发布、派生卡任务和学习辅助物化已实现；正式单句 TTS 资产和教材高亮持久化尚未实现；不恢复旧 Knowledge/OCR/SRS 产品
+> 当前边界：教材运行时 schema、API、`/textbooks` 校对页面、显式发布、派生卡任务及完成态同步、持久化选区标红、正式 EN/JA 单句 TTS 和学习辅助物化均已实现；官方音频自动句级切分、口语评分与知识图谱仍不在 v1 范围；不恢复旧 Knowledge/OCR/SRS 产品
 
 ## 0. 文档定位与权威边界
 

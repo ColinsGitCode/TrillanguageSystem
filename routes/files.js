@@ -55,6 +55,9 @@ router.get('/api/highlights/by-file', (req, res) => {
         if (!folder || !base || !sourceHash) {
             return res.status(400).json({ error: 'folder, base and sourceHash are required' });
         }
+        if (folder.startsWith('textbook:')) {
+            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
+        }
         const highlight = dbService.getCardHighlightByFile(folder, base, sourceHash);
         res.json({ success: true, highlight: highlight || null });
     } catch (err) {
@@ -81,6 +84,9 @@ router.put('/api/highlights/by-file', (req, res) => {
         const htmlContent = String(html || '');
         if (!folderName || !baseFilename || !hash) {
             return res.status(400).json({ error: 'folder, base and sourceHash are required' });
+        }
+        if (folderName.startsWith('textbook:')) {
+            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
         }
         if (!htmlContent.trim()) {
             return res.status(400).json({ error: 'html is required' });
@@ -113,6 +119,9 @@ router.delete('/api/highlights/by-file', (req, res) => {
         const sourceHash = String(req.query.sourceHash || '').trim();
         if (!folder || !base) {
             return res.status(400).json({ error: 'folder and base are required' });
+        }
+        if (folder.startsWith('textbook:')) {
+            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
         }
         const deleted = dbService.deleteCardHighlightByFile(folder, base, sourceHash);
         res.json({ success: true, deleted });

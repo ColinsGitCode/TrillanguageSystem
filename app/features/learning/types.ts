@@ -171,8 +171,9 @@ export type StudyItem = {
     language: string;
     text: string;
     filename_suffix: string;
-    file_path: string;
+    file_path?: string;
     status: string;
+    playback_url?: string;
   }>;
   highlightReference: { id: number; sourceHash: string; version: number } | null;
 };

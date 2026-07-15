@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   BookOpenCheck,
   CheckCircle2,
   FileJson2,
   Headphones,
+  Highlighter,
   Languages,
   ListChecks,
   NotebookTabs,
@@ -11,19 +12,28 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
+  Volume2,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductShell } from '../../components/ProductShell';
 import { ApiError } from '../../lib/api/client';
 import { textbookApi } from './textbook-api';
-import type { TextbookAsset, TextbookCourse, TextbookExpression, TextbookTrack } from './types';
+import {
+  buildTextbookHighlightDocument,
+  escapeTextbookText,
+  expressionHighlightFragments,
+  highlightedExpressionIds,
+  sanitizeTextbookHighlightDocument,
+  updateExpressionHighlightDocument,
+} from './textbook-highlight';
+import { applyMarkerHighlight, applyTextHighlight } from '../card-modal/highlight';
+import type { TextbookAsset, TextbookAudio, TextbookCourse, TextbookExpression, TextbookTrack } from './types';
 
 type ImportDraft = {
   manifestRelativePath: string;
   expectedManifestHash: string;
 };
-
-const MARKED_EXPRESSIONS_STORAGE_KEY = 'three-lans:textbook-marked-expressions';
 
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
@@ -52,31 +62,6 @@ function audioAsset(track: TextbookTrack | null): TextbookAsset | null {
   return track?.assets.find((asset) => asset.kind === 'official_audio') || null;
 }
 
-function loadMarkedIds() {
-  if (typeof window === 'undefined') return new Set<number>();
-  try {
-    const raw = window.localStorage.getItem(MARKED_EXPRESSIONS_STORAGE_KEY);
-    const values = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(values)) return new Set<number>();
-    return new Set(values.map((value) => Number(value)).filter((value) => Number.isInteger(value)));
-  } catch {
-    return new Set<number>();
-  }
-}
-
-function saveMarkedIds(markedIds: Set<number>) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(MARKED_EXPRESSIONS_STORAGE_KEY, JSON.stringify([...markedIds].sort((a, b) => a - b)));
-}
-
-function speakPreview(text: string, lang: 'en-US' | 'ja-JP') {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang;
-  window.speechSynthesis.speak(utterance);
-}
-
 function confidenceTone(expression: TextbookExpression) {
   const confidence = parseJson<Record<string, number>>(expression.confidence_json, {});
   const min = Math.min(...Object.values(confidence).filter((value) => Number.isFinite(value)));
@@ -86,7 +71,11 @@ function confidenceTone(expression: TextbookExpression) {
   return 'high';
 }
 
-function OfficialAudio({ asset }: { asset: TextbookAsset | null }) {
+function OfficialAudio({ asset, audioRef, onPlay }: {
+  asset: TextbookAsset | null;
+  audioRef: RefObject<HTMLAudioElement | null>;
+  onPlay: () => void;
+}) {
   if (!asset) return <div className="textbook-audio unavailable"><Headphones aria-hidden="true" /><span>未绑定官方 Track 音频</span></div>;
   if (asset.availability !== 'available') {
     return <div className="textbook-audio unavailable"><Headphones aria-hidden="true" /><span>官方音频不可用：{asset.availability}</span></div>;
@@ -94,7 +83,7 @@ function OfficialAudio({ asset }: { asset: TextbookAsset | null }) {
   return (
     <div className="textbook-audio">
       <div><Headphones aria-hidden="true" /><span>Official Track</span><strong>{Math.round((asset.duration_ms || 0) / 1000)}s</strong></div>
-      <audio controls preload="none" src={`/api/textbooks/assets/${asset.id}/content`} />
+      <audio ref={audioRef} controls preload="none" onPlay={onPlay} src={`/api/textbooks/assets/${asset.id}/content`} />
     </div>
   );
 }
@@ -168,12 +157,11 @@ function TrackList({ courses, activeTrackId, onSelect }: {
   );
 }
 
-function ExpressionList({ expressions, activeId, markedIds, onSelect, onToggleMark }: {
+function ExpressionList({ expressions, activeId, markedIds, onSelect }: {
   expressions: TextbookExpression[];
   activeId: number | null;
   markedIds: Set<number>;
   onSelect: (id: number) => void;
-  onToggleMark: (id: number) => void;
 }) {
   return (
     <section className="surface textbook-expression-panel">
@@ -186,7 +174,7 @@ function ExpressionList({ expressions, activeId, markedIds, onSelect, onToggleMa
               <strong>{expression.official_en_text}</strong>
               <small>{expression.official_ja_text}</small>
             </button>
-            <button type="button" className="textbook-mark-button" onClick={() => onToggleMark(expression.id)}>{markedIds.has(expression.id) ? '已标红' : '标红'}</button>
+            {markedIds.has(expression.expression_id) && <span className="textbook-mark-indicator">含标红</span>}
           </li>
         ))}
       </ol>
@@ -198,24 +186,85 @@ function guessSelectionLanguage(text: string): 'en' | 'ja' {
   return /[\u3040-\u30ff\u3400-\u9fff]/u.test(text) ? 'ja' : 'en';
 }
 
-function ExpressionDetail({ expression, onDerive, derivationMessage, derivationBusy }: {
+function ExpressionDetail({
+  expression,
+  onDerive,
+  derivationMessage,
+  derivationBusy,
+  highlightHtml,
+  highlightBusy,
+  highlightEnabled,
+  onSaveHighlight,
+  audioFiles,
+  onPlayAudio,
+}: {
   expression: TextbookExpression | null;
   onDerive: (payload: { selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => void;
   derivationMessage: string;
   derivationBusy: boolean;
+  highlightHtml: string;
+  highlightBusy: boolean;
+  highlightEnabled: boolean;
+  onSaveHighlight: (html: string) => void;
+  audioFiles: TextbookAudio[];
+  onPlayAudio: (url: string) => void;
 }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const selectedRangeRef = useRef<Range | null>(null);
+  const selectedTextRef = useRef('');
   const [selectedText, setSelectedText] = useState('');
+  const [hasHighlightSelection, setHasHighlightSelection] = useState(false);
   const phrases = parseJson<Array<{ label: string; explanation: string; source: string }>>(expression?.phrase_analysis_json, []);
   const grammar = parseJson<Array<{ label: string; explanation: string; source: string }>>(expression?.grammar_points_json, []);
   const confidence = parseJson<Record<string, number>>(expression?.confidence_json, {});
+  const fragments = expression ? expressionHighlightFragments(highlightHtml, expression.expression_id) : null;
+  const enAudio = audioFiles.find((audio) => audio.language === 'en');
+  const jaAudio = audioFiles.find((audio) => audio.language === 'ja');
   useEffect(() => {
     setSelectedText('');
+    setHasHighlightSelection(false);
+    selectedRangeRef.current = null;
+    selectedTextRef.current = '';
   }, [expression?.id]);
   const captureSelection = () => {
     if (typeof window === 'undefined') return;
-    const selection = window.getSelection()?.toString().trim() || '';
-    setSelectedText(selection.length > 120 ? `${selection.slice(0, 120)}…` : selection);
+    const selectionState = window.getSelection();
+    const range = selectionState?.rangeCount ? selectionState.getRangeAt(0) : null;
+    const selected = selectionState?.toString().trim() || '';
+    const startElement = range?.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer as Element
+      : range?.startContainer.parentElement;
+    const endElement = range?.endContainer.nodeType === Node.ELEMENT_NODE
+      ? range.endContainer as Element
+      : range?.endContainer.parentElement;
+    const valid = Boolean(
+      range
+      && !range.collapsed
+      && selected
+      && contentRef.current?.contains(range.commonAncestorContainer)
+      && startElement?.closest('[data-textbook-language]')
+      && endElement?.closest('[data-textbook-language]')
+    );
+    selectedRangeRef.current = valid ? range!.cloneRange() : null;
+    selectedTextRef.current = valid ? selected : '';
+    setHasHighlightSelection(valid);
+    setSelectedText(valid ? (selected.length > 120 ? `${selected.slice(0, 120)}…` : selected) : '');
   };
+  const saveHighlight = () => {
+    const container = contentRef.current;
+    const range = selectedRangeRef.current;
+    if (!expression || !container || !range) return;
+    const applied = applyMarkerHighlight(container, range)
+      || applyTextHighlight(container, selectedTextRef.current);
+    if (!applied) return;
+    const nextHtml = updateExpressionHighlightDocument(highlightHtml, expression.expression_id, container);
+    window.getSelection()?.removeAllRanges();
+    selectedRangeRef.current = null;
+    selectedTextRef.current = '';
+    setHasHighlightSelection(false);
+    onSaveHighlight(nextHtml);
+  };
+  const canPlay = (audio?: TextbookAudio) => Boolean(audio && ['generated', 'fallback_generated'].includes(audio.status));
   if (!expression) {
     return <section className="surface textbook-detail-panel empty"><ListChecks aria-hidden="true" /><h2>选择一个表达</h2><p>右侧会显示来源、重点短语、语法和逐方向 hash。</p></section>;
   }
@@ -226,23 +275,33 @@ function ExpressionDetail({ expression, onDerive, derivationMessage, derivationB
         <span>{confidenceTone(expression).toUpperCase()}</span>
       </header>
       <div className="textbook-tts-boundary">
-        官方整轨使用本地音频文件；下方单句按钮是浏览器预听，不写入系统 TTS 资产。
+        官方整轨与系统单句 TTS 独立登记；播放任一来源时会自动暂停另一来源。
       </div>
-      <div className="textbook-answer-card">
-        <p className="textbook-lang-label">English official</p>
-        <h3>{expression.official_en_text}</h3>
-        <button type="button" onClick={() => speakPreview(expression.official_en_text, 'en-US')}><Play aria-hidden="true" /> 浏览器预听 EN</button>
+      <div ref={contentRef} className="textbook-expression-content" onMouseUp={captureSelection}>
+        <div className="textbook-answer-card">
+          <p className="textbook-lang-label">English official</p>
+          <h3 data-textbook-language="en" dangerouslySetInnerHTML={{ __html: fragments?.en || escapeTextbookText(expression.official_en_text) }} />
+          <button type="button" disabled={!canPlay(enAudio)} onClick={() => enAudio && onPlayAudio(enAudio.playback_url)}><Play aria-hidden="true" /> {canPlay(enAudio) ? '播放 EN' : 'EN 语音未生成'}</button>
+        </div>
+        <div className="textbook-answer-card">
+          <p className="textbook-lang-label">Japanese official</p>
+          <h3 data-textbook-language="ja" className="textbook-ja" dangerouslySetInnerHTML={{ __html: fragments?.ja || expression.ja_ruby_html }} />
+          <button type="button" disabled={!canPlay(jaAudio)} onClick={() => jaAudio && onPlayAudio(jaAudio.playback_url)}><Play aria-hidden="true" /> {canPlay(jaAudio) ? '播放 JA' : 'JA 语音未生成'}</button>
+        </div>
+        <div className="textbook-zh-cue"><Languages aria-hidden="true" /><span data-textbook-language="zh" dangerouslySetInnerHTML={{ __html: fragments?.zh || escapeTextbookText(expression.zh_cue_text) }} /></div>
       </div>
-      <div className="textbook-answer-card">
-        <p className="textbook-lang-label">Japanese official</p>
-        <h3 className="textbook-ja" dangerouslySetInnerHTML={{ __html: expression.ja_ruby_html }} />
-        <button type="button" onClick={() => speakPreview(expression.official_ja_text, 'ja-JP')}><Play aria-hidden="true" /> 浏览器预听 JA</button>
-      </div>
-      <div className="textbook-zh-cue"><Languages aria-hidden="true" /><span>{expression.zh_cue_text}</span></div>
       <section className="textbook-selection-panel">
         <p className="textbook-lang-label">Selection to card</p>
         {selectedText ? <strong>{selectedText}</strong> : <span>选中英文或日文片段后，这里会显示派生卡候选。</span>}
         <div>
+          <button
+            type="button"
+            disabled={!highlightEnabled || !hasHighlightSelection || highlightBusy}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={saveHighlight}
+          >
+            <Highlighter aria-hidden="true" /> {highlightBusy ? '保存中…' : '标红选区'}
+          </button>
           <button
             type="button"
             disabled={!selectedText || derivationBusy}
@@ -279,11 +338,14 @@ function ExpressionDetail({ expression, onDerive, derivationMessage, derivationB
 
 export function TextbookCoursesPage() {
   const queryClient = useQueryClient();
+  const officialAudioRef = useRef<HTMLAudioElement | null>(null);
+  const generatedAudioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTrackId, setActiveTrackId] = useState<number | null>(null);
   const [activeExpressionId, setActiveExpressionId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
-  const [markedIds, setMarkedIds] = useState<Set<number>>(() => loadMarkedIds());
+  const [highlightHtml, setHighlightHtml] = useState('');
   const [publishMessage, setPublishMessage] = useState('');
+  const [audioMessage, setAudioMessage] = useState('');
   const [derivationMessage, setDerivationMessage] = useState('');
   const coursesQuery = useQuery({ queryKey: ['textbooks', 'courses'], queryFn: textbookApi.courses, retry: false });
   const courseQueries = useQuery({
@@ -304,6 +366,12 @@ export function TextbookCoursesPage() {
     queryKey: ['textbooks', 'track', activeTrackId, 'publish-preview'],
     queryFn: () => textbookApi.publishPreview(Number(activeTrackId)),
     enabled: Boolean(activeTrackId && ['verified', 'published'].includes(trackQuery.data?.track.status || '')),
+  });
+  const highlightQuery = useQuery({
+    queryKey: ['textbooks', 'track', activeTrackId, 'highlight'],
+    queryFn: () => textbookApi.highlight(Number(activeTrackId)),
+    enabled: Boolean(activeTrackId && trackQuery.data?.track.status === 'published'),
+    retry: false,
   });
   const searchQuery = useQuery({
     queryKey: ['textbooks', 'search', search],
@@ -336,6 +404,30 @@ export function TextbookCoursesPage() {
     },
     onError: (error) => setPublishMessage(error instanceof Error ? error.message : 'publish failed'),
   });
+  const ttsMutation = useMutation({
+    mutationFn: () => textbookApi.generateTts(Number(activeTrackId)),
+    onSuccess: async (data) => {
+      setAudioMessage(`单句语音：生成 ${data.summary.generated}，跳过 ${data.summary.skipped}，失败 ${data.summary.failed}`);
+      await queryClient.invalidateQueries({ queryKey: ['textbooks', 'track', activeTrackId] });
+      await queryClient.invalidateQueries({ queryKey: ['learning'] });
+    },
+    onError: (error) => setAudioMessage(error instanceof Error ? error.message : 'TTS generation failed'),
+  });
+  const saveHighlightMutation = useMutation({
+    mutationFn: (html: string) => textbookApi.saveHighlight(Number(activeTrackId), html),
+    onSuccess: (data) => {
+      setHighlightHtml(sanitizeTextbookHighlightDocument(data.highlight.htmlContent));
+      queryClient.setQueryData(['textbooks', 'track', activeTrackId, 'highlight'], data);
+    },
+  });
+  const deleteHighlightMutation = useMutation({
+    mutationFn: ({ trackId, highlightId }: { trackId: number; highlightId: number }) => textbookApi.deleteHighlight(trackId, highlightId),
+    onSuccess: async () => {
+      const currentTrack = trackQuery.data?.track;
+      setHighlightHtml(currentTrack ? buildTextbookHighlightDocument(currentTrack) : '');
+      await queryClient.invalidateQueries({ queryKey: ['textbooks', 'track', activeTrackId, 'highlight'] });
+    },
+  });
   const derivationMutation = useMutation({
     mutationFn: (payload: { expressionId: number; selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => (
       textbookApi.createDerivation(payload.expressionId, {
@@ -365,6 +457,23 @@ export function TextbookCoursesPage() {
     }
   }, [activeExpressionId, trackQuery.data?.track.expressions]);
 
+  useEffect(() => {
+    const currentTrack = trackQuery.data?.track;
+    if (!currentTrack) {
+      setHighlightHtml('');
+      return;
+    }
+    const persisted = highlightQuery.data?.highlight?.htmlContent;
+    setHighlightHtml(persisted
+      ? sanitizeTextbookHighlightDocument(persisted)
+      : buildTextbookHighlightDocument(currentTrack));
+  }, [highlightQuery.data?.highlight?.htmlContent, trackQuery.data?.track]);
+
+  useEffect(() => () => {
+    officialAudioRef.current?.pause();
+    generatedAudioRef.current?.pause();
+  }, []);
+
   const featureDisabled = coursesQuery.isError && coursesQuery.error instanceof ApiError && coursesQuery.error.status === 404;
   const track = trackQuery.data?.track || null;
   const expressions = track?.expressions || [];
@@ -372,6 +481,23 @@ export function TextbookCoursesPage() {
   const lowConfidenceCount = expressions.filter((expression) => confidenceTone(expression) === 'low').length;
   const officialAudio = audioAsset(track);
   const publishPreview = publishPreviewQuery.data?.preview || null;
+  const markedIds = useMemo(() => highlightedExpressionIds(highlightHtml), [highlightHtml]);
+  const expressionAudioKey = activeExpression
+    ? String(activeExpression.expression_key).replace(/^expr:/u, '').replace(/[^a-z0-9]+/giu, '_')
+    : '';
+  const activeExpressionAudio = (track?.tts_audio || []).filter((audio) => (
+    expressionAudioKey && audio.filename_suffix.endsWith(`_expr_${expressionAudioKey}`)
+  ));
+  const playGeneratedAudio = (url: string) => {
+    officialAudioRef.current?.pause();
+    generatedAudioRef.current?.pause();
+    const audio = new Audio(url);
+    generatedAudioRef.current = audio;
+    audio.play().catch(() => setAudioMessage('单句语音播放失败，请检查 TTS 资产。'));
+  };
+  const onOfficialAudioPlay = () => {
+    generatedAudioRef.current?.pause();
+  };
 
   return (
     <ProductShell active="textbooks" title="教材课程">
@@ -383,7 +509,7 @@ export function TextbookCoursesPage() {
             <h1>教材课程</h1>
             <p>教材截图由 Codex Skill 识别；本页负责浏览、人工校对和官方整轨对照。确认前不会进入复习系统。</p>
           </div>
-          <OfficialAudio asset={officialAudio} />
+          <OfficialAudio asset={officialAudio} audioRef={officialAudioRef} onPlay={onOfficialAudioPlay} />
         </header>
 
         {featureDisabled ? (
@@ -422,6 +548,7 @@ export function TextbookCoursesPage() {
                       <p>{statusLabel(track.status)} · {expressions.length} expressions · {lowConfidenceCount} low-confidence{publishPreview ? ` · ${publishPreview.unitCount} study units` : ''}</p>
                       {publishPreview?.shortestIntroductionDays ? <small>按当前每日新单元上限，最短约 {publishPreview.shortestIntroductionDays} 学习日引入完。</small> : null}
                       {publishMessage && <small>{publishMessage}</small>}
+                      {audioMessage && <small>{audioMessage}</small>}
                     </div>
                     <div className="textbook-track-actions">
                       <button
@@ -438,6 +565,24 @@ export function TextbookCoursesPage() {
                       >
                         <BookOpenCheck aria-hidden="true" /> {track.status === 'published' ? '已发布' : publishMutation.isPending ? '发布中…' : '发布到学习计划'}
                       </button>
+                      <button
+                        type="button"
+                        disabled={track.status !== 'published' || ttsMutation.isPending}
+                        onClick={() => ttsMutation.mutate()}
+                      >
+                        <Volume2 aria-hidden="true" /> {ttsMutation.isPending ? '生成语音中…' : '生成单句语音'}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="清除本 Track 标红"
+                        disabled={!highlightQuery.data?.highlight || deleteHighlightMutation.isPending}
+                        onClick={() => highlightQuery.data?.highlight && deleteHighlightMutation.mutate({
+                          trackId: track.id,
+                          highlightId: highlightQuery.data.highlight.id,
+                        })}
+                      >
+                        <Trash2 aria-hidden="true" /> 清除标红
+                      </button>
                     </div>
                   </section>
                 ) : (
@@ -448,18 +593,18 @@ export function TextbookCoursesPage() {
                   activeId={activeExpressionId}
                   markedIds={markedIds}
                   onSelect={setActiveExpressionId}
-                  onToggleMark={(id) => setMarkedIds((current) => {
-                    const next = new Set(current);
-                    if (next.has(id)) next.delete(id); else next.add(id);
-                    saveMarkedIds(next);
-                    return next;
-                  })}
                 />
               </div>
               <ExpressionDetail
                 expression={activeExpression}
                 derivationMessage={derivationMessage}
                 derivationBusy={derivationMutation.isPending}
+                highlightHtml={highlightHtml}
+                highlightBusy={saveHighlightMutation.isPending}
+                highlightEnabled={track?.status === 'published'}
+                onSaveHighlight={(html) => saveHighlightMutation.mutate(html)}
+                audioFiles={activeExpressionAudio}
+                onPlayAudio={playGeneratedAudio}
                 onDerive={(payload) => activeExpression && derivationMutation.mutate({ expressionId: activeExpression.expression_id, ...payload })}
               />
             </section>

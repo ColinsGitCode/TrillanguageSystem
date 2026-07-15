@@ -8,8 +8,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const textbookSourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'textbook-source-'));
+const textbookWorkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'textbook-work-'));
 process.env.TEXTBOOK_FEATURE_ENABLED = '1';
 process.env.TEXTBOOK_SOURCE_ROOT = textbookSourceRoot;
+process.env.TEXTBOOK_WORK_PATH = textbookWorkRoot;
 
 const {
   api,
@@ -18,10 +20,12 @@ const {
   getBaseUrl,
   closeServer,
 } = require('./_harness');
+const { TextbookTtsService } = require('../../services/textbooks/textbookTtsService');
 
 test.after(async () => {
   await closeServer();
   fs.rmSync(textbookSourceRoot, { recursive: true, force: true });
+  fs.rmSync(textbookWorkRoot, { recursive: true, force: true });
 });
 
 function sha256(buffer) {
@@ -263,6 +267,38 @@ test('verified textbook track publishes textbook study items and creates derivat
     textbook_ja: 2,
   });
 
+  const ttsService = new TextbookTtsService({
+    dbService,
+    workPath: textbookWorkRoot,
+    generateAudioBatch: async (tasks, { outputDir, baseName }) => {
+      const results = tasks.map((task, index) => {
+        const extension = task.extension;
+        const filePath = path.join(outputDir, `${baseName}${task.filename_suffix}.${extension}`);
+        fs.writeFileSync(filePath, Buffer.from(`${task.lang}:${task.text}`));
+        return {
+          index,
+          filePath,
+          extension,
+          ttsProvider: task.lang === 'en' ? 'kokoro' : 'voicevox',
+          ttsModel: task.lang === 'en' ? 'hexgrad/Kokoro-82M' : 'voicevox',
+          ttsVoice: task.lang === 'en' ? 'af_bella' : 'speaker:2',
+          status: 'generated',
+        };
+      });
+      return { results, errors: [] };
+    },
+  });
+  const audioGenerated = await ttsService.generateTrack(trackId);
+  assert.deepEqual(audioGenerated.summary, { requested: 4, generated: 4, failed: 0, skipped: 0 });
+  assert.equal(audioGenerated.track.tts_audio.length, 4);
+  assert.equal('file_path' in audioGenerated.track.tts_audio[0], false);
+  assert.match(audioGenerated.track.tts_audio[0].playback_url, /^\/api\/textbooks\/audio\/\d+\/content$/u);
+  const audioRepeated = await ttsService.generateTrack(trackId);
+  assert.deepEqual(audioRepeated.summary, { requested: 0, generated: 0, failed: 0, skipped: 4 });
+  dbService.db.prepare('UPDATE audio_files SET text = ? WHERE id = ?').run('stale audio text', audioGenerated.track.tts_audio[0].id);
+  const audioRepaired = await ttsService.generateTrack(trackId);
+  assert.deepEqual(audioRepaired.summary, { requested: 1, generated: 1, failed: 0, skipped: 3 });
+
   const options = await api('GET', '/api/learning/scope-options');
   assert.equal(options.status, 200);
   assert.equal(options.body.textbookTracks.length, 1);
@@ -293,6 +329,35 @@ test('verified textbook track publishes textbook study items and creates derivat
   assert.equal(item.body.item.unitKind, 'textbook_ja');
   assert.deepEqual(item.body.item.prompt.targetLanguages, ['ja']);
   assert.match(item.body.item.answer.markdown, /日本語/);
+  assert.equal(item.body.item.audioFiles.length, 1);
+  assert.match(item.body.item.audioFiles[0].playback_url, /^\/api\/textbooks\/audio\/\d+\/content$/u);
+
+  const audioId = audioGenerated.track.tts_audio[0].id;
+  const audioHead = await api('HEAD', `/api/textbooks/audio/${audioId}/content`);
+  assert.equal(audioHead.status, 200);
+  assert.equal(audioHead.headers['accept-ranges'], 'bytes');
+
+  const highlightHtml = `<div data-textbook-track-id="${trackId}" data-textbook-highlight-version="1">${published.body.track.expressions.map((current, index) => (
+    `<section data-textbook-expression-id="${current.expression_id}">`
+      + `<div data-textbook-language="en">${index === 0 ? '<mark class="study-highlight-red">Get</mark> up.' : current.official_en_text}</div>`
+      + `<div data-textbook-language="ja">${current.official_ja_text}</div>`
+      + `<div data-textbook-language="zh">${current.zh_cue_text}</div>`
+      + '</section>'
+  )).join('')}</div>`;
+  const savedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
+    body: { html: highlightHtml },
+  });
+  assert.equal(savedHighlight.status, 200);
+  assert.equal(savedHighlight.body.highlight.markCount, 1);
+  const fetchedHighlight = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
+  assert.equal(fetchedHighlight.body.highlight.id, savedHighlight.body.highlight.id);
+  const highlightedItem = await api('GET', `/api/learning/items/${itemId}`);
+  assert.equal(highlightedItem.body.item.highlightReference.id, savedHighlight.body.highlight.id);
+  assert.match(highlightedItem.body.item.answer.markdown, /study-highlight-red/u);
+  const rejectedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
+    body: { html: highlightHtml.replace('Get</mark> up.', 'Get</mark> down.') },
+  });
+  assert.equal(rejectedHighlight.status, 409);
 
   const expressionId = dbService.db.prepare(`
     SELECT expression_id FROM textbook_expression_revisions ORDER BY display_ordinal LIMIT 1
@@ -306,7 +371,26 @@ test('verified textbook track publishes textbook study items and creates derivat
   });
   assert.equal(derivation.status, 200);
   assert.equal(derivation.body.job.jobType, 'trilingual');
+  assert.equal(derivation.body.job.targetFolder, 'Textbook-daily-english-Track-01');
+  assert.equal(derivation.body.job.requestPayload.target_folder, 'Textbook-daily-english-Track-01');
   assert.equal(derivation.body.derivation.target_job_id, derivation.body.job.id);
+  const targetGenerationId = Number(dbService.db.prepare(`
+    INSERT INTO generations(
+      phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
+      folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
+      markdown_content, content_hash, generation_date, request_id
+    ) VALUES (?, 'en', 'trilingual', 'textbook_selection', 'deepseek', 'deepseek-v4-pro',
+      '20260715', 'get-up', '/tmp/get-up.md', '/tmp/get-up.html', '/tmp/get-up.meta.json',
+      '# Get up', ?, '2026-07-15', ?)
+  `).run('Get up', 'a'.repeat(64), `derived-${Date.now()}`).lastInsertRowid);
+  dbService.updateGenerationJob(derivation.body.job.id, {
+    status: 'success',
+    resultGenerationId: targetGenerationId,
+    finishedAt: new Date().toISOString(),
+  });
+  const completedDerivation = dbService.syncTextbookDerivationJobStatus(derivation.body.job.id);
+  assert.equal(completedDerivation.status, 'completed');
+  assert.equal(completedDerivation.target_generation_id, targetGenerationId);
   const repeatedDerivation = await api('POST', `/api/textbooks/expressions/${expressionId}/derivations`, {
     body: {
       selectionText: 'Get up',
@@ -321,6 +405,10 @@ test('verified textbook track publishes textbook study items and creates derivat
     dbService.db.prepare('SELECT COUNT(*) AS count FROM textbook_card_derivations').get().count,
     1
   );
+
+  const deletedHighlight = await api('DELETE', `/api/textbooks/tracks/${trackId}/highlights/${savedHighlight.body.highlight.id}`);
+  assert.equal(deletedHighlight.status, 200);
+  assert.equal(deletedHighlight.body.deleted, 1);
 });
 
 test('official audio endpoint supports HEAD, range, etag, and hash drift protection', async () => {

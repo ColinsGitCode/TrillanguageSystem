@@ -9,6 +9,7 @@ const { learningError } = require('../domain/learningErrors');
 const { DEFAULT_SCOPE, itemMatchesScope, normalizeScope } = require('../domain/planScope');
 const { createDefaultPlanningSignalProvider } = require('../planning/defaultPlanningSignalProvider');
 const { CONTRACT_VERSION, mergePlanningDiagnostics } = require('../planning/planningSignalProvider');
+const { expressionFragmentsFromHighlight } = require('../../textbooks/textbookHighlightService');
 const {
   extractStudyUnitMarkdown,
   labeledValue,
@@ -1501,7 +1502,7 @@ class LearningService {
     const locator = parseJson(row.unit_locator_json, {});
     if (row.unit_kind === 'textbook_en' || row.unit_kind === 'textbook_ja') {
       const expression = this.db.prepare(`
-        SELECT er.*, e.expression_key, tr.id AS track_id, tr.track_number, tr.title AS track_title,
+        SELECT er.*, e.expression_key, rev.projection_hash, tr.id AS track_id, tr.track_number, tr.title AS track_title,
           c.course_key, c.title AS course_title
         FROM textbook_expression_revisions er
         JOIN textbook_expressions e ON e.id = er.expression_id
@@ -1517,12 +1518,19 @@ class LearningService {
       const direction = row.unit_kind === 'textbook_en' ? 'en' : 'ja';
       const targetLanguages = [direction];
       const targetText = direction === 'en' ? expression.official_en_text : expression.official_ja_text;
+      const highlight = this.db.prepare(`
+        SELECT id, source_hash, version, html_content, updated_at
+        FROM card_highlights
+        WHERE folder_name = ? AND base_filename = ? AND source_hash = ?
+        LIMIT 1
+      `).get(row.folder_name, row.base_filename, expression.projection_hash) || null;
+      const highlightFragments = expressionFragmentsFromHighlight(highlight?.html_content, expression.expression_id);
       const markdown = [
         `### ${expression.course_title} · Track ${String(expression.track_number).padStart(2, '0')} · ${expression.expression_key}`,
         '',
-        `- **中文提示**: ${expression.zh_cue_text}`,
-        `- **English**: ${expression.official_en_text}`,
-        `- **日本語**: ${expression.ja_ruby_html || expression.official_ja_text}`,
+        `- **中文提示**: ${highlightFragments?.zh || expression.zh_cue_text}`,
+        `- **English**: ${highlightFragments?.en || expression.official_en_text}`,
+        `- **日本語**: ${highlightFragments?.ja || expression.ja_ruby_html || expression.official_ja_text}`,
       ].join('\n');
       const scheduleRow = this.db.prepare(`
         SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
@@ -1531,6 +1539,16 @@ class LearningService {
         FROM learning_schedule_states WHERE study_item_id = ?
       `).get(row.id);
       const scheduleState = mapSchedule(scheduleRow ? { ...scheduleRow, study_item_id: row.id } : null);
+      const audioSuffix = `_${direction}_expr_${String(expression.expression_key || '').replace(/^expr:/u, '').replace(/[^a-z0-9]+/giu, '_')}`;
+      const audioFiles = this.db.prepare(`
+        SELECT id, language, text, filename_suffix, tts_provider, tts_model, tts_voice, status
+        FROM audio_files
+        WHERE generation_id = ? AND filename_suffix = ?
+        ORDER BY id DESC
+      `).all(row.generation_id, audioSuffix).map((audio) => ({
+        ...audio,
+        playback_url: `/api/textbooks/audio/${audio.id}/content`,
+      }));
       return {
         id: Number(row.id),
         unitKind: row.unit_kind,
@@ -1551,8 +1569,13 @@ class LearningService {
         answer: { targetText, markdown },
         scheduleState,
         expectedScheduleVersion: scheduleState?.version || 0,
-        audioFiles: [],
-        highlightReference: null,
+        audioFiles,
+        highlightReference: highlight ? {
+          id: Number(highlight.id),
+          sourceHash: highlight.source_hash,
+          version: Number(highlight.version),
+          updatedAt: highlight.updated_at,
+        } : null,
       };
     }
     const targetLanguages = row.unit_kind === 'scenario_bilingual' ? ['en', 'ja']
