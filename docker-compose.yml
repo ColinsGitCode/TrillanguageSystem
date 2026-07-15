@@ -13,7 +13,7 @@ services:
       - RECORDS_PATH=/data/trilingual_records
       - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
       - DB_PATH=/data/trilingual_records/trilingual_records.db
-      - TEXTBOOK_FEATURE_ENABLED=${TEXTBOOK_FEATURE_ENABLED:-false}
+      - TEXTBOOK_FEATURE_ENABLED=${TEXTBOOK_FEATURE_ENABLED:-true}
       - TEXTBOOK_SOURCE_ROOT=/media/textbooks
       - TEXTBOOK_WORK_PATH=/data/textbooks
       - SQLITE_BUSY_TIMEOUT_MS=${SQLITE_BUSY_TIMEOUT_MS:-5000}

@@ -13,6 +13,7 @@ import './styles/tokens.css';
 import './styles/factory.css';
 import './styles/card-modal.css';
 import './styles/learning.css';
+import './styles/textbooks.css';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'icon', type: 'image/svg+xml', href: '/favicon-lan.svg' },

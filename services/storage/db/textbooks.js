@@ -248,6 +248,47 @@ function getTrack(db, id) {
   };
 }
 
+function verifyRevision(db, revisionId, { expectedTrackStatus } = {}) {
+  const timestamp = nowIso();
+  const txn = db.transaction(() => {
+    const revision = db.prepare(`
+      SELECT r.*, t.status AS track_status
+      FROM textbook_track_revisions r
+      JOIN textbook_tracks t ON t.id = r.track_id
+      WHERE r.id = ?
+    `).get(revisionId);
+    if (!revision) throw textbookError('TEXTBOOK_REVISION_NOT_FOUND', 404);
+    if (expectedTrackStatus && revision.track_status !== expectedTrackStatus) {
+      throw textbookError('TEXTBOOK_REVISION_CONFLICT', 409);
+    }
+    if (!['draft', 'verified'].includes(revision.status)) {
+      throw textbookError('TEXTBOOK_REVISION_CONFLICT', 409);
+    }
+    const unavailableAssets = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM textbook_track_assets
+      WHERE revision_id = ? AND availability <> 'available'
+    `).get(revisionId).count;
+    if (unavailableAssets > 0) throw textbookError('TEXTBOOK_MEDIA_NOT_FOUND', 409);
+
+    db.prepare(`
+      UPDATE textbook_track_revisions
+      SET status = 'verified', verified_at_utc = COALESCE(verified_at_utc, ?)
+      WHERE id = ?
+    `).run(timestamp, revisionId);
+    db.prepare(`
+      UPDATE textbook_tracks
+      SET status = 'verified',
+        current_revision_id = ?,
+        pending_revision_id = NULL,
+        updated_at_utc = ?
+      WHERE id = ?
+    `).run(revisionId, timestamp, revision.track_id);
+    return getTrack(db, revision.track_id);
+  });
+  return txn();
+}
+
 function listExpressionsByRevision(db, revisionId) {
   return db.prepare(`
     SELECT er.*, e.expression_key, e.lifecycle
@@ -308,6 +349,7 @@ module.exports = {
   listCourses,
   getCourse,
   getTrack,
+  verifyRevision,
   searchExpressions,
   getAsset,
   markAssetAvailability,

@@ -16,8 +16,8 @@ Current runtime capabilities:
 - folder/card browsing, history, deletion, and highlights;
 - card modal with CONTENT and INTEL;
 - generation observability and infrastructure health;
-- Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics.
-- Textbook Courses TC-P1 backend foundation behind `TEXTBOOK_FEATURE_ENABLED`: draft Manifest import, seven textbook tables, textbook search, and controlled official Track audio streaming. No formal textbook UI or learning publication exists until TC-P2/TC-P3.
+- Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics;
+- Textbook Courses TC-P2 review workspace: draft Manifest import, seven textbook tables, textbook search, controlled official Track audio streaming, `/textbooks` course/review page, local red-marking, and human verification. No generation projection, Study Item publication, or textbook review scheduling exists until TC-P3+.
 
 Retired on 2026-07-13:
 
@@ -45,7 +45,7 @@ The Compose project name is three_lans_system. The user-visible app is http://12
 
 `skills/import-textbook-track/` is the accepted TC-P0 Codex Skill for turning ordered local textbook screenshots and optional official Track audio into a Git-external draft Manifest. It uses image understanding directly, never the application `/api/ocr` route, and never writes SQLite. Actual textbook text, screenshots, audio, Manifest and dry-run summary must remain outside Git.
 
-TC-P1 runtime support exists behind `TEXTBOOK_FEATURE_ENABLED=false` by default: `database/schema.sql` plus `database/migrations/002_textbook_courses.sql` own the seven textbook tables, `routes/textbooks.js` owns draft import/query/media APIs, and `TEXTBOOK_SOURCE_ROOT` is a controlled read-only media root. Draft imports must not create `textbook_track` generation projections or Study Items; Track 01 content is still confirmed manually in TC-P2.
+TC-P2 runtime support is enabled by default and can be disabled with `TEXTBOOK_FEATURE_ENABLED=false`: `database/schema.sql` plus `database/migrations/002_textbook_courses.sql` own the seven textbook tables, `routes/textbooks.js` owns draft import/query/media APIs, and `TEXTBOOK_SOURCE_ROOT` is a controlled read-only media root. Draft import and human verification must not create `textbook_track` generation projections or Study Items; publishing and learning integration remain TC-P3+.
 
 ## Runtime architecture
 
@@ -77,7 +77,7 @@ Active route modules:
 - routes/ocr.js: /api/ocr;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
-- routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, and official audio content, feature-flagged off by default;
+- routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, and official audio content, feature-flagged on by default for TC-P2;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.

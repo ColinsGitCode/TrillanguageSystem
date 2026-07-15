@@ -1,11 +1,11 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；Track 01 内容确认延后到 TC-P2 校对页面**
+> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；Track 01 内容由人工在页面确认**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：教材运行时 schema、API 和正式页面尚未实现；TC-P0 只提供 Git 内 Skill/校验器与 Git 外 dry-run，不恢复旧 Knowledge/OCR/SRS 产品
+> 当前边界：教材运行时 schema、API 和 `/textbooks` 校对页面已实现；教材发布、派生卡创建、单句 TTS 资产和学习辅助物化尚未实现；不恢复旧 Knowledge/OCR/SRS 产品
 
 ## 0. 文档定位与权威边界
 
@@ -604,4 +604,14 @@ TC-P1 已完成后端基础：
 - [x] Cards Factory 默认历史、搜索、最近和统计排除 `textbook_track`
 - [x] `TEXTBOOK_FEATURE_ENABLED` 默认关闭，TC-P2 之前不显示正式教材入口
 
-TC-P2 待开始：教材首页、校对页、Track 学习页、真实 Track 01 人工确认、官方音频播放器与标红/派生卡交互。
+TC-P2 已完成教材首页、校对页与 Track 浏览工作台：
+
+- [x] `/textbooks` 进入侧栏“教材课程”，默认可见，可用 `TEXTBOOK_FEATURE_ENABLED=false` 关闭；
+- [x] Git 外 Manifest dry-run/import 能从页面触发，导入仍只生成 draft 教材事实表；
+- [x] 官方 Track 音频通过受控 `/api/textbooks/assets/:id/content` 播放，不进入 `audio_files`；
+- [x] 表达列表、英日官方原文、中文提示、日语 ruby、短语、语法、置信度和逐方向 hash 可校对；
+- [x] “确认校对”只把 Track/Revision 推进到 `verified`，不创建 `textbook_track` generation、Study Item 或 Review Event；
+- [x] 标红为本机浏览器持久化校对标记；选区派生卡只提供 TC-P3 入口占位；
+- [x] 单句 EN/JA 朗读为浏览器预听，正式教材单句 TTS 资产留到 TC-P3+。
+
+TC-P3 待开始：Card Derivation API、教材高亮持久化、教材发布、单句 TTS 资产、学习辅助物化与计划范围接入。

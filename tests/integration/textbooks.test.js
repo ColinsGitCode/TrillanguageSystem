@@ -165,6 +165,7 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   assert.equal(imported.body.track.status, 'draft');
   assert.equal(imported.body.track.expressions.length, 2);
   assert.equal(imported.body.track.generation_id, null);
+  const revisionId = imported.body.track.revision_id;
 
   const counts = dbService.db.prepare(`
     SELECT
@@ -203,6 +204,17 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   const history = await api('GET', '/api/history?search=Get');
   assert.equal(history.status, 200);
   assert.equal(history.body.records.length, 0);
+
+  const verified = await api('POST', `/api/textbooks/revisions/${revisionId}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+  assert.equal(verified.status, 200);
+  assert.equal(verified.body.track.status, 'verified');
+  assert.equal(verified.body.track.revision_status, 'verified');
+  assert.equal(verified.body.track.current_revision_id, revisionId);
+  assert.equal(verified.body.track.generation_id, null);
+  assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM study_items').get().count, 0);
+  assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM generations').get().count, 0);
 });
 
 test('official audio endpoint supports HEAD, range, etag, and hash drift protection', async () => {

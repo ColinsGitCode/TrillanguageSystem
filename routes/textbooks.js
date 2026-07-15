@@ -94,6 +94,13 @@ router.post('/api/textbooks/imports', asyncRoute(async (req, res) => {
   return send(res, await importService.importDraft(req.body || {}));
 }));
 
+router.post('/api/textbooks/revisions/:id/verify', route((req, res) => {
+  const track = dbService.verifyTextbookRevision(req.params.id, {
+    expectedTrackStatus: req.body?.expectedTrackStatus,
+  });
+  return send(res, { track });
+}));
+
 router.get('/api/textbooks/assets/:id/content', asyncRoute(async (req, res) => {
   return streamOfficialAudio({
     dbService,

@@ -349,6 +349,10 @@ class DatabaseService {
     return textbooksDomain.getTrack(this.db, id);
   }
 
+  verifyTextbookRevision(id, payload = {}) {
+    return textbooksDomain.verifyRevision(this.db, id, payload);
+  }
+
   searchTextbookExpressions(query, limit) {
     return textbooksDomain.searchExpressions(this.db, query, limit);
   }

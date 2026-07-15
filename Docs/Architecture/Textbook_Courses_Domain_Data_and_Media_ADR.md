@@ -1,11 +1,11 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；Track 01 内容确认延后到 TC-P2 校对页面**
+> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
-> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P1 已创建运行时表、feature-flagged API 和受控媒体接口；不导入真实教材内容，也不开发正式页面
+> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P2 已创建运行时表、API、受控媒体接口和正式校对页面；不把教材发布到学习辅助，不创建教材 Study Item
 
 ## 0. 决策状态与权威边界
 
@@ -610,7 +610,7 @@ TEXTBOOK_WORK_PATH=/data/textbooks      # 投影与 TTS，Docker named volume，
 - 来源根保存用户拥有的截图、官方音频和实际 Manifest；
 - 工作根保存生成的 Markdown/HTML/meta 投影与单句 TTS；
 - Compose 通过 `TEXTBOOK_SOURCE_PATH` 提供宿主目录；
-- 功能由 `TEXTBOOK_FEATURE_ENABLED` 控制，默认关闭直到 TC-P2 验收；
+- 功能由 `TEXTBOOK_FEATURE_ENABLED` 控制；TC-P2 起默认开启，可用 `false/no/off/0` 显式关闭；
 - DB 永远不保存宿主绝对路径。
 
 ### 10.2 路径解析
@@ -917,7 +917,7 @@ POC 已确认：`defer_foreign_keys=ON` 不能安全完成本次父表替换；�
 | TC-P3 | 派生卡、发布、plan scope v2、复习与历史 | 去重、40 单元、per-unit hash、同一 SRS |
 | TC-P4 | 完整验收、备份、运行手册和文档封板 | lint/unit/integration/build/desktop E2E/Docker/smoke |
 
-TC-P0 不改 schema。TC-P1 先以 feature flag 关闭状态落基础能力。TC-P2 验收通过后才默认显示教材导航。TC-P3 才允许把 Track 发布到学习辅助。
+TC-P0 不改 schema。TC-P1 先以 feature flag 关闭状态落基础能力。TC-P2 验收通过后默认显示教材导航，但仍只允许 draft import 与 verified 人工确认。TC-P3 才允许把 Track 发布到学习辅助。
 
 ## 17. TC-D2 门禁
 
@@ -1006,3 +1006,20 @@ npm run lint             pass
 ```
 
 新增集成覆盖包括：draft import 不创建 generation/study_items、重复导入幂等、Cards Factory 默认搜索隔离、官方音频 HEAD/Range/ETag/304/416/hash drift。
+
+## 20. TC-P2 校对工作台实施记录（2026-07-15）
+
+TC-P2 已完成正式 `/textbooks` 桌面工作台，并把 `TEXTBOOK_FEATURE_ENABLED` 默认切到开启；需要禁用时显式设置 `TEXTBOOK_FEATURE_ENABLED=false`。
+
+完成范围：
+
+- React Router route `/textbooks` 与 ProductShell 侧栏“教材课程”；
+- Manifest dry-run/import 表单，仍只写 draft 教材事实表；
+- 课程/Track 列表、教材表达搜索、Track summary 和人工 verify；
+- 官方整轨播放器继续走受控 `/api/textbooks/assets/:id/content`，不使用 `express.static`，不写 `audio_files`；
+- 表达详情显示 English/Japanese 官方原文、Japanese ruby、AI 派生中文提示、短语、语法、置信度和 EN/JA unit hash；
+- 本机 localStorage 标红用于人工校对辅助；
+- 选区派生卡面板为 TC-P3 入口占位，不创建 generation；
+- 单句 EN/JA 按钮只调用浏览器 `speechSynthesis` 做预听，不登记系统 TTS 资产。
+
+后端新增 `POST /api/textbooks/revisions/:revisionId/verify`：该操作把 Revision 与 Track 推进到 `verified`，要求资产可用，并保持 `generation_id = NULL`、Study Item 数量不变、Review Event 不产生。发布、投影、教材高亮持久化、Card Derivation API、单句 TTS 和学习辅助物化均延后到 TC-P3+。

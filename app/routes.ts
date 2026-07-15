@@ -6,4 +6,5 @@ export default [
   route('learn/plan', 'routes/learn-plan.tsx'),
   route('learn/history', 'routes/learn-history.tsx'),
   route('learn/session', 'routes/learn-session.tsx'),
+  route('textbooks', 'routes/textbooks.tsx'),
 ] satisfies RouteConfig;

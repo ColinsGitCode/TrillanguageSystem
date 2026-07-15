@@ -5,6 +5,7 @@ import {
   History,
   Menu,
   Moon,
+  NotebookTabs,
   Settings2,
   Sun,
   X,
@@ -12,7 +13,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { factoryApi } from '../features/factory/factory-api';
 
-export type ProductArea = 'factory' | 'today' | 'plan' | 'history';
+export type ProductArea = 'factory' | 'today' | 'plan' | 'history' | 'textbooks';
 
 type Props = {
   active: ProductArea;
@@ -81,7 +82,7 @@ export function ProductShell({ active, title, children }: Props) {
       <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
         <div className="brand-block">
           <span className="brand-bars"><i /><i /><i /></span>
-          <div><strong>Three LANS</strong><small>{active === 'factory' ? 'Cards Factory' : 'Learning Workbench'}</small></div>
+          <div><strong>Three LANS</strong><small>{active === 'factory' ? 'Cards Factory' : active === 'textbooks' ? 'Textbook Courses' : 'Learning Workbench'}</small></div>
         </div>
         <nav aria-label="主导航">
           <p>学习</p>
@@ -93,6 +94,9 @@ export function ProductShell({ active, title, children }: Props) {
           </a>
           <a className={active === 'history' ? 'active' : ''} href="/learn/history" aria-current={active === 'history' ? 'page' : undefined}>
             <History aria-hidden="true" /> 学习记录
+          </a>
+          <a className={active === 'textbooks' ? 'active' : ''} href="/textbooks" aria-current={active === 'textbooks' ? 'page' : undefined}>
+            <NotebookTabs aria-hidden="true" /> 教材课程
           </a>
           <p className="sidebar-production-label">生产</p>
           <a className={active === 'factory' ? 'active' : ''} href="/" aria-current={active === 'factory' ? 'page' : undefined}>
