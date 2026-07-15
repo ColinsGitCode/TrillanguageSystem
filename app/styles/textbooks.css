@@ -318,6 +318,20 @@
   color: var(--color-text-secondary);
 }
 
+.textbook-track-summary small {
+  display: block;
+  margin-top: 5px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.textbook-track-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .textbook-expression-panel {
   overflow: hidden;
 }

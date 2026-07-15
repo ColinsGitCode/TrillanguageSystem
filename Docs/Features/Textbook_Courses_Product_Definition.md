@@ -1,11 +1,11 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；Track 01 内容由人工在页面确认**
+> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；TC-P3 学习集成已完成；Track 01 内容由人工在页面确认**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR](../Architecture/Learning_Assistance_2_0_Domain_and_Data_ADR.md)
-> 当前边界：教材运行时 schema、API 和 `/textbooks` 校对页面已实现；教材发布、派生卡创建、单句 TTS 资产和学习辅助物化尚未实现；不恢复旧 Knowledge/OCR/SRS 产品
+> 当前边界：教材运行时 schema、API、`/textbooks` 校对页面、显式发布、派生卡任务和学习辅助物化已实现；正式单句 TTS 资产和教材高亮持久化尚未实现；不恢复旧 Knowledge/OCR/SRS 产品
 
 ## 0. 文档定位与权威边界
 
@@ -614,4 +614,15 @@ TC-P2 已完成教材首页、校对页与 Track 浏览工作台：
 - [x] 标红为本机浏览器持久化校对标记；选区派生卡只提供 TC-P3 入口占位；
 - [x] 单句 EN/JA 朗读为浏览器预听，正式教材单句 TTS 资产留到 TC-P3+。
 
-TC-P3 待开始：Card Derivation API、教材高亮持久化、教材发布、单句 TTS 资产、学习辅助物化与计划范围接入。
+TC-P3 已完成教材发布、Card Derivation API、学习辅助物化与计划范围接入：
+
+- [x] verified Track 可显式发布为稳定 `textbook_track` generation 投影；
+- [x] publish preview 显示表达数、`textbook_en/ja` 单元数、计划 revision 和按 `dailyNewLimit` 估算的最短引入天数；
+- [x] `learning_source_admissions.admission_source='manual'` 记录教材准入，draft/verified 阶段仍不创建 generation 或 Study Item；
+- [x] `study_items` 使用 `textbook_en` / `textbook_ja`，并采用表达级、方向级 content hash，不复制 Track generation hash；
+- [x] `plan scope v2` 支持教材卡型和显式 Track 列表，默认计划仍不包含教材；
+- [x] 学习 item view-model 从教材结构表读取中文提示、官方英/日答案和 ruby，不从投影 Markdown 反向解析；
+- [x] 学习历史可按教材 EN/JA 单元筛选；
+- [x] 选区派生卡写入 `textbook_card_derivations`，使用 `(expression_id, selection_hash, target_card_type)` 去重，并创建 generation job。
+
+TC-P3 未完成且明确后置：教材高亮持久化、正式单句 TTS 资产、派生卡完成后自动回写 `target_generation_id`。

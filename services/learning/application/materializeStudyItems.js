@@ -156,7 +156,7 @@ function materializeLearningP0(db, { report, apply = false, now = () => new Date
   assertLearningP0Postconditions(db);
   const plan = buildMaterializationPlan(report);
   const generations = new Map(db.prepare(
-    'SELECT id, card_type, content_hash FROM generations ORDER BY id'
+    "SELECT id, card_type, content_hash FROM generations WHERE card_type <> 'textbook_track' ORDER BY id"
   ).all().map((row) => [Number(row.id), row]));
   if (generations.size !== report.cards.length) {
     throw new Error(`Eligibility report card count ${report.cards.length} does not match database ${generations.size}`);
@@ -176,7 +176,12 @@ function materializeLearningP0(db, { report, apply = false, now = () => new Date
     'SELECT * FROM learning_source_admissions'
   ).all().map((row) => [Number(row.generation_id), row]));
   const existingItems = new Map(db.prepare(
-    'SELECT * FROM study_items'
+    `
+      SELECT item.*
+      FROM study_items item
+      JOIN generations generation ON generation.id = item.source_generation_id
+      WHERE generation.card_type <> 'textbook_track'
+    `
   ).all().map((row) => [`${row.source_generation_id}:${row.unit_key}`, row]));
   const admissionActions = { insert: 0, update: 0, unchanged: 0 };
   const itemActions = { insert: 0, update: 0, unchanged: 0, suspend: 0 };

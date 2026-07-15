@@ -28,6 +28,8 @@ const UNIT_KINDS = new Set([
   'trilingual_ja',
   'grammar_ja',
   'scenario_bilingual',
+  'textbook_en',
+  'textbook_ja',
   'whole_card',
 ]);
 
@@ -378,7 +380,7 @@ class LearningService {
     return this.db.prepare(`
       SELECT
         si.id AS study_item_id, si.generation_id, si.source_generation_id,
-        si.unit_kind, si.lifecycle, g.card_type, g.generation_date,
+        si.unit_kind, si.unit_locator_json, si.lifecycle, g.card_type, g.generation_date,
         g.folder_name, g.phrase AS source_title,
         ss.fsrs_state, ss.due_at_utc, ss.last_reviewed_at_utc,
         ss.stability, ss.difficulty, ss.elapsed_days, ss.scheduled_days,
@@ -482,12 +484,33 @@ class LearningService {
       FROM generations
       WHERE id IN (${generationIds.map(() => '?').join(',')})
     `).get(...generationIds) : { min_date: null, max_date: null };
+    const textbookTracks = this.db.prepare(`
+      SELECT t.id, t.track_number, t.title, t.status, c.course_key, c.title AS course_title,
+        COUNT(si.id) AS study_item_count
+      FROM textbook_tracks t
+      JOIN textbook_courses c ON c.id = t.course_id
+      JOIN study_items si ON si.generation_id = t.generation_id
+      WHERE t.status = 'published'
+        AND si.lifecycle = 'active'
+        AND si.unit_kind IN ('textbook_en', 'textbook_ja')
+      GROUP BY t.id
+      ORDER BY c.course_key, t.display_order, t.track_number
+    `).all();
     return {
       dateRange: { min: dates?.min_date || null, max: dates?.max_date || null },
       tags: tags.map((row) => ({
         namespace: row.namespace,
         value: row.value,
         generationCount: Number(row.generation_count),
+      })),
+      textbookTracks: textbookTracks.map((row) => ({
+        id: Number(row.id),
+        trackNumber: Number(row.track_number),
+        title: row.title,
+        status: row.status,
+        courseKey: row.course_key,
+        courseTitle: row.course_title,
+        studyItemCount: Number(row.study_item_count || 0),
       })),
     };
   }
@@ -1475,10 +1498,66 @@ class LearningService {
     if (row.lifecycle !== 'active' || !row.generation_id) {
       throw learningError('LEARNING_SOURCE_INELIGIBLE', 'The Study Item is not eligible for learning', 409);
     }
+    const locator = parseJson(row.unit_locator_json, {});
+    if (row.unit_kind === 'textbook_en' || row.unit_kind === 'textbook_ja') {
+      const expression = this.db.prepare(`
+        SELECT er.*, e.expression_key, tr.id AS track_id, tr.track_number, tr.title AS track_title,
+          c.course_key, c.title AS course_title
+        FROM textbook_expression_revisions er
+        JOIN textbook_expressions e ON e.id = er.expression_id
+        JOIN textbook_track_revisions rev ON rev.id = er.revision_id
+        JOIN textbook_tracks tr ON tr.id = rev.track_id
+        JOIN textbook_courses c ON c.id = tr.course_id
+        WHERE er.id = ?
+        LIMIT 1
+      `).get(Number(locator.expressionRevisionId || 0));
+      if (!expression) {
+        throw learningError('LEARNING_SOURCE_INELIGIBLE', 'The textbook expression backing this Study Item is missing', 409);
+      }
+      const direction = row.unit_kind === 'textbook_en' ? 'en' : 'ja';
+      const targetLanguages = [direction];
+      const targetText = direction === 'en' ? expression.official_en_text : expression.official_ja_text;
+      const markdown = [
+        `### ${expression.course_title} · Track ${String(expression.track_number).padStart(2, '0')} · ${expression.expression_key}`,
+        '',
+        `- **中文提示**: ${expression.zh_cue_text}`,
+        `- **English**: ${expression.official_en_text}`,
+        `- **日本語**: ${expression.ja_ruby_html || expression.official_ja_text}`,
+      ].join('\n');
+      const scheduleRow = this.db.prepare(`
+        SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
+          algorithm_id AS schedule_algorithm_id, algorithm_version AS schedule_algorithm_version,
+          parameters_hash AS schedule_parameters_hash, updated_at_utc AS schedule_updated_at_utc
+        FROM learning_schedule_states WHERE study_item_id = ?
+      `).get(row.id);
+      const scheduleState = mapSchedule(scheduleRow ? { ...scheduleRow, study_item_id: row.id } : null);
+      return {
+        id: Number(row.id),
+        unitKind: row.unit_kind,
+        unitKey: row.unit_key,
+        locator,
+        lifecycle: row.lifecycle,
+        contentRevision: Number(row.content_revision),
+        source: {
+          generationId: Number(row.generation_id),
+          cardType: row.card_type,
+          title: `${expression.track_title} · ${expression.expression_key}`,
+          folder: row.folder_name,
+          baseFilename: row.base_filename,
+          generationDate: row.generation_date,
+          contentHash: row.content_hash,
+        },
+        prompt: { language: 'zh', text: expression.zh_cue_text, targetLanguages },
+        answer: { targetText, markdown },
+        scheduleState,
+        expectedScheduleVersion: scheduleState?.version || 0,
+        audioFiles: [],
+        highlightReference: null,
+      };
+    }
     const targetLanguages = row.unit_kind === 'scenario_bilingual' ? ['en', 'ja']
       : row.unit_kind === 'trilingual_en' ? ['en']
         : row.unit_kind === 'whole_card' ? ['en', 'ja'] : ['ja'];
-    const locator = parseJson(row.unit_locator_json, {});
     const unitMarkdown = extractStudyUnitMarkdown(row.markdown_content, row.unit_kind, locator);
     const promptText = row.unit_kind === 'scenario_bilingual'
       ? (labeledValue(unitMarkdown, '中文') || row.phrase)

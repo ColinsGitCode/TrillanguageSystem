@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Check, Pause, Play, Save, Tags } from 'lucide-react';
+import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
@@ -11,6 +11,7 @@ const CARD_TYPES = [
   { value: 'trilingual', label: '三语卡片', detail: '英文与日文分开学习' },
   { value: 'grammar_ja', label: '日语语法', detail: '语法点与例句' },
   { value: 'scenario_phrase', label: '场景表达', detail: '每个表达双语回忆' },
+  { value: 'textbook_track', label: '教材课程', detail: '已发布 Track 的英日原句' },
   { value: 'whole_card', label: '完整卡片', detail: '人工确认的整卡单元' },
 ] as const;
 
@@ -84,6 +85,7 @@ export function LearningPlanPage() {
     onError: (error) => setNotice(apiMessage(error)),
   });
 
+  const textbookTracks = optionsQuery.data?.textbookTracks || [];
   const toggleLanguage = (language: 'en' | 'ja') => {
     if (!scope) return;
     const exists = scope.languages.includes(language);
@@ -94,7 +96,28 @@ export function LearningPlanPage() {
     if (!scope) return;
     const exists = scope.cardTypes.includes(cardType);
     if (exists && scope.cardTypes.length === 1) return;
-    setScope({ ...scope, cardTypes: exists ? scope.cardTypes.filter((item) => item !== cardType) : [...scope.cardTypes, cardType].sort() });
+    const nextCardTypes = exists
+      ? scope.cardTypes.filter((item) => item !== cardType)
+      : [...scope.cardTypes, cardType].sort();
+    const nextScope: LearningScope = {
+      ...scope,
+      version: cardType === 'textbook_track' || scope.version === 2 ? 2 : scope.version,
+      cardTypes: nextCardTypes,
+    };
+    if (cardType === 'textbook_track') {
+      nextScope.textbookTrackIds = exists ? [] : textbookTracks.map((track) => track.id);
+    }
+    setScope(nextScope);
+  };
+  const toggleTextbookTrack = (trackId: number) => {
+    if (!scope) return;
+    const ids = scope.textbookTrackIds || [];
+    const exists = ids.includes(trackId);
+    setScope({
+      ...scope,
+      version: 2,
+      textbookTrackIds: exists ? ids.filter((id) => id !== trackId) : [...ids, trackId].sort((a, b) => a - b),
+    });
   };
   const toggleTag = (namespace: string, value: string) => {
     if (!scope) return;
@@ -106,6 +129,7 @@ export function LearningPlanPage() {
   const preview = previewQuery.data?.scopePreview || planQuery.data?.scopePreview;
   const theoreticalDays = dailyNew > 0 && preview ? Math.ceil(preview.studyItemCount / dailyNew) : null;
   const isReduction = Boolean(planQuery.data?.plan && preview && preview.studyItemCount < planQuery.data.scopePreview.studyItemCount);
+  const textbookScopeMissingTracks = Boolean(scope?.cardTypes.includes('textbook_track') && !scope.textbookTrackIds?.length);
   const visibleTags = useMemo(() => (optionsQuery.data?.tags || []).filter((tag) => ['topic', 'fn', 'tag'].includes(tag.namespace)).slice(0, 18), [optionsQuery.data]);
 
   if (planQuery.isLoading || !scope) {
@@ -150,6 +174,25 @@ export function LearningPlanPage() {
               </div>
             </fieldset>
 
+            {scope.cardTypes.includes('textbook_track') && (
+              <fieldset>
+                <legend><BookOpen aria-hidden="true" /> 教材 Track</legend>
+                <div className="learning-tag-list">
+                  {textbookTracks.map((track) => {
+                    const selected = Boolean(scope.textbookTrackIds?.includes(track.id));
+                    return (
+                      <button key={track.id} type="button" aria-pressed={selected} className={selected ? 'selected' : ''} onClick={() => toggleTextbookTrack(track.id)}>
+                        Track {String(track.trackNumber).padStart(2, '0')} · {track.title}
+                        <small>{track.courseTitle} · {track.studyItemCount} 单元</small>
+                      </button>
+                    );
+                  })}
+                  {!textbookTracks.length && <span className="field-note">还没有已发布的教材 Track。请先在教材课程中发布 Track。</span>}
+                </div>
+                {textbookTracks.length > 0 && !scope.textbookTrackIds?.length && <p className="field-note">已选择教材课程，但未选择任何 Track；保存前至少选择一个。</p>}
+              </fieldset>
+            )}
+
             <fieldset>
               <legend><CalendarRange aria-hidden="true" /> 日期范围</legend>
               <label className="learning-toggle"><input type="checkbox" checked={dateEnabled} onChange={(event) => {
@@ -189,11 +232,12 @@ export function LearningPlanPage() {
               <div><dt>English 单元</dt><dd>{preview?.byKind.trilingual_en || 0}</dd></div>
               <div><dt>Japanese / 语法</dt><dd>{(preview?.byKind.trilingual_ja || 0) + (preview?.byKind.grammar_ja || 0)}</dd></div>
               <div><dt>场景表达</dt><dd>{preview?.byKind.scenario_bilingual || 0}</dd></div>
+              <div><dt>教材课程</dt><dd>{(preview?.byKind.textbook_en || 0) + (preview?.byKind.textbook_ja || 0)}</dd></div>
               <div><dt>引入全部所需</dt><dd>{theoreticalDays ? `约 ${theoreticalDays} 学习日` : '只清到期'}</dd></div>
             </dl>
             {preview?.studyItemCount === 0 && <div className="learning-banner warning">当前组合没有合格学习单元。放宽语言、卡型、日期或标签范围。</div>}
             {theoreticalDays && theoreticalDays > 180 ? <div className="learning-banner info">当前范围较大。可以先缩小范围，学习状态会在将来扩展范围时继续沿用。</div> : null}
-            <button className="learning-primary-button" type="button" disabled={saveMutation.isPending || previewQuery.isFetching || !preview?.studyItemCount} onClick={() => isReduction ? setConfirmSave(true) : saveMutation.mutate()}>
+            <button className="learning-primary-button" type="button" disabled={saveMutation.isPending || previewQuery.isFetching || !preview?.studyItemCount || textbookScopeMissingTracks} onClick={() => isReduction ? setConfirmSave(true) : saveMutation.mutate()}>
               <Save aria-hidden="true" /> {saveMutation.isPending ? '保存中…' : '保存并生成今日队列'}
             </button>
           </aside>

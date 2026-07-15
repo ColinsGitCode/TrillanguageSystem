@@ -353,6 +353,26 @@ class DatabaseService {
     return textbooksDomain.verifyRevision(this.db, id, payload);
   }
 
+  previewTextbookPublish(id) {
+    return textbooksDomain.previewPublish(this.db, id);
+  }
+
+  publishTextbookTrack(id, payload = {}) {
+    return this.withBusyRetry(() => textbooksDomain.publishTrack(this.db, id, payload));
+  }
+
+  previewTextbookDerivation(expressionId, payload = {}) {
+    return textbooksDomain.previewDerivation(this.db, expressionId, payload);
+  }
+
+  createTextbookDerivation(expressionId, payload = {}) {
+    return this.withBusyRetry(() => textbooksDomain.createDerivation(this.db, expressionId, payload));
+  }
+
+  attachTextbookDerivationJob(derivationId, jobId) {
+    return this.withBusyRetry(() => textbooksDomain.attachDerivationJob(this.db, derivationId, jobId));
+  }
+
   searchTextbookExpressions(query, limit) {
     return textbooksDomain.searchExpressions(this.db, query, limit);
   }

@@ -1,6 +1,10 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { textbookError } = require('../../textbooks/textbookErrors');
+
+const TEXTBOOK_DECISION_VERSION = 'textbook-publish-v1';
+const TEXTBOOK_STATE_VERSION = 'textbook-admission-v1';
 
 function json(value) {
   return JSON.stringify(value ?? {});
@@ -8,6 +12,35 @@ function json(value) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function trackBaseFilename(trackNumber) {
+  return `track-${String(trackNumber).padStart(2, '0')}`;
+}
+
+function projectionPaths(courseKey, trackNumber, revisionNumber) {
+  const base = trackBaseFilename(trackNumber);
+  const folder = `textbook:${courseKey}`;
+  const hiddenPath = `textbook/${courseKey}/${base}/revision-${revisionNumber}`;
+  return {
+    folder,
+    base,
+    md: `${hiddenPath}.md`,
+    html: `${hiddenPath}.html`,
+    meta: `${hiddenPath}.meta.json`,
+  };
 }
 
 function assetRows(manifest) {
@@ -248,6 +281,376 @@ function getTrack(db, id) {
   };
 }
 
+function buildProjectionMarkdown(track, expressions) {
+  const lines = [
+    `# ${track.title}`,
+    '',
+    `> Textbook Course: ${track.course_title}`,
+    `> Track: ${String(track.track_number).padStart(2, '0')}`,
+    '',
+    '## Expressions',
+    '',
+  ];
+  for (const expression of expressions) {
+    lines.push(
+      `### ${String(expression.display_ordinal).padStart(2, '0')}. ${expression.expression_key}`,
+      '',
+      `- **中文**: ${expression.zh_cue_text}`,
+      `- **English**: ${expression.official_en_text}`,
+      `- **日本語**: ${expression.official_ja_text}`,
+      ''
+    );
+  }
+  return `${lines.join('\n').trim()}\n`;
+}
+
+function textbookLocator({ track, expression, direction }) {
+  return {
+    schemaVersion: 2,
+    extractorVersion: 'textbook-unit-v1',
+    section: 'textbook-expression',
+    trackId: Number(track.id),
+    expressionId: Number(expression.expression_id),
+    expressionRevisionId: Number(expression.id),
+    expressionKey: expression.expression_key,
+    direction,
+  };
+}
+
+function publishTrack(db, trackId, {
+  expectedTrackRevision,
+  confirmUnitCount,
+  expectedPlanRevision,
+} = {}) {
+  const timestamp = nowIso();
+  const txn = db.transaction(() => {
+    const track = getTrack(db, trackId);
+    if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
+    if (track.status !== 'verified' || track.revision_status !== 'verified') {
+      throw textbookError('TEXTBOOK_TRACK_NOT_VERIFIED', 409);
+    }
+    if (expectedTrackRevision !== undefined && Number(expectedTrackRevision) !== Number(track.revision_number)) {
+      throw textbookError('TEXTBOOK_REVISION_CONFLICT', 409);
+    }
+    const unavailableAssets = db.prepare(`
+      SELECT COUNT(*) AS count FROM textbook_track_assets
+      WHERE revision_id = ? AND availability <> 'available'
+    `).get(track.revision_id).count;
+    if (unavailableAssets > 0) throw textbookError('TEXTBOOK_MEDIA_NOT_FOUND', 409);
+    const expressions = track.expressions.filter((expression) => expression.lifecycle === 'active');
+    const unitCount = expressions.length * 2;
+    if (confirmUnitCount !== undefined && Number(confirmUnitCount) !== unitCount) {
+      throw textbookError('TEXTBOOK_PUBLISH_CONFIRMATION_MISMATCH', 409, { expected: unitCount, actual: Number(confirmUnitCount) });
+    }
+    const plan = db.prepare('SELECT revision FROM learning_plans WHERE id = 1').get() || null;
+    if (expectedPlanRevision !== undefined && plan && Number(expectedPlanRevision) !== Number(plan.revision)) {
+      throw textbookError('TEXTBOOK_PLAN_REVISION_CONFLICT', 409, { actualRevision: Number(plan.revision) });
+    }
+
+    const projection = projectionPaths(track.course_key, track.track_number, track.revision_number);
+    const markdownContent = buildProjectionMarkdown(track, expressions);
+    const generationPayload = {
+      phrase: track.title,
+      phrase_language: 'mixed',
+      card_type: 'textbook_track',
+      source_mode: 'textbook_import',
+      llm_provider: 'textbook',
+      llm_model: `import-textbook-track@${track.revision_number}`,
+      folder_name: projection.folder,
+      base_filename: projection.base,
+      md_file_path: projection.md,
+      html_file_path: projection.html,
+      meta_file_path: projection.meta,
+      markdown_content: markdownContent,
+      content_hash: track.content_hash,
+      en_translation: expressions.map((expression) => expression.official_en_text).join('\n'),
+      ja_translation: expressions.map((expression) => expression.official_ja_text).join('\n'),
+      zh_translation: expressions.map((expression) => expression.zh_cue_text).join('\n'),
+      generation_date: timestamp.slice(0, 10),
+      request_id: `textbook:${track.course_key}:track:${String(track.track_number).padStart(2, '0')}`,
+    };
+
+    let generationId = track.generation_id ? Number(track.generation_id) : null;
+    if (generationId) {
+      db.prepare(`
+        UPDATE generations SET
+          phrase=@phrase, phrase_language=@phrase_language, card_type=@card_type,
+          source_mode=@source_mode, llm_provider=@llm_provider, llm_model=@llm_model,
+          folder_name=@folder_name, base_filename=@base_filename,
+          md_file_path=@md_file_path, html_file_path=@html_file_path, meta_file_path=@meta_file_path,
+          markdown_content=@markdown_content, content_hash=@content_hash,
+          en_translation=@en_translation, ja_translation=@ja_translation, zh_translation=@zh_translation,
+          generation_date=@generation_date, updated_at=CURRENT_TIMESTAMP
+        WHERE id=@generationId AND card_type='textbook_track'
+      `).run({ ...generationPayload, generationId });
+    } else {
+      generationId = Number(db.prepare(`
+        INSERT INTO generations(
+          phrase, phrase_language, card_type, source_mode, llm_provider, llm_model,
+          folder_name, base_filename, md_file_path, html_file_path, meta_file_path,
+          markdown_content, content_hash, en_translation, ja_translation, zh_translation,
+          generation_date, request_id
+        ) VALUES (
+          @phrase, @phrase_language, @card_type, @source_mode, @llm_provider, @llm_model,
+          @folder_name, @base_filename, @md_file_path, @html_file_path, @meta_file_path,
+          @markdown_content, @content_hash, @en_translation, @ja_translation, @zh_translation,
+          @generation_date, @request_id
+        )
+      `).run(generationPayload).lastInsertRowid);
+      db.prepare(`
+        INSERT INTO observability_metrics(
+          generation_id, tokens_input, tokens_output, tokens_total, tokens_cached,
+          cost_input, cost_output, cost_total, cost_currency,
+          performance_total_ms, performance_phases, quality_score, quality_checks,
+          quality_dimensions, quality_warnings, prompt_full, prompt_parsed,
+          llm_output, llm_finish_reason, metadata
+        ) VALUES (?, 0, 0, 0, 0, 0, 0, 0, 'USD', 0, '{}', 100, '[]', '{}', '[]', '', '{}', '', 'textbook-import', ?)
+      `).run(generationId, json({ source: 'textbook_publish', trackId: Number(track.id), revisionId: Number(track.revision_id) }));
+    }
+
+    db.prepare(`
+      INSERT INTO learning_source_admissions(
+        generation_id, status, content_hash, reasons_json, decision_version, state_version,
+        dp_state_hash, materialization_disposition, identity_anchor_generation_id,
+        admission_source, evaluated_at_utc, created_at_utc, updated_at_utc
+      ) VALUES (?, 'eligible', ?, '[]', ?, ?, NULL, 'create-items', ?, 'manual', ?, ?, ?)
+      ON CONFLICT(generation_id) DO UPDATE SET
+        status='eligible', content_hash=excluded.content_hash, reasons_json='[]',
+        decision_version=excluded.decision_version, state_version=excluded.state_version,
+        materialization_disposition='create-items', identity_anchor_generation_id=excluded.identity_anchor_generation_id,
+        admission_source='manual', evaluated_at_utc=excluded.evaluated_at_utc, updated_at_utc=excluded.updated_at_utc
+    `).run(generationId, track.content_hash, TEXTBOOK_DECISION_VERSION, TEXTBOOK_STATE_VERSION, generationId, timestamp, timestamp, timestamp);
+
+    const existingItems = new Map(db.prepare(`
+      SELECT * FROM study_items WHERE source_generation_id = ?
+    `).all(generationId).map((item) => [item.unit_key, item]));
+    const expectedKeys = new Set();
+    const itemActions = { inserted: 0, updated: 0, unchanged: 0, archived: 0 };
+    const upsertItem = db.prepare(`
+      INSERT INTO study_items(
+        generation_id, source_generation_id, unit_key, unit_kind, unit_locator_json,
+        content_hash, content_revision, lifecycle, created_at_utc, updated_at_utc
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, ?)
+      ON CONFLICT(source_generation_id, unit_key) DO UPDATE SET
+        generation_id=excluded.generation_id,
+        unit_kind=excluded.unit_kind,
+        unit_locator_json=excluded.unit_locator_json,
+        content_revision=study_items.content_revision + CASE
+          WHEN study_items.content_hash <> excluded.content_hash
+            OR study_items.unit_locator_json <> excluded.unit_locator_json
+            OR study_items.unit_kind <> excluded.unit_kind THEN 1 ELSE 0 END,
+        content_hash=excluded.content_hash,
+        lifecycle='active',
+        lifecycle_reason=NULL,
+        updated_at_utc=excluded.updated_at_utc
+    `);
+    for (const expression of expressions) {
+      for (const direction of ['en', 'ja']) {
+        const unitKey = `${expression.expression_key}:${direction}`;
+        const unitKind = `textbook_${direction}`;
+        const contentHash = direction === 'en' ? expression.en_unit_hash : expression.ja_unit_hash;
+        const locatorJson = stableJson(textbookLocator({ track, expression, direction }));
+        expectedKeys.add(unitKey);
+        const existing = existingItems.get(unitKey);
+        upsertItem.run(generationId, generationId, unitKey, unitKind, locatorJson, contentHash, timestamp, timestamp);
+        if (!existing) itemActions.inserted += 1;
+        else if (existing.content_hash !== contentHash || existing.unit_locator_json !== locatorJson || existing.unit_kind !== unitKind || existing.lifecycle !== 'active') itemActions.updated += 1;
+        else itemActions.unchanged += 1;
+      }
+    }
+    for (const [unitKey, item] of existingItems) {
+      if (!expectedKeys.has(unitKey) && item.lifecycle !== 'archived') {
+        db.prepare(`
+          UPDATE study_items SET lifecycle='archived', lifecycle_reason='textbook-expression-retired', updated_at_utc=?
+          WHERE id=?
+        `).run(timestamp, item.id);
+        itemActions.archived += 1;
+      }
+    }
+
+    db.prepare(`
+      UPDATE textbook_track_revisions SET status='published', verified_at_utc=COALESCE(verified_at_utc, ?) WHERE id=?
+    `).run(timestamp, track.revision_id);
+    db.prepare(`
+      UPDATE textbook_tracks SET status='published', generation_id=?, published_at_utc=COALESCE(published_at_utc, ?),
+        current_revision_id=?, pending_revision_id=NULL, updated_at_utc=?
+      WHERE id=?
+    `).run(generationId, timestamp, track.revision_id, timestamp, track.id);
+
+    return {
+      track: getTrack(db, track.id),
+      generationId,
+      unitCount,
+      itemActions,
+      planRevision: plan ? Number(plan.revision) : 0,
+      shortestIntroductionDays: null,
+    };
+  });
+  const result = txn();
+  const plan = db.prepare('SELECT daily_new_limit FROM learning_plans WHERE id = 1').get();
+  if (plan && Number(plan.daily_new_limit) > 0) {
+    result.shortestIntroductionDays = Math.ceil(result.unitCount / Number(plan.daily_new_limit));
+  }
+  return result;
+}
+
+function previewPublish(db, trackId) {
+  const track = getTrack(db, trackId);
+  if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
+  const activeExpressions = track.expressions.filter((expression) => expression.lifecycle === 'active').length;
+  const plan = db.prepare('SELECT revision, daily_new_limit, scope_json FROM learning_plans WHERE id = 1').get() || null;
+  return {
+    trackId: Number(track.id),
+    status: track.status,
+    revision: track.revision_number ? Number(track.revision_number) : null,
+    expressionCount: activeExpressions,
+    unitCount: activeExpressions * 2,
+    planRevision: plan ? Number(plan.revision) : 0,
+    dailyNewLimit: plan ? Number(plan.daily_new_limit) : null,
+    shortestIntroductionDays: plan && Number(plan.daily_new_limit) > 0
+      ? Math.ceil((activeExpressions * 2) / Number(plan.daily_new_limit))
+      : null,
+  };
+}
+
+function normalizeTargetCardType(value) {
+  const cardType = String(value || '').trim();
+  if (!['trilingual', 'grammar_ja'].includes(cardType)) {
+    throw textbookError('TEXTBOOK_DERIVATION_TARGET_UNSUPPORTED', 400);
+  }
+  return cardType;
+}
+
+function normalizeSelectionLanguage(value, selectionText) {
+  const language = String(value || '').trim();
+  if (['en', 'ja'].includes(language)) return language;
+  return /[\u3040-\u30ff\u3400-\u9fff]/u.test(String(selectionText || '')) ? 'ja' : 'en';
+}
+
+function normalizeSelectionText(value) {
+  const text = String(value || '').replace(/\s+/gu, ' ').trim();
+  if (!text) throw textbookError('TEXTBOOK_DERIVATION_SELECTION_REQUIRED', 400);
+  if (text.length > 240) throw textbookError('TEXTBOOK_DERIVATION_SELECTION_TOO_LONG', 400);
+  return text;
+}
+
+function getCurrentExpressionRevision(db, expressionId) {
+  return db.prepare(`
+    SELECT er.*, e.expression_key, e.lifecycle,
+      tr.id AS track_id, tr.track_number, tr.title AS track_title, tr.status AS track_status,
+      c.course_key, c.title AS course_title
+    FROM textbook_expression_revisions er
+    JOIN textbook_expressions e ON e.id = er.expression_id
+    JOIN textbook_track_revisions rev ON rev.id = er.revision_id
+    JOIN textbook_tracks tr ON tr.id = rev.track_id AND tr.current_revision_id = rev.id
+    JOIN textbook_courses c ON c.id = tr.course_id
+    WHERE er.expression_id = ?
+    LIMIT 1
+  `).get(Number(expressionId || 0)) || null;
+}
+
+function previewDerivation(db, expressionId, input = {}) {
+  const expression = getCurrentExpressionRevision(db, expressionId);
+  if (!expression || expression.lifecycle !== 'active') {
+    throw textbookError('TEXTBOOK_EXPRESSION_NOT_FOUND', 404);
+  }
+  if (expression.track_status !== 'published') {
+    throw textbookError('TEXTBOOK_TRACK_NOT_PUBLISHED', 409);
+  }
+  const selectionText = normalizeSelectionText(input.selectionText);
+  const selectionLanguage = normalizeSelectionLanguage(input.selectionLanguage, selectionText);
+  const targetCardType = normalizeTargetCardType(input.targetCardType);
+  if (targetCardType === 'grammar_ja' && selectionLanguage !== 'ja') {
+    throw textbookError('TEXTBOOK_DERIVATION_TARGET_LANGUAGE_MISMATCH', 400);
+  }
+  const selectionHash = sha256(`${selectionLanguage}:${selectionText}`);
+  const existing = db.prepare(`
+    SELECT * FROM textbook_card_derivations
+    WHERE expression_id = ? AND selection_hash = ? AND target_card_type = ?
+    LIMIT 1
+  `).get(expression.expression_id, selectionHash, targetCardType) || null;
+  const targetPhrase = targetCardType === 'grammar_ja'
+    ? selectionText
+    : `${selectionText} / ${selectionLanguage === 'ja' ? expression.official_en_text : expression.official_ja_text}`;
+  return {
+    expression,
+    derivation: existing,
+    request: {
+      expressionId: Number(expression.expression_id),
+      sourceExpressionRevisionId: Number(expression.id),
+      selectionLanguage,
+      selectionText,
+      selectionHash,
+      targetCardType,
+      targetPhrase,
+    },
+  };
+}
+
+function createDerivation(db, expressionId, input = {}) {
+  const timestamp = nowIso();
+  const preview = previewDerivation(db, expressionId, input);
+  const requestContext = {
+    schemaVersion: 1,
+    courseKey: preview.expression.course_key,
+    trackId: Number(preview.expression.track_id),
+    trackNumber: Number(preview.expression.track_number),
+    expressionKey: preview.expression.expression_key,
+    official: {
+      en: preview.expression.official_en_text,
+      ja: preview.expression.official_ja_text,
+    },
+    zhCue: preview.expression.zh_cue_text,
+  };
+  const txn = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO textbook_card_derivations(
+        expression_id, source_expression_revision_id, selection_language,
+        selection_text, selection_hash, target_card_type, status,
+        request_context_json, created_at_utc, updated_at_utc
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+      ON CONFLICT(expression_id, selection_hash, target_card_type) DO UPDATE SET
+        source_expression_revision_id=excluded.source_expression_revision_id,
+        selection_language=excluded.selection_language,
+        selection_text=excluded.selection_text,
+        request_context_json=excluded.request_context_json,
+        status=CASE
+          WHEN textbook_card_derivations.status IN ('completed', 'running') THEN textbook_card_derivations.status
+          ELSE 'pending'
+        END,
+        updated_at_utc=excluded.updated_at_utc
+    `).run(
+      preview.request.expressionId,
+      preview.request.sourceExpressionRevisionId,
+      preview.request.selectionLanguage,
+      preview.request.selectionText,
+      preview.request.selectionHash,
+      preview.request.targetCardType,
+      json(requestContext),
+      timestamp,
+      timestamp
+    );
+    const derivation = db.prepare(`
+      SELECT * FROM textbook_card_derivations
+      WHERE expression_id = ? AND selection_hash = ? AND target_card_type = ?
+      LIMIT 1
+    `).get(preview.request.expressionId, preview.request.selectionHash, preview.request.targetCardType);
+    return { ...preview, derivation };
+  });
+  return txn();
+}
+
+function attachDerivationJob(db, derivationId, jobId) {
+  const timestamp = nowIso();
+  const result = db.prepare(`
+    UPDATE textbook_card_derivations
+    SET target_job_id = ?, status = 'running', updated_at_utc = ?
+    WHERE id = ?
+  `).run(Number(jobId || 0), timestamp, Number(derivationId || 0));
+  if (!result.changes) throw textbookError('TEXTBOOK_DERIVATION_NOT_FOUND', 404);
+  return db.prepare('SELECT * FROM textbook_card_derivations WHERE id = ?').get(Number(derivationId || 0));
+}
+
 function verifyRevision(db, revisionId, { expectedTrackStatus } = {}) {
   const timestamp = nowIso();
   const txn = db.transaction(() => {
@@ -349,8 +752,13 @@ module.exports = {
   listCourses,
   getCourse,
   getTrack,
+  previewPublish,
+  publishTrack,
   verifyRevision,
   searchExpressions,
   getAsset,
   markAssetAvailability,
+  previewDerivation,
+  createDerivation,
+  attachDerivationJob,
 };

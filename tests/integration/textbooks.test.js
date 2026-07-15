@@ -217,6 +217,112 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM generations').get().count, 0);
 });
 
+test('verified textbook track publishes textbook study items and creates derivation jobs', async () => {
+  const fixture = await createManifestFixture();
+  const imported = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: fixture.manifestRelative,
+      expectedManifestHash: fixture.manifestHash,
+    },
+  });
+  const revisionId = imported.body.track.revision_id;
+  const trackId = imported.body.track.id;
+  await api('POST', `/api/textbooks/revisions/${revisionId}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+
+  const preview = await api('GET', `/api/textbooks/tracks/${trackId}/publish-preview`);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.body.preview.unitCount, 4);
+  assert.equal(preview.body.preview.planRevision, 0);
+
+  const published = await api('POST', `/api/textbooks/tracks/${trackId}/publish`, {
+    body: {
+      expectedTrackRevision: 1,
+      confirmUnitCount: 4,
+      expectedPlanRevision: 0,
+    },
+  });
+  assert.equal(published.status, 200);
+  assert.equal(published.body.track.status, 'published');
+  assert.equal(published.body.unitCount, 4);
+  assert.equal(published.body.itemActions.inserted, 4);
+  assert.equal(published.body.track.generation_id, published.body.generationId);
+
+  const publishedCounts = dbService.db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM generations WHERE card_type = 'textbook_track') AS textbook_generations,
+      (SELECT COUNT(*) FROM learning_source_admissions WHERE admission_source = 'manual') AS manual_admissions,
+      (SELECT COUNT(*) FROM study_items WHERE unit_kind = 'textbook_en') AS textbook_en,
+      (SELECT COUNT(*) FROM study_items WHERE unit_kind = 'textbook_ja') AS textbook_ja
+  `).get();
+  assert.deepEqual(publishedCounts, {
+    textbook_generations: 1,
+    manual_admissions: 1,
+    textbook_en: 2,
+    textbook_ja: 2,
+  });
+
+  const options = await api('GET', '/api/learning/scope-options');
+  assert.equal(options.status, 200);
+  assert.equal(options.body.textbookTracks.length, 1);
+  assert.equal(options.body.textbookTracks[0].studyItemCount, 4);
+
+  const planPreview = await api('POST', '/api/learning/plan/preview', {
+    body: {
+      scope: {
+        version: 2,
+        languages: ['en', 'ja'],
+        cardTypes: ['textbook_track'],
+        dateRange: null,
+        tags: [],
+        textbookTrackIds: [trackId],
+      },
+    },
+  });
+  assert.equal(planPreview.status, 200);
+  assert.equal(planPreview.body.scopePreview.studyItemCount, 4);
+  assert.equal(planPreview.body.scopePreview.byKind.textbook_en, 2);
+  assert.equal(planPreview.body.scopePreview.byKind.textbook_ja, 2);
+
+  const itemId = dbService.db.prepare(`
+    SELECT id FROM study_items WHERE unit_kind = 'textbook_ja' ORDER BY id LIMIT 1
+  `).get().id;
+  const item = await api('GET', `/api/learning/items/${itemId}`);
+  assert.equal(item.status, 200);
+  assert.equal(item.body.item.unitKind, 'textbook_ja');
+  assert.deepEqual(item.body.item.prompt.targetLanguages, ['ja']);
+  assert.match(item.body.item.answer.markdown, /日本語/);
+
+  const expressionId = dbService.db.prepare(`
+    SELECT expression_id FROM textbook_expression_revisions ORDER BY display_ordinal LIMIT 1
+  `).get().expression_id;
+  const derivation = await api('POST', `/api/textbooks/expressions/${expressionId}/derivations`, {
+    body: {
+      selectionText: 'Get up',
+      selectionLanguage: 'en',
+      targetCardType: 'trilingual',
+    },
+  });
+  assert.equal(derivation.status, 200);
+  assert.equal(derivation.body.job.jobType, 'trilingual');
+  assert.equal(derivation.body.derivation.target_job_id, derivation.body.job.id);
+  const repeatedDerivation = await api('POST', `/api/textbooks/expressions/${expressionId}/derivations`, {
+    body: {
+      selectionText: 'Get up',
+      selectionLanguage: 'en',
+      targetCardType: 'trilingual',
+    },
+  });
+  assert.equal(repeatedDerivation.status, 200);
+  assert.equal(repeatedDerivation.body.reused, true);
+  assert.equal(repeatedDerivation.body.job.id, derivation.body.job.id);
+  assert.equal(
+    dbService.db.prepare('SELECT COUNT(*) AS count FROM textbook_card_derivations').get().count,
+    1
+  );
+});
+
 test('official audio endpoint supports HEAD, range, etag, and hash drift protection', async () => {
   const audioBytes = Buffer.from('0123456789abcdef');
   const fixture = await createManifestFixture({ audioBytes });

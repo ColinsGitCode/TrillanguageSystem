@@ -1,11 +1,11 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成**
+> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成；TC-P3 学习集成已完成**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
-> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P2 已创建运行时表、API、受控媒体接口和正式校对页面；不把教材发布到学习辅助，不创建教材 Study Item
+> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P3 已创建运行时表、API、受控媒体接口、正式校对页面、显式 publish、教材 Study Item 和学习计划范围接入；正式单句 TTS 资产与教材高亮持久化仍后置
 
 ## 0. 决策状态与权威边界
 
@@ -1023,3 +1023,30 @@ TC-P2 已完成正式 `/textbooks` 桌面工作台，并把 `TEXTBOOK_FEATURE_EN
 - 单句 EN/JA 按钮只调用浏览器 `speechSynthesis` 做预听，不登记系统 TTS 资产。
 
 后端新增 `POST /api/textbooks/revisions/:revisionId/verify`：该操作把 Revision 与 Track 推进到 `verified`，要求资产可用，并保持 `generation_id = NULL`、Study Item 数量不变、Review Event 不产生。发布、投影、教材高亮持久化、Card Derivation API、单句 TTS 和学习辅助物化均延后到 TC-P3+。
+
+## 21. TC-P3 学习集成实施记录（2026-07-15）
+
+TC-P3 已把 verified 教材 Track 接入学习辅助 2.0，但仍保持人工显式发布门禁。
+
+后端新增：
+
+- `GET /api/textbooks/tracks/:id/publish-preview`：返回 active 表达数、将创建的 `textbook_en/ja` 单元数、当前计划 revision 与按 `dailyNewLimit` 推算的最短引入天数；
+- `POST /api/textbooks/tracks/:id/publish`：仅允许 verified Track，创建或更新稳定 `generations.card_type='textbook_track'` 投影，写入 manual learning admission，并 upsert `textbook_en/ja` Study Items；
+- `POST /api/textbooks/expressions/:id/derivations/preview` 与 `POST /api/textbooks/expressions/:id/derivations`：按 `(expression_id, selection_hash, target_card_type)` 去重，创建 generation job，并回写 `target_job_id`；
+- `learningService` 支持 `textbook_en/ja` item view-model、history filter、scope options 中的 published Track 列表；
+- `materializeLearningP0` 的全库一致性检查排除 `textbook_track`，避免 DP7 重跑误伤 manual 教材 Study Items。
+
+前端新增：
+
+- `/textbooks` Track summary 的 publish preview 与“发布到学习计划”操作；
+- 表达详情选区可创建三语卡或日语语法卡生成任务；
+- 学习计划增加“教材课程”卡型和 published Track 显式选择；
+- 学习记录增加教材 EN/JA 过滤；
+- 复习页可显示教材单元答案，但不把 `textbook_track` 投影交给普通 CardModal。
+
+验收覆盖：
+
+- `tests/integration/textbooks.test.js` 覆盖 import -> verify -> publish -> learning scope preview -> item view-model -> derivation job；
+- lint、React typecheck、React build 均作为 TC-P3 回归门禁。
+
+未纳入 TC-P3：正式单句 TTS 资产、教材高亮持久化、generation job 成功后自动把 `textbook_card_derivations.target_generation_id` 回写为 completed。

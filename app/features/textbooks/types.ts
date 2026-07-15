@@ -68,6 +68,50 @@ export type TextbookTrack = TextbookTrackSummary & {
   assets: TextbookAsset[];
 };
 
+export type TextbookPublishPreview = {
+  trackId: number;
+  status: string;
+  revision: number | null;
+  expressionCount: number;
+  unitCount: number;
+  planRevision: number;
+  dailyNewLimit: number | null;
+  shortestIntroductionDays: number | null;
+};
+
+export type TextbookPublishResult = {
+  success: true;
+  track: TextbookTrack;
+  generationId: number;
+  unitCount: number;
+  itemActions: { inserted: number; updated: number; unchanged: number; archived: number };
+  planRevision: number;
+  shortestIntroductionDays: number | null;
+};
+
+export type TextbookDerivationPreview = {
+  derivation: Record<string, unknown> | null;
+  request: {
+    expressionId: number;
+    sourceExpressionRevisionId: number;
+    selectionLanguage: 'en' | 'ja';
+    selectionText: string;
+    selectionHash: string;
+    targetCardType: 'trilingual' | 'grammar_ja';
+    targetPhrase: string;
+  };
+  expression: {
+    id: number;
+    revisionId: number;
+    expressionKey: string;
+    trackId: number;
+    trackTitle: string;
+    officialEnText: string;
+    officialJaText: string;
+    zhCueText: string;
+  };
+};
+
 export type TextbookImportSummary = {
   status: string;
   courseKey: string;

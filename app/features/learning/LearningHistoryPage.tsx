@@ -19,6 +19,8 @@ const UNIT_OPTIONS: Array<{ value: LearningUnitKind | ''; label: string }> = [
   { value: 'trilingual_ja', label: '三语卡 · 日语' },
   { value: 'grammar_ja', label: '日语语法' },
   { value: 'scenario_bilingual', label: '场景表达 · 英日' },
+  { value: 'textbook_en', label: '教材课程 · 英语' },
+  { value: 'textbook_ja', label: '教材课程 · 日语' },
   { value: 'whole_card', label: '完整卡片' },
 ];
 

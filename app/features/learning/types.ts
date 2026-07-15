@@ -1,11 +1,12 @@
 import type { CardType } from '../factory/types';
 
 export type LearningScope = {
-  version: 1;
+  version: 1 | 2;
   languages: Array<'en' | 'ja'>;
-  cardTypes: Array<CardType | 'whole_card'>;
+  cardTypes: Array<CardType | 'whole_card' | 'textbook_track'>;
   dateRange: { from: string; to: string } | null;
   tags: Array<{ namespace: string; value: string }>;
+  textbookTrackIds?: number[];
 };
 export type ScopePreview = {
   generationCount: number;
@@ -47,6 +48,15 @@ export type ScopeOptionsResponse = {
   success: true;
   dateRange: { min: string | null; max: string | null };
   tags: Array<{ namespace: string; value: string; generationCount: number }>;
+  textbookTracks: Array<{
+    id: number;
+    trackNumber: number;
+    title: string;
+    status: 'published';
+    courseKey: string;
+    courseTitle: string;
+    studyItemCount: number;
+  }>;
 };
 
 export type QueueEntry = {
@@ -83,7 +93,7 @@ export type QueueEntry = {
     unitKind: string;
     unitKey: string;
     title: string;
-    cardType: CardType;
+    cardType: CardType | 'textbook_track';
   } | null;
 };
 
@@ -146,7 +156,7 @@ export type StudyItem = {
   locator: Record<string, unknown>;
   source: {
     generationId: number;
-    cardType: CardType;
+    cardType: CardType | 'textbook_track';
     title: string;
     folder: string;
     baseFilename: string;
@@ -187,6 +197,8 @@ export type LearningUnitKind =
   | 'trilingual_ja'
   | 'grammar_ja'
   | 'scenario_bilingual'
+  | 'textbook_en'
+  | 'textbook_ja'
   | 'whole_card';
 
 export type LearningHistoryResponse = {

@@ -47,7 +47,8 @@ function SessionSummary({ session, onBack }: { session: LearningSession; onBack:
 function LearningAnswer({ item }: { item: StudyItem }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const renderedHtml = useMemo(() => renderCardMarkdown(item.answer.markdown, item.source.cardType, item.source.folder), [item]);
+  const renderCardType = item.source.cardType === 'textbook_track' ? 'trilingual' : item.source.cardType;
+  const renderedHtml = useMemo(() => renderCardMarkdown(item.answer.markdown, renderCardType, item.source.folder), [item.answer.markdown, item.source.folder, renderCardType]);
 
   useEffect(() => () => audioRef.current?.pause(), []);
 
@@ -180,6 +181,15 @@ export function ReviewSessionPage() {
   const completed = session.queueProgress.actionCount;
   const goal = session.queueProgress.actionGoal;
   const progress = goal ? Math.min(100, (completed / goal) * 100) : 0;
+  const openFullCard = (studyItem: StudyItem) => {
+    if (studyItem.source.cardType === 'textbook_track') return;
+    setFullCard({
+      folder: studyItem.source.folder,
+      baseName: studyItem.source.baseFilename,
+      title: studyItem.source.title,
+      cardType: studyItem.source.cardType,
+    });
+  };
 
   return (
     <ProductShell active="today" title="复习会话">
@@ -204,7 +214,7 @@ export function ReviewSessionPage() {
 
           {!revealed && item && <button className="learning-reveal-button" type="button" data-testid="learning-reveal" disabled={revealMutation.isPending} onClick={() => revealMutation.mutate()}>{revealMutation.isPending ? '正在揭示…' : '揭示答案'}<kbd>Space</kbd></button>}
 
-          {revealed && item && <section className={`surface learning-answer-surface tone-${presentation.tone}`} data-testid="learning-answer"><header><span>答案面</span>{item.highlightReference && <small>含个人标红</small>}<button type="button" onClick={() => setFullCard({ folder: item.source.folder, baseName: item.source.baseFilename, title: item.source.title, cardType: item.source.cardType })}>查看完整卡片 <ExternalLink aria-hidden="true" /></button></header><LearningAnswer item={item} /></section>}
+          {revealed && item && <section className={`surface learning-answer-surface tone-${presentation.tone}`} data-testid="learning-answer"><header><span>答案面</span>{item.highlightReference && <small>含个人标红</small>}{item.source.cardType !== 'textbook_track' && <button type="button" onClick={() => openFullCard(item)}>查看完整卡片 <ExternalLink aria-hidden="true" /></button>}</header><LearningAnswer item={item} /></section>}
         </div>
 
         <footer className="learning-session-footer">

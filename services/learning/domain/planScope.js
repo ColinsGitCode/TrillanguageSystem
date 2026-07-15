@@ -8,6 +8,7 @@ const ALLOWED_CARD_TYPES = Object.freeze([
   'grammar_ja',
   'scenario_phrase',
   'whole_card',
+  'textbook_track',
 ]);
 const ALLOWED_TAG_NAMESPACES = Object.freeze(['topic', 'fn', 'lang', 'src', 'qa', 'tag']);
 const DEFAULT_SCOPE = Object.freeze({
@@ -16,6 +17,7 @@ const DEFAULT_SCOPE = Object.freeze({
   cardTypes: Object.freeze(['trilingual', 'grammar_ja', 'scenario_phrase', 'whole_card']),
   dateRange: null,
   tags: Object.freeze([]),
+  textbookTrackIds: Object.freeze([]),
 });
 
 function invalid(message, details) {
@@ -65,25 +67,40 @@ function normalizeTags(value) {
     .sort((a, b) => `${a.namespace}:${a.value}`.localeCompare(`${b.namespace}:${b.value}`));
 }
 
+function normalizeTextbookTrackIds(value) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) invalid('scope.textbookTrackIds must be an array');
+  return [...new Set(value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0))]
+    .sort((a, b) => a - b);
+}
+
 function normalizeScope(value = DEFAULT_SCOPE) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) invalid('scope must be an object');
-  if (value.version !== undefined && Number(value.version) !== 1) invalid('scope.version must be 1');
+  const version = Number(value.version || 1);
+  if (![1, 2].includes(version)) invalid('scope.version must be 1 or 2');
+  const cardTypes = uniqueStrings(value.cardTypes, 'scope.cardTypes', ALLOWED_CARD_TYPES);
+  const textbookTrackIds = normalizeTextbookTrackIds(value.textbookTrackIds);
+  if (cardTypes.includes('textbook_track') && textbookTrackIds.length === 0) {
+    invalid('scope.textbookTrackIds is required when textbook_track is selected');
+  }
   return {
-    version: 1,
+    version: textbookTrackIds.length || cardTypes.includes('textbook_track') ? 2 : 1,
     languages: uniqueStrings(value.languages, 'scope.languages', ALLOWED_LANGUAGES),
-    cardTypes: uniqueStrings(value.cardTypes, 'scope.cardTypes', ALLOWED_CARD_TYPES),
+    cardTypes,
     dateRange: normalizeDateRange(value.dateRange),
     tags: normalizeTags(value.tags),
+    textbookTrackIds,
   };
 }
 
 function itemMatchesScope(row, scope, activeTagKeys = new Set()) {
-  if (scope.dateRange) {
+  if (!['textbook_en', 'textbook_ja'].includes(row.unit_kind) && scope.dateRange) {
     if (!row.generation_date || row.generation_date < scope.dateRange.from || row.generation_date > scope.dateRange.to) {
       return false;
     }
   }
-  if (scope.tags.some((tag) => !activeTagKeys.has(`${tag.namespace}:${tag.value}`))) return false;
+  if (!['textbook_en', 'textbook_ja'].includes(row.unit_kind)
+    && scope.tags.some((tag) => !activeTagKeys.has(`${tag.namespace}:${tag.value}`))) return false;
   switch (row.unit_kind) {
     case 'trilingual_en':
       return scope.cardTypes.includes('trilingual') && scope.languages.includes('en');
@@ -97,8 +114,28 @@ function itemMatchesScope(row, scope, activeTagKeys = new Set()) {
         && scope.languages.includes('ja');
     case 'whole_card':
       return scope.cardTypes.includes('whole_card');
+    case 'textbook_en': {
+      const locator = safeParseLocator(row.unit_locator_json);
+      return scope.cardTypes.includes('textbook_track')
+        && scope.languages.includes('en')
+        && scope.textbookTrackIds.includes(Number(locator.trackId));
+    }
+    case 'textbook_ja': {
+      const locator = safeParseLocator(row.unit_locator_json);
+      return scope.cardTypes.includes('textbook_track')
+        && scope.languages.includes('ja')
+        && scope.textbookTrackIds.includes(Number(locator.trackId));
+    }
     default:
       return false;
+  }
+}
+
+function safeParseLocator(value) {
+  try {
+    return JSON.parse(value || '{}');
+  } catch (_error) {
+    return {};
   }
 }
 

@@ -194,7 +194,16 @@ function ExpressionList({ expressions, activeId, markedIds, onSelect, onToggleMa
   );
 }
 
-function ExpressionDetail({ expression }: { expression: TextbookExpression | null }) {
+function guessSelectionLanguage(text: string): 'en' | 'ja' {
+  return /[\u3040-\u30ff\u3400-\u9fff]/u.test(text) ? 'ja' : 'en';
+}
+
+function ExpressionDetail({ expression, onDerive, derivationMessage, derivationBusy }: {
+  expression: TextbookExpression | null;
+  onDerive: (payload: { selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => void;
+  derivationMessage: string;
+  derivationBusy: boolean;
+}) {
   const [selectedText, setSelectedText] = useState('');
   const phrases = parseJson<Array<{ label: string; explanation: string; source: string }>>(expression?.phrase_analysis_json, []);
   const grammar = parseJson<Array<{ label: string; explanation: string; source: string }>>(expression?.grammar_points_json, []);
@@ -234,10 +243,22 @@ function ExpressionDetail({ expression }: { expression: TextbookExpression | nul
         <p className="textbook-lang-label">Selection to card</p>
         {selectedText ? <strong>{selectedText}</strong> : <span>选中英文或日文片段后，这里会显示派生卡候选。</span>}
         <div>
-          <button type="button" disabled={!selectedText}>生成三语卡预览</button>
-          <button type="button" disabled={!selectedText}>生成语法卡预览</button>
+          <button
+            type="button"
+            disabled={!selectedText || derivationBusy}
+            onClick={() => onDerive({ selectionText: selectedText, selectionLanguage: guessSelectionLanguage(selectedText), targetCardType: 'trilingual' })}
+          >
+            生成三语卡
+          </button>
+          <button
+            type="button"
+            disabled={!selectedText || derivationBusy || guessSelectionLanguage(selectedText) !== 'ja'}
+            onClick={() => onDerive({ selectionText: selectedText, selectionLanguage: 'ja', targetCardType: 'grammar_ja' })}
+          >
+            生成语法卡
+          </button>
         </div>
-        <small>TC-P2 仅提供人工校对与派生入口占位；真正创建卡片由 TC-P3 的 Card Derivation API 负责。</small>
+        <small>{derivationMessage || '选区会写入派生关系并创建生成任务；重复选区会复用同一派生键。'}</small>
       </section>
       <dl className="textbook-confidence-grid">
         {Object.entries(confidence).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{Math.round(value * 100)}%</dd></div>)}
@@ -262,6 +283,8 @@ export function TextbookCoursesPage() {
   const [activeExpressionId, setActiveExpressionId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [markedIds, setMarkedIds] = useState<Set<number>>(() => loadMarkedIds());
+  const [publishMessage, setPublishMessage] = useState('');
+  const [derivationMessage, setDerivationMessage] = useState('');
   const coursesQuery = useQuery({ queryKey: ['textbooks', 'courses'], queryFn: textbookApi.courses, retry: false });
   const courseQueries = useQuery({
     queryKey: ['textbooks', 'courses-with-tracks', coursesQuery.data?.courses.map((course) => course.id).join(',') || 'empty'],
@@ -277,6 +300,11 @@ export function TextbookCoursesPage() {
     queryFn: () => textbookApi.track(Number(activeTrackId)),
     enabled: Boolean(activeTrackId),
   });
+  const publishPreviewQuery = useQuery({
+    queryKey: ['textbooks', 'track', activeTrackId, 'publish-preview'],
+    queryFn: () => textbookApi.publishPreview(Number(activeTrackId)),
+    enabled: Boolean(activeTrackId && ['verified', 'published'].includes(trackQuery.data?.track.status || '')),
+  });
   const searchQuery = useQuery({
     queryKey: ['textbooks', 'search', search],
     queryFn: () => fetch(`/api/textbooks/search?q=${encodeURIComponent(search)}`).then((res) => res.json()),
@@ -288,6 +316,39 @@ export function TextbookCoursesPage() {
       await queryClient.invalidateQueries({ queryKey: ['textbooks'] });
       setActiveTrackId(data.track.id);
     },
+  });
+  const publishMutation = useMutation({
+    mutationFn: () => {
+      const track = trackQuery.data?.track;
+      const preview = publishPreviewQuery.data?.preview;
+      if (!track || !preview) throw new Error('publish preview is not ready');
+      return textbookApi.publishTrack(track.id, {
+        expectedTrackRevision: track.revision_number,
+        confirmUnitCount: preview.unitCount,
+        expectedPlanRevision: preview.planRevision,
+      });
+    },
+    onSuccess: async (data) => {
+      setPublishMessage(`已发布到学习系统：${data.unitCount} 个单元，insert ${data.itemActions.inserted} / update ${data.itemActions.updated}`);
+      await queryClient.invalidateQueries({ queryKey: ['textbooks'] });
+      await queryClient.invalidateQueries({ queryKey: ['learning'] });
+      setActiveTrackId(data.track.id);
+    },
+    onError: (error) => setPublishMessage(error instanceof Error ? error.message : 'publish failed'),
+  });
+  const derivationMutation = useMutation({
+    mutationFn: (payload: { expressionId: number; selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => (
+      textbookApi.createDerivation(payload.expressionId, {
+        selectionText: payload.selectionText,
+        selectionLanguage: payload.selectionLanguage,
+        targetCardType: payload.targetCardType,
+      })
+    ),
+    onSuccess: (data) => {
+      setDerivationMessage(`已创建生成任务 #${data.job.id}，可在队列管理查看进度。`);
+      void queryClient.invalidateQueries({ queryKey: ['generation-jobs'] });
+    },
+    onError: (error) => setDerivationMessage(error instanceof Error ? error.message : 'derivation failed'),
   });
 
   useEffect(() => {
@@ -310,6 +371,7 @@ export function TextbookCoursesPage() {
   const activeExpression = expressions.find((expression) => expression.id === activeExpressionId) || null;
   const lowConfidenceCount = expressions.filter((expression) => confidenceTone(expression) === 'low').length;
   const officialAudio = audioAsset(track);
+  const publishPreview = publishPreviewQuery.data?.preview || null;
 
   return (
     <ProductShell active="textbooks" title="教材课程">
@@ -357,15 +419,26 @@ export function TextbookCoursesPage() {
                     <div>
                       <p className="eyebrow">{track.course_key} · Track {String(track.track_number).padStart(2, '0')}</p>
                       <h2>{track.title}</h2>
-                      <p>{statusLabel(track.status)} · {expressions.length} expressions · {lowConfidenceCount} low-confidence</p>
+                      <p>{statusLabel(track.status)} · {expressions.length} expressions · {lowConfidenceCount} low-confidence{publishPreview ? ` · ${publishPreview.unitCount} study units` : ''}</p>
+                      {publishPreview?.shortestIntroductionDays ? <small>按当前每日新单元上限，最短约 {publishPreview.shortestIntroductionDays} 学习日引入完。</small> : null}
+                      {publishMessage && <small>{publishMessage}</small>}
                     </div>
-                    <button
-                      type="button"
-                      disabled={!track.revision_id || track.status !== 'draft' || verifyMutation.isPending}
-                      onClick={() => verifyMutation.mutate({ revisionId: Number(track.revision_id), status: track.status })}
-                    >
-                      <CheckCircle2 aria-hidden="true" /> {track.status === 'verified' ? '已确认' : verifyMutation.isPending ? '确认中…' : '确认校对'}
-                    </button>
+                    <div className="textbook-track-actions">
+                      <button
+                        type="button"
+                        disabled={!track.revision_id || track.status !== 'draft' || verifyMutation.isPending}
+                        onClick={() => verifyMutation.mutate({ revisionId: Number(track.revision_id), status: track.status })}
+                      >
+                        <CheckCircle2 aria-hidden="true" /> {track.status === 'verified' || track.status === 'published' ? '已确认' : verifyMutation.isPending ? '确认中…' : '确认校对'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={track.status !== 'verified' || publishMutation.isPending || !publishPreview}
+                        onClick={() => publishMutation.mutate()}
+                      >
+                        <BookOpenCheck aria-hidden="true" /> {track.status === 'published' ? '已发布' : publishMutation.isPending ? '发布中…' : '发布到学习计划'}
+                      </button>
+                    </div>
                   </section>
                 ) : (
                   <section className="surface textbook-track-summary empty"><h2>尚未选择 Track</h2><p>导入 Manifest 后会在这里显示表达队列。</p></section>
@@ -383,7 +456,12 @@ export function TextbookCoursesPage() {
                   })}
                 />
               </div>
-              <ExpressionDetail expression={activeExpression} />
+              <ExpressionDetail
+                expression={activeExpression}
+                derivationMessage={derivationMessage}
+                derivationBusy={derivationMutation.isPending}
+                onDerive={(payload) => activeExpression && derivationMutation.mutate({ expressionId: activeExpression.expression_id, ...payload })}
+              />
             </section>
           </>
         )}
