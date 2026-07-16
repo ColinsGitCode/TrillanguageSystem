@@ -109,4 +109,69 @@ test.describe('PlanningSignalProvider contract', () => {
       { source: 'rule', ruleVersion: 'tags-v2', ruleKey: 'topic-travel' },
     ]);
   });
+
+  test.it('injects the graph reader into the default composite explanation', () => {
+    const provider = createDefaultPlanningSignalProvider({
+      graphSignalReader: {
+        readPlanningSignal: () => ({
+          score: 19,
+          groups: ['lookup-difficulty'],
+          reasons: [{ code: 'recent-lookup', label: '近期重复检索' }],
+          evidence: [{
+            source: 'kg-lookup-signal-v1',
+            ruleVersion: 'kg-lookup-signal-v1',
+            ruleKey: 'point:17',
+          }],
+        }),
+      },
+    });
+    const result = provider.evaluate({
+      studyItemId: 7,
+      unitKind: 'trilingual_ja',
+      cardType: 'trilingual',
+      sourceTitle: 'fixture',
+      tags: [],
+      reviewEvidence: {},
+    }, {});
+    assert.equal(result.score, 19);
+    assert.equal(result.diagnostics['graph-contract'].applied, 1);
+    assert.equal(result.signals[1].providerId, 'graph-contract');
+    assert.deepEqual(result.signals[1].reasons, [{ code: 'recent-lookup', label: '近期重复检索' }]);
+    assert.deepEqual(result.signals[1].evidence, [{
+      source: 'kg-lookup-signal-v1',
+      ruleVersion: 'kg-lookup-signal-v1',
+      ruleKey: 'point:17',
+    }]);
+  });
+
+  test.it('degrades throwing, invalid and over-budget graph readers independently', () => {
+    const throwing = new CompositePlanningSignalProvider({
+      providers: [new GraphPlanningSignalProvider({
+        signalReader: { readPlanningSignal() { throw new Error('locked'); } },
+      })],
+    });
+    const thrown = throwing.evaluate({ studyItemId: 1 });
+    assert.equal(thrown.score, null);
+    assert.equal(thrown.diagnostics['graph-contract'].failed, 1);
+
+    const invalid = new CompositePlanningSignalProvider({
+      providers: [new GraphPlanningSignalProvider({
+        signalReader: { readPlanningSignal: () => ({ score: Number.NaN }) },
+      })],
+    });
+    const malformed = invalid.evaluate({ studyItemId: 1 });
+    assert.equal(malformed.score, null);
+    assert.equal(malformed.diagnostics['graph-contract'].failed, 1);
+
+    const ticks = [0, 11];
+    const slow = new CompositePlanningSignalProvider({
+      providers: [new GraphPlanningSignalProvider({
+        signalReader: { readPlanningSignal: () => ({ score: 10 }) },
+      })],
+      clock: () => ticks.shift(),
+    });
+    const timedOut = slow.evaluate({ studyItemId: 1 });
+    assert.equal(timedOut.score, null);
+    assert.equal(timedOut.diagnostics['graph-contract'].timedOut, 1);
+  });
 });

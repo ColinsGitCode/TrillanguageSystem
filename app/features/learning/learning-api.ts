@@ -7,6 +7,9 @@ import type {
   LearningScope,
   LearningSession,
   LearningUnitKind,
+  ManualIntentResponse,
+  ManualQueueIntent,
+  ManualIntentCapacity,
   PlanResponse,
   ReviewResponse,
   ScopeOptionsResponse,
@@ -45,6 +48,18 @@ export const learningApi = {
   resumePlan: () => requestJson<PlanResponse>('/api/learning/plan/resume', { method: 'POST' }),
   todayQueue: () => requestJson<{ success: true; queue: DailyQueue | null; emptyReason?: string }>('/api/learning/queues/today'),
   ensureTodayQueue: () => requestJson<{ success: true; queue: DailyQueue }>('/api/learning/queues/today', { method: 'POST' }),
+  todayManualIntents: () => requestJson<{
+    success: true;
+    intents: ManualQueueIntent[];
+    capacity: ManualIntentCapacity;
+    emptyReason?: string;
+  }>('/api/learning/manual-queue-intents/today'),
+  addManualIntent: (payload: { intentKey: string; studyItemId: number; confirmed: true }) => (
+    requestJson<ManualIntentResponse>('/api/learning/manual-queue-intents', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  ),
   activeSession: () => requestJson<{ success: true; session: LearningSession | null }>('/api/learning/sessions/active'),
   startSession: (queueId?: number) => requestJson<{
     success: true;

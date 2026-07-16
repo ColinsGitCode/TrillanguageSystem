@@ -14,6 +14,7 @@ const { DatabaseService } = databaseModule;
 const {
   BASELINE_VERSION,
   KG_P1_TABLES,
+  LEARNING_P3_TABLES,
   LEARNING_P0_TABLES,
   TEXTBOOK_P1_TABLES,
   runMigrations,
@@ -32,11 +33,11 @@ function schemaObjects(db) {
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001/002/003 on a new database and creates LA, textbook, and KG tables', () => {
+  test.it('registers 001/002/003/004 on a new database and creates LA, textbook, KG, and manual-intent tables', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001', '002', '003'],
+        applied: ['001', '002', '003', '004'],
         skipped: [],
         baselineRegistered: false,
       });
@@ -47,6 +48,7 @@ test.describe('versioned migration runner', () => {
         { version: '001', is_baseline: 0 },
         { version: '002', is_baseline: 0 },
         { version: '003', is_baseline: 0 },
+        { version: '004', is_baseline: 0 },
       ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -54,6 +56,7 @@ test.describe('versioned migration runner', () => {
       LEARNING_P0_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       TEXTBOOK_P1_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       KG_P1_TABLES.forEach((table) => assert.ok(tables.has(table), table));
+      LEARNING_P3_TABLES.forEach((table) => assert.ok(tables.has(table), table));
     } finally {
       service.close();
     }
@@ -82,6 +85,7 @@ test.describe('versioned migration runner', () => {
         { version: '001', is_baseline: 0 },
         { version: '002', is_baseline: 0 },
         { version: '003', is_baseline: 0 },
+        { version: '004', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {

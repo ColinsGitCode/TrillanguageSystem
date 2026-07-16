@@ -132,6 +132,55 @@ test.describe('Learning plan scope and queue policy', () => {
     assert.equal(result.planning.diagnostics['graph-contract'].empty, 2);
   });
 
+  test.it('keeps the same selected set and base keys when the KG reader is toggled', () => {
+    const rows = [
+      { study_item_id: 1, generation_id: 1, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'short', schedule_version: null },
+      { study_item_id: 2, generation_id: 2, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'x'.repeat(90), schedule_version: null },
+      { study_item_id: 3, generation_id: 3, generation_date: '2026-07-14', folder_name: '20260714', card_type: 'trilingual', unit_kind: 'trilingual_en', source_title: 'y'.repeat(90), schedule_version: null },
+    ];
+    const args = [
+      rows,
+      new Map(rows.map((row) => [row.generation_id, new Set()])),
+      fullScope,
+      { startUtc: '2026-07-13T16:00:00.000Z', endUtc: '2026-07-14T16:00:00.000Z' },
+      '2026-07-14T01:00:00.000Z',
+      2,
+      20,
+      0,
+    ];
+    const disabled = buildQueueCandidates(
+      ...args,
+      createDefaultPlanningSignalProvider(),
+      new Map()
+    );
+    let reads = 0;
+    const enabled = buildQueueCandidates(
+      ...args,
+      createDefaultPlanningSignalProvider({
+        graphSignalReader: {
+          readPlanningSignal(item) {
+            reads += 1;
+            return item.studyItemId === 1
+              ? { score: 30, groups: ['lookup-difficulty'], reasons: [], evidence: [] }
+              : null;
+          },
+        },
+      }),
+      new Map()
+    );
+    const stableShape = (result) => result.entries.map((entry) => ({
+      studyItemId: entry.studyItemId,
+      bucket: entry.bucket,
+      availableAtUtc: entry.availableAtUtc,
+      dueAtUtc: entry.dueAtUtc,
+    })).sort((left, right) => left.studyItemId - right.studyItemId);
+    assert.deepEqual(stableShape(enabled), stableShape(disabled));
+    assert.deepEqual(new Set(enabled.entries.map((entry) => entry.studyItemId)), new Set([1, 2]));
+    assert.equal(reads, 2);
+    assert.deepEqual(disabled.entries.map((entry) => entry.studyItemId), [2, 1]);
+    assert.deepEqual(enabled.entries.map((entry) => entry.studyItemId), [1, 2]);
+  });
+
   test.it('keeps the exact base set and order when every provider fails', () => {
     class FailingProvider extends PlanningSignalProvider {
       constructor() { super({ id: 'failing-graph', version: '1', kind: 'graph' }); }

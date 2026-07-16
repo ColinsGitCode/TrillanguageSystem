@@ -8,6 +8,9 @@ test.describe('React root shell', () => {
     await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('href', '/');
     await expect(page.getByRole('link', { name: 'Cards Factory' })).toHaveAttribute('aria-current', 'page');
 
+    const knowledgeResponse = await request.get('/knowledge');
+    expect(knowledgeResponse.status()).toBe(200);
+
     for (const path of ['/__rr-poc', '/index.html', '/dashboard.html', '/knowledge-hub.html', '/knowledge-ops.html']) {
       expect((await request.get(path)).status(), path).toBe(404);
     }

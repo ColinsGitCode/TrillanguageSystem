@@ -29,7 +29,7 @@
 7. **Graph provider 只读预计算信号。** `readPlanningSignal()` 只按 `study_item_id` 同步读取本地 `kg_planning_signals`，目标为单次索引查询；严禁网络、LLM、重分析或写入。
 8. **“加入本次学习”归 LA 所有。** 新增一张 `learning_manual_queue_intents` 表；该动作不修改 Schedule State，已调度的非新 Study Item 进入今日队列，正常评分后才由现有 Review Event + SchedulerPort 更新 FSRS。
 9. **新 schema 使用全新 `kg_*` 命名。** 不复用启动时已退役并删除的 `knowledge_*` 表、旧路由或旧页面。
-10. **schema 继续双路径同一真源。** `database/schema.sql` 描述完整期望状态，`database/migrations/003_knowledge_graph_2_0.sql` 负责存量库迁移；两者必须在同一提交中保持一致。
+10. **schema 继续双路径同一真源。** `database/schema.sql` 描述完整期望状态；migration 003 负责 KG 表 37-47，migration 004 负责 LA 表 48。每个阶段都必须让完整 schema 与对应存量库迁移保持一致。
 
 权威关系固定为：
 
@@ -501,7 +501,7 @@ study item score     = max(score of its active attached points)
 
 ## 9. v1 数据模型总览
 
-KG-P1 建议新增 11 张 `kg_*` 表；KG-P3 另新增 1 张 LA 所有表。表号接现有 `schema.sql` 的表 36 顺延。
+KG-P1 新增 11 张 `kg_*` 表；KG-P3 通过 migration 004 另新增 1 张 LA 所有表。表号接现有 `schema.sql` 的表 36 顺延。
 
 | 表号 | 表 | 类型 | 说明 |
 |---:|---|---|---|
@@ -561,7 +561,7 @@ Fresh Study Item 不支持该入口，因为它会绕过 `dailyNewLimit`。UI �
 - entry explanation 明确 `source='manual-intent'`，不得伪装成系统到期；
 - 已有 entry 的 bucket/reason 不被手动意图覆盖。
 
-现有 schema 允许 bucket 1-6，但运行代码只生成 1-4 和 6；LA-D0/LA-D2 此前没有为 bucket 5 定义产品语义。本文 amendment **首次**把 bucket 5 定义为“已调度未到期项的用户主动加入”位置。未来若要把困难项同日重现也放入 bucket 5，必须另行 amendment；当前两者都不能越过到期 bucket 1-4。
+现有 schema 允许 bucket 1-6。KG-P3 实施核对发现，LA-P1 已经把 bucket 5 用于 FSRS 返回 `shortTerm=true` 后的 `difficult-reappearance`，这早于本文最初对“空 bucket 5”的判断。本文据实修订为**共享优先级层**：`difficult-reappearance` 与 `manual-lookup` 都位于到期 bucket 1-4 之后、新单元 bucket 6 之前，并由 `reason` 与 explanation source 严格区分。手动 intent 不得覆盖既有困难项 entry，困难项重现也不得伪装成手动来源。
 
 ### 10.4 会话恢复与评分
 
@@ -822,13 +822,15 @@ services/learning/application/
 
 ### 14.1 迁移文件
 
-Accepted 后的第一个 schema 提交必须同时包含：
+KG-P1 的 schema 提交包含：
 
 - `database/migrations/003_knowledge_graph_2_0.sql`；
-- `database/schema.sql` 表 37-48；
+- `database/schema.sql` 表 37-47；
 - migration runner 的 `KG_P1_TABLES` postcondition；
 - schema/migration parity 测试；
 - 新库、002 存量库和重复启动测试。
+
+KG-P3 的 LA amendment 另由 `database/migrations/004_learning_manual_queue_intents.sql` 交付表 48，并增加独立 `LEARNING_P3_TABLES` postcondition；不得修改已应用 migration 003 的 checksum。
 
 ### 14.2 回填顺序
 
@@ -1105,3 +1107,49 @@ KG-P1 已完成事实层、工作流投影、读模型和受控 API，未接入 
 | Docker build/runtime | React production build 通过，viewer/health 正常，npm audit 0 vulnerabilities |
 
 边界核验：KG-P1 没有调用 DeepSeek 建图、没有写 Review Event 或 Schedule State、没有接入 `GraphPlanningSignalProvider`，也没有执行回填 apply。真实 manifest 保留在容器 `/tmp`，不进入 Git。下一阶段为 **KG-P2 单索引同步 signalReader、解释透传、基础集合一致性、10ms 预算和错误降级验收**。
+
+---
+
+## 23. KG-P2 实施记录（2026-07-16）
+
+KG-P2 已完成预计算 Graph Planning Signal 到学习队列的只读接入：
+
+- `GraphPlanningSignalReader` 只在 `KG_ENABLED && KG_PLANNING_ENABLED` 时准备 `WHERE study_item_id = ?` 的本地同步查询；关闭、缺表、无行、读取异常或非法投影均返回 `null`；
+- `createDefaultPlanningSignalProvider({ graphSignalReader })` 把 reader 注入既有 `GraphPlanningSignalProvider`，不改变 Heuristic Provider、Composite contract 或 SchedulerPort；
+- provider 仍在基础集合完成截取后运行；同一 DB snapshot 的开关对照证明 Study Item 集合、bucket、available_at 和 due_at 完全一致，只允许相同三键内按 provider score 细排；
+- queue explanation 透传 `graph-contract`、`kg-lookup-signal-v1`、公开 reason 与 `point:<id>` provenance；不公开内部 watermark，不在读路径重建投影；
+- reader 抛错、非法结果和超过 10ms 的结果分别进入 failed/timedOut 降级；基础顺序恢复，队列请求不失败；
+- 读路径不调用 DeepSeek、Kuromoji 或网络，不写 lookup、Review Event、Schedule State 或 FSRS。
+
+验收结果：
+
+| 项目 | 结果 |
+|---|---:|
+| prepared query | `study_item_id INTEGER PRIMARY KEY` |
+| reader volume | 1132 planning signals + 11320 synthetic lookup facts |
+| reader p95 | `< 5ms` 门禁通过 |
+| provider hard budget | 10ms；超时确定性降级通过 |
+| same-snapshot set/base-key parity | 通过 |
+| lint | 通过 |
+| unit | 324/324 通过 |
+| integration | 61/61 通过 |
+| smoke | 7/7 通过 |
+
+上线边界保持不变：`KG_ENABLED`、`KG_PLANNING_ENABLED`、`KG_LLM_ENRICHMENT_ENABLED` 在代码、`.env.example` 与 Compose 中继续默认 `0`。KG-P2 已通过打开 planning flag 所需的技术门禁；KG-P3 已完成显式加入学习闭环。本阶段不替代小范围运行观察，也不在默认环境自动开启。
+
+---
+
+## 24. KG-P3 实施记录（2026-07-16）
+
+KG-P3 已完成“知识点查找 -> 明确确认 -> 加入本次学习 -> 正常评分”的 LA 协同闭环：
+
+- `database/migrations/004_learning_manual_queue_intents.sql` 与 `database/schema.sql` 同步交付表 48；migration runner 对新表执行 postcondition，并保持新库/存量库对象级 parity；
+- `LearningService.addManualQueueIntent()` 只接受 active、admitted、已有 Schedule State 且今日未评分的 Study Item；fresh item、未确认请求、超容量和跨 queue active session 均使用稳定错误码拒绝；
+- intent 与 queue entry 在同一事务写入；同 key 同 body 幂等，同 key 不同 body 返回 409，`(plan, learning_day, Study Item)` 保持唯一；
+- 已自然进入今日队列的 item 返回原 entry 且不写 intent；overdue/due item 使用自然 bucket 1-4，未到期 item 使用 bucket 5 + `manual-lookup`；已有 entry 的 reason/bucket 不被覆盖；
+- bucket 5 与既有 `difficult-reappearance` 共存，以 reason/source 区分，二者均不能越过 bucket 1-4，也不计入 fresh；
+- 同 queue active session 可追加且不改变当前或已揭示 entry；评分仍由现有 Review Event + SchedulerPort transaction 更新 FSRS，并在同一事务把 intent 标记 completed；加入、恢复和过期本身不写 Review Event 或 Schedule State；
+- `/api/learning/manual-queue-intents` 与 `/today` 提供显式加入和浏览器恢复；学习历史新增独立 `manualAssigned/manualReviewed/manualCompletionRate`，不污染 due/new 指标；
+- `/knowledge` 落地 KG-D1 S3-S5 桌面交互：只读 suggestion、显式 lookup、KP/词形/Evidence、关联 Study Item 调度状态、确认对话框与“查看今日学习”；功能关闭时明确降级。
+
+验收结果：lint、React typecheck、328 项 unit、62 项 integration 与生产 React build 均通过；Playwright 覆盖“未确认不发请求、确认后只调用一次 manual-intent”交互。三项 KG feature flag 继续默认 `0`，P3 不自动开启图查询或 planning。

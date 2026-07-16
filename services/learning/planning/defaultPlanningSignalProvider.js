@@ -4,11 +4,11 @@ const { CompositePlanningSignalProvider } = require('./planningSignalProvider');
 const { GraphPlanningSignalProvider } = require('./graphPlanningSignalProvider');
 const { HeuristicPlanningSignalProvider } = require('./heuristicPlanningSignalProvider');
 
-function createDefaultPlanningSignalProvider() {
+function createDefaultPlanningSignalProvider({ graphSignalReader = null } = {}) {
   return new CompositePlanningSignalProvider({
     providers: [
       new HeuristicPlanningSignalProvider(),
-      new GraphPlanningSignalProvider(),
+      new GraphPlanningSignalProvider({ signalReader: graphSignalReader }),
     ],
   });
 }

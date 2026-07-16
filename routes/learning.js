@@ -1,13 +1,21 @@
 'use strict';
 
 const express = require('express');
+const { KG_ENABLED, KG_PLANNING_ENABLED } = require('../lib/serverConfig');
 const dbService = require('../services/storage/databaseService');
+const { GraphPlanningSignalReader } = require('../services/kg/storage/graphPlanningSignalReader');
 const { LearningService } = require('../services/learning/application/learningService');
+const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
 
 const router = express.Router();
+const graphSignalReader = new GraphPlanningSignalReader({
+  db: dbService.db,
+  enabled: KG_ENABLED && KG_PLANNING_ENABLED,
+});
 const service = new LearningService({
   db: dbService.db,
   busyRetry: (operation) => dbService.withBusyRetry(operation),
+  planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader }),
 });
 
 function send(res, payload) {
@@ -37,6 +45,8 @@ router.get('/api/learning/history', route((req, res) => send(res, service.getHis
 
 router.post('/api/learning/queues/today', route((_req, res) => send(res, { queue: service.ensureTodayQueue() })));
 router.get('/api/learning/queues/today', route((_req, res) => send(res, service.getTodayQueue())));
+router.post('/api/learning/manual-queue-intents', route((req, res) => send(res, service.addManualQueueIntent(req.body))));
+router.get('/api/learning/manual-queue-intents/today', route((_req, res) => send(res, service.getTodayManualQueueIntents())));
 
 router.get('/api/learning/sessions/active', route((_req, res) => send(res, service.getActiveSession())));
 router.post('/api/learning/sessions', route((req, res) => send(res, service.startSession(req.body))));

@@ -165,6 +165,14 @@ export type StudyItem = {
   };
   prompt: { language: 'zh'; text: string; targetLanguages: string[] };
   answer: { targetText: string | { en: string; ja: string } | null; markdown: string };
+  scheduleState: {
+    fsrsState: string;
+    dueAtUtc: string;
+    lastReviewedAtUtc: string | null;
+    reps: number;
+    lapses: number;
+    version: number;
+  } | null;
   expectedScheduleVersion: number;
   audioFiles: Array<{
     id: number;
@@ -176,6 +184,43 @@ export type StudyItem = {
     playback_url?: string;
   }>;
   highlightReference: { id: number; sourceHash: string; version: number } | null;
+};
+
+export type ManualQueueIntent = {
+  id: number;
+  intentKey: string;
+  planId: number;
+  learningDay: string;
+  timeZone: string;
+  queueId: number;
+  queueEntryId: number;
+  studyItemId: number;
+  policyVersion: string;
+  status: 'active' | 'completed' | 'expired' | 'cancelled';
+  completionReviewEventId: number | null;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  completedAtUtc: string | null;
+  expiredAtUtc: string | null;
+  cancelledAtUtc: string | null;
+  entry?: QueueEntry;
+};
+
+export type ManualIntentCapacity = {
+  policyVersion: string;
+  limit: number;
+  used: number;
+  remaining: number;
+};
+
+export type ManualIntentResponse = {
+  success: true;
+  idempotent: boolean;
+  reused: boolean;
+  alreadyQueued: boolean;
+  intent: ManualQueueIntent | null;
+  entry: QueueEntry;
+  capacity: ManualIntentCapacity;
 };
 
 export type ReviewResponse = {
@@ -231,6 +276,9 @@ export type LearningHistoryResponse = {
     newAssigned: number;
     newReviewed: number;
     newConversionRate: number;
+    manualAssigned: number;
+    manualReviewed: number;
+    manualCompletionRate: number;
     currentOverdue: number;
     averageResponseMs: number;
     medianResponseMs: number;
@@ -251,6 +299,8 @@ export type LearningHistoryResponse = {
     backlog: number;
     newAssigned: number;
     newReviewed: number;
+    manualAssigned: number;
+    manualReviewed: number;
     averageResponseMs: number;
     sessionCount: number;
   }>;

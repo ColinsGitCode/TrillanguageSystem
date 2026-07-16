@@ -18,6 +18,9 @@ const {
 
 const DEFAULT_ACTION_GOAL = 20;
 const DEFAULT_NEW_LIMIT = 5;
+const MANUAL_INTENT_POLICY_VERSION = 'manual-intent-v1';
+const MANUAL_INTENT_MAX_PER_DAY = 20;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const HISTORY_PRESETS = new Map([
   ['7', 7],
   ['30', 30],
@@ -250,6 +253,47 @@ function buildQueueCandidates(
     planning: {
       ...(planningSignalProvider?.describe?.() || { contractVersion: CONTRACT_VERSION, providers: [] }),
       diagnostics: providerDiagnostics,
+    },
+  };
+}
+
+function buildManualQueueEntry(row, bounds, nowUtc) {
+  const schedule = mapSchedule(row);
+  if (!schedule || !Number.isFinite(Date.parse(schedule.dueAtUtc))) return null;
+  const dueMs = Date.parse(schedule.dueAtUtc);
+  const startMs = Date.parse(bounds.startUtc);
+  const endMs = Date.parse(bounds.endUtc);
+  const recentlyFailed = Number(row.last_rating || 0) === 1 || Number(row.last_rating || 0) === 2;
+  if (dueMs < endMs) {
+    const overdue = dueMs < startMs;
+    return {
+      studyItemId: Number(row.study_item_id),
+      reason: overdue ? (recentlyFailed ? 'overdue-recent-failure' : 'overdue')
+        : (recentlyFailed ? 'due-today-recent-failure' : 'due-today'),
+      bucket: overdue ? (recentlyFailed ? 1 : 2) : (recentlyFailed ? 3 : 4),
+      availableAtUtc: schedule.dueAtUtc,
+      dueAtUtc: schedule.dueAtUtc,
+      explanation: {
+        code: overdue ? 'overdue' : 'due-today',
+        label: overdue ? '已逾期（手动加入）' : '今日到期（手动加入）',
+        source: 'manual-intent',
+        recentlyFailed,
+        provider: { id: 'manual-intent', version: MANUAL_INTENT_POLICY_VERSION, score: null },
+      },
+    };
+  }
+  return {
+    studyItemId: Number(row.study_item_id),
+    reason: 'manual-lookup',
+    bucket: 5,
+    availableAtUtc: nowUtc,
+    dueAtUtc: schedule.dueAtUtc,
+    explanation: {
+      code: 'manual-lookup',
+      label: '本次额外加入',
+      source: 'manual-intent',
+      originalDueAtUtc: schedule.dueAtUtc,
+      provider: { id: 'manual-intent', version: MANUAL_INTENT_POLICY_VERSION, score: null },
     },
   };
 }
@@ -673,6 +717,48 @@ class LearningService {
     };
   }
 
+  _manualIntentDto(row) {
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      intentKey: row.intent_key,
+      planId: Number(row.plan_id),
+      learningDay: row.learning_day,
+      timeZone: row.time_zone,
+      queueId: Number(row.queue_id),
+      queueEntryId: Number(row.queue_entry_id),
+      studyItemId: Number(row.study_item_id),
+      policyVersion: row.policy_version,
+      status: row.status,
+      completionReviewEventId: row.completion_review_event_id
+        ? Number(row.completion_review_event_id)
+        : null,
+      createdAtUtc: row.created_at_utc,
+      updatedAtUtc: row.updated_at_utc,
+      completedAtUtc: row.completed_at_utc,
+      expiredAtUtc: row.expired_at_utc,
+      cancelledAtUtc: row.cancelled_at_utc,
+    };
+  }
+
+  _manualIntentCapacity(planId, learningDay, dailyActionGoal) {
+    const limit = Math.min(Number(dailyActionGoal), MANUAL_INTENT_MAX_PER_DAY);
+    const used = Number(this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM learning_manual_queue_intents
+      WHERE plan_id = ? AND learning_day = ? AND status <> 'cancelled'
+    `).get(planId, learningDay).count);
+    return { policyVersion: MANUAL_INTENT_POLICY_VERSION, limit, used, remaining: Math.max(0, limit - used) };
+  }
+
+  _expireManualIntents(learningDayValue, nowUtc) {
+    this.db.prepare(`
+      UPDATE learning_manual_queue_intents
+      SET status = 'expired', expired_at_utc = ?, updated_at_utc = ?
+      WHERE status = 'active' AND learning_day < ?
+    `).run(nowUtc, nowUtc, learningDayValue);
+  }
+
   ensureTodayQueue() {
     const nowUtc = this._now();
     let queueId;
@@ -683,6 +769,7 @@ class LearningService {
       const currentProfile = this.db.prepare('SELECT * FROM learning_profiles WHERE id = 1').get();
       const profile = this._ensureProfile(nowUtc, currentProfile?.time_zone || DEFAULT_TIME_ZONE);
       const day = learningDay(nowUtc, profile.time_zone);
+      this._expireManualIntents(day, nowUtc);
       const existing = this.db.prepare(`
         SELECT * FROM learning_daily_queues
         WHERE plan_id = 1 AND learning_day = ? AND plan_revision = ? AND profile_revision = ?
@@ -767,6 +854,235 @@ class LearningService {
       ORDER BY id DESC LIMIT 1
     `).get(day, plan.revision, profile.revision);
     return row ? { queue: this._queueDto(row) } : { queue: null, emptyReason: 'not-ensured' };
+  }
+
+  getTodayManualQueueIntents() {
+    const plan = this.db.prepare('SELECT * FROM learning_plans WHERE id = 1').get();
+    const profile = this.db.prepare('SELECT * FROM learning_profiles WHERE id = 1').get();
+    if (!plan || !profile) {
+      return {
+        intents: [],
+        capacity: { policyVersion: MANUAL_INTENT_POLICY_VERSION, limit: 0, used: 0, remaining: 0 },
+        emptyReason: 'not-created',
+      };
+    }
+    const day = learningDay(this._now(), profile.time_zone);
+    const rows = this.db.prepare(`
+      SELECT intent.*, item.unit_kind, item.unit_key, generation.phrase AS source_title,
+             generation.card_type, entry.reason, entry.bucket, entry.provider_score,
+             entry.explanation_json, entry.available_at_utc, entry.due_at_utc,
+             entry.status AS entry_status, entry.attempts, entry.last_event_id
+      FROM learning_manual_queue_intents intent
+      JOIN learning_queue_entries entry ON entry.id = intent.queue_entry_id
+      JOIN study_items item ON item.id = intent.study_item_id
+      LEFT JOIN generations generation ON generation.id = item.generation_id
+      WHERE intent.plan_id = ? AND intent.learning_day = ?
+      ORDER BY intent.created_at_utc, intent.id
+    `).all(plan.id, day);
+    return {
+      intents: rows.map((row) => ({
+        ...this._manualIntentDto(row),
+        entry: this._entryDto({
+          ...row,
+          id: row.queue_entry_id,
+          study_item_id: row.study_item_id,
+          status: row.entry_status,
+        }),
+      })),
+      capacity: this._manualIntentCapacity(Number(plan.id), day, Number(plan.daily_action_goal)),
+    };
+  }
+
+  addManualQueueIntent(input = {}) {
+    const studyItemId = integer(input.studyItemId, 'studyItemId', { min: 1 });
+    const intentKey = String(input.intentKey || '').trim();
+    if (!IDEMPOTENCY_KEY_PATTERN.test(intentKey)) {
+      throw learningError('LEARNING_INVALID_REQUEST', 'intentKey must be 8-128 safe characters', 400);
+    }
+    if (input.confirmed !== true) {
+      throw learningError('LEARNING_MANUAL_INTENT_INELIGIBLE', 'Explicit confirmation is required', 409);
+    }
+    const requestHash = sha256(stableJson({
+      studyItemId,
+      confirmed: true,
+      policyVersion: MANUAL_INTENT_POLICY_VERSION,
+    }));
+    const existingByKey = this.db.prepare(
+      'SELECT * FROM learning_manual_queue_intents WHERE intent_key = ?'
+    ).get(intentKey);
+    if (existingByKey) {
+      if (existingByKey.request_hash !== requestHash) {
+        throw learningError('LEARNING_IDEMPOTENCY_CONFLICT', 'The intent key was used for a different request', 409);
+      }
+      const entry = this.db.prepare('SELECT * FROM learning_queue_entries WHERE id = ?')
+        .get(existingByKey.queue_entry_id);
+      const plan = this.db.prepare('SELECT * FROM learning_plans WHERE id = ?').get(existingByKey.plan_id);
+      return {
+        idempotent: true,
+        reused: false,
+        alreadyQueued: false,
+        intent: this._manualIntentDto(existingByKey),
+        entry: this._entryDto(entry),
+        capacity: this._manualIntentCapacity(
+          Number(existingByKey.plan_id),
+          existingByKey.learning_day,
+          Number(plan?.daily_action_goal || MANUAL_INTENT_MAX_PER_DAY)
+        ),
+      };
+    }
+
+    const ensuredQueue = this.ensureTodayQueue();
+    const nowUtc = this._now();
+    let result;
+    this._write(() => {
+      const plan = this.db.prepare('SELECT * FROM learning_plans WHERE id = 1').get();
+      const profile = this.db.prepare('SELECT * FROM learning_profiles WHERE id = 1').get();
+      if (!plan || plan.status !== 'active' || !profile) {
+        throw learningError('LEARNING_MANUAL_INTENT_INELIGIBLE', 'An active learning plan and profile are required', 409);
+      }
+      const day = learningDay(nowUtc, profile.time_zone);
+      this._expireManualIntents(day, nowUtc);
+      const queue = this.db.prepare('SELECT * FROM learning_daily_queues WHERE id = ?').get(ensuredQueue.id);
+      if (!queue
+        || queue.learning_day !== day
+        || Number(queue.plan_revision) !== Number(plan.revision)
+        || Number(queue.profile_revision) !== Number(profile.revision)) {
+        throw learningError('LEARNING_QUEUE_REVISION_CONFLICT', 'Today\'s queue changed; reload before adding the item', 409);
+      }
+      const activeSession = this._activeSessionRow();
+      if (activeSession && Number(activeSession.queue_id) !== Number(queue.id)) {
+        throw learningError(
+          'LEARNING_ACTIVE_SESSION_CONFLICT',
+          'The active session belongs to a different queue',
+          409,
+          { sessionId: Number(activeSession.id), queueId: Number(activeSession.queue_id) }
+        );
+      }
+
+      const itemRow = this._candidateRows().find((row) => Number(row.study_item_id) === studyItemId);
+      if (!itemRow || itemRow.schedule_version === null || itemRow.schedule_version === undefined) {
+        throw learningError(
+          'LEARNING_MANUAL_INTENT_INELIGIBLE',
+          'Only active, admitted, already-scheduled Study Items can be added',
+          409,
+          { studyItemId }
+        );
+      }
+      const reviewedToday = this.db.prepare(`
+        SELECT id FROM learning_review_events
+        WHERE study_item_id = ? AND learning_day = ? AND time_zone = ?
+        LIMIT 1
+      `).get(studyItemId, day, profile.time_zone);
+      if (reviewedToday) {
+        throw learningError(
+          'LEARNING_MANUAL_INTENT_ALREADY_REVIEWED_TODAY',
+          'This Study Item was already reviewed today',
+          409,
+          { reviewEventId: Number(reviewedToday.id) }
+        );
+      }
+
+      const existingIntent = this.db.prepare(`
+        SELECT * FROM learning_manual_queue_intents
+        WHERE plan_id = ? AND learning_day = ? AND study_item_id = ?
+      `).get(plan.id, day, studyItemId);
+      if (existingIntent) {
+        const existingEntry = this.db.prepare('SELECT * FROM learning_queue_entries WHERE id = ?')
+          .get(existingIntent.queue_entry_id);
+        result = {
+          idempotent: false,
+          reused: true,
+          alreadyQueued: false,
+          intent: this._manualIntentDto(existingIntent),
+          entry: this._entryDto(existingEntry),
+          capacity: this._manualIntentCapacity(Number(plan.id), day, Number(plan.daily_action_goal)),
+        };
+        return;
+      }
+
+      const queueEntry = this.db.prepare(`
+        SELECT * FROM learning_queue_entries WHERE queue_id = ? AND study_item_id = ?
+      `).get(queue.id, studyItemId);
+      if (queueEntry) {
+        result = {
+          idempotent: false,
+          reused: false,
+          alreadyQueued: true,
+          intent: null,
+          entry: this._entryDto(queueEntry),
+          capacity: this._manualIntentCapacity(Number(plan.id), day, Number(plan.daily_action_goal)),
+        };
+        return;
+      }
+
+      const capacity = this._manualIntentCapacity(Number(plan.id), day, Number(plan.daily_action_goal));
+      if (capacity.remaining <= 0) {
+        throw learningError(
+          'LEARNING_MANUAL_INTENT_LIMIT_REACHED',
+          'The daily manual-learning limit has been reached',
+          409,
+          capacity
+        );
+      }
+      const entry = buildManualQueueEntry(itemRow, dayBounds(day, profile.time_zone), nowUtc);
+      if (!entry) {
+        throw learningError('LEARNING_MANUAL_INTENT_INELIGIBLE', 'The saved schedule is invalid', 409);
+      }
+      const insertedEntry = this.db.prepare(`
+        INSERT INTO learning_queue_entries(
+          queue_id, study_item_id, reason, bucket, provider_score, explanation_json,
+          available_at_utc, due_at_utc, status, attempts, created_at_utc, updated_at_utc
+        ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'pending', 0, ?, ?)
+      `).run(
+        queue.id,
+        studyItemId,
+        entry.reason,
+        entry.bucket,
+        stableJson(entry.explanation),
+        entry.availableAtUtc,
+        entry.dueAtUtc,
+        nowUtc,
+        nowUtc
+      );
+      const queueEntryId = Number(insertedEntry.lastInsertRowid);
+      const insertedIntent = this.db.prepare(`
+        INSERT INTO learning_manual_queue_intents(
+          intent_key, request_hash, plan_id, learning_day, time_zone,
+          queue_id, queue_entry_id, study_item_id, policy_version, status,
+          created_at_utc, updated_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      `).run(
+        intentKey,
+        requestHash,
+        plan.id,
+        day,
+        profile.time_zone,
+        queue.id,
+        queueEntryId,
+        studyItemId,
+        MANUAL_INTENT_POLICY_VERSION,
+        nowUtc,
+        nowUtc
+      );
+      this.db.prepare(`
+        UPDATE learning_daily_queues SET status = ?, updated_at_utc = ? WHERE id = ?
+      `).run(activeSession ? 'active' : 'ready', nowUtc, queue.id);
+      if (activeSession && !activeSession.current_entry_id) {
+        this._activateNext(Number(activeSession.id), Number(queue.id), nowUtc);
+      }
+      const intentRow = this.db.prepare('SELECT * FROM learning_manual_queue_intents WHERE id = ?')
+        .get(insertedIntent.lastInsertRowid);
+      const entryRow = this.db.prepare('SELECT * FROM learning_queue_entries WHERE id = ?').get(queueEntryId);
+      result = {
+        idempotent: false,
+        reused: false,
+        alreadyQueued: false,
+        intent: this._manualIntentDto(intentRow),
+        entry: this._entryDto(entryRow),
+        capacity: this._manualIntentCapacity(Number(plan.id), day, Number(plan.daily_action_goal)),
+      };
+    });
+    return result;
   }
 
   _nextEntry(queueId, nowUtc) {
@@ -1045,6 +1361,8 @@ class LearningService {
         SELECT learning_day AS day FROM learning_review_events
         UNION ALL
         SELECT learning_day AS day FROM learning_daily_queues
+        UNION ALL
+        SELECT learning_day AS day FROM learning_manual_queue_intents
       )
     `).get();
     const presetDays = HISTORY_PRESETS.get(preset);
@@ -1092,6 +1410,15 @@ class LearningService {
       ORDER BY session.id
     `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
 
+    const manualIntentRows = this.db.prepare(`
+      SELECT intent.learning_day, intent.status, intent.study_item_id, item.unit_kind
+      FROM learning_manual_queue_intents intent
+      JOIN study_items item ON item.id = intent.study_item_id
+      WHERE intent.learning_day BETWEEN ? AND ?
+        AND intent.status <> 'cancelled'${unitKind ? ' AND item.unit_kind = ?' : ''}
+      ORDER BY intent.learning_day, intent.id
+    `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
+
     const daily = new Map(dateSequence(startDay, endDay).map((day) => [day, {
       learningDay: day,
       actions: 0,
@@ -1102,6 +1429,8 @@ class LearningService {
       backlog: 0,
       newAssigned: 0,
       newReviewed: 0,
+      manualAssigned: 0,
+      manualReviewed: 0,
       averageResponseMs: 0,
       sessionCount: 0,
     }]));
@@ -1149,6 +1478,12 @@ class LearningService {
     for (const session of sessionRows) {
       const target = daily.get(session.learning_day);
       if (target) target.sessionCount += 1;
+    }
+    for (const intent of manualIntentRows) {
+      const target = daily.get(intent.learning_day);
+      if (!target) continue;
+      target.manualAssigned += 1;
+      if (intent.status === 'completed') target.manualReviewed += 1;
     }
     for (const item of daily.values()) {
       item.goalReached = item.actionGoal > 0 && item.actions >= item.actionGoal;
@@ -1202,6 +1537,8 @@ class LearningService {
     const dueCompleted = dailyRows.reduce((sum, day) => sum + day.dueCompleted, 0);
     const newAssigned = dailyRows.reduce((sum, day) => sum + day.newAssigned, 0);
     const newReviewed = dailyRows.reduce((sum, day) => sum + day.newReviewed, 0);
+    const manualAssigned = dailyRows.reduce((sum, day) => sum + day.manualAssigned, 0);
+    const manualReviewed = dailyRows.reduce((sum, day) => sum + day.manualReviewed, 0);
     const responses = eventRows.map((event) => Number(event.response_ms));
     const activeDays = new Set(eventRows.map((event) => event.learning_day)).size;
     const sessionsWithProgress = sessionRows.filter((session) => Number(session.review_count) > 0).length;
@@ -1240,6 +1577,9 @@ class LearningService {
         newAssigned,
         newReviewed,
         newConversionRate: round(ratio(newReviewed, newAssigned)),
+        manualAssigned,
+        manualReviewed,
+        manualCompletionRate: round(ratio(manualReviewed, manualAssigned)),
         currentOverdue,
         averageResponseMs: responses.length
           ? Math.round(responses.reduce((sum, value) => sum + value, 0) / responses.length)
@@ -1457,6 +1797,11 @@ class LearningService {
         nowUtc,
         entry.id
       );
+      this.db.prepare(`
+        UPDATE learning_manual_queue_intents
+        SET status = 'completed', completion_review_event_id = ?, completed_at_utc = ?, updated_at_utc = ?
+        WHERE queue_entry_id = ? AND study_item_id = ? AND status = 'active'
+      `).run(eventId, nowUtc, nowUtc, entry.id, item.id);
       this._activateNext(Number(session.id), Number(session.queue_id), nowUtc);
       const remaining = Number(this.db.prepare(`
         SELECT COUNT(*) AS count FROM learning_queue_entries

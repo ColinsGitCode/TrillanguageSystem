@@ -13,9 +13,9 @@ Cards Factory 是一个本地学习卡片生产工作台：通过 DeepSeek 生�
 - Kokoro 英文 TTS 与 VOICEVOX 日文 TTS。
 - 学习辅助 2.0：学习计划、今日队列、FSRS 复习、四档评分与学习记录；
 - 教材课程：Git 外 Manifest、人工校对、官方整轨、英日单句 TTS、标红、派生卡与学习计划接入。
-- 知识图谱 2.0 基础层：确定性知识点/词形识别、显式查询事实、unresolved 人工裁决、只读聚合与受控 API（默认关闭，待分阶段启用）。
+- 知识图谱 2.0：确定性知识点/词形识别、显式查询事实、unresolved 人工裁决、只读聚合、受控 API、基础队列内的同步 Graph Planning Signal，以及经确认把已调度单元加入本次学习（默认关闭，待分阶段启用）。
 
-Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析与旧 SRS/复习/学习计划已于 2026-07-13 退役并从运行时、API 和数据库 schema 删除。学习辅助 2.0 已重新设计并上线；知识图谱 2.0 已按新领域模型完成 KG-P0-P1，未复活旧 Knowledge 子系统。
+Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析与旧 SRS/复习/学习计划已于 2026-07-13 退役并从运行时、API 和数据库 schema 删除。学习辅助 2.0 已重新设计并上线；知识图谱 2.0 已按新领域模型完成 KG-P0-P3，未复活旧 Knowledge 子系统。
 
 ## 快速开始
 

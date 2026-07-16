@@ -35,6 +35,7 @@ const TABLES_IN_DELETE_ORDER = [
 
   // Learning Assistance 2.0 (projections/events before workflow parents)
   'learning_schedule_states',
+  'learning_manual_queue_intents',
   'learning_review_events',
   'learning_sessions',
   'learning_queue_entries',
