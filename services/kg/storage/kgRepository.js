@@ -182,6 +182,28 @@ class KgRepository {
     return Boolean(this.db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(Number(sourceRefId)));
   }
 
+  sourceContentMatches(evidence) {
+    if (!evidence || !this.sourceExists(evidence.sourceKind, evidence.sourceRefId)) return false;
+    if (evidence.sourceKind === 'generation') {
+      const row = this.db.prepare('SELECT content_hash FROM generations WHERE id = ?').get(Number(evidence.sourceRefId));
+      return row?.content_hash === evidence.sourceContentHash;
+    }
+    if (evidence.sourceKind === 'study_item') {
+      const row = this.db.prepare('SELECT content_hash FROM study_items WHERE id = ?').get(Number(evidence.sourceRefId));
+      return row?.content_hash === evidence.sourceContentHash;
+    }
+    if (evidence.sourceKind === 'textbook_expression') {
+      const row = this.db.prepare(`
+        SELECT CASE ? WHEN 'en' THEN expression.en_unit_hash ELSE expression.ja_unit_hash END AS content_hash
+        FROM textbook_expression_revisions expression
+        JOIN textbook_track_revisions revision ON revision.id = expression.revision_id
+        WHERE expression.expression_id = ? AND revision.revision_number = ?
+      `).get(evidence.language, Number(evidence.sourceRefId), Number(evidence.sourceRevision));
+      return row?.content_hash === evidence.sourceContentHash;
+    }
+    return false;
+  }
+
   getEvidenceByKey(evidenceKey) {
     return this.db.prepare('SELECT * FROM kg_evidence WHERE evidence_key = ?').get(evidenceKey) || null;
   }

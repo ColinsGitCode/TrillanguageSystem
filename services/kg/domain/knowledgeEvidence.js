@@ -11,8 +11,7 @@ function assertSha256(value, label) {
   return normalized;
 }
 
-function buildEvidenceLinkCandidate({
-  pointKey,
+function buildEvidence({
   sourceKind,
   sourceRefId,
   sourceRevision = 1,
@@ -30,7 +29,6 @@ function buildEvidenceLinkCandidate({
   if (!Number.isInteger(normalizedRevision) || normalizedRevision <= 0) throw new TypeError('sourceRevision must be a positive integer');
   if (!['primary', 'context'].includes(evidenceRole)) throw new TypeError(`Unsupported evidence role: ${evidenceRole}`);
 
-  const normalizedPointKey = assertSha256(pointKey, 'pointKey');
   const normalizedContentHash = assertSha256(sourceContentHash, 'sourceContentHash');
   const identityPayload = {
     identityVersion: EVIDENCE_RULE_VERSION,
@@ -41,23 +39,29 @@ function buildEvidenceLinkCandidate({
     sourceContentHash: normalizedContentHash,
   };
   return {
+    evidenceKey: sha256(stableJson(identityPayload)),
+    sourceKind: normalizedSourceKind,
+    sourceRefId: normalizedRefId,
+    sourceRevision: normalizedRevision,
+    sourceContentHash: normalizedContentHash,
+    language: String(language || '').trim().toLowerCase(),
+    sourceText: normalizeKnowledgeText(sourceText, language),
+    locator,
+    evidenceRole,
+  };
+}
+
+function buildEvidenceLinkCandidate({ pointKey, ...source } = {}) {
+  const normalizedPointKey = assertSha256(pointKey, 'pointKey');
+  const evidence = buildEvidence(source);
+  return {
     status: 'accepted',
     linkKind: 'evidence-of',
-    strength: evidenceRole === 'primary' ? 'strong' : 'weak',
+    strength: evidence.evidenceRole === 'primary' ? 'strong' : 'weak',
     sourceKind: 'deterministic-structure',
     ruleVersion: EVIDENCE_RULE_VERSION,
     pointKey: normalizedPointKey,
-    evidence: {
-      evidenceKey: sha256(stableJson(identityPayload)),
-      sourceKind: normalizedSourceKind,
-      sourceRefId: normalizedRefId,
-      sourceRevision: normalizedRevision,
-      sourceContentHash: normalizedContentHash,
-      language: String(language || '').trim().toLowerCase(),
-      sourceText: normalizeKnowledgeText(sourceText, language),
-      locator,
-      evidenceRole,
-    },
+    evidence,
     publicReason: 'Structured primary expression provides deterministic content evidence.',
   };
 }
@@ -65,5 +69,6 @@ function buildEvidenceLinkCandidate({
 module.exports = {
   EVIDENCE_RULE_VERSION,
   SOURCE_KINDS,
+  buildEvidence,
   buildEvidenceLinkCandidate,
 };

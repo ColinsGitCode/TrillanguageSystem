@@ -42,8 +42,9 @@ test.describe('React page smoke', () => {
     }
   });
 
-  test('knowledge lookup confirms a scheduled Study Item before adding it to today', async ({ page }) => {
+  test('knowledge result selection stays read-only before a scheduled Study Item is added to today', async ({ page }) => {
     let manualIntentRequests = 0;
+    let lookupRequests = 0;
     await page.route('**/api/kg/search**', async (route) => {
       const query = new URL(route.request().url()).searchParams.get('q');
       await route.fulfill({
@@ -66,21 +67,10 @@ test.describe('React page smoke', () => {
         }),
       });
     });
-    await page.route('**/api/kg/lookups', (route) => route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        success: true,
-        lookup: {
-          id: 1,
-          eventKey: 'lookup:test',
-          resolution: 'resolved',
-          point: { id: 1, kind: 'lexeme', language: 'ja', canonicalForm: '食べる' },
-          resolutionCase: null,
-          reused: false,
-        },
-      }),
-    }));
+    await page.route('**/api/kg/lookups', (route) => {
+      lookupRequests += 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
     await page.route('**/api/kg/points/1', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -156,9 +146,10 @@ test.describe('React page smoke', () => {
 
     await page.goto('/knowledge');
     await page.getByPlaceholder('输入词语、短语或语法…').fill('食べる');
-    await page.getByRole('button', { name: '查找', exact: true }).click();
+    await page.getByRole('button', { name: /日本語 · 词语\s+食べる/ }).click();
     await expect(page.getByRole('heading', { name: '食べる' })).toBeVisible();
     await expect(page.getByText('毎朝パンを食べる。')).toBeVisible();
+    expect(lookupRequests).toBe(0);
     await page.getByRole('button', { name: '加入', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('加入本次学习？');
     expect(manualIntentRequests).toBe(0);

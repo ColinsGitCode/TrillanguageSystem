@@ -7,7 +7,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const databaseModule = require('../../services/storage/databaseService');
 const { DatabaseService } = databaseModule;
-const { buildKnowledgeBackfillManifest } = require('../../services/kg/application/buildKnowledgeBackfillManifest');
+const {
+  buildKnowledgeBackfillManifest,
+} = require('../../services/kg/application/buildKnowledgeBackfillManifest');
+const { prepareSourceText, stripJapaneseRuby } = require('../../services/kg/domain/sourceTextQuality');
 const { buildKnowledgePointIdentity, buildSurfaceIdentity } = require('../../services/kg/domain/knowledgeIdentity');
 
 const NOW = '2026-07-16T04:00:00.000Z';
@@ -23,7 +26,8 @@ function seedSources(db) {
       generation_date, request_id
     ) VALUES ('handoff', 'en', 'trilingual', 'input', 'deepseek', 'deepseek-v4-pro',
       '20260716', 'dry-run', '/tmp/dry-run.md', '/tmp/dry-run.html', '/tmp/dry-run.json',
-      '# handoff', ?, 'handoff', '引き継ぐ', '交接', '2026-07-16', 'kg-p1-dry-run')
+      '# handoff', ?, 'handoff', '<ruby>引<rt>ひ</rt></ruby>き<ruby>継<rt>つ</rt></ruby>ぐ', '交接',
+      '2026-07-16', 'kg-p1-dry-run')
   `).run(HASH_A).lastInsertRowid);
   db.prepare(`
     INSERT INTO learning_source_admissions(
@@ -80,11 +84,24 @@ function seedSources(db) {
 
 test.after(() => databaseModule.close());
 
+test('KG source preparation strips Japanese ruby and rejects target-language or markup drift', () => {
+  assert.equal(stripJapaneseRuby('<ruby>引<rt>ひ</rt></ruby>き<ruby>継<rt>つ</rt></ruby>ぐ'), '引き継ぐ');
+  assert.deepEqual(
+    prepareSourceText('<ruby>引<rt>ひ</rt></ruby>き<ruby>継<rt>つ</rt></ruby>ぐ', 'ja'),
+    { status: 'ready', text: '引き継ぐ' }
+  );
+  assert.equal(prepareSourceText('仓鼠', 'en').reason, 'source-language-mismatch');
+  assert.equal(prepareSourceText('API', 'ja').reason, 'source-language-mismatch');
+  assert.equal(prepareSourceText('<span>handoff</span>', 'en').reason, 'source-markup-unsupported');
+});
+
 test('KG-P1 backfill builds a stable read-only manifest from eligible and textbook sources', async () => {
   const database = new DatabaseService(':memory:');
   try {
     seedSources(database.db);
+    const analyzedJapanese = [];
     const analyzeJapanese = async (text) => {
+      analyzedJapanese.push(text);
       const pointIdentity = buildKnowledgePointIdentity({
         kpKind: 'lexeme', language: 'ja', canonicalForm: text, canonicalReading: 'ひきつぐ',
       });
@@ -99,6 +116,7 @@ test('KG-P1 backfill builds a stable read-only manifest from eligible and textbo
     const before = database.db.prepare('SELECT COUNT(*) AS count FROM kg_points').get().count;
     const first = await buildKnowledgeBackfillManifest({ db: database.db, now: NOW, analyzeJapanese });
     const second = await buildKnowledgeBackfillManifest({ db: database.db, now: NOW, analyzeJapanese });
+    const later = await buildKnowledgeBackfillManifest({ db: database.db, now: '2026-07-17T03:00:00.000Z', analyzeJapanese });
     const after = database.db.prepare('SELECT COUNT(*) AS count FROM kg_points').get().count;
 
     assert.equal(before, 0);
@@ -110,7 +128,10 @@ test('KG-P1 backfill builds a stable read-only manifest from eligible and textbo
     assert.equal(first.summary.resolvedCandidates, 4);
     assert.equal(first.summary.unresolvedCandidates, 1);
     assert.equal(first.unresolved[0].reason, 'whole-card-extractor-unavailable');
+    assert.ok(first.candidates.every((candidate) => !/<\/?(?:ruby|rt)\b/iu.test(candidate.source.text)));
+    assert.deepEqual(analyzedJapanese, ['引き継ぐ', '引き継ぐ', '引き継ぐ']);
     assert.equal(first.manifestHash, second.manifestHash);
+    assert.equal(first.manifestHash, later.manifestHash);
   } finally {
     database.close();
   }

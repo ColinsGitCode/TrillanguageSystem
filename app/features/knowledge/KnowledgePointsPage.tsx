@@ -146,7 +146,7 @@ export function KnowledgePointsPage() {
           <form onSubmit={submitLookup}>
             <div className="knowledge-segments" aria-label="查找语言">
               {(Object.keys(languageLabels) as KnowledgeLanguage[]).map((value) => (
-                <button type="button" className={language === value ? 'selected' : ''} key={value} onClick={() => setLanguage(value)}>{languageLabels[value]}</button>
+                <button type="button" aria-pressed={language === value} className={language === value ? 'selected' : ''} key={value} onClick={() => setLanguage(value)}>{languageLabels[value]}</button>
               ))}
             </div>
             <label>
@@ -178,7 +178,15 @@ export function KnowledgePointsPage() {
               {query.trim() && searchQuery.data?.results.length === 0 && <div className="knowledge-placeholder"><Sparkles aria-hidden="true" /><p>没有现成知识点。提交查找可按确定性规则创建或进入待确认。</p></div>}
               <div className="knowledge-result-list">
                 {(searchQuery.data?.results || []).map((result) => (
-                  <button key={result.id} type="button" className={selectedPointId === result.id ? 'selected' : ''} onClick={() => lookupMutation.mutate(result)}>
+                  <button
+                    key={result.id}
+                    type="button"
+                    className={selectedPointId === result.id ? 'selected' : ''}
+                    onClick={() => {
+                      setSelectedPointId(result.id);
+                      setUnresolvedText('');
+                    }}
+                  >
                     <span>{languageLabels[result.language]} · {kindLabels[result.kind]}</span>
                     <strong>{result.canonicalForm}</strong>
                     {result.canonicalReading && <small>{result.canonicalReading}</small>}

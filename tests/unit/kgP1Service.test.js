@@ -78,6 +78,35 @@ test('resolved lookup is idempotent and append-only', async () => {
   }
 });
 
+test('lookup rejects target-language mismatch before writing facts', async () => {
+  const { database, service } = makeService();
+  try {
+    await assert.rejects(
+      service.lookup({
+        eventKey: 'lookup:mismatch:ja:0001',
+        inputText: 'continuous integration',
+        language: 'ja',
+        kindHint: 'phrase',
+      }),
+      (error) => error.code === 'KG_INVALID_INPUT' && error.status === 400
+    );
+    await assert.rejects(
+      service.lookup({
+        eventKey: 'lookup:mismatch:en:0001',
+        inputText: '持续集成',
+        language: 'en',
+        kindHint: 'phrase',
+      }),
+      (error) => error.code === 'KG_INVALID_INPUT' && error.status === 400
+    );
+    assert.equal(database.db.prepare('SELECT COUNT(*) AS count FROM kg_lookup_events').get().count, 0);
+    assert.equal(database.db.prepare('SELECT COUNT(*) AS count FROM kg_resolution_cases').get().count, 0);
+    assert.equal(database.db.prepare('SELECT COUNT(*) AS count FROM kg_points').get().count, 0);
+  } finally {
+    database.close();
+  }
+});
+
 test('ambiguous analysis opens one unresolved case without guessing a point', async () => {
   const analyzeJapanese = async (input) => ({
     status: 'unresolved',

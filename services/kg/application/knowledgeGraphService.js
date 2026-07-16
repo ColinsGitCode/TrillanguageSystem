@@ -9,6 +9,7 @@ const {
 } = require('../domain/knowledgeIdentity');
 const { analyzeJapaneseForm } = require('../domain/japaneseFormAnalysis');
 const { buildEvidenceLinkCandidate } = require('../domain/knowledgeEvidence');
+const { prepareSourceText } = require('../domain/sourceTextQuality');
 const { KnowledgeGraphError, invalidInput } = require('../domain/kgErrors');
 const { KgRepository } = require('../storage/kgRepository');
 const { rebuildKnowledgeProjections } = require('./rebuildKnowledgeProjections');
@@ -152,8 +153,13 @@ class KnowledgeGraphService {
   }
 
   async analyzeInput({ inputText, language, kind }) {
+    const prepared = prepareSourceText(inputText, language);
+    if (prepared.status !== 'ready') {
+      throw invalidInput(`Input does not match the selected language or markup contract: ${prepared.reason}`);
+    }
+    const preparedText = prepared.text;
     if (language === 'ja' && kind === 'lexeme') {
-      const result = await this.analyzeJapanese(inputText);
+      const result = await this.analyzeJapanese(preparedText);
       return {
         ...result,
         language,
@@ -169,7 +175,7 @@ class KnowledgeGraphService {
         })),
       };
     }
-    const normalizedInput = normalizeKnowledgeText(inputText, language);
+    const normalizedInput = normalizeKnowledgeText(preparedText, language);
     const pointIdentity = buildKnowledgePointIdentity({
       kpKind: kind,
       language,
@@ -177,7 +183,7 @@ class KnowledgeGraphService {
     });
     return {
       status: 'resolved',
-      input: inputText,
+      input: preparedText,
       normalizedInput,
       canonicalForm: normalizedInput,
       lemmaReading: '',
@@ -439,32 +445,37 @@ class KnowledgeGraphService {
     }
     return this.busyRetry(() => this.repo.transaction(() => {
       const now = this.clock();
-      const eventPayload = { pointId: point.id, evidenceKey: candidate.evidence.evidenceKey };
-      const eventId = this.repo.ensureResolutionEvent({
-        eventKey: `rule:evidence:${point.pointKey}:${candidate.evidence.evidenceKey}`,
-        requestHash: sha256(stableJson(eventPayload)),
-        action: 'evidence-attached',
-        actorKind: 'rule',
-        ruleVersion: candidate.ruleVersion,
-        payloadJson: json(eventPayload),
-        publicReason: candidate.publicReason,
-        occurredAtUtc: now,
-        createdAtUtc: now,
-      });
-      const evidence = this.repo.insertEvidence(candidate.evidence, now);
-      this.repo.ensureEvidenceLink({
-        pointId: point.id,
-        evidenceId: Number(evidence.id),
-        attachmentRole: candidate.evidence.evidenceRole,
-        strength: candidate.strength,
-        decisionEventId: eventId,
-        extractorVersion: candidate.ruleVersion,
-        publicReason: candidate.publicReason,
-        now,
-      });
+      const evidence = this.persistEvidenceCandidate(candidate, point, now);
       const projection = rebuildKnowledgeProjections({ db: this.db, now, pointIds: [point.id] });
       return { point: this.getPoint(point.id), evidence, projection };
     }));
+  }
+
+  persistEvidenceCandidate(candidate, point, now) {
+    const eventPayload = { pointId: point.id, evidenceKey: candidate.evidence.evidenceKey };
+    const eventId = this.repo.ensureResolutionEvent({
+      eventKey: `rule:evidence:${point.pointKey}:${candidate.evidence.evidenceKey}`,
+      requestHash: sha256(stableJson(eventPayload)),
+      action: 'evidence-attached',
+      actorKind: 'rule',
+      ruleVersion: candidate.ruleVersion,
+      payloadJson: json(eventPayload),
+      publicReason: candidate.publicReason,
+      occurredAtUtc: now,
+      createdAtUtc: now,
+    });
+    const evidence = this.repo.insertEvidence(candidate.evidence, now);
+    this.repo.ensureEvidenceLink({
+      pointId: point.id,
+      evidenceId: Number(evidence.id),
+      attachmentRole: candidate.evidence.evidenceRole,
+      strength: candidate.strength,
+      decisionEventId: eventId,
+      extractorVersion: candidate.ruleVersion,
+      publicReason: candidate.publicReason,
+      now,
+    });
+    return evidence;
   }
 
   rebuild(now = this.clock()) {

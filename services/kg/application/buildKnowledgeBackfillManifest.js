@@ -3,15 +3,17 @@
 const {
   buildKnowledgePointIdentity,
   buildSurfaceIdentity,
+  normalizeKnowledgeText,
   sha256,
   stableJson,
 } = require('../domain/knowledgeIdentity');
 const { analyzeJapaneseForm, analyzerDescriptor } = require('../domain/japaneseFormAnalysis');
-const { buildEvidenceLinkCandidate } = require('../domain/knowledgeEvidence');
+const { buildEvidence, buildEvidenceLinkCandidate } = require('../domain/knowledgeEvidence');
+const { prepareSourceText, stripJapaneseRuby } = require('../domain/sourceTextQuality');
 const { extractStudyUnitMarkdown, labeledValue } = require('../../learning/domain/studyItemContent');
 
-const MANIFEST_VERSION = 'kg-p1-backfill-dry-run-v1';
-const EXTRACTOR_VERSION = 'kg-source-extractor-v1';
+const MANIFEST_VERSION = 'kg-p1-backfill-manifest-v3';
+const EXTRACTOR_VERSION = 'kg-source-extractor-v2';
 
 function parseJson(value, fallback = {}) {
   try {
@@ -123,44 +125,83 @@ function publishedTextbookSources(db) {
 }
 
 async function analyzeSource(source, analyzeJapanese) {
-  const text = String(source.text || '').trim();
-  if (!text) return { status: 'unresolved', source, reason: 'source-text-empty' };
-  const kind = classifyText(text, source.language, source.preferredKind);
-  if (source.language === 'ja' && kind === 'lexeme') {
+  const prepared = prepareSourceText(source.text, source.language);
+  const normalizedSource = { ...source, text: prepared.text };
+  if (prepared.status !== 'ready') {
+    return { status: 'unresolved', source: normalizedSource, reason: prepared.reason };
+  }
+  const text = prepared.text;
+  const kind = classifyText(text, normalizedSource.language, normalizedSource.preferredKind);
+  const sourceEvidence = buildEvidence({
+    sourceKind: normalizedSource.sourceKind,
+    sourceRefId: normalizedSource.sourceRefId,
+    sourceRevision: normalizedSource.sourceRevision,
+    sourceContentHash: normalizedSource.sourceContentHash,
+    language: normalizedSource.language,
+    sourceText: text,
+    locator: normalizedSource.locator,
+  });
+  if (normalizedSource.language === 'ja' && kind === 'lexeme') {
     const analysis = await analyzeJapanese(text);
+    const analysisFacts = {
+      normalizedInput: analysis.normalizedInput,
+      analyzer: analysis.analyzer || null,
+      tokens: analysis.tokens || [],
+      lemmaTokens: analysis.lemmaTokens || [],
+      inputHash: sha256(analysis.normalizedInput || text),
+      outputHash: sha256(stableJson({
+        status: analysis.status,
+        canonicalForm: analysis.canonicalForm || null,
+        lemmaReading: analysis.lemmaReading || null,
+        relation: analysis.relation || null,
+        reason: analysis.reason || null,
+        tokens: analysis.tokens || [],
+        lemmaTokens: analysis.lemmaTokens || [],
+      })),
+    };
     if (analysis.status !== 'resolved') {
-      return { status: 'unresolved', source, kind, reason: analysis.reason, analysis };
+      return {
+        status: 'unresolved', source: normalizedSource, kind, reason: analysis.reason,
+        analysis: { ...analysisFacts, details: analysis.details || {} },
+        evidence: sourceEvidence,
+      };
     }
     const evidence = buildEvidenceLinkCandidate({
       pointKey: analysis.pointIdentity.pointKey,
-      ...source,
+      ...normalizedSource,
       sourceText: text,
     });
     return {
-      status: 'resolved', source, kind,
+      status: 'resolved', source: normalizedSource, kind,
       point: analysis.pointIdentity,
       surface: analysis.surfaceIdentity,
       relation: analysis.relation,
       evidence,
-      analyzer: analysis.analyzer,
+      ...analysisFacts,
     };
   }
   const point = buildKnowledgePointIdentity({
     kpKind: kind,
-    language: source.language,
+    language: normalizedSource.language,
     canonicalForm: text,
   });
-  const surface = buildSurfaceIdentity({ language: source.language, surfaceText: text });
+  const surface = buildSurfaceIdentity({ language: normalizedSource.language, surfaceText: text });
   const evidence = buildEvidenceLinkCandidate({
     pointKey: point.pointKey,
-    ...source,
+    ...normalizedSource,
     sourceText: text,
   });
   return {
-    status: 'resolved', source, kind, point, surface,
+    status: 'resolved', source: normalizedSource, kind, point, surface,
     relation: { linkKind: 'canonical', formKind: 'dictionary' },
     evidence,
     analyzer: null,
+    tokens: [],
+    lemmaTokens: [],
+    inputHash: sha256(normalizeKnowledgeText(text, normalizedSource.language)),
+    outputHash: sha256(stableJson({
+      status: 'resolved', point, surface, relation: { linkKind: 'canonical', formKind: 'dictionary' },
+    })),
   };
 }
 
@@ -216,9 +257,13 @@ async function buildKnowledgeBackfillManifest({ db, now = new Date().toISOString
       evidenceKeys: [...group.evidenceKeys].sort(),
     })),
   };
+  const hashBody = {
+    ...manifestBody,
+    createdAtUtc: undefined,
+  };
   return {
     ...manifestBody,
-    manifestHash: sha256(stableJson(manifestBody)),
+    manifestHash: sha256(stableJson(hashBody)),
   };
 }
 
@@ -227,6 +272,8 @@ module.exports = {
   MANIFEST_VERSION,
   buildKnowledgeBackfillManifest,
   classifyText,
+  prepareSourceText,
   publishedTextbookSources,
+  stripJapaneseRuby,
   studyItemSources,
 };

@@ -1153,3 +1153,21 @@ KG-P3 已完成“知识点查找 -> 明确确认 -> 加入本次学习 -> 正�
 - `/knowledge` 落地 KG-D1 S3-S5 桌面交互：只读 suggestion、显式 lookup、KP/词形/Evidence、关联 Study Item 调度状态、确认对话框与“查看今日学习”；功能关闭时明确降级。
 
 验收结果：lint、React typecheck、328 项 unit、62 项 integration 与生产 React build 均通过；Playwright 覆盖“未确认不发请求、确认后只调用一次 manual-intent”交互。三项 KG feature flag 继续默认 `0`，P3 不自动开启图查询或 planning。
+
+---
+
+## 25. KG-R0 受控事实回填（2026-07-16）
+
+KG-P0-P3 交付的是 schema、确定性规则和运行时闭环；既有学习单元不会自动写入 KG 事实表。KG-R0 补齐首次生产数据初始化，但不改变 KG v1 的功能边界：
+
+- `buildKnowledgeBackfillManifest()` 升级为稳定 v3 hash：生成时间不参与 hash，日语 token/lemma token 与分析 hash 保留在本地 Manifest；`kg-source-extractor-v2` 先移除日语 ruby 注音层，再对英语/日语执行目标语言与残留 HTML 门禁；
+- `applyKnowledgeBackfill()` 只接受显式批准的 `expectedManifestHash`，先重建当前 Manifest，再逐条复核 Evidence source hash；hash 不匹配或 source drift 时零写入；
+- apply 仅允许空 KG 事实库，防止初始回填与未来增量维护混淆；在一个事务内物化确定性 KP、surface、Evidence、link 和有可用正文的 unresolved case，随后重建投影；
+- `scripts/maintenance/applyKnowledgeBackfill.js` 强制 `--apply`、SQLite backup 路径和不可覆盖 report 路径；卷级备份、审核和分级启用见 `Docs/Operations/Knowledge_Graph_2_0_Runbook.md`；
+- 运行时三项 KG flag 在 R0 后仍默认 `0`。只有回填报告和人工样本验收后，才允许先启用 `KG_ENABLED`；`KG_PLANNING_ENABLED` 继续等待小范围运行观察。
+
+首次 v2 apply 在 UI 样本验收中发现历史翻译列存在语言错位与 ruby 正文污染，已按运行手册关闭 KG 并恢复 pre-R0 SQLite backup。恢复验收为 `integrity_check=ok`、外键违规 0、11 张 KG 表全空。v2 批次永久作废；后续 apply 只能使用通过 resolved 语言/标记门禁的 v3 Manifest。
+
+最终批准的 v3 Manifest hash 为 `b79afaf97f1a1c1fd445fc150060ffc925ec7de3759a15460857085f77037275`。v3c apply 插入 855 个 KP、1107 个 surface、1123 条 Evidence、255 个可物化 unresolved case，回填本身写入 lookup 0 条；语言错位与残留标记违规均为 0。`study_items=1141` 保持不变，Review Event、Schedule State 与 Manual Intent 均保持 0，SQLite `integrity_check=ok` 且外键违规为 0。
+
+运行时抽样同时修正了一个所有权偏差：typeahead 搜索结果点击只能选择并读取 KP，不得调用 lookup mutation；只有用户显式提交“查找”才写 append-only lookup。E2E 对 `/api/kg/lookups` 设置失败拦截并断言结果选择发送 0 次请求。最终桌面验收覆盖英文 resolved、日语 kanji reading、pure-kana unresolved 与错误语言输入拒绝；本地运行环境只启用 `KG_ENABLED`，planning 与 LLM enrichment 继续关闭。
