@@ -95,3 +95,79 @@
               box-shadow var(--duration-fast) var(--ease-standard),
               color var(--duration-fast) var(--ease-standard);
 }
+
+/* —— 选区内联工具条:标红 + 生成卡片(移植自旧 v3.5 选取即生成,适配 React) —— */
+.card-selection-toolbar {
+  position: fixed;
+  z-index: 120;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  transform: translate(-50%, calc(-100% - 8px));
+  transition: opacity var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
+}
+.card-selection-toolbar[data-placement="below"] { transform: translate(-50%, 8px); }
+.card-selection-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font: 600 13px/1 var(--font-sans);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.card-selection-toolbar .csa-highlight { color: var(--color-danger); }
+.card-selection-toolbar .csa-generate { color: var(--color-primary); }
+.card-selection-toolbar button:hover:not(:disabled) { background: var(--color-bg-subtle); }
+.card-selection-toolbar button:disabled { cursor: default; opacity: .6; }
+.card-selection-toolbar button svg { width: 15px; height: 15px; }
+.card-selection-toolbar .csa-sep { width: 1px; margin: 3px 0; background: var(--color-border); }
+.card-selection-toolbar .csa-generate-wrap { position: relative; display: inline-flex; }
+.card-selection-toolbar .csa-caret { width: 13px; height: 13px; margin-left: -2px; opacity: .7; }
+
+/* —— 生成卡片:卡型选择菜单 —— */
+.card-selection-toolbar .csa-gen-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 1;
+  min-width: 128px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+.card-selection-toolbar .csa-gen-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 8px 12px;
+  color: var(--color-text-primary);
+}
+
+/* —— 选区操作反馈 toast —— */
+.card-selection-toast {
+  position: fixed;
+  z-index: 130;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  background: var(--color-text-primary);
+  color: var(--color-text-inverse);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-modal);
+  font: 600 13px/1 var(--font-sans);
+  white-space: nowrap;
+}

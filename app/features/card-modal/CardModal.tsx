@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Highlighter, Trash2, X } from 'lucide-react';
+import { ChevronDown, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { factoryApi } from '../factory/factory-api';
-import type { CardSelection } from '../factory/types';
+import type { CardSelection, CardType } from '../factory/types';
+import { ApiError } from '../../lib/api/client';
 import { applyMarkerHighlight, applyTextHighlight } from './highlight';
+import { buildSelectionCandidate } from './selection';
 import {
   computeTextHash,
   extractMarkdownTitle,
@@ -18,6 +20,13 @@ type Props = {
   onClose: () => void;
 };
 
+const CARD_TYPE_LABEL: Record<CardType, string> = {
+  trilingual: '单词卡',
+  grammar_ja: '语法卡',
+  scenario_phrase: '场景卡',
+};
+const SELECTION_CARD_TYPES: CardType[] = ['trilingual', 'grammar_ja', 'scenario_phrase'];
+
 export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const queryClient = useQueryClient();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -29,6 +38,10 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const [renderedHtml, setRenderedHtml] = useState('');
   const [hasSelection, setHasSelection] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toolbar, setToolbar] = useState<{ top: number; left: number; placeBelow: boolean; phrase: string } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [genMenuOpen, setGenMenuOpen] = useState(false);
+  const toastTimerRef = useRef<number | null>(null);
   const cardQuery = useQuery({
     queryKey: ['card', selection.folder, selection.baseName],
     queryFn: () => factoryApi.card(selection),
@@ -99,6 +112,36 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     },
   });
 
+  const showToast = (message: string) => {
+    setToast(message);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2400);
+  };
+  useEffect(() => () => {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+  }, []);
+
+  const generateMutation = useMutation({
+    mutationFn: (vars: { phrase: string; cardType: CardType }) => factoryApi.enqueue({
+      phrase: vars.phrase,
+      cardType: vars.cardType,
+      sourceMode: 'selection',
+      targetFolder: selection.folder,
+    }),
+    onSuccess: async (_data, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ['queue'] });
+      window.getSelection()?.removeAllRanges();
+      setToolbar(null);
+      setGenMenuOpen(false);
+      setHasSelection(false);
+      showToast(`✦ 已加入生成队列 · ${CARD_TYPE_LABEL[vars.cardType]}`);
+    },
+    onError: (error) => {
+      const duplicate = error instanceof ApiError && error.status === 409;
+      showToast(duplicate ? '该短语已存在或已在生成队列中' : '生成入队失败，请重试');
+    },
+  });
+
   const saveHighlight = async () => {
     const container = contentRef.current;
     const range = selectedRangeRef.current;
@@ -110,6 +153,8 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     selectedRangeRef.current = null;
     selectedTextRef.current = '';
     setHasSelection(false);
+    setToolbar(null);
+    setGenMenuOpen(false);
     const renderer = container.querySelector<HTMLElement>('[data-card-renderer-version="2"]');
     if (!renderer) return;
     const html = renderer.outerHTML;
@@ -124,17 +169,29 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   };
 
   const captureSelection = () => {
-    const selectionState = window.getSelection();
-    const range = selectionState?.rangeCount ? selectionState.getRangeAt(0) : null;
-    if (!range || range.collapsed || !contentRef.current?.contains(range.commonAncestorContainer)) {
+    const container = contentRef.current;
+    if (!container) return;
+    const candidate = buildSelectionCandidate(container);
+    if (!candidate) {
       selectedRangeRef.current = null;
       selectedTextRef.current = '';
       setHasSelection(false);
+      setToolbar(null);
+      setGenMenuOpen(false);
       return;
     }
-    selectedRangeRef.current = range.cloneRange();
-    selectedTextRef.current = selectionState?.toString() || '';
+    selectedRangeRef.current = candidate.range.cloneRange();
+    selectedTextRef.current = window.getSelection()?.toString() || candidate.rawText;
     setHasSelection(true);
+    const rect = candidate.range.getBoundingClientRect();
+    const placeBelow = rect.top < 64;
+    setToolbar({
+      top: placeBelow ? rect.bottom : rect.top,
+      left: rect.left + rect.width / 2,
+      placeBelow,
+      phrase: candidate.normalized,
+    });
+    setGenMenuOpen(false);
   };
 
   const handleContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -187,7 +244,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           )}
         </nav>
 
-        <div className="react-card-scroll">
+        <div className="react-card-scroll" onScroll={() => setToolbar(null)}>
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
@@ -212,6 +269,51 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           )}
           {tab === 'intel' && <IntelPanel record={cardQuery.data?.record || null} />}
         </div>
+
+        {tab === 'content' && !readOnly && toolbar && (
+          <div
+            className="card-selection-toolbar"
+            data-placement={toolbar.placeBelow ? 'below' : 'above'}
+            style={{ top: toolbar.top, left: toolbar.left }}
+            role="toolbar"
+            aria-label="选区操作"
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <button type="button" className="csa-highlight" onClick={() => void saveHighlight()}>
+              <Highlighter aria-hidden="true" /> 标红
+            </button>
+            <span className="csa-sep" aria-hidden="true" />
+            <div className="csa-generate-wrap">
+              <button
+                type="button"
+                className="csa-generate"
+                disabled={generateMutation.isPending}
+                aria-haspopup="menu"
+                aria-expanded={genMenuOpen}
+                onClick={() => setGenMenuOpen((open) => !open)}
+              >
+                <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
+                <ChevronDown aria-hidden="true" className="csa-caret" />
+              </button>
+              {genMenuOpen && !generateMutation.isPending && (
+                <div className="csa-gen-menu" role="menu">
+                  {SELECTION_CARD_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
+                    >
+                      {CARD_TYPE_LABEL[type]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {toast && <div className="card-selection-toast" role="status">{toast}</div>}
 
         {confirmDelete && !readOnly && (
           <div className="delete-confirm" role="alertdialog" aria-label="确认删除卡片">
