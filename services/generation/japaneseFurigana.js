@@ -2,6 +2,8 @@ const Kuroshiro = require('kuroshiro').default || require('kuroshiro');
 const KuromojiAnalyzer = require('kuroshiro-analyzer-kuromoji');
 
 let kuroshiroInstance = null;
+let kuroshiroInitPromise = null;
+let kuromojiAnalyzerInstance = null;
 const KANJI_REGEX = /[\u3400-\u9FFF々〆ヵヶ]/;
 
 function stripNonKanjiRuby(html) {
@@ -13,10 +15,22 @@ function stripNonKanjiRuby(html) {
 
 async function getKuroshiro() {
   if (kuroshiroInstance) return kuroshiroInstance;
-  const kuroshiro = new Kuroshiro();
-  await kuroshiro.init(new KuromojiAnalyzer());
-  kuroshiroInstance = kuroshiro;
-  return kuroshiroInstance;
+  if (!kuroshiroInitPromise) {
+    kuroshiroInitPromise = (async () => {
+      const kuroshiro = new Kuroshiro();
+      const analyzer = new KuromojiAnalyzer();
+      await kuroshiro.init(analyzer);
+      kuromojiAnalyzerInstance = analyzer;
+      kuroshiroInstance = kuroshiro;
+      return kuroshiro;
+    })();
+  }
+  return kuroshiroInitPromise;
+}
+
+async function analyzeJapaneseTokens(text) {
+  await getKuroshiro();
+  return kuromojiAnalyzerInstance.parse(String(text || ''));
 }
 
 async function toRuby(text) {
@@ -25,4 +39,4 @@ async function toRuby(text) {
   return stripNonKanjiRuby(converted).replace(/<rp>.*?<\/rp>/g, '');
 }
 
-module.exports = { toRuby };
+module.exports = { analyzeJapaneseTokens, toRuby };

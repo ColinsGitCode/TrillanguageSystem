@@ -986,7 +986,7 @@ KG-D1 12 状态与本文契约映射如下，原型当前已包含 12 个真实 
 
 ## 19. 实施阶段
 
-### KG-P0：识别 POC
+### KG-P0：识别 POC（已完成，2026-07-16）
 
 - 暴露只读 token analyzer；
 - 固定 §4.3 fixture；
@@ -1041,3 +1041,33 @@ KG-D1 12 状态与本文契约映射如下，原型当前已包含 12 个真实 
 - [x] 用户确认本文为 Accepted，允许进入 KG-P0
 
 2026-07-16 全部门禁通过，本文转为 Accepted，成为知识图谱 2.0 的领域与数据基线；KG-P0 已获准启动。后续实施必须遵守本文的所有权、降级、幂等、只读聚合与 LA 协同边界。
+
+---
+
+## 21. KG-P0 实施记录（2026-07-16）
+
+KG-P0 已完成并通过门禁，交付范围严格限制为只读 POC：
+
+- `services/generation/japaneseFurigana.js` 在既有单例 Kuroshiro/Kuromoji 初始化边界上暴露 `analyzeJapaneseTokens()`，未额外加载第二份词典，原 `toRuby()` 行为保持兼容；
+- `services/kg/domain/knowledgeIdentity.js` 实现 `kg-identity-v1` / `surface-identity-v1` 的稳定规范化与 SHA-256 identity；
+- `services/kg/domain/japaneseFormAnalysis.js` 实现 basic form 重分析、lemma reading、`canonical / inflection-of / polite-of` 判定与保守 unresolved；
+- `services/kg/domain/knowledgeEvidence.js` 以结构化来源生成只读 `evidence-of` candidate；
+- `tests/fixtures/kg-p0-japanese-token-fixtures.json` 固定 analyzer/rule 版本、原始 token JSON、预期关系、unresolved 原因和 point key；
+- `scripts/poc/kgP0DryRun.js` / `npm run kg:p0` 输出 `mode=read-only-no-database` 的 POC manifest。
+
+实测结果：
+
+| 项目 | 结果 |
+|---|---|
+| fixture | 8 |
+| resolved / unresolved | 6 / 2 |
+| `食べる / 食べた / 食べて / 食べます` | 同一 point key `8d738529...beda2` |
+| `箸 / 橋` | 相同 lemma reading，但 point key 不同 |
+| `はし` | `ambiguous-kana-input` |
+| 未知 `xyz` | `unsupported-token` |
+| accepted relation candidates | `inflection-of` 2、`polite-of` 1、`evidence-of` 1；另有内部 canonical 3 |
+| lint | 通过 |
+| unit | 311/311 通过（其中 KG-P0 新增 17） |
+| integration | 57/57 通过 |
+
+边界核验：未新增或修改 `database/schema.sql`、migration、route、LearningService、Planning Provider、feature flag、DeepSeek 调用或运行时数据库数据。KG-P0 只证明确定性身份与关系规则可行；下一阶段为 **KG-P1 事实表、读模型与只读 API**，必须另行实施 migration 003，且初次部署的 KG feature flags 继续全部为 0。
