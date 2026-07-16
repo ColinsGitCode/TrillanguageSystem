@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>KG-D1 已确认 · 知识图谱桌面原型</title>
+<style>
+:root {
+  color-scheme: light;
+  --canvas:#f7f8fa; --surface:#ffffff; --elevated:#ffffff; --subtle:#f1f3f5;
+  --text:#172033; --text2:#566074; --text3:#7a8496; --disabled:#a7afbc; --inverse:#ffffff;
+  --border:#dde2e9; --border2:#c6ced9; --focus:#2563eb; --overlay:rgb(17 24 39 / 48%);
+  --primary:#2563eb; --primary2:#1d4ed8; --primary-soft:#eaf1ff;
+  --success:#0f8a5f; --success-soft:#e7f7f1; --warning:#b76508; --warning-soft:#fff3dc;
+  --danger:#c43b4d; --danger-soft:#fff0f2; --info:#087ea4; --info-soft:#e8f6fb;
+  --en:#2563eb; --ja:#7c3aed; --zh:#0d9488;
+  --kg:#6d28d9; --kg-dark:#4c1d95; --kg-soft:#f1ecff;
+  --shadow:0 1px 2px rgb(17 24 39 / 7%), 0 3px 10px rgb(17 24 39 / 4%);
+  --shadow-lg:0 18px 48px rgb(17 24 39 / 18%);
+  --sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  --jp:"Hiragino Sans","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas:#15181d; --surface:#1d2128; --elevated:#242932; --subtle:#292f39;
+  --text:#f2f4f7; --text2:#c1c8d2; --text3:#929cab; --disabled:#697382; --inverse:#14171c;
+  --border:#343b46; --border2:#46505e; --focus:#78a8ff; --overlay:rgb(0 0 0 / 68%);
+  --primary:#78a8ff; --primary2:#9abfff; --primary-soft:#23334f;
+  --success:#5fd1a5; --success-soft:#19392f; --warning:#f0b35e; --warning-soft:#443019;
+  --danger:#ff8794; --danger-soft:#48242b; --info:#67c8e8; --info-soft:#173846;
+  --en:#82adff; --ja:#c0a3ff; --zh:#5fd4c7;
+  --kg:#a78bfa; --kg-dark:#c4b5fd; --kg-soft:#2a2450;
+  --shadow:0 1px 2px rgb(0 0 0 / 25%); --shadow-lg:0 22px 56px rgb(0 0 0 / 42%);
+}
+* { box-sizing:border-box; }
+html,body { margin:0; min-height:100%; background:var(--canvas); color:var(--text); }
+body { min-width:1180px; font:14px/1.5 var(--sans); letter-spacing:0; }
+button,input,textarea { font:inherit; letter-spacing:0; color:inherit; }
+button { cursor:pointer; }
+button:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+button:disabled { cursor:not-allowed; opacity:.5; }
+rt { color:var(--text3); font:500 10px/1 var(--jp); }
+.jp { font-family:var(--jp); }
+
+/* —— 原型控制条 —— */
+.proto-bar { position:sticky; top:0; z-index:90; min-height:46px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:7px 12px; background:var(--surface); border-bottom:1px solid var(--border); box-shadow:var(--shadow); }
+.proto-label { margin-right:4px; color:var(--text3); font:700 10px/1 var(--mono); text-transform:uppercase; }
+.proto-pick { min-height:30px; padding:0 9px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text2); font-size:11px; white-space:nowrap; }
+.proto-pick[aria-pressed="true"] { color:var(--inverse); background:var(--kg); border-color:var(--kg); font-weight:700; }
+.proto-theme { margin-left:auto; min-width:68px; }
+.state { display:none; }
+.state.on { display:block; }
+.stage { padding:16px; }
+.prototype-note { width:min(1420px,calc(100vw - 32px)); margin:0 auto 10px; padding:9px 12px; color:var(--text2); background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--kg); border-radius:6px; font-size:12px; }
+.prototype-note strong { color:var(--text); }
+.prototype-note code { padding:1px 5px; background:var(--kg-soft); border-radius:4px; font:600 11px/1.4 var(--mono); color:var(--kg-dark); }
+
+/* —— 应用外壳 —— */
+.frame { width:min(1420px,calc(100vw - 32px)); min-width:1120px; min-height:720px; margin:0 auto; overflow:hidden; background:var(--canvas); border:1px solid var(--border2); border-radius:10px; box-shadow:var(--shadow-lg); }
+.app { min-height:720px; display:grid; grid-template-columns:224px minmax(0,1fr); }
+.side { display:flex; flex-direction:column; padding:18px 14px; background:var(--surface); border-right:1px solid var(--border); }
+.brand { display:flex; align-items:center; gap:12px; padding:0 6px 22px; }
+.brand-bars { width:24px; height:32px; display:flex; gap:3px; }
+.brand-bars i { flex:1; border-radius:2px; background:var(--en); }
+.brand-bars i:nth-child(2) { background:var(--ja); }
+.brand-bars i:nth-child(3) { background:var(--zh); }
+.brand strong,.brand small { display:block; }
+.brand strong { font-size:15px; }
+.brand small { margin-top:2px; color:var(--text3); font-size:10px; }
+.nav-group { margin:14px 8px 6px; color:var(--text3); font-size:11px; font-weight:600; }
+.nav a { min-height:38px; display:flex; align-items:center; gap:10px; margin:2px 0; padding:0 10px; color:var(--text2); text-decoration:none; border-radius:6px; font-weight:600; font-size:13px; }
+.nav a.active { color:var(--kg); background:var(--kg-soft); }
+.nav-mark { width:15px; height:15px; display:grid; place-items:center; color:currentColor; font:700 10px/1 var(--mono); border:1px solid currentColor; border-radius:3px; }
+.side-foot { margin-top:auto; padding:10px 8px 0; color:var(--text3); font-size:11px; border-top:1px solid var(--border); }
+
+/* —— 主区 —— */
+.main { display:flex; flex-direction:column; min-width:0; }
+.topbar { display:flex; align-items:center; gap:12px; min-height:56px; padding:0 22px; border-bottom:1px solid var(--border); background:var(--surface); }
+.topbar h1 { margin:0; font-size:16px; font-weight:700; }
+.topbar .sub { color:var(--text3); font-size:12px; }
+.topbar .spacer { margin-left:auto; }
+.content { padding:22px; display:flex; flex-direction:column; gap:16px; }
+
+/* —— 查找条 —— */
+.lookup { display:flex; gap:10px; align-items:stretch; }
+.lookup-field { position:relative; flex:1; }
+.lookup-field input { width:100%; height:44px; padding:0 14px 0 40px; border:1px solid var(--border2); border-radius:9px; background:var(--surface); font-size:15px; }
+.lookup-field .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text3); font-size:16px; }
+.btn { min-height:44px; padding:0 18px; border:1px solid var(--border2); border-radius:9px; background:var(--surface); color:var(--text); font-weight:600; font-size:14px; display:inline-flex; align-items:center; gap:7px; }
+.btn.primary { background:var(--kg); border-color:var(--kg); color:var(--inverse); }
+.btn.ghost { background:transparent; }
+.btn.sm { min-height:34px; padding:0 12px; font-size:13px; border-radius:7px; }
+.typeahead { margin-top:6px; border:1px solid var(--border); border-radius:9px; background:var(--elevated); box-shadow:var(--shadow); overflow:hidden; }
+.typeahead li { list-style:none; display:flex; align-items:center; gap:10px; padding:9px 14px; border-top:1px solid var(--border); font-size:14px; }
+.typeahead li:first-child { border-top:0; }
+.typeahead .kind { font:600 10px/1 var(--mono); color:var(--text3); text-transform:uppercase; }
+.readonly-flag { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:999px; background:var(--info-soft); color:var(--info); font-size:11px; font-weight:600; }
+
+/* —— 卡片/面板 —— */
+.panel { border:1px solid var(--border); border-radius:11px; background:var(--surface); overflow:hidden; }
+.panel-head { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border); }
+.panel-head h2 { margin:0; font-size:14px; font-weight:700; }
+.panel-head .muted { color:var(--text3); font-size:12px; font-weight:500; }
+.panel-body { padding:16px; }
+.grid2 { display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start; }
+.grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-items:stretch; }
+
+/* —— KP 头 —— */
+.kp-head { display:flex; align-items:flex-start; gap:16px; }
+.kp-title { font-size:30px; font-weight:700; line-height:1.1; }
+.kp-reading { margin-top:4px; color:var(--text3); font-size:14px; }
+.kp-meta { margin-left:auto; text-align:right; display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+.kp-kind { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; background:var(--kg-soft); color:var(--kg-dark); font:700 11px/1 var(--mono); text-transform:uppercase; }
+
+/* —— 徽标/胶囊 —— */
+.chip { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; border:1px solid transparent; }
+.chip.rel { background:var(--kg-soft); color:var(--kg-dark); border-color:color-mix(in srgb,var(--kg) 30%,transparent); }
+.chip.en { background:color-mix(in srgb,var(--en) 12%,transparent); color:var(--en); }
+.chip.ja { background:color-mix(in srgb,var(--ja) 14%,transparent); color:var(--ja); }
+.chip.due { background:var(--warning-soft); color:var(--warning); }
+.chip.ok { background:var(--success-soft); color:var(--success); }
+.chip.muted { background:var(--subtle); color:var(--text3); }
+.chip.warn { background:var(--danger-soft); color:var(--danger); }
+
+/* —— 证据行 —— */
+.evi { display:flex; align-items:center; gap:12px; padding:11px 0; border-top:1px solid var(--border); }
+.evi:first-child { border-top:0; }
+.evi .frm { font-family:var(--jp); font-size:16px; min-width:74px; }
+.evi .desc { color:var(--text2); font-size:13px; }
+.evi .desc b { color:var(--text); }
+.evi .tail { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+/* —— 检索困难信号块 —— */
+.signal-card { display:flex; gap:14px; align-items:center; padding:14px 16px; border-radius:11px; background:var(--kg-soft); border:1px solid color-mix(in srgb,var(--kg) 26%,transparent); }
+.signal-num { font-size:34px; font-weight:800; color:var(--kg-dark); line-height:1; font-variant-numeric:tabular-nums; }
+.signal-card .lab { color:var(--kg-dark); font-size:13px; }
+.signal-card .lab b { display:block; font-size:14px; color:var(--text); }
+
+/* —— 解释框 —— */
+.explain { padding:12px 14px; border-radius:9px; background:var(--subtle); border:1px dashed var(--border2); font-size:12.5px; color:var(--text2); }
+.explain b { color:var(--text); }
+.explain .k { font:600 11px/1.5 var(--mono); color:var(--kg-dark); }
+.guard { display:flex; gap:9px; padding:11px 13px; border-radius:9px; background:var(--info-soft); color:var(--info); font-size:12.5px; border:1px solid color-mix(in srgb,var(--info) 24%,transparent); }
+.guard b { color:var(--text); }
+
+/* —— 队列外/加入学习 —— */
+.notqueue { display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:10px; background:var(--warning-soft); border:1px solid color-mix(in srgb,var(--warning) 30%,transparent); }
+.notqueue .txt { font-size:13px; color:var(--text2); }
+.notqueue .txt b { color:var(--text); }
+
+/* —— 模态 —— */
+.modal-scrim { position:absolute; inset:0; background:var(--overlay); display:grid; place-items:center; padding:24px; }
+.modal { width:min(520px,100%); background:var(--elevated); border:1px solid var(--border2); border-radius:14px; box-shadow:var(--shadow-lg); overflow:hidden; }
+.modal-head { padding:16px 18px 8px; }
+.modal-head h3 { margin:0 0 4px; font-size:17px; }
+.modal-head p { margin:0; color:var(--text3); font-size:12.5px; }
+.modal-body { padding:8px 18px 4px; display:flex; flex-direction:column; gap:11px; }
+.kv { display:flex; justify-content:space-between; gap:12px; padding:9px 12px; border-radius:8px; background:var(--subtle); font-size:13px; }
+.kv span:first-child { color:var(--text3); }
+.kv b { font-weight:650; }
+.modal-foot { display:flex; justify-content:flex-end; gap:9px; padding:14px 18px 18px; }
+.pledge { display:flex; gap:8px; padding:10px 12px; border-radius:8px; background:var(--success-soft); color:var(--success); font-size:12px; }
+.pledge b { color:var(--text); }
+
+/* —— 批次 2 工具类 —— */
+.resolve { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:11px; background:var(--success-soft); border:1px solid color-mix(in srgb,var(--success) 26%,transparent); }
+.resolve.warn { background:var(--warning-soft); border-color:color-mix(in srgb,var(--warning) 30%,transparent); }
+.resolve .big { font-family:var(--jp); font-size:26px; font-weight:700; }
+.arrow { color:var(--text3); font-size:18px; }
+.token { display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:7px; background:var(--surface); border:1px solid var(--border2); font-family:var(--jp); font-size:14px; }
+.token small { color:var(--text3); font:600 10px/1 var(--mono); }
+.cand { display:flex; align-items:center; gap:13px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+.cand .g { font-family:var(--jp); font-size:24px; font-weight:700; min-width:44px; text-align:center; }
+.cand .m { font-size:13px; color:var(--text2); line-height:1.5; }
+.cand .m b { color:var(--text); }
+
+/* —— 批次 3 工具类 —— */
+.panel.rev .panel-head { box-shadow:inset 3px 0 0 var(--info); }
+.panel.diff .panel-head { box-shadow:inset 3px 0 0 var(--kg); }
+.panel.cov .panel-head { box-shadow:inset 3px 0 0 var(--text3); }
+.stat-row { display:flex; gap:10px; flex-wrap:wrap; }
+.stat { flex:1; min-width:112px; padding:11px 13px; border-radius:9px; background:var(--subtle); }
+.stat .n { font-size:21px; font-weight:800; font-variant-numeric:tabular-nums; }
+.stat .l { color:var(--text3); font-size:12px; margin-top:2px; }
+.cluster { display:flex; flex-direction:column; align-items:center; gap:12px; padding:6px 0 2px; }
+.lemma-node { padding:14px 24px; border-radius:12px; background:var(--kg-soft); border:1px solid color-mix(in srgb,var(--kg) 34%,transparent); text-align:center; }
+.lemma-node .g { font-family:var(--jp); font-size:30px; font-weight:700; color:var(--kg-dark); }
+.lemma-node small { display:block; color:var(--text3); font-size:11px; margin-top:3px; }
+.branches { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+.branch { width:158px; padding:13px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); text-align:center; }
+.branch .g { font-family:var(--jp); font-size:20px; font-weight:700; }
+.branch .rl { margin-top:8px; }
+.dup { display:flex; align-items:center; gap:13px; padding:13px 15px; border-radius:10px; background:var(--danger-soft); border:1px solid color-mix(in srgb,var(--danger) 30%,transparent); }
+.qrow { display:flex; align-items:center; gap:12px; padding:11px 13px; margin:5px 0; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+.qrow.boost { border-color:color-mix(in srgb,var(--kg) 42%,transparent); background:var(--kg-soft); }
+.qrow .pos { width:24px; text-align:center; font:700 13px/1 var(--mono); color:var(--text3); }
+.qrow .nm { font-weight:600; font-size:15px; }
+.qrow .tail { margin-left:auto; display:flex; align-items:center; gap:7px; }
+.bucket-label { margin:12px 0 2px; color:var(--text3); font-size:12px; font-weight:600; }
+.evidence-grid .panel { min-height:278px; }
+.evidence-grid .panel-body { display:flex; flex-direction:column; gap:11px; }
+.metric-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-top:1px solid var(--border); font-size:12.5px; }
+.metric-line:first-child { border-top:0; }
+.metric-line span { color:var(--text2); }
+.metric-line b { text-align:right; }
+.form-map { display:flex; flex-direction:column; align-items:center; gap:9px; padding:4px 0; }
+.form-trunk { width:1px; height:18px; background:var(--border2); }
+.form-note { padding:9px 11px; border-radius:8px; background:var(--subtle); color:var(--text2); font-size:12px; text-align:left; }
+.input-mock { display:flex; align-items:center; min-height:44px; padding:0 13px; border:1px solid var(--border2); border-radius:9px; background:var(--surface); font-size:15px; }
+.dup .code { padding:3px 7px; border-radius:5px; background:color-mix(in srgb,var(--danger) 10%,var(--surface)); color:var(--danger); font:700 11px/1.4 var(--mono); }
+.queue-grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(290px,.8fr); gap:16px; align-items:start; }
+.sort-keys { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.sort-key { padding:3px 7px; border-radius:5px; background:var(--subtle); color:var(--text3); font:600 10px/1.3 var(--mono); }
+.sort-key.active { background:var(--kg-soft); color:var(--kg-dark); }
+.qrow .move { color:var(--kg-dark); font:700 11px/1 var(--mono); }
+.diag { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.diag div { padding:10px 11px; border-radius:8px; background:var(--subtle); }
+.diag span,.diag b { display:block; }
+.diag span { color:var(--text3); font-size:11px; }
+.diag b { margin-top:3px; font:700 12px/1.4 var(--mono); }
+.degraded { display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:10px; background:var(--info-soft); border:1px solid color-mix(in srgb,var(--info) 28%,transparent); }
+.degraded .copy { color:var(--text2); font-size:13px; }
+.degraded .copy b { display:block; color:var(--text); font-size:14px; }
+.lock-row { display:flex; align-items:center; gap:9px; padding:10px 12px; border-radius:8px; background:var(--success-soft); color:var(--success); font-size:12.5px; }
+.lock-row b { color:var(--text); }
+
+.frame-caption { width:min(1420px,calc(100vw - 32px)); margin:8px auto 0; color:var(--text3); font-size:11px; text-align:right; }
+</style>
+</head>
+<body>
+
+<div class="proto-bar" role="toolbar" aria-label="原型状态切换">
+  <span class="proto-label">KG-D1 已确认</span>
+  <button class="proto-pick" data-go="s1" aria-pressed="true">S1 查找入口</button>
+  <button class="proto-pick" data-go="s2">S2 重复·已在队列</button>
+  <button class="proto-pick" data-go="s3">S3 重复·队列外</button>
+  <button class="proto-pick" data-go="s4">S4 加入学习·确认</button>
+  <button class="proto-pick" data-go="s5">S5 加入结果</button>
+  <button class="proto-pick" data-go="s6">S6 相关词形</button>
+  <button class="proto-pick" data-go="s7">S7 unresolved</button>
+  <button class="proto-pick" data-go="s8">S8 KP·三类证据</button>
+  <button class="proto-pick" data-go="s9">S9 词形聚类</button>
+  <button class="proto-pick" data-go="s10">S10 命中重复</button>
+  <button class="proto-pick" data-go="s11">S11 队列内上浮</button>
+  <button class="proto-pick" data-go="s12">S12 降级态</button>
+  <button class="proto-pick proto-theme" id="themeBtn" type="button">◐ 深色</button>
+</div>
+
+<!-- ============================== S1 查找入口 ============================== -->
+<section class="state on" id="s1">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S1 · 显式「查找知识点」入口（空态）。</strong>
+      这是 KG-D0 §5.1 定义的<strong>唯一会写 lookup 事件</strong>的用户动作入口。下方联想列表是<strong>只读</strong>的：
+      逐字输入 / typeahead / 浏览结果都<strong>不</strong>写 <code>explicit_lookup</code>，只有用户提交查找并打开一个明确结果时才计一次。（§5.1、§5.5）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b><br>图 provider 可随时降级</div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>知识点查找</h1><span class="sub">Knowledge Point Lookup</span>
+          <span class="spacer"></span><span class="readonly-flag">◎ 输入与浏览均只读</span></div>
+        <div class="content">
+          <div class="lookup">
+            <div class="lookup-field">
+              <span class="ic">⌕</span>
+              <input value="たべ" aria-label="查找知识点" />
+            </div>
+            <button class="btn primary">查找知识点</button>
+          </div>
+          <ul class="typeahead" aria-label="联想（只读，不写事件）">
+            <li><span class="jp" style="font-size:16px;">食べる</span><span class="kind">lexeme · ja</span>
+              <span class="chip muted" style="margin-left:auto;">辞书形</span></li>
+            <li><span class="jp" style="font-size:16px;">食べます</span><span class="kind">surface · ja</span>
+              <span class="chip rel" style="margin-left:auto;">→ 食べる 敬体</span></li>
+            <li><span class="jp" style="font-size:16px;">食べ物</span><span class="kind">lexeme · ja</span>
+              <span class="chip muted" style="margin-left:auto;">名词</span></li>
+          </ul>
+          <div class="guard">
+            <span>ℹ️</span>
+            <div><b>为什么联想不算 lookup？</b> lookup 是「检索困难信号」，必须对应一次<strong>明确的查找意图</strong>；
+              若把每次 typeahead 都记成信号，会把「手滑打字」误当成「没记住」，污染 §5.2 的排序解释。</div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S1 / 12 · 对应 KG-D0 §2 T1 入口、§5.1 事件语义、§5.5 只读保证</div>
+  </div>
+</section>
+
+<!-- ============================== S2 重复查找·已在基础队列 ============================== -->
+<section class="state" id="s2">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S2 · 重复显式查找同一表达，且关联 Study Item 已在今日基础队列。</strong>
+      系统回显「显式查找 2 次 / 最近 07-14」，并给出<strong>排序解释</strong>——但明确标注：图信号只在
+      <code>同 bucket + available_at + due_at</code> 的条目之间做可解释细排，<strong>不改变基础集合，也不改到期顺序</strong>。（§5.2、§9）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1 class="jp">ありがとうございます</h1>
+          <span class="sub">phrase · ja</span><span class="spacer"></span>
+          <button class="btn ghost sm">再查一次</button></div>
+        <div class="content">
+          <div class="signal-card">
+            <div class="signal-num">2</div>
+            <div class="lab"><b>此前显式查找 2 次</b>最近一次 2026-07-14 · 仅统计 explicit_lookup / 已确认的 duplicate_generation_attempt</div>
+            <span class="chip due" style="margin-left:auto;">检索困难信号</span>
+          </div>
+
+          <div class="grid2">
+            <div class="panel">
+              <div class="panel-head"><h2>关联 Study Item</h2><span class="muted">正式调度单位 · 归 LA 2.0</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="evi">
+                  <span class="frm jp">感谢表达</span>
+                  <span class="desc"><b>scenario_bilingual</b> · 「日常寒暄」场景卡 · JA Phrase KP</span>
+                  <span class="tail"><span class="chip due">今日到期</span><span class="chip muted">bucket 4</span></span>
+                </div>
+                <div class="evi">
+                  <span class="frm jp">礼貌体</span>
+                  <span class="desc"><b>textbook_ja</b> · 教材 Track 01 · 表达 #12</span>
+                  <span class="tail"><span class="chip ok">review · 稳定 6.2d</span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h2>今日队列中的解释</h2><span class="muted">只读</span></div>
+              <div class="panel-body" style="display:flex; flex-direction:column; gap:11px;">
+                <div class="explain">
+                  该 Study Item 已在今日基础队列（<b>bucket 4 · 今日到期</b>）。因近期重复查找，
+                  图 provider 给出 <span class="k">score +18</span>，在
+                  <span class="k">bucket=4, available_at, due_at 全部相同</span>的一组条目内把它<b>细排靠前</b>。
+                </div>
+                <div class="guard"><span>🔒</span>
+                  <div><b>能做与不能做：</b>能——同组内细排；不能——把它挪出所在 bucket、改到期日、或把未到期项拉进来。
+                    关闭图 provider 后，今日队列<strong>集合与逐条顺序不变</strong>（除本细排）。</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn primary sm">在今日队列中查看</button>
+                  <button class="btn ghost sm">查看该知识点全部证据</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S2 / 12 · 对应 KG-D0 §2 T1、§5.2 受限细排、§7.2 集合不变、§9 成功指标</div>
+  </div>
+</section>
+
+<!-- ============================== S3 重复查找·项目不在基础队列 ============================== -->
+<section class="state" id="s3">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S3 · 重复查找的关联 Study Item「未进入」今日基础队列</strong>（未到期 / 超出每日新单元截取 / 其它 LA 规则）。
+      系统<strong>不自动拉回</strong>，只展示状态 + lookup 历史，并提供显式<strong>「加入本次学习」</strong>操作。（§5.3）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1 class="jp">お願いします</h1>
+          <span class="sub">phrase · ja</span><span class="spacer"></span>
+          <button class="btn ghost sm">再查一次</button></div>
+        <div class="content">
+          <div class="signal-card">
+            <div class="signal-num">3</div>
+            <div class="lab"><b>此前显式查找 3 次</b>最近一次 2026-07-15</div>
+            <span class="chip due" style="margin-left:auto;">检索困难信号</span>
+          </div>
+
+          <div class="notqueue">
+            <span style="font-size:20px;">🗓️</span>
+            <div class="txt"><b>该知识点当前不在今日基础队列。</b>
+              关联 Study Item 状态：<b>review · 下次到期 2026-07-20（未到期）</b>。
+              按 LA 规则今天不安排它；KG <strong>不会</strong>自动把它插进队列或提前到期。</div>
+            <button class="btn primary sm" style="margin-left:auto;" data-go="s4">加入本次学习</button>
+          </div>
+
+          <div class="grid2">
+            <div class="panel">
+              <div class="panel-head"><h2>关联 Study Item</h2><span class="muted">正式调度单位 · 归 LA 2.0</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="evi">
+                  <span class="frm jp">请求表达</span>
+                  <span class="desc"><b>trilingual_ja</b> · 卡片「拜托 / お願い」· 目标语 JA</span>
+                  <span class="tail"><span class="chip muted">review</span><span class="chip ok">到期 07-20</span></span>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h2>为什么不自动拉回</h2></div>
+              <div class="panel-body" style="display:flex; flex-direction:column; gap:11px;">
+                <div class="explain">
+                  自动把未到期项拉回复习，等于让「查询行为」<b>直接改写调度</b>——这正是 KG-D0 §5.3 / §8 明确的非目标。
+                  是否学它、以什么顺序学，必须由用户<b>显式发起</b>一次一次性学习意图。
+                </div>
+                <div class="guard"><span>🔗</span>
+                  <div><b>协同契约（待增补）：</b>「加入本次学习」的容量、与到期项的先后、是否占用每日新单元上限、会话恢复语义，
+                    须在 <strong>KG-D2 正式增补 LA-D2</strong> 后才实现；在此之前该按钮在真实实现中<strong>不可用</strong>。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S3 / 12 · 对应 KG-D0 §2 T1、§5.3 不自动拉回、§8 非目标、§10 KG-P3 依赖 LA-D2</div>
+  </div>
+</section>
+
+<!-- ============================== S4 加入本次学习·确认 ============================== -->
+<section class="state" id="s4">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S4 · 「加入本次学习」确认。</strong>
+      该动作只创建<strong>一次性、幂等</strong>的 LA 学习意图，<strong>不修改</strong>原 <code>due_at</code> / <code>stability</code> / <code>difficulty</code>；
+      真正更新调度要等用户实际复习并提交四档评分，走 LA 的正常 review event + SchedulerPort。（§5.3）
+    </div>
+    <div class="frame"><div class="app" style="position:relative;">
+      <aside class="side" aria-hidden="true">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+      </aside>
+      <main class="main" aria-hidden="true">
+        <div class="topbar"><h1 class="jp">お願いします</h1><span class="sub">phrase · ja</span></div>
+        <div class="content"><div class="notqueue"><span style="font-size:20px;">🗓️</span>
+          <div class="txt"><b>该知识点当前不在今日基础队列。</b></div></div></div>
+      </main>
+      <div class="modal-scrim">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="s4t">
+          <div class="modal-head"><h3 id="s4t">加入本次学习？</h3>
+            <p>为「お願いします」创建一次性学习意图，仅本次会话有效</p></div>
+          <div class="modal-body">
+            <div class="kv"><span>知识点</span><b class="jp">お願いします · phrase/ja</b></div>
+            <div class="kv"><span>关联 Study Item</span><b>trilingual_ja「拜托 / お願い」</b></div>
+            <div class="kv"><span>原到期日</span><b>2026-07-20（保持不变）</b></div>
+            <div class="kv"><span>本次动作</span><b>一次性加入 · 幂等</b></div>
+            <div class="pledge"><span>✓</span>
+              <div><b>不改动调度状态：</b>不修改 due_at、stability、difficulty，也不写 review 事件；
+                仅当你复习并评分后，才由 LA 正常更新调度。</div></div>
+            <div class="guard"><span>⚠️</span>
+              <div>该能力依赖 <b>KG-D2 → LA-D2 协同增补</b>；增补通过前按钮为演示态。</div></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn ghost" data-go="s3">取消</button>
+            <button class="btn primary" data-go="s5">确认加入</button>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="frame-caption">S4 / 12 · 对应 KG-D0 §5.3 一次性/幂等/不改调度、§7.3 FSRS 纯净</div>
+  </div>
+</section>
+
+<!-- ============================== S5 加入本次学习·结果 ============================== -->
+<section class="state" id="s5">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S5 · 「加入本次学习」结果。</strong>
+      已为「お願いします」创建<strong>一次性学习意图</strong>：原到期日 <code>2026-07-20</code> 保持不变，
+      <strong>未写</strong> review 事件、<strong>未改</strong> stability/difficulty。真正的调度更新要等你在复习中提交四档评分。（§5.3、§7.3）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1 class="jp">お願いします</h1><span class="sub">phrase · ja</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s1">← 返回查找</button></div>
+        <div class="content">
+          <div class="resolve">
+            <span style="font-size:22px;">✓</span>
+            <div><b style="font-size:15px;">已加入本次学习</b>
+              <div style="color:var(--text2); font-size:13px; margin-top:2px;">一次性学习意图 · 仅本次会话有效 · 幂等（重复点击不叠加）</div></div>
+            <span class="chip ok" style="margin-left:auto;">本次会话 +1 项</span>
+          </div>
+
+          <div class="grid2">
+            <div class="panel">
+              <div class="panel-head"><h2>本次动作对调度的影响</h2><span class="muted">零写入</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="evi"><span class="desc"><b>原到期日 due_at</b></span><span class="tail"><span class="chip muted">2026-07-20 · 不变</span></span></div>
+                <div class="evi"><span class="desc"><b>review 事件</b></span><span class="tail"><span class="chip muted">未写入</span></span></div>
+                <div class="evi"><span class="desc"><b>stability / difficulty</b></span><span class="tail"><span class="chip muted">未改动</span></span></div>
+                <div class="evi"><span class="desc"><b>learning_schedule_states</b></span><span class="tail"><span class="chip muted">未触碰</span></span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h2>接下来会发生什么</h2></div>
+              <div class="panel-body" style="display:flex; flex-direction:column; gap:11px;">
+                <div class="explain">该项已作为一次性条目进入本次会话。<b>只有当你实际复习并给出四档评分</b>，
+                  才由 LA 的正常 review event + <span class="k">SchedulerPort.schedule()</span> 更新调度——KG 全程不参与写入。</div>
+                <div class="pledge"><span>✓</span><div><b>幂等保证：</b>再次点击「加入本次学习」不会重复创建，也不会二次影响队列。</div></div>
+                <div style="display:flex; gap:8px;"><button class="btn primary sm">前往今日学习</button>
+                  <button class="btn ghost sm" data-go="s1">继续查找其它</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="guard"><span>🔗</span><div><b>协同契约（待增补）：</b>一次性条目与到期项的先后、是否占用每日新单元上限、会话恢复语义，须在 <strong>KG-D2 → LA-D2</strong> 增补中定义。</div></div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S5 / 12 · 对应 KG-D0 §5.3 一次性/幂等/不改调度、§7.3 FSRS 纯净</div>
+  </div>
+</section>
+<section class="state" id="s6">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S6 · 显式查找相关词形「食べた」。</strong>
+      系统以受支持的日语规则识别其内容词核心为「食べる」，回显 <code>inflection-of（过去形式）</code> 关系与「你已见过」证据。
+      抽取是 <strong>Kuromoji 确定性</strong>结果，不调用 LLM；规则覆盖不到时进 unresolved。（§2 T2、§6.1、§6.2）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>相关词形</h1><span class="sub">你查的是「食べた」</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s1">再查一次</button></div>
+        <div class="content">
+          <div class="resolve">
+            <span class="big jp">食べた</span>
+            <span class="arrow">→</span>
+            <div><b style="font-size:15px;">是「<span class="jp">食べる</span>」的过去形式</b>
+              <div style="color:var(--text2); font-size:13px; margin-top:2px;">Lexeme KP · ja · 你已在学</div></div>
+            <span class="chip rel" style="margin-left:auto;">inflection-of</span>
+          </div>
+
+          <div class="grid2">
+            <div class="panel">
+              <div class="panel-head"><h2 class="jp">食べる</h2><span class="muted">辞书形 · lexeme/ja</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="kp-reading" style="margin-bottom:10px;">lemma reading：<b class="jp">たべる</b>（对「<span class="jp">食べる</span>」重新分析所得，非原 token 读音）</div>
+                <div class="evi"><span class="frm jp">食べた</span><span class="desc">你查的词形 · <b>过去</b></span><span class="tail"><span class="chip rel">inflection-of</span></span></div>
+                <div class="evi"><span class="frm jp">食べて</span><span class="desc">て形</span><span class="tail"><span class="chip rel">inflection-of</span></span></div>
+                <div class="evi"><span class="frm jp">食べます</span><span class="desc">敬体</span><span class="tail"><span class="chip rel">polite-of</span></span></div>
+                <div class="evi"><span class="frm jp">食べる</span><span class="desc">辞书形本体 · 已在学</span><span class="tail"><span class="chip ok">review · 到期 07-18</span></span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h2>你在哪见过它</h2><span class="muted">evidence-of</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="evi"><span class="frm">卡片</span><span class="desc"><b>trilingual_ja</b>「吃 / 食べる」</span><span class="tail"><span class="chip ja">JA</span></span></div>
+                <div class="evi"><span class="frm">场景</span><span class="desc"><b>scenario_bilingual</b> · 朝食准备 · 表达 #4</span><span class="tail"><span class="chip muted">已发布</span></span></div>
+              </div>
+              <div class="panel-body" style="border-top:1px solid var(--border);">
+                <div class="explain" style="margin:0;">
+                  <b>Kuromoji token 序列（确定性）：</b><br>
+                  <span class="token jp">食べ <small>动词·连用</small></span> <span class="arrow">+</span>
+                  <span class="token jp">た <small>助动词·过去</small></span>
+                  <span style="display:block; margin-top:9px;">→ 内容词 <span class="k">basic_form=食べる</span>；后续 <span class="k">た</span> 推导<b>过去形式</b>。不猜测、不调用 LLM。</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;"><button class="btn primary sm" data-go="s8">查看「食べる」全部证据</button>
+            <button class="btn ghost sm" data-go="s9">查看词形聚类</button></div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S6 / 12 · 对应 KG-D0 §2 T2、§6.1 token 序列、§6.2 inflection-of/polite-of/evidence-of</div>
+  </div>
+</section>
+<section class="state" id="s7">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S7 · 查找「はし」（纯假名）无法唯一锚定 → unresolved。</strong>
+      读音相同，可能指向 <span class="jp">箸 / 橋 / 端</span>；<strong>读音不能完成义项消歧</strong>。
+      系统显示<strong>待确认</strong>，<strong>不强行合并、不建强附着</strong>。人工确认与重跑语义由 KG-D2 定义。（§4.2、§4.4、§6.1）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1 class="jp">はし</h1><span class="sub">纯假名输入 · ja</span><span class="spacer"></span>
+          <span class="chip warn">待确认 unresolved</span></div>
+        <div class="content">
+          <div class="resolve warn">
+            <span style="font-size:22px;">⚠️</span>
+            <div><b style="font-size:15px;">无法唯一确定这是哪个知识点</b>
+              <div style="color:var(--text2); font-size:13px; margin-top:2px;">读音「はし」对应多个词汇；读音相同不代表同一 KP</div></div>
+            <span class="chip warn" style="margin-left:auto;">不自动合并</span>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>候选知识点</h2><span class="muted">仅供人工确认 · v1 不强附着</span></div>
+            <div class="panel-body" style="display:flex; flex-direction:column; gap:10px;">
+              <div class="cand"><span class="g jp">箸</span><div class="m"><b>筷子</b> · lexeme/ja · reading はし<br>已有卡片 trilingual_ja「筷子 / 箸」</div><button class="btn ghost sm" style="margin-left:auto;">就是这个</button></div>
+              <div class="cand"><span class="g jp">橋</span><div class="m"><b>桥</b> · lexeme/ja · reading はし<br>教材 textbook_ja Track 02 出现</div><button class="btn ghost sm" style="margin-left:auto;">就是这个</button></div>
+              <div class="cand"><span class="g jp">端</span><div class="m"><b>边 / 端</b> · lexeme/ja · reading はし<br>暂无证据</div><button class="btn ghost sm" style="margin-left:auto;">就是这个</button></div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="explain"><b>为什么不猜一个？</b> 强行把「はし」合并到某个 KP，会污染掌握度聚合与关系边，且难以回退。
+              KG-D0 §4.2 要求：置信度不足时宁可 <span class="k">unresolved</span>，也不做强合并。</div>
+            <div class="guard"><span>🧭</span><div><b>KG-D2 待定：</b>unresolved 的保存、人工确认动作、确认后是否回填 lookup 归属与重跑，属 §4.4 开放约束；v1 原型只呈现「待确认」，不落强附着。</div></div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S7 / 12 · 对应 KG-D0 §4.2 保守身份、§4.4 unresolved、§6.1 纯假名歧义</div>
+  </div>
+</section>
+<!-- ============================== S8 KP 详情·三类证据 ============================== -->
+<section class="state" id="s8">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S8 · KP 详情将三类证据分开呈现。</strong>
+      “正式复习”“检索困难”“内容覆盖”各自保留来源和时间，不压成一个模糊分数；显式 lookup 只能形成风险提示，
+      不能把 KP 直接标成“未掌握”，也不能生成新的可写调度状态。（§2 T3、§6.3、§9）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>知识点详情</h1><span class="sub">只读聚合</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s6">← 返回相关词形</button></div>
+        <div class="content">
+          <div class="panel">
+            <div class="panel-body kp-head">
+              <div>
+                <div class="kp-title jp">食べる</div>
+                <div class="kp-reading jp">たべる · basic form + lemma reading</div>
+              </div>
+              <div style="display:flex; gap:7px; flex-wrap:wrap; align-self:center;">
+                <span class="chip ja">JA</span><span class="chip rel">lexeme</span><span class="chip ok">已在学</span>
+              </div>
+              <div class="kp-meta"><span class="kp-kind">KP · JA · LEXEME</span>
+                <span style="color:var(--text3); font-size:11px;">只读视图 · 更新于 07-16 09:42</span></div>
+            </div>
+          </div>
+
+          <div class="grid3 evidence-grid">
+            <div class="panel rev">
+              <div class="panel-head"><h2>正式复习</h2><span class="muted">LA 事实</span></div>
+              <div class="panel-body">
+                <div class="stat-row">
+                  <div class="stat"><div class="n">3</div><div class="l">关联 Study Items</div></div>
+                  <div class="stat"><div class="n">9</div><div class="l">累计复习</div></div>
+                </div>
+                <div class="metric-line"><span>最近评分</span><b>记住 · 07-15</b></div>
+                <div class="metric-line"><span>最近吃力</span><b>07-08 · 困难</b></div>
+                <div class="metric-line"><span>下一项到期</span><b>07-18 · trilingual_ja</b></div>
+                <div class="form-note">这些数据来自各 Study Item 的正式评分与 Schedule State；KP 只读汇总，不产生“KP due_at”。</div>
+              </div>
+            </div>
+
+            <div class="panel diff">
+              <div class="panel-head"><h2>检索困难</h2><span class="muted">KG 事实</span></div>
+              <div class="panel-body">
+                <div class="stat-row">
+                  <div class="stat"><div class="n" style="color:var(--kg-dark);">4</div><div class="l">explicit_lookup</div></div>
+                  <div class="stat"><div class="n" style="color:var(--kg-dark);">1</div><div class="l">duplicate attempt</div></div>
+                </div>
+                <div class="metric-line"><span>最近显式查找</span><b>今天 09:42</b></div>
+                <div class="metric-line"><span>近 7 天变化</span><b>+3 次</b></div>
+                <div class="metric-line"><span>当前提示</span><b style="color:var(--warning);">近期需要关注</b></div>
+                <div class="form-note">不含 typeahead、页面浏览、答案揭示和四档评分；“查过 4 次”不等于“未掌握”。</div>
+              </div>
+            </div>
+
+            <div class="panel cov">
+              <div class="panel-head"><h2>内容覆盖</h2><span class="muted">Evidence</span></div>
+              <div class="panel-body">
+                <div class="stat-row">
+                  <div class="stat"><div class="n">5</div><div class="l">内容证据</div></div>
+                  <div class="stat"><div class="n">4</div><div class="l">表面词形</div></div>
+                </div>
+                <div class="metric-line"><span>三语卡</span><b>2 · 主表达</b></div>
+                <div class="metric-line"><span>语法卡</span><b>1 · ～ている</b></div>
+                <div class="metric-line"><span>场景表达</span><b>2 · 朝食 / 外食</b></div>
+                <div class="metric-line"><span>教材表达</span><b>0 · 暂无证据</b></div>
+                <button class="btn ghost sm" data-go="s9">查看 4 个词形</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="guard"><span>i</span><div><b>证据保持分区：</b>正式复习决定调度；显式查找只提供检索困难信号；内容覆盖说明“在哪里见过”。界面不把三者合成一个不可解释的掌握分。</div></div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S8 / 12 · 对应 KG-D0 §2 T3、§3 KP Read Model、§6.3 三类证据、§9 可解释性</div>
+  </div>
+</section>
+
+<!-- ============================== S9 词形聚类 ============================== -->
+<section class="state" id="s9">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S9 · Lexeme KP 的词形聚类。</strong>
+      多个 Surface Form 附着同一个「食べる」KP；<code>inflection-of</code> / <code>polite-of</code> 是受 fixture 保护的确定性 link。
+      <code>same-lemma</code> 不重复建边，场景归属保存在 Evidence 元数据中。（§6.1、§6.2）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a class="active"><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>词形聚类</h1><span class="sub jp">食べる · lexeme/ja</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s8">← 知识点详情</button></div>
+        <div class="content">
+          <div class="grid2" style="grid-template-columns:1.6fr .9fr;">
+            <div class="panel">
+              <div class="panel-head"><h2>同一词汇知识点的 4 个表面形式</h2><span class="muted">确定性聚类</span></div>
+              <div class="panel-body">
+                <div class="cluster">
+                  <div class="lemma-node"><div class="g jp">食べる</div><small>Lexeme KP · lemma reading たべる</small></div>
+                  <div class="form-trunk"></div>
+                  <div class="branches">
+                    <div class="branch"><div class="g jp">食べた</div><div class="rl"><span class="chip rel">inflection-of</span></div><small>过去形式</small></div>
+                    <div class="branch"><div class="g jp">食べて</div><div class="rl"><span class="chip rel">inflection-of</span></div><small>て形</small></div>
+                    <div class="branch"><div class="g jp">食べます</div><div class="rl"><span class="chip rel">polite-of</span></div><small>敬体</small></div>
+                    <div class="branch"><div class="g jp">食べる</div><div class="rl"><span class="chip muted">canonical</span></div><small>辞书形</small></div>
+                  </div>
+                </div>
+                <div class="explain" style="margin-top:14px;"><b>为什么没有 same-lemma 边？</b>
+                  四个 Surface Form 已经共同附着到同一 Lexeme KP；再建一组两两连接只会重复表达同一事实并放大边数量。</div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div class="panel">
+                <div class="panel-head"><h2>规范身份</h2></div>
+                <div class="panel-body" style="padding-top:6px;">
+                  <div class="metric-line"><span>kp_kind</span><b>lexeme</b></div>
+                  <div class="metric-line"><span>language</span><b>ja</b></div>
+                  <div class="metric-line"><span>basic_form</span><b class="jp">食べる</b></div>
+                  <div class="metric-line"><span>lemma reading</span><b class="jp">たべる</b></div>
+                  <div class="metric-line"><span>sense</span><b>粗粒度 · 可拆分</b></div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h2>上下文不是关系边</h2></div>
+                <div class="panel-body">
+                  <div class="form-note"><b>场景：朝食</b><br><span class="jp">パンを食べます。</span><br><code>Evidence.context_kind=scenario</code></div>
+                  <div class="form-note"><b>场景：外食</b><br><span class="jp">レストランで魚を食べた。</span><br><code>Evidence.context_kind=scenario</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="guard"><span>i</span><div><b>识别失败时不扩图：</b>未知词、纯假名歧义或 token-sequence 规则未覆盖时进入 unresolved，不调用 LLM 猜测关系。</div></div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S9 / 12 · 对应 KG-D0 §4.2 identity、§6.1 token sequence、§6.2 三类 Typed Link</div>
+  </div>
+</section>
+
+<!-- ============================== S10 精确重复生成 ============================== -->
+<section class="state" id="s10">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S10 · Cards Factory 命中精确重复。</strong>
+      409 继续阻止重复生成；只有用户明确选择“查看已有知识点”时，才写一次幂等的 <code>duplicate_generation_attempt</code>。
+      关闭提示、继续编辑或只看到 409 都不写 lookup。（§5.1、§7.4）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>Cards Factory</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="nav-group">生产</div>
+        <nav class="nav"><a class="active"><span class="nav-mark">CF</span> Cards Factory</a></nav>
+        <div class="side-foot">生成服务：<b>正常</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>创建学习卡</h1><span class="sub">Cards Factory</span><span class="spacer"></span>
+          <span class="chip muted">DeepSeek V4 Pro</span></div>
+        <div class="content">
+          <div class="grid2" style="grid-template-columns:1.2fr .9fr;">
+            <div class="panel">
+              <div class="panel-head"><h2>三语卡</h2><span class="muted">中文 · English · 日本語</span></div>
+              <div class="panel-body" style="display:flex; flex-direction:column; gap:12px;">
+                <label style="color:var(--text3); font-size:12px;">输入短语或句子</label>
+                <div class="input-mock jp">ありがとうございます</div>
+                <div class="dup">
+                  <span class="code">409 · CARD_DUPLICATE_EXISTS</span>
+                  <div style="color:var(--text2); font-size:13px;"><b style="display:block; color:var(--text);">未创建新卡片</b>
+                    已有同类型卡片：#318「ありがとうございます」</div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn primary sm" data-go="s2">查看已有知识点 · 记为一次查找</button>
+                  <button class="btn ghost sm">创建新版本</button>
+                  <button class="btn ghost sm">继续编辑</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h2>这次交互会记录什么</h2><span class="muted">事件边界</span></div>
+              <div class="panel-body" style="padding-top:6px;">
+                <div class="metric-line"><span>命中 409</span><b>不写 lookup</b></div>
+                <div class="metric-line"><span>关闭 / 继续编辑</span><b>不写 lookup</b></div>
+                <div class="metric-line"><span>查看已有知识点</span><b style="color:var(--kg-dark);">写 1 次 attempt</b></div>
+                <div class="metric-line"><span>重复点击 / 请求重放</span><b>幂等 · 不叠加</b></div>
+                <div class="explain" style="margin-top:12px;"><b>为什么要等用户选择？</b>
+                  生成冲突只说明“系统已有相同卡片”；用户进入已有知识点，才明确表达了“我正在再次查找它”。</div>
+              </div>
+            </div>
+          </div>
+          <div class="guard"><span>i</span><div><b>去重职责保持不变：</b>KG 不绕过 `reject/create-version`，也不为了记录一次查找而重新调用 LLM 或落一张重复卡。</div></div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S10 / 12 · 对应 KG-D0 §5.1 duplicate_generation_attempt、§7.4 精确去重正交</div>
+  </div>
+</section>
+
+<!-- ============================== S11 基础队列内可解释细排 ============================== -->
+<section class="state" id="s11">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S11 · Graph provider 只在基础队列内做可解释细排。</strong>
+      条目已经由 LA 选入，且仅在 <code>bucket=4 + available_at=09:00 + due_at=09:00</code> 完全相同的组内应用
+      <code>provider_score</code>；逾期项、其它到期时间和集合均不变。（§5.2、§7.2、§9）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a class="active"><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b>已启用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>今日学习</h1><span class="sub">20 个动作 · 5 个新内容</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s12">查看降级态</button></div>
+        <div class="content">
+          <div class="queue-grid">
+            <div class="panel">
+              <div class="panel-head"><h2>今日队列</h2><span class="muted">14 项 · 基础集合未改变</span></div>
+              <div class="panel-body" style="padding-top:8px;">
+                <div class="bucket-label">逾期 · bucket 2</div>
+                <div class="qrow"><span class="pos">1</span><span class="nm jp">～ようになってきました</span>
+                  <span class="tail"><span class="chip due">逾期 3 天</span><span class="chip muted">保持 #1</span></span></div>
+
+                <div class="bucket-label">今日到期 · bucket 4 · available_at / due_at 均为 09:00</div>
+                <div class="qrow boost"><span class="pos">2</span><div><span class="nm jp">ありがとうございます</span>
+                  <div style="color:var(--text3); font-size:11px; margin-top:2px;">近期显式查找 2 次</div></div>
+                  <span class="tail"><span class="move">组内 #4 → #1</span><span class="chip rel">+18</span></span></div>
+                <div class="qrow"><span class="pos">3</span><span class="nm">handoff</span>
+                  <span class="tail"><span class="chip en">EN</span><span class="chip muted">score 0</span></span></div>
+                <div class="qrow"><span class="pos">4</span><span class="nm jp">水分補給を心がけています</span>
+                  <span class="tail"><span class="chip ja">JA</span><span class="chip muted">score 0</span></span></div>
+                <div class="qrow"><span class="pos">5</span><span class="nm jp">～ている</span>
+                  <span class="tail"><span class="chip ja">语法</span><span class="chip muted">score 0</span></span></div>
+
+                <div class="bucket-label">后续到期时间 · 顺序不受 Graph score 影响</div>
+                <div class="qrow"><span class="pos">6</span><span class="nm">Coffee should be ready.</span>
+                  <span class="tail"><span class="chip muted">due 10:30</span><span class="chip rel">+24 · 不跨越</span></span></div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div class="panel">
+                <div class="panel-head"><h2>为什么排到这里</h2><span class="muted">可解释</span></div>
+                <div class="panel-body" style="display:flex; flex-direction:column; gap:11px;">
+                  <div class="sort-keys"><span class="sort-key">bucket 4</span><span>→</span><span class="sort-key">available 09:00</span><span>→</span><span class="sort-key">due 09:00</span><span>→</span><span class="sort-key active">score +18</span></div>
+                  <div class="explain"><b>近期重复查找：</b>你在 7 天内显式查找「ありがとうございます」2 次，因此它在同到期时间的 4 个项目中细排靠前。</div>
+                  <div class="lock-row"><span>✓</span><div><b>未改变：</b>14 个 Study Item、bucket、available_at、due_at 与每日新单元。</div></div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h2>Graph provider 诊断</h2></div>
+                <div class="panel-body">
+                  <div class="diag">
+                    <div><span>provider</span><b>graph-contract@1.0.0</b></div>
+                    <div><span>result</span><b style="color:var(--success);">applied</b></div>
+                    <div><span>budget</span><b>2.4ms / 10ms</b></div>
+                    <div><span>base set</span><b>14 / 14 unchanged</b></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S11 / 12 · 对应 KG-D0 §5.2 排序键、§7.2 集合不变、§9 基础集合成功指标</div>
+  </div>
+</section>
+
+<!-- ============================== S12 Graph reader 降级 ============================== -->
+<section class="state" id="s12">
+  <div class="stage">
+    <div class="prototype-note">
+      <strong>S12 · KG reader 缺失、失败或超时时的降级态。</strong>
+      Graph provider 返回空信号后，LA 使用既有 base-policy 确定性顺序；结果必须与“未启用 KG”的基础快照逐条一致。
+      降级不会阻断今日学习，也不会显示错误的知识解释。（§0、§5.2、§9）
+    </div>
+    <div class="frame"><div class="app">
+      <aside class="side">
+        <div class="brand"><div class="brand-bars"><i></i><i></i><i></i></div>
+          <div><strong>Three LANS</strong><small>学习工作台</small></div></div>
+        <div class="nav-group">学习</div>
+        <nav class="nav">
+          <a class="active"><span class="nav-mark">今</span> 今日学习</a>
+          <a><span class="nav-mark">计</span> 学习计划</a>
+          <a><span class="nav-mark">史</span> 学习记录</a>
+          <a><span class="nav-mark">KP</span> 知识点查找</a>
+        </nav>
+        <div class="side-foot">KG 信号：<b style="color:var(--warning);">暂不可用</b></div>
+      </aside>
+      <main class="main">
+        <div class="topbar"><h1>今日学习</h1><span class="sub">20 个动作 · 5 个新内容</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-go="s11">返回启用态</button></div>
+        <div class="content">
+          <div class="degraded"><span class="chip muted">基础模式</span>
+            <div class="copy"><b>知识关联提示暂不可用，今日学习不受影响</b>队列已使用稳定基础规则生成；你仍可正常学习、揭示答案和评分。</div>
+            <span class="chip ok" style="margin-left:auto;">14 / 14 项完整</span>
+          </div>
+
+          <div class="queue-grid">
+            <div class="panel">
+              <div class="panel-head"><h2>今日队列</h2><span class="muted">base-policy · 确定性顺序</span></div>
+              <div class="panel-body" style="padding-top:8px;">
+                <div class="bucket-label">逾期 · bucket 2</div>
+                <div class="qrow"><span class="pos">1</span><span class="nm jp">～ようになってきました</span>
+                  <span class="tail"><span class="chip due">逾期 3 天</span></span></div>
+
+                <div class="bucket-label">今日到期 · bucket 4 · available_at / due_at 均为 09:00</div>
+                <div class="qrow"><span class="pos">2</span><span class="nm">handoff</span><span class="tail"><span class="chip en">EN</span><span class="chip muted">ID 82</span></span></div>
+                <div class="qrow"><span class="pos">3</span><span class="nm jp">水分補給を心がけています</span><span class="tail"><span class="chip ja">JA</span><span class="chip muted">ID 91</span></span></div>
+                <div class="qrow"><span class="pos">4</span><span class="nm jp">～ている</span><span class="tail"><span class="chip ja">语法</span><span class="chip muted">ID 104</span></span></div>
+                <div class="qrow"><span class="pos">5</span><span class="nm jp">ありがとうございます</span><span class="tail"><span class="chip ja">JA</span><span class="chip muted">ID 117</span></span></div>
+
+                <div class="bucket-label">后续到期时间</div>
+                <div class="qrow"><span class="pos">6</span><span class="nm">Coffee should be ready.</span><span class="tail"><span class="chip muted">due 10:30</span></span></div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div class="panel">
+                <div class="panel-head"><h2>降级验证</h2><span class="muted">只读诊断</span></div>
+                <div class="panel-body" style="display:flex; flex-direction:column; gap:11px;">
+                  <div class="diag">
+                    <div><span>graph-contract</span><b style="color:var(--warning);">timedOut</b></div>
+                    <div><span>provider_score</span><b>NULL</b></div>
+                    <div><span>fallback</span><b>base-policy@1</b></div>
+                    <div><span>queue entries</span><b>14 / 14</b></div>
+                  </div>
+                  <div class="lock-row"><span>✓</span><div><b>逐条一致：</b>Study Item IDs 与未启用 KG 的基础快照相同，顺序为 82 → 91 → 104 → 117。</div></div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h2>仍然可以完成</h2></div>
+                <div class="panel-body" style="padding-top:6px;">
+                  <div class="metric-line"><span>开始 / 恢复会话</span><b style="color:var(--success);">正常</b></div>
+                  <div class="metric-line"><span>揭示答案</span><b style="color:var(--success);">正常</b></div>
+                  <div class="metric-line"><span>四档评分 / FSRS</span><b style="color:var(--success);">正常</b></div>
+                  <div class="metric-line"><span>KG 关联解释</span><b style="color:var(--warning);">暂时隐藏</b></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div></div>
+    <div class="frame-caption">S12 / 12 · 对应 KG-D0 §0 可降级、§5.2 provider 护栏、§9 确定性 fallback</div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var picks = Array.prototype.slice.call(document.querySelectorAll('.proto-pick[data-go]'));
+  function show(id) {
+    document.querySelectorAll('.state').forEach(function (s) { s.classList.toggle('on', s.id === id); });
+    picks.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-go') === id ? 'true' : 'false'); });
+    window.scrollTo(0, 0);
+  }
+  picks.forEach(function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-go')); }); });
+  document.querySelectorAll('[data-go]').forEach(function (el) {
+    if (el.classList.contains('proto-pick')) return;
+    el.addEventListener('click', function () { show(el.getAttribute('data-go')); });
+  });
+  var t = document.getElementById('themeBtn');
+  t.addEventListener('click', function () {
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    t.textContent = dark ? '◐ 深色' : '◑ 浅色';
+  });
+})();
+</script>
+</body>
+</html>

@@ -11,12 +11,12 @@
 
 ## 当前产品边界
 
-2026-07-15 当前正式运行产品包含两部分：
+2026-07-16 当前正式运行产品包含两部分：
 
 - **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗；
 - **学习辅助 2.0**：学习计划、今日队列、可恢复复习会话、四档评分、FSRS 调度、学习记录与可降级 PlanningSignalProvider。
 
-**教材课程**已完成 TC-D0-TC-D2 与 TC-P0-TC-P4，并于 2026-07-15 通过完整架构验收。当前具备 `/textbooks` 桌面校对工作台：Git 外 Manifest 校验、draft 导入、七张教材表、教材表达搜索、受控官方音频播放、正式 EN/JA 单句 TTS、持久化选区标红、人工 verified、显式发布到学习辅助、`textbook_en/ja` 学习单元、教材 Track 范围计划、教材复习视图，以及会同步完成态的选区派生卡任务。真实 Track 01 已导入 draft，但尚未人工确认或发布。`TEXTBOOK_FEATURE_ENABLED` 默认开启但仍可关闭。知识图谱 2.0 继续后置。
+**教材课程**已完成 TC-D0-TC-D2 与 TC-P0-TC-P4，并于 2026-07-15 通过完整架构验收。当前具备 `/textbooks` 桌面校对工作台：Git 外 Manifest 校验、draft 导入、七张教材表、教材表达搜索、受控官方音频播放、正式 EN/JA 单句 TTS、持久化选区标红、人工 verified、显式发布到学习辅助、`textbook_en/ja` 学习单元、教材 Track 范围计划、教材复习视图，以及会同步完成态的选区派生卡任务。真实 Track 01 已导入 draft，但尚未人工确认或发布。`TEXTBOOK_FEATURE_ENABLED` 默认开启但仍可关闭。知识图谱 2.0 已确认 KG-D0 产品定义与 KG-D1 桌面原型，下一门禁为 KG-D2。
 
 当前实施与设计入口：
 
@@ -39,7 +39,9 @@
 - Architecture/schemas/textbook-track-manifest.v1.schema.json：不含教材原文的 Track Manifest v1 机器校验 contract；
 - ../skills/import-textbook-track/SKILL.md：TC-P0 教材 Track 导入 Skill；实际 Manifest、截图、官方音频和 dry-run summary 留在 Git 外；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
-- Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束。
+- Features/UI_Modernization_Design_System.md：设计 tokens 与 UI 横向约束；
+- Features/Knowledge_Graph_2_0_Product_Definition.md：已确认的 KG-D0 产品定义。把「重复查询」重构为检索困难信号、把「近似词形」重构为知识关联；定义 `lexeme/phrase/grammar_pattern` 三类知识点身份、append-only 显式 lookup 事件语义、日语 basic-form+lemma-reading 规范化与 `inflection-of/polite-of/evidence-of` 确定性关系；Study Item 仍是唯一正式调度单位，KP 只做跨内容组织、查询与只读聚合，图信号只经可降级的 `graphPlanningSignalProvider` 对基础队列受限细排，绝不写 FSRS；
+- Features/prototypes/kg-d1-prototype.html：已确认的 KG-D1 桌面端 12 状态原型，覆盖显式 lookup、重复查找、队列内/外边界、一次性加入学习、日语词形关系、unresolved、KP 三类证据、精确重复生成、受限细排与降级态；下一阶段为 KG-D2 ADR。
 
 ## 已退役：Mission / Knowledge / SRS
 
@@ -55,7 +57,7 @@ Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析、旧 SRS/复�
 - TestReports/UI_Validation_MissionControl_20260305.md；
 - 所有旧 Knowledge、SRS、TRAIN、review 相关计划与测试报告。
 
-学习辅助 2.0 已在全栈迁移完成后启动产品设计，当前基线为 `Features/Learning_Assistance_2_0_Design_Baseline.md`；知识图谱 2.0 保持后置，不复活旧 API、旧 schema 或旧页面。
+学习辅助 2.0 已在全栈迁移完成后启动产品设计，当前基线为 `Features/Learning_Assistance_2_0_Design_Baseline.md`；知识图谱 2.0 已从 KG-D0 全新启动，并于 2026-07-16 确认产品定义与 KG-D1 桌面原型，仍不复活旧知识 API、旧 schema 或旧页面，且不接管学习调度状态。
 
 ## 其他历史边界
 
