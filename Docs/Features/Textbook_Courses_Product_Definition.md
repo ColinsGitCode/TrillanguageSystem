@@ -1,6 +1,6 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0、TC-D1、TC-D2 已确认（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 后端基础已完成；TC-P2 教材校对工作台已完成；TC-P3 学习集成已完成；TC-P3.1 教材学习闭环已完成；Track 01 内容由人工在页面确认**
+> 状态：**TC-D0-TC-D2 已确认；TC-P0-TC-P4 已于 2026-07-15 完成并通过验收；Track 01 已导入 draft，内容仍由人工在页面确认后才能发布**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)

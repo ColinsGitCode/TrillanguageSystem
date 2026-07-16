@@ -34,9 +34,22 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .sidebar-nav-soon { min-height: 42px; display: flex; align-items: center; gap: 12px; padding: 0 10px; color: var(--color-text-disabled); font-weight: 650; cursor: not-allowed; }
 .sidebar-nav-soon em { margin-left: auto; padding: 2px 5px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: 700 9px/1 var(--font-mono); font-style: normal; }
 .sidebar-status { margin-top: auto; display: flex; align-items: center; gap: 8px; color: var(--color-text-tertiary); font-size: 12px; }
-.sidebar-status > span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); }
-.sidebar-status > span.offline { background: var(--color-danger); }
-.sidebar-status .icon-button { margin-left: auto; }
+.sidebar-status > span:first-child { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--color-success); }
+.sidebar-status > span:first-child.offline { background: var(--color-danger); }
+.sidebar-tools { margin-left: auto; display: flex; gap: 6px; }
+.sidebar-tools .icon-button { width: 34px; height: 34px; }
+
+.react-app-shell.sidebar-compact { grid-template-columns: 72px minmax(0, 1fr); }
+.sidebar-compact .react-sidebar { padding-inline: 10px; }
+.sidebar-compact .brand-block { justify-content: center; padding-inline: 0; }
+.sidebar-compact .brand-block > div,
+.sidebar-compact .react-sidebar nav p,
+.sidebar-compact .sidebar-nav-label,
+.sidebar-compact .sidebar-status-label { display: none; }
+.sidebar-compact .react-sidebar nav a { justify-content: center; padding: 0; }
+.sidebar-compact .react-sidebar nav a svg { width: 20px; height: 20px; }
+.sidebar-compact .sidebar-status { flex-direction: column; justify-content: center; }
+.sidebar-compact .sidebar-tools { margin-left: 0; flex-direction: column; }
 
 .react-workspace { min-width: 0; padding: 20px; }
 .mobile-topbar { display: none; }
@@ -182,12 +195,11 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
   .react-app-shell { grid-template-columns: 72px minmax(0, 1fr); }
   .react-sidebar { padding-inline: 10px; }
   .brand-block { justify-content: center; padding-inline: 0; }
-  .brand-block > div, .react-sidebar nav p, .react-sidebar nav a:not(.active), .react-sidebar nav a.active { font-size: 0; }
+  .brand-block > div, .react-sidebar nav p, .sidebar-nav-label, .sidebar-status-label { display: none; }
   .react-sidebar nav a { justify-content: center; padding: 0; }
   .react-sidebar nav a svg { width: 20px; height: 20px; }
-  .sidebar-status { justify-content: center; }
-  .sidebar-status { font-size: 0; }
-  .sidebar-status .icon-button { margin-left: 0; }
+  .sidebar-status { flex-direction: column; justify-content: center; }
+  .sidebar-tools { margin-left: 0; flex-direction: column; }
   .factory-composer { grid-template-columns: minmax(130px, .6fr) minmax(0, 3.4fr); }
   .factory-composer > .surface-heading h1 { font-size: 16px; }
   .card-type-choice small { display: none; }
@@ -201,10 +213,11 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
   .react-sidebar { position: fixed; left: 0; width: 224px; transform: translateX(-105%); box-shadow: var(--shadow-modal); transition: transform var(--duration-normal) var(--ease-standard); }
   .react-sidebar.open { transform: translateX(0); }
   .react-sidebar .brand-block { justify-content: flex-start; }
-  .react-sidebar .brand-block > div, .react-sidebar nav p, .react-sidebar nav a.active { font-size: inherit; }
+  .react-sidebar .brand-block > div, .react-sidebar nav p, .react-sidebar .sidebar-nav-label, .react-sidebar .sidebar-status-label { display: initial; }
   .react-sidebar nav a { justify-content: flex-start; padding: 0 10px; }
-  .sidebar-status { justify-content: flex-start; font-size: 12px; }
-  .sidebar-status .icon-button { margin-left: auto; }
+  .sidebar-status { flex-direction: row; justify-content: flex-start; font-size: 12px; }
+  .sidebar-tools { margin-left: auto; flex-direction: row; }
+  .sidebar-collapse-button { display: none; }
   .react-workspace { padding: 10px; }
   .mobile-topbar { height: 48px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .factory-top-grid, .factory-library-grid { grid-template-columns: 1fr; }

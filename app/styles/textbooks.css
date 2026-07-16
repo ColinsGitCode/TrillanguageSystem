@@ -1,18 +1,30 @@
 .textbook-page {
-  width: min(1220px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding-bottom: 28px;
 }
 
+.textbook-command-strip {
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: minmax(340px, .9fr) minmax(0, 1.7fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.textbook-command-strip.feature-disabled {
+  grid-template-columns: 1fr;
+}
+
 .textbook-hero {
-  min-height: 116px;
+  min-height: 112px;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  grid-template-columns: minmax(160px, 1fr) minmax(150px, 180px);
   align-items: center;
-  gap: 20px;
-  margin-bottom: 14px;
-  padding: 18px 20px 18px 28px;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 10px 10px 18px;
   overflow: hidden;
 }
 
@@ -24,8 +36,8 @@
 }
 
 .textbook-hero h1 {
-  margin: 2px 0 7px;
-  font-size: 28px;
+  margin: 1px 0 4px;
+  font-size: 22px;
   line-height: 1.15;
 }
 
@@ -33,16 +45,21 @@
   max-width: 680px;
   margin: 0;
   color: var(--color-text-secondary);
-  line-height: 1.5;
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .textbook-audio {
-  min-height: 74px;
+  min-height: 62px;
   display: grid;
-  grid-template-columns: 130px minmax(0, 1fr);
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 12px;
-  padding: 10px;
+  gap: 4px;
+  padding: 6px;
   background: var(--color-bg-subtle);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -75,7 +92,7 @@
 
 .textbook-audio audio {
   width: 100%;
-  height: 36px;
+  height: 28px;
 }
 
 .textbook-audio.unavailable {
@@ -85,9 +102,9 @@
 
 .textbook-top-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, .7fr);
-  gap: 14px;
-  margin-bottom: 14px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, .6fr);
+  gap: 10px;
+  margin: 0;
 }
 
 .textbook-import-panel,
@@ -101,22 +118,44 @@
 
 .textbook-import-panel,
 .textbook-search-panel {
-  padding: 16px;
+  padding: 9px 10px;
+}
+
+.textbook-import-panel {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr) 94px;
+  grid-template-areas:
+    "heading path actions"
+    "heading hash actions"
+    "message message message";
+  align-items: center;
+  gap: 5px 8px;
+}
+
+.textbook-search-panel {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-rows: 30px minmax(28px, 1fr);
+  align-items: center;
+  gap: 5px 8px;
 }
 
 .textbook-import-panel header,
 .textbook-search-panel header {
-  min-height: 44px;
+  min-height: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 7px;
+  margin: 0;
 }
+
+.textbook-import-panel header { grid-area: heading; }
+.textbook-search-panel header { grid-row: 1 / 3; }
 
 .textbook-import-panel header svg,
 .textbook-search-panel header svg {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   color: #e94b86;
 }
 
@@ -127,52 +166,66 @@
 .textbook-detail-panel h2,
 .textbook-track-summary h2 {
   margin: 2px 0 0;
-  font-size: 18px;
+  font-size: 16px;
+}
+
+.textbook-search-panel h2 {
+  font-size: 14px;
+}
+
+.textbook-search-panel header .eyebrow {
+  display: none;
 }
 
 .textbook-import-panel label {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+  display: block;
+  margin: 0;
 }
 
+.textbook-import-panel label:nth-of-type(1) { grid-area: path; }
+.textbook-import-panel label:nth-of-type(2) { grid-area: hash; }
+
 .textbook-import-panel label span {
-  color: var(--color-text-secondary);
-  font: 700 10px/1 var(--font-mono);
-  text-transform: uppercase;
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .textbook-import-panel input,
 .textbook-search-panel input {
   width: 100%;
-  min-height: 38px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
   color: var(--color-text-primary);
   background: var(--color-bg-subtle);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font: 600 12px/1 var(--font-mono);
+  font: 600 10px/1 var(--font-mono);
 }
 
 .textbook-import-actions {
+  grid-area: actions;
   display: flex;
+  flex-direction: column;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 5px;
+  margin: 0;
 }
 
 .textbook-import-actions button,
 .textbook-track-summary button,
 .textbook-answer-card button,
 .textbook-mark-button {
-  min-height: 34px;
+  min-height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 11px;
+  padding: 0 9px;
   color: var(--color-text-secondary);
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
@@ -195,22 +248,25 @@
 }
 
 .textbook-inline-message {
-  margin: 10px 0 0;
+  grid-area: message;
+  margin: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .textbook-search-results {
-  min-height: 58px;
+  min-height: 28px;
+  max-height: 38px;
   display: grid;
   gap: 6px;
-  margin-top: 10px;
+  margin: 0;
+  overflow: auto;
 }
 
 .textbook-search-results button {
   display: grid;
   gap: 3px;
-  padding: 9px 10px;
+  padding: 5px 7px;
   text-align: left;
   color: var(--color-text-secondary);
   background: var(--color-bg-surface);
@@ -234,7 +290,7 @@
 
 .textbook-workbench {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(118px, .5fr) minmax(300px, 1.25fr) minmax(520px, 2.4fr);
   gap: 14px;
   align-items: start;
 }
@@ -248,36 +304,38 @@
 .textbook-sidebar-panel {
   max-height: calc(100dvh - 32px);
   overflow: auto;
-  padding: 14px;
+  padding: 10px;
 }
 
 .textbook-sidebar-panel > header {
-  padding-bottom: 10px;
+  padding-bottom: 7px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .textbook-course-group {
-  padding-top: 12px;
+  padding-top: 9px;
 }
 
 .textbook-course-group h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .textbook-course-group p {
   margin: 4px 0 8px;
   color: var(--color-text-tertiary);
-  font: 600 10px/1 var(--font-mono);
+  font: 600 9px/1.25 var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 .textbook-course-group button {
   width: 100%;
-  min-height: 72px;
+  min-height: 58px;
   display: grid;
   gap: 4px;
   margin-bottom: 7px;
-  padding: 10px;
+  padding: 8px;
   text-align: left;
   color: var(--color-text-secondary);
   background: var(--color-bg-surface);
@@ -295,7 +353,7 @@
 
 .textbook-course-group button span,
 .textbook-course-group button small {
-  font: 700 9px/1 var(--font-mono);
+  font: 700 8px/1.15 var(--font-mono);
   text-transform: uppercase;
 }
 
@@ -304,13 +362,13 @@
 }
 
 .textbook-track-summary {
-  min-height: 88px;
+  min-height: 76px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
-  padding: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 11px 12px;
 }
 
 .textbook-track-summary p:not(.eyebrow) {
@@ -329,7 +387,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 5px;
 }
 
 .textbook-expression-panel {
@@ -337,11 +395,11 @@
 }
 
 .textbook-expression-panel > header {
-  min-height: 62px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -351,7 +409,7 @@
 }
 
 .textbook-expression-panel ol {
-  max-height: calc(100dvh - 256px);
+  max-height: calc(100dvh - 212px);
   margin: 0;
   padding: 0;
   overflow: auto;
@@ -686,4 +744,6 @@
   gap: 8px;
   color: var(--color-text-tertiary);
   text-align: center;
+  font-size: 11px;
+  line-height: 1.45;
 }

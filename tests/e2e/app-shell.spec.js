@@ -24,6 +24,19 @@ test.describe('React root shell', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
 
+  test('desktop navigation can collapse to icons and persists the choice', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/textbooks');
+    await page.getByRole('button', { name: '收起导航' }).click();
+    await expect(page.locator('.react-app-shell')).toHaveClass(/sidebar-compact/u);
+    await expect(page.getByRole('link', { name: '教材课程' })).toHaveAttribute('title', '教材课程');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('three-lans-sidebar-compact-v1'))).toBe('true');
+    await page.reload();
+    await expect(page.locator('.react-app-shell')).toHaveClass(/sidebar-compact/u);
+    await page.getByRole('button', { name: '展开导航' }).click();
+    await expect(page.locator('.react-app-shell')).not.toHaveClass(/sidebar-compact/u);
+  });
+
   test('dark semantic text tokens meet AA contrast and reduced motion is honored', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('three-lans-theme-v1', 'dark'));
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });

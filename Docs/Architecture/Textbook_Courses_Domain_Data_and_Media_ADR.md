@@ -1,11 +1,11 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Accepted（2026-07-14）；TC-P0 技术 dry-run 已通过；TC-P1 backend foundation 已完成；TC-P2 校对工作台已完成；TC-P3 学习集成已完成；TC-P3.1 教材学习闭环已完成**
+> 状态：**Accepted（2026-07-14）；TC-P0-TC-P4 已于 2026-07-15 完成并通过架构验收**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
-> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P3.1 已创建运行时表、API、受控官方与 TTS 媒体接口、正式校对页面、显式 publish、教材 Study Item、学习计划范围、持久化标红与派生任务完成态同步；官方音频自动句级切分与知识图谱仍后置
+> 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P4 已完成运行时、桌面 UI、学习集成、备份恢复、完整自动化验收与真实 Track 01 本地 smoke；官方音频自动句级切分与知识图谱仍后置
 
 ## 0. 决策状态与权威边界
 
@@ -1077,3 +1077,22 @@ TC-P3.1 完成 TC-P3 明确后置的三项运行时能力，不改变 TC-D2 的�
 - 教材集成测试覆盖 TTS 去重与文本变更重生、Range/HEAD、标红保存/版本校验/删除/学习投影，以及派生任务成功态回写。
 
 仍未纳入：官方整轨音频的句级时间轴、强制对齐、口语评分、知识图谱信号和移动端页面。
+
+## 23. TC-P4 架构验收记录（2026-07-15）
+
+TC-P4 完成完整验收、业务备份、运行手册和文档封板。它不扩大 TC-D0 产品范围，也不越过“人工确认后才能发布”的门禁。
+
+新增验收资产：
+
+- `scripts/tests/textbookAcceptance.sh` 与 `npm run test:textbooks:acceptance` 统一执行 lint、unit、integration、typecheck、production build、API smoke、全站桌面 E2E/visual、Compose contract 和可选 Git 外 Manifest 校验；
+- `tests/e2e/textbooks.spec.js` 使用不含教材内容的合成 Manifest，覆盖 1280x720 空态、1440x900 导入/校对/发布、标红持久化、派生任务、官方/TTS 音频互斥和无横向溢出；
+- `Docs/Operations/Textbook_Courses_Runbook.md` 固化导入、人工校对、媒体、修订、备份、恢复、降级和故障处理；
+- `Docs/TestReports/Textbook_Courses_TC_P4_Acceptance_20260715.md` 保存不含教材原文的验收结果。
+
+门禁发现并修复三项真实问题：
+
+1. 标红按钮的 `mouseup` 会冒泡到详情面板并清空选区；选区捕获现只归正文区域所有；
+2. 已发布 Track 导入新修订后，查询错误优先 current revision；现统一优先 pending revision，人工确认后再切 current；
+3. expression revision locator 变化会把所有方向误判为内容更新；现 content revision 只由逐方向 unit hash 或 unit kind 变化驱动，locator 可无噪声刷新。
+
+最终门禁：unit 294/294、integration 57/57、API smoke 7/7、desktop E2E/visual 32/32、lint/typecheck/build/Compose contract 全绿。真实 Track 01 只在本机 Git 外校验并以 draft 导入；20 组表达、40 个候选单元、2 张来源图、1 个官方音频，`expr:20` pairing 保持低置信度等待人工确认。生产数据库仍为 0 个 `textbook_track` generation 和 0 个教材 Study Item。

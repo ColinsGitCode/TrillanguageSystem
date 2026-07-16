@@ -139,7 +139,7 @@ function TrackList({ courses, activeTrackId, onSelect }: {
     <section className="surface textbook-sidebar-panel">
       <header><p className="eyebrow">COURSES</p><h2>教材</h2></header>
       {courses.length === 0 ? (
-        <div className="textbook-empty-list"><NotebookTabs aria-hidden="true" /><span>暂无课程。先运行 Skill 生成 Manifest，再导入草稿。</span></div>
+        <div className="textbook-empty-list"><NotebookTabs aria-hidden="true" /><span>暂无课程。先导入 Track 草稿。</span></div>
       ) : courses.map((course) => (
         <div className="textbook-course-group" key={course.id}>
           <h3>{course.title}</h3>
@@ -269,7 +269,7 @@ function ExpressionDetail({
     return <section className="surface textbook-detail-panel empty"><ListChecks aria-hidden="true" /><h2>选择一个表达</h2><p>右侧会显示来源、重点短语、语法和逐方向 hash。</p></section>;
   }
   return (
-    <section className={`surface textbook-detail-panel confidence-${confidenceTone(expression)}`} onMouseUp={captureSelection}>
+    <section className={`surface textbook-detail-panel confidence-${confidenceTone(expression)}`}>
       <header>
         <div><p className="eyebrow">EXPR {String(expression.display_ordinal).padStart(2, '0')} · {expression.expression_key}</p><h2>校对详情</h2></div>
         <span>{confidenceTone(expression).toUpperCase()}</span>
@@ -502,24 +502,18 @@ export function TextbookCoursesPage() {
   return (
     <ProductShell active="textbooks" title="教材课程">
       <div className="textbook-page" data-testid="textbook-courses-page">
-        <header className="textbook-hero surface">
-          <div className="textbook-page-edge" aria-hidden="true" />
-          <div>
-            <p className="eyebrow">TEXTBOOK COURSES · HUMAN REVIEW FIRST</p>
-            <h1>教材课程</h1>
-            <p>教材截图由 Codex Skill 识别；本页负责浏览、人工校对和官方整轨对照。确认前不会进入复习系统。</p>
-          </div>
-          <OfficialAudio asset={officialAudio} audioRef={officialAudioRef} onPlay={onOfficialAudioPlay} />
-        </header>
+        <div className={`textbook-command-strip${featureDisabled ? ' feature-disabled' : ''}`}>
+          <header className="textbook-hero surface">
+            <div className="textbook-page-edge" aria-hidden="true" />
+            <div>
+              <p className="eyebrow">TEXTBOOK COURSES · HUMAN REVIEW FIRST</p>
+              <h1>教材课程</h1>
+              <p>教材截图由 Codex Skill 识别；本页负责浏览、人工校对和官方整轨对照。确认前不会进入复习系统。</p>
+            </div>
+            <OfficialAudio asset={officialAudio} audioRef={officialAudioRef} onPlay={onOfficialAudioPlay} />
+          </header>
 
-        {featureDisabled ? (
-          <section className="surface textbook-disabled">
-            <ShieldCheck aria-hidden="true" />
-            <h2>教材功能未开启</h2>
-            <p>设置 `TEXTBOOK_FEATURE_ENABLED=true` 并重启服务后，才会开放本地教材 Manifest 导入和校对页面。</p>
-          </section>
-        ) : (
-          <>
+          {!featureDisabled && (
             <section className="textbook-top-row">
               <ImportPanel onImported={setActiveTrackId} />
               <section className="surface textbook-search-panel">
@@ -536,7 +530,17 @@ export function TextbookCoursesPage() {
                 </div>
               </section>
             </section>
+          )}
+        </div>
 
+        {featureDisabled ? (
+          <section className="surface textbook-disabled">
+            <ShieldCheck aria-hidden="true" />
+            <h2>教材功能未开启</h2>
+            <p>设置 `TEXTBOOK_FEATURE_ENABLED=true` 并重启服务后，才会开放本地教材 Manifest 导入和校对页面。</p>
+          </section>
+        ) : (
+          <>
             <section className="textbook-workbench">
               <TrackList courses={courses} activeTrackId={activeTrackId} onSelect={setActiveTrackId} />
               <div className="textbook-main-column">

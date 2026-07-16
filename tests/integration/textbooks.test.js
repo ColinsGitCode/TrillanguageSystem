@@ -32,16 +32,22 @@ function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
-async function createManifestFixture({ audioBytes = Buffer.from('fake-mp3-track-01') } = {}) {
+async function createManifestFixture({
+  audioBytes = Buffer.from('fake-mp3-track-01'),
+  imageBytes = Buffer.from('synthetic-page-image'),
+  revisionNumber = 1,
+  parentManifestHash = null,
+  firstEnglish = 'Get up.',
+} = {}) {
   const contract = await import('../../services/textbooks/manifestContract.mjs');
   const baseDir = path.join(textbookSourceRoot, 'daily-english', 'track-01');
   fs.mkdirSync(baseDir, { recursive: true });
   const imageRelative = 'daily-english/track-01/page-01.png';
   const audioRelative = 'daily-english/track-01/track-01.mp3';
-  const manifestRelative = 'daily-english/track-01/manifest.json';
+  const manifestRelative = `daily-english/track-01/manifest.v${revisionNumber}.json`;
   const imagePath = path.join(textbookSourceRoot, imageRelative);
   const audioPath = path.join(textbookSourceRoot, audioRelative);
-  fs.writeFileSync(imagePath, Buffer.from('synthetic-page-image'));
+  fs.writeFileSync(imagePath, imageBytes);
   fs.writeFileSync(audioPath, audioBytes);
   const manifest = {
     schemaVersion: 'textbook-track-manifest/v1',
@@ -57,9 +63,9 @@ async function createManifestFixture({ audioBytes = Buffer.from('fake-mp3-track-
       expectedExpressionCount: 2,
     },
     revision: {
-      number: 1,
+      number: revisionNumber,
       status: 'draft',
-      parentManifestHash: null,
+      parentManifestHash,
     },
     assets: [
       {
@@ -83,7 +89,7 @@ async function createManifestFixture({ audioBytes = Buffer.from('fake-mp3-track-
       },
     ],
     expressions: [
-      expression('expr:01', 1, 'Get up.', 'おきて。', '起床。'),
+      expression('expr:01', 1, firstEnglish, 'おきて。', '起床。'),
       expression('expr:02', 2, 'I am up now.', 'もうおきたよ。', '已经起床。'),
     ],
     import: {
@@ -457,4 +463,57 @@ test('official audio endpoint supports HEAD, range, etag, and hash drift protect
     dbService.db.prepare('SELECT availability FROM textbook_track_assets WHERE id = ?').get(assetId).availability,
     'hash-mismatch'
   );
+});
+
+test('publishing a revised Track updates only the direction whose unit hash changed', async () => {
+  const first = await createManifestFixture();
+  const importedFirst = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: first.manifestRelative,
+      expectedManifestHash: first.manifestHash,
+    },
+  });
+  const trackId = importedFirst.body.track.id;
+  await api('POST', `/api/textbooks/revisions/${importedFirst.body.track.revision_id}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+  const publishedFirst = await api('POST', `/api/textbooks/tracks/${trackId}/publish`, {
+    body: { expectedTrackRevision: 1, confirmUnitCount: 4, expectedPlanRevision: 0 },
+  });
+  assert.deepEqual(publishedFirst.body.itemActions, { inserted: 4, updated: 0, unchanged: 0, archived: 0 });
+
+  const second = await createManifestFixture({
+    imageBytes: Buffer.from('synthetic-page-image-revision-2'),
+    revisionNumber: 2,
+    parentManifestHash: first.manifestHash,
+    firstEnglish: 'Please get up.',
+  });
+  const importedSecond = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: second.manifestRelative,
+      expectedManifestHash: second.manifestHash,
+    },
+  });
+  assert.equal(importedSecond.status, 200);
+  assert.equal(importedSecond.body.track.status, 'draft');
+  assert.equal(importedSecond.body.track.revision_number, 2);
+  await api('POST', `/api/textbooks/revisions/${importedSecond.body.track.revision_id}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+  const publishedSecond = await api('POST', `/api/textbooks/tracks/${trackId}/publish`, {
+    body: { expectedTrackRevision: 2, confirmUnitCount: 4, expectedPlanRevision: 0 },
+  });
+  assert.equal(publishedSecond.status, 200);
+  assert.deepEqual(publishedSecond.body.itemActions, { inserted: 0, updated: 1, unchanged: 3, archived: 0 });
+
+  const revisions = dbService.db.prepare(`
+    SELECT unit_key, content_revision FROM study_items
+    WHERE source_generation_id = ? ORDER BY unit_key
+  `).all(publishedSecond.body.generationId);
+  assert.deepEqual(revisions, [
+    { unit_key: 'expr:01:en', content_revision: 2 },
+    { unit_key: 'expr:01:ja', content_revision: 1 },
+    { unit_key: 'expr:02:en', content_revision: 1 },
+    { unit_key: 'expr:02:ja', content_revision: 1 },
+  ]);
 });

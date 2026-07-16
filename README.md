@@ -11,8 +11,10 @@ Cards Factory 是一个本地学习卡片生产工作台：通过 DeepSeek 生�
 - CONTENT / INTEL 学习卡弹窗；
 - 生成 token、耗时、质量数据与基础服务健康检查；
 - Kokoro 英文 TTS 与 VOICEVOX 日文 TTS。
+- 学习辅助 2.0：学习计划、今日队列、FSRS 复习、四档评分与学习记录；
+- 教材课程：Git 外 Manifest、人工校对、官方整轨、英日单句 TTS、标红、派生卡与学习计划接入。
 
-Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析与旧 SRS/复习/学习计划已于 2026-07-13 退役并从运行时、API 和数据库 schema 删除。学习辅助与知识图谱将在全栈架构改造完成后重新设计。
+Mission Control、Knowledge Hub、Knowledge OPS、旧知识分析与旧 SRS/复习/学习计划已于 2026-07-13 退役并从运行时、API 和数据库 schema 删除。学习辅助 2.0 已重新设计并上线；知识图谱 2.0 继续后置。
 
 ## 快速开始
 
@@ -38,6 +40,7 @@ Compose project name 为 three_lans_system，默认启动 viewer、ocr、tts-en�
     npm run lint
     npm run smoke
     npm run test:e2e
+    npm run test:textbooks:acceptance
 
 ## 架构速览
 

@@ -6,6 +6,8 @@ import {
   Menu,
   Moon,
   NotebookTabs,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings2,
   Sun,
   X,
@@ -33,6 +35,7 @@ function isHealthUnhealthy(data: Awaited<ReturnType<typeof factoryApi.health>> |
 export function ProductShell({ active, title, children }: Props) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mobileNav, setMobileNav] = useState(false);
+  const [sidebarCompact, setSidebarCompact] = useState(false);
   const mobileNavButtonRef = useRef<HTMLButtonElement>(null);
   const mobileNavRef = useRef<HTMLElement>(null);
   const healthQuery = useQuery({
@@ -49,6 +52,7 @@ export function ProductShell({ active, title, children }: Props) {
       : 'light';
     setTheme(next);
     document.documentElement.dataset.theme = next;
+    setSidebarCompact(localStorage.getItem('three-lans-sidebar-compact-v1') === 'true');
   }, []);
 
   useEffect(() => {
@@ -75,10 +79,15 @@ export function ProductShell({ active, title, children }: Props) {
     document.documentElement.dataset.theme = next;
     localStorage.setItem('three-lans-theme-v1', next);
   };
+  const toggleSidebar = () => {
+    const next = !sidebarCompact;
+    setSidebarCompact(next);
+    localStorage.setItem('three-lans-sidebar-compact-v1', String(next));
+  };
   const healthUnhealthy = isHealthUnhealthy(healthQuery.data, healthQuery.isError);
 
   return (
-    <div className="react-app-shell">
+    <div className={`react-app-shell${sidebarCompact ? ' sidebar-compact' : ''}`}>
       <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
         <div className="brand-block">
           <span className="brand-bars"><i /><i /><i /></span>
@@ -86,29 +95,41 @@ export function ProductShell({ active, title, children }: Props) {
         </div>
         <nav aria-label="主导航">
           <p>学习</p>
-          <a className={active === 'today' ? 'active' : ''} href="/learn" aria-current={active === 'today' ? 'page' : undefined}>
-            <CalendarCheck2 aria-hidden="true" /> 今日学习
+          <a className={active === 'today' ? 'active' : ''} href="/learn" aria-current={active === 'today' ? 'page' : undefined} title={sidebarCompact ? '今日学习' : undefined}>
+            <CalendarCheck2 aria-hidden="true" /><span className="sidebar-nav-label">今日学习</span>
           </a>
-          <a className={active === 'plan' ? 'active' : ''} href="/learn/plan" aria-current={active === 'plan' ? 'page' : undefined}>
-            <Settings2 aria-hidden="true" /> 学习计划
+          <a className={active === 'plan' ? 'active' : ''} href="/learn/plan" aria-current={active === 'plan' ? 'page' : undefined} title={sidebarCompact ? '学习计划' : undefined}>
+            <Settings2 aria-hidden="true" /><span className="sidebar-nav-label">学习计划</span>
           </a>
-          <a className={active === 'history' ? 'active' : ''} href="/learn/history" aria-current={active === 'history' ? 'page' : undefined}>
-            <History aria-hidden="true" /> 学习记录
+          <a className={active === 'history' ? 'active' : ''} href="/learn/history" aria-current={active === 'history' ? 'page' : undefined} title={sidebarCompact ? '学习记录' : undefined}>
+            <History aria-hidden="true" /><span className="sidebar-nav-label">学习记录</span>
           </a>
-          <a className={active === 'textbooks' ? 'active' : ''} href="/textbooks" aria-current={active === 'textbooks' ? 'page' : undefined}>
-            <NotebookTabs aria-hidden="true" /> 教材课程
+          <a className={active === 'textbooks' ? 'active' : ''} href="/textbooks" aria-current={active === 'textbooks' ? 'page' : undefined} title={sidebarCompact ? '教材课程' : undefined}>
+            <NotebookTabs aria-hidden="true" /><span className="sidebar-nav-label">教材课程</span>
           </a>
           <p className="sidebar-production-label">生产</p>
-          <a className={active === 'factory' ? 'active' : ''} href="/" aria-current={active === 'factory' ? 'page' : undefined}>
-            <Factory aria-hidden="true" /> Cards Factory
+          <a className={active === 'factory' ? 'active' : ''} href="/" aria-current={active === 'factory' ? 'page' : undefined} title={sidebarCompact ? 'Cards Factory' : undefined}>
+            <Factory aria-hidden="true" /><span className="sidebar-nav-label">Cards Factory</span>
           </a>
         </nav>
         <div className="sidebar-status">
           <span className={healthUnhealthy ? 'offline' : ''} />
-          {healthUnhealthy ? '服务异常' : '服务正常'}
-          <button className="icon-button" type="button" aria-label="切换主题" onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-          </button>
+          <span className="sidebar-status-label">{healthUnhealthy ? '服务异常' : '服务正常'}</span>
+          <div className="sidebar-tools">
+            <button className="icon-button" type="button" aria-label="切换主题" title="切换主题" onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            </button>
+            <button
+              className="icon-button sidebar-collapse-button"
+              type="button"
+              aria-label={sidebarCompact ? '展开导航' : '收起导航'}
+              title={sidebarCompact ? '展开导航' : '收起导航'}
+              aria-pressed={sidebarCompact}
+              onClick={toggleSidebar}
+            >
+              {sidebarCompact ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            </button>
+          </div>
         </div>
       </aside>
 

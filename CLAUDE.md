@@ -17,7 +17,7 @@ Current runtime capabilities:
 - card modal with CONTENT and INTEL;
 - generation observability and infrastructure health;
 - Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics;
-- Textbook Courses TC-P3.1 integration: draft Manifest import, textbook search, controlled official Track audio streaming, `/textbooks` course/review page, persisted selection highlights, human verification, explicit Track publishing to `textbook_track` generation projections, formal English/Japanese per-expression TTS assets, `textbook_en/ja` Study Items, learning plan scope v2, review item view-models, history filters, and textbook selection card-derivation jobs with terminal-state synchronization.
+- Textbook Courses TC-P4: Git-external draft Manifest import, textbook search, controlled official Track audio streaming, `/textbooks` desktop review page, persisted selection highlights, human verification, explicit Track publishing to `textbook_track` generation projections, formal English/Japanese per-expression TTS assets, `textbook_en/ja` Study Items, learning plan scope v2, review item view-models, history filters, textbook selection card derivation, full desktop E2E/visual acceptance, and documented backup/recovery.
 
 Retired on 2026-07-13:
 
@@ -37,6 +37,7 @@ Retired code, routes, schema, tests, and visual snapshots must not be restored d
     npm run lint
     npm run smoke
     npm run test:e2e
+    npm run test:textbooks:acceptance
     docker compose up -d --build
 
 The Compose project name is three_lans_system. The user-visible app is http://127.0.0.1:3010/.
@@ -45,7 +46,7 @@ The Compose project name is three_lans_system. The user-visible app is http://12
 
 `skills/import-textbook-track/` is the accepted TC-P0 Codex Skill for turning ordered local textbook screenshots and optional official Track audio into a Git-external draft Manifest. It uses image understanding directly, never the application `/api/ocr` route, and never writes SQLite. Actual textbook text, screenshots, audio, Manifest and dry-run summary must remain outside Git.
 
-TC-P3.1 runtime support is enabled by default and can be disabled with `TEXTBOOK_FEATURE_ENABLED=false`: `database/schema.sql` plus `database/migrations/002_textbook_courses.sql` own the seven textbook tables, `routes/textbooks.js` owns draft import/query/media/publish/derivation/highlight/TTS APIs, `TEXTBOOK_SOURCE_ROOT` is a controlled read-only media root, and `TEXTBOOK_WORK_PATH` is the writable projection/TTS root. Draft import and human verification must not create `textbook_track` generation projections, Study Items, or formal TTS assets; only explicit publish from a verified Track may create/update the projection, manual learning admission, `textbook_en/ja` Study Items with per-expression unit hashes, and subsequent per-expression TTS generation.
+TC-P4 runtime support is enabled by default and can be disabled with `TEXTBOOK_FEATURE_ENABLED=false`: `database/schema.sql` plus `database/migrations/002_textbook_courses.sql` own the seven textbook tables, `routes/textbooks.js` owns draft import/query/media/publish/derivation/highlight/TTS APIs, `TEXTBOOK_SOURCE_ROOT` is a controlled read-only media root, and `TEXTBOOK_WORK_PATH` is the writable projection/TTS root. Draft import and human verification must not create `textbook_track` generation projections, Study Items, or formal TTS assets; only explicit publish from a verified Track may create/update the projection, manual learning admission, `textbook_en/ja` Study Items with per-expression unit hashes, and subsequent per-expression TTS generation. Operational recovery is defined in `Docs/Operations/Textbook_Courses_Runbook.md`.
 
 ## Runtime architecture
 
@@ -77,7 +78,7 @@ Active route modules:
 - routes/ocr.js: /api/ocr;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
-- routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, explicit publish, persisted highlights, selection derivation jobs, official audio content, and generated per-expression TTS content, feature-flagged on by default for TC-P3.1;
+- routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, explicit publish, persisted highlights, selection derivation jobs, official audio content, and generated per-expression TTS content, feature-flagged on by default for TC-P4;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.

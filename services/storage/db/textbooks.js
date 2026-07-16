@@ -256,7 +256,7 @@ function getCourse(db, id) {
   const tracks = db.prepare(`
     SELECT t.*, r.expression_count, r.manifest_hash
     FROM textbook_tracks t
-    LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.current_revision_id, t.pending_revision_id)
+    LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.pending_revision_id, t.current_revision_id)
     WHERE t.course_id = ?
     ORDER BY t.display_order, t.track_number
   `).all(course.id);
@@ -270,7 +270,7 @@ function getTrack(db, id) {
       r.expression_count, r.manifest_hash, r.source_fingerprint, r.content_hash, r.projection_hash
     FROM textbook_tracks t
     JOIN textbook_courses c ON c.id = t.course_id
-    LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.current_revision_id, t.pending_revision_id)
+    LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.pending_revision_id, t.current_revision_id)
     WHERE t.id = ?
   `).get(id);
   if (!track) return null;
@@ -523,7 +523,6 @@ function publishTrack(db, trackId, {
         unit_locator_json=excluded.unit_locator_json,
         content_revision=study_items.content_revision + CASE
           WHEN study_items.content_hash <> excluded.content_hash
-            OR study_items.unit_locator_json <> excluded.unit_locator_json
             OR study_items.unit_kind <> excluded.unit_kind THEN 1 ELSE 0 END,
         content_hash=excluded.content_hash,
         lifecycle='active',
@@ -540,7 +539,7 @@ function publishTrack(db, trackId, {
         const existing = existingItems.get(unitKey);
         upsertItem.run(generationId, generationId, unitKey, unitKind, locatorJson, contentHash, timestamp, timestamp);
         if (!existing) itemActions.inserted += 1;
-        else if (existing.content_hash !== contentHash || existing.unit_locator_json !== locatorJson || existing.unit_kind !== unitKind || existing.lifecycle !== 'active') itemActions.updated += 1;
+        else if (existing.content_hash !== contentHash || existing.unit_kind !== unitKind || existing.lifecycle !== 'active') itemActions.updated += 1;
         else itemActions.unchanged += 1;
       }
     }
