@@ -3,7 +3,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+delete process.env.KG_ENABLED;
+delete process.env.KG_PLANNING_ENABLED;
+delete process.env.KG_LLM_ENRICHMENT_ENABLED;
+
 const cfg = require('../../lib/serverConfig');
+
+test('KG feature flags are disabled by default', () => {
+  assert.equal(cfg.KG_ENABLED, false);
+  assert.equal(cfg.KG_PLANNING_ENABLED, false);
+  assert.equal(cfg.KG_LLM_ENRICHMENT_ENABLED, false);
+});
 
 test.describe('serverConfig.toNumberOr', () => {
   test.it('parses numeric strings and numbers', () => {

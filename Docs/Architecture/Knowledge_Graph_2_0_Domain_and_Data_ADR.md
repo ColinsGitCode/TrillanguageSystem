@@ -1071,3 +1071,37 @@ KG-P0 已完成并通过门禁，交付范围严格限制为只读 POC：
 | integration | 57/57 通过 |
 
 边界核验：未新增或修改 `database/schema.sql`、migration、route、LearningService、Planning Provider、feature flag、DeepSeek 调用或运行时数据库数据。KG-P0 只证明确定性身份与关系规则可行；下一阶段为 **KG-P1 事实表、读模型与只读 API**，必须另行实施 migration 003，且初次部署的 KG feature flags 继续全部为 0。
+
+---
+
+## 22. KG-P1 实施记录（2026-07-16）
+
+KG-P1 已完成事实层、工作流投影、读模型和受控 API，未接入 Planning Provider：
+
+- `database/migrations/003_knowledge_graph_2_0.sql` 与 `database/schema.sql` 同步交付表 37-47；migration runner 对 11 张 `kg_*` 表执行 postcondition，并通过新库/存量库对象级 parity；
+- `KnowledgeGraphService` 与 `KgRepository` 实现确定性 KP/Surface、Evidence、append-only lookup/resolution、unresolved case 和 revision-checked 人工 resolve/dismiss/reopen；
+- `rebuildKnowledgeProjections` 可清空重建 `kg_point_stats` 与 `kg_planning_signals`，`kg-lookup-signal-v1` 使用 7/30 天窗口、max-not-sum 与 30 分 cap；
+- `/api/kg` 提供搜索、显式 lookup、KP 详情/词形/Evidence、Resolution Case 与人工 decision；搜索不写事实，同 key 同 body 幂等，同 key 不同 body 返回 409；
+- `KG_ENABLED`、`KG_PLANNING_ENABLED`、`KG_LLM_ENRICHMENT_ENABLED` 在代码、`.env.example` 与 Compose 中均默认 `0`；关闭时 `/api/kg/*` 返回 `KG_FEATURE_DISABLED`，学习、教材、生成和 FSRS 不受影响；
+- `kgP1BackfillDryRun.js` 以 SQLite readonly 连接扫描 eligible/whole-card-only Study Item 与 published textbook expression，只输出 Git 外 manifest，不写 KG 表。
+
+真实 Compose volume 验收：
+
+| 项目 | 结果 |
+|---|---:|
+| migration versions | baseline + 001 + 002 + 003 |
+| KG tables | 11 |
+| active eligible Study Items | 1132 |
+| extracted Study Item sources | 1167 |
+| published textbook sources | 40 |
+| resolved / unresolved candidates | 1156 / 52 |
+| suggested KP / Surface / Evidence | 1106 / 1106 / 1120 |
+| unresolved breakdown | whole-card 1、ambiguous kana 43、unsupported token 4、unsupported sequence 1、empty source 3 |
+| dry-run 后 KG point/lookup/resolution/signal rows | 0 / 0 / 0 / 0 |
+| lint | 通过 |
+| unit | 317/317 通过 |
+| integration | 60/60 通过 |
+| smoke | 7/7 通过 |
+| Docker build/runtime | React production build 通过，viewer/health 正常，npm audit 0 vulnerabilities |
+
+边界核验：KG-P1 没有调用 DeepSeek 建图、没有写 Review Event 或 Schedule State、没有接入 `GraphPlanningSignalProvider`，也没有执行回填 apply。真实 manifest 保留在容器 `/tmp`，不进入 Git。下一阶段为 **KG-P2 单索引同步 signalReader、解释透传、基础集合一致性、10ms 预算和错误降级验收**。

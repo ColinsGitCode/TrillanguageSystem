@@ -11,6 +11,19 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // Knowledge Graph 2.0 (read models and append-only facts before parents)
+  'kg_planning_signals',
+  'kg_point_stats',
+  'kg_lookup_events',
+  'kg_point_evidence_links',
+  'kg_point_surface_links',
+  'kg_point_transitions',
+  'kg_resolution_events',
+  'kg_resolution_cases',
+  'kg_evidence',
+  'kg_surface_forms',
+  'kg_points',
+
   // Textbook Courses (immutable facts are reset only in test mode)
   'textbook_card_derivations',
   'textbook_expression_revisions',
@@ -61,7 +74,13 @@ function truncateAll(db) {
         AND name IN (
           'textbook_revision_delete_block',
           'textbook_expression_revision_delete_block',
-          'textbook_asset_delete_block'
+          'textbook_asset_delete_block',
+          'kg_resolution_events_update_block',
+          'kg_resolution_events_delete_block',
+          'kg_point_transitions_update_block',
+          'kg_point_transitions_delete_block',
+          'kg_lookup_events_update_block',
+          'kg_lookup_events_delete_block'
         )
     `).all();
     for (const trigger of immutableTriggers) {

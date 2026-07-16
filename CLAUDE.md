@@ -229,11 +229,31 @@ Current tables:
 - learning_sessions;
 - learning_review_events;
 - learning_schedule_states;
+- textbook_courses;
+- textbook_tracks;
+- textbook_track_revisions;
+- textbook_track_assets;
+- textbook_expressions;
+- textbook_expression_revisions;
+- textbook_card_derivations;
+- kg_points;
+- kg_surface_forms;
+- kg_evidence;
+- kg_resolution_cases;
+- kg_resolution_events;
+- kg_point_transitions;
+- kg_point_surface_links;
+- kg_point_evidence_links;
+- kg_lookup_events;
+- kg_point_stats;
+- kg_planning_signals;
 - generations_fts virtual table and triggers.
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
 
-Learning Assistance 2.0 LA-P0-P4 is complete: admissions and historical Study Items are materialized; online generation materializes eligible Study Items in the same transaction; `/api/learning` implements plan, preview, scope options, queue, session, reveal, skip, end, idempotent review, item view-model and read-only history/metrics contracts. `/learn/history` derives progress, backlog, rating, response-time and recent-event views from Review Events, queue snapshots and sessions without a new analytics table. Merely loading any learning page or `GET /api/learning/history` must remain read-only. Historical skip counts are intentionally unavailable because skip is currently a temporary session workflow state, not a durable fact. `services/learning/planning` owns the synchronous, side-effect-free PlanningSignalProvider contract, Heuristic v1 and the optional Graph reader adapter. Providers run only after the base queue set is selected; missing, empty, failed, asynchronous or over-budget providers must preserve the base set and deterministic fallback order. No Knowledge Graph product or schema is active; any future work starts at KG-D0.
+Learning Assistance 2.0 LA-P0-P4 is complete: admissions and historical Study Items are materialized; online generation materializes eligible Study Items in the same transaction; `/api/learning` implements plan, preview, scope options, queue, session, reveal, skip, end, idempotent review, item view-model and read-only history/metrics contracts. `/learn/history` derives progress, backlog, rating, response-time and recent-event views from Review Events, queue snapshots and sessions without a new analytics table. Merely loading any learning page or `GET /api/learning/history` must remain read-only. Historical skip counts are intentionally unavailable because skip is currently a temporary session workflow state, not a durable fact. `services/learning/planning` owns the synchronous, side-effect-free PlanningSignalProvider contract, Heuristic v1 and the optional Graph reader adapter. Providers run only after the base queue set is selected; missing, empty, failed, asynchronous or over-budget providers must preserve the base set and deterministic fallback order.
+
+Knowledge Graph 2.0 KG-P0-P1 is complete. Migration 003 owns eleven `kg_*` tables; `services/kg` owns deterministic identity analysis, append-only lookup/resolution facts, reversible unresolved cases, Evidence attachments, and rebuildable point-stats/planning-signal read models. `/api/kg` is explicitly mounted but `KG_ENABLED`, `KG_PLANNING_ENABLED`, and `KG_LLM_ENRICHMENT_ENABLED` all default to disabled. Search is read-only; only explicit lookup submission writes a lookup fact. KG must not write Review Events, Schedule States, or FSRS data. KG-P2 may add the existing optional PlanningSignalProvider reader, but it must preserve the selected base queue set and deterministic fallback order.
 
 dropDeprecatedTables permanently removes legacy training, Knowledge, SRS, card_reviews, and user_preferences tables from existing databases. This destructive cleanup is intentional and part of the approved retirement.
 

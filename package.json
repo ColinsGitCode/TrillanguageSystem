@@ -26,7 +26,8 @@
     "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
     "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply",
     "cards:reassign-kindergarden-date": "node scripts/migrations/reassignFolderDate.js --source=kindergarden --target=20260713 --date=2026-07-13",
-    "kg:p0": "node scripts/poc/kgP0DryRun.js"
+    "kg:p0": "node scripts/poc/kgP0DryRun.js",
+    "kg:p1:dry-run": "node scripts/maintenance/kgP1BackfillDryRun.js"
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
