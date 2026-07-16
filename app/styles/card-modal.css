@@ -1,12 +1,12 @@
 .card-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 12px; background: var(--color-overlay); }
 .react-card-modal { position: relative; width: min(1600px, 100%); height: calc(100dvh - 24px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-modal); box-shadow: var(--shadow-modal); }
 .react-card-head { min-height: 106px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 16px; padding: 12px 18px; border-bottom: 1px solid var(--color-border); }
-.card-modal-readonly { color: var(--color-text-tertiary); font: 700 9px/1.2 var(--font-mono); text-align: center; }
+.card-modal-readonly { color: var(--color-text-tertiary); font: 600 12px/1.4 var(--font-sans); text-align: center; }
 .react-card-head > div { text-align: center; min-width: 0; }
 .react-card-head h1 { margin: 0; font-size: 42px; line-height: 1.08; overflow-wrap: anywhere; }
-.react-card-head p { margin: 7px 0 0; color: var(--color-text-tertiary); font: 700 12px/1 var(--font-mono); }
+.react-card-head p { margin: 7px 0 0; color: var(--color-text-tertiary); font: 600 12px/1 var(--font-mono); }
 .card-modal-tabs { min-height: 44px; display: flex; align-items: stretch; padding: 0 18px; background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); }
-.card-modal-tabs > button { min-width: 128px; padding: 0 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; font: 700 12px/1 var(--font-mono); }
+.card-modal-tabs > button { min-width: 128px; padding: 0 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; font: 600 13px/1 var(--font-sans); }
 .card-modal-tabs > button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
 .card-modal-tabs .highlight-selection-button { min-width: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--color-danger); }
 .card-modal-tabs .highlight-selection-button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
@@ -19,8 +19,8 @@
 .card-study-meta dl { margin: 0; }
 .card-study-meta dl > div { padding: 8px 0; border-bottom: 1px solid var(--color-border); }
 .card-study-meta dl > div:last-child { border-bottom: 0; }
-.card-study-meta dt { color: var(--color-text-tertiary); font-size: 10px; text-transform: uppercase; }
-.card-study-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 600 11px/1.4 var(--font-mono); }
+.card-study-meta dt { color: var(--color-text-tertiary); font-size: 12px; letter-spacing: .01em; }
+.card-study-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 600 12px/1.4 var(--font-mono); }
 
 .react-card-renderer { color: var(--color-text-primary); font-size: 18px; line-height: 1.75; }
 .react-card-renderer > h1:first-child { display: none; }
@@ -33,12 +33,12 @@
 .react-card-renderer blockquote { margin: 16px 0; padding: 8px 16px; color: var(--color-text-secondary); border-left: 3px solid var(--color-border-strong); }
 .react-card-renderer code { padding: 2px 5px; background: var(--color-bg-subtle); border-radius: var(--radius-sm); font-family: var(--font-mono); }
 .react-card-renderer ruby { ruby-position: over; }
-.react-card-renderer rt { color: var(--color-text-tertiary); font: 600 10px/1 var(--font-ja); }
-.react-card-renderer .audio-btn { width: 31px; height: 31px; display: inline-grid; place-items: center; margin-left: 7px; padding: 0; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: 50%; cursor: pointer; font-size: 11px; vertical-align: middle; }
+.react-card-renderer rt { color: var(--color-text-tertiary); font: 600 12px/1 var(--font-ja); }
+.react-card-renderer .audio-btn { width: 31px; height: 31px; display: inline-grid; place-items: center; margin-left: 7px; padding: 0; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: 50%; cursor: pointer; font-size: 12px; vertical-align: middle; }
 .react-card-renderer .audio-btn.is-playing { color: var(--color-text-inverse); background: var(--color-primary); border-color: var(--color-primary); }
 .react-card-renderer mark.study-highlight-red { color: inherit; background: color-mix(in srgb, var(--color-danger) 24%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-danger) 65%, transparent); }
 .loanword-block { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-.loanword-label, .loanword-tag { padding: 3px 8px; border-radius: var(--radius-full); font-size: 11px; }
+.loanword-label, .loanword-tag { padding: 3px 8px; border-radius: var(--radius-full); font-size: 12px; }
 .loanword-label { color: var(--color-text-inverse); background: var(--color-data-purple); }
 .loanword-tag { color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); }
 .safe-render-error { padding: 18px; color: var(--color-danger); background: var(--color-danger-subtle); border-radius: var(--radius-md); }
@@ -47,20 +47,20 @@
 .intel-score-panel, .intel-panel { padding: 16px; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .intel-score-panel { display: grid; place-items: center; align-content: center; min-height: 190px; background: var(--color-obs-bg); color: var(--color-obs-text); }
 .intel-score-panel .eyebrow { color: var(--color-obs-muted); }
-.intel-score-panel strong { font: 700 72px/1 var(--font-mono); }
-.intel-score-panel span { margin-top: 6px; color: var(--color-success); font: 700 12px/1 var(--font-mono); }
+.intel-score-panel strong { font: 600 72px/1 var(--font-mono); }
+.intel-score-panel span { margin-top: 6px; color: var(--color-success); font: 600 12px/1 var(--font-mono); }
 .intel-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .intel-facts div { padding: 9px; background: var(--color-bg-subtle); border-radius: var(--radius-md); }
-.intel-facts dt { color: var(--color-text-tertiary); font-size: 10px; text-transform: uppercase; }
+.intel-facts dt { color: var(--color-text-tertiary); font-size: 12px; letter-spacing: .01em; }
 .intel-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; font: 650 12px/1.4 var(--font-mono); }
 .intel-wide { grid-column: 1 / -1; }
 .intel-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .intel-bar { position: relative; }
-.intel-bar > span { display: block; padding-right: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 11px; }
-.intel-bar > strong { position: absolute; top: 0; right: 0; font: 700 11px/1 var(--font-mono); }
+.intel-bar > span { display: block; padding-right: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 12px; }
+.intel-bar > strong { position: absolute; top: 0; right: 0; font: 600 12px/1 var(--font-mono); }
 .intel-bar > div { height: 5px; margin-top: 8px; overflow: hidden; background: var(--color-bg-subtle); border-radius: var(--radius-full); }
 .intel-bar i { display: block; height: 100%; background: var(--color-primary); }
-.intel-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; color: var(--color-obs-text); background: var(--color-obs-bg); border-radius: var(--radius-md); white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 var(--font-mono); }
+.intel-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; color: var(--color-obs-text); background: var(--color-obs-bg); border-radius: var(--radius-md); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font-mono); }
 
 .delete-confirm { position: absolute; top: 64px; left: 18px; z-index: 4; width: min(340px, calc(100% - 36px)); padding: 16px; background: var(--color-bg-elevated); border: 1px solid var(--color-danger); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
 .delete-confirm p { color: var(--color-text-secondary); }
@@ -73,7 +73,7 @@
   .react-card-modal { width: 100%; height: 100dvh; border: 0; border-radius: 0; }
   .react-card-head { min-height: 90px; gap: 8px; padding: 8px 10px; }
   .react-card-head h1 { font-size: 26px; }
-  .react-card-head p { font-size: 10px; }
+  .react-card-head p { font-size: 12px; }
   .card-modal-tabs { padding: 0 8px; }
   .card-modal-tabs > button { min-width: 84px; padding: 0 10px; }
   .highlight-selection-button { font-size: 0 !important; }
@@ -86,4 +86,12 @@
   .intel-wide { grid-column: auto; }
   .intel-bars { grid-template-columns: 1fr 1fr; }
   .intel-facts { grid-template-columns: 1fr; }
+}
+
+/* —— UI 精修:微动效 —— */
+.card-modal-tabs > button, .react-card-renderer .audio-btn, .card-modal-close {
+  transition: background var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
 }

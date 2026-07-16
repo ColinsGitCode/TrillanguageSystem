@@ -139,3 +139,10 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* —— UI 精修:全局可见聚焦环(:where 零特指度,不覆盖组件已有 :focus 样式) —— */
+:where(button, a[href], input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
