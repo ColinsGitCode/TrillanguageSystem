@@ -29,7 +29,8 @@
     "kg:p0": "node scripts/poc/kgP0DryRun.js",
     "kg:p1:dry-run": "node scripts/maintenance/kgP1BackfillDryRun.js",
     "kg:r0:apply": "node scripts/maintenance/applyKnowledgeBackfill.js --apply",
-    "kg:r1:canary": "node scripts/maintenance/kgR1PlanningCanary.js"
+    "kg:r1:canary": "node scripts/maintenance/kgR1PlanningCanary.js",
+    "kg:r2:sync": "node scripts/maintenance/kgR2IncrementalSync.js"
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",

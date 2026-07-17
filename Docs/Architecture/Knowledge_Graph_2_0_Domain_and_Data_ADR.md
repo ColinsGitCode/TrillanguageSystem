@@ -1181,3 +1181,24 @@ KG-R1 增加 `runPlanningCanary` 与 `kg:r1:canary` 只读维护入口。工具�
 真实 volume 首次启用前后两轮均通过全部门禁：1134 个候选行中取代表性 20 项，唯一真实 Graph signal 把 Study Item 7 从索引 6 细排到索引 0；Study Item 集合与每项 bucket、available/due 三键完全一致，强制失败精确恢复 baseline。500 次 reader 探针的 p95 为 0.0013ms / 0.0014ms，均无超过 10ms；query plan 使用整数主键，网络调用和 18 张观察表计数变化为 0，SQLite integrity 为 `ok`、外键违规为 0。
 
 本地运行环境据此启用 `KG_PLANNING_ENABLED=1`，保留 `KG_LLM_ENRICHMENT_ENABLED=0`；代码、Compose 和 `.env.example` 默认值继续全部关闭。当前真实库没有学习计划、持久化队列、Schedule State 或 Review Event，因此 KG-R1 只确认 planning 能力安全启用，未虚报真实用户队列 explanation 验收。首个真实计划/队列产生后须补 queue snapshot 观察；在此之前不得为验收伪造用户计划。
+
+---
+
+## 27. KG-R2 增量事实维护增补（2026-07-17）
+
+KG-R0 的空库一次性 apply 不承担后续在线维护。KG-R2 以独立 ADR
+`Knowledge_Graph_2_0_Incremental_Maintenance_ADR.md` 增补本基线：新增表 49
+`kg_source_sync_jobs` 与 migration 005；在线卡片和教材发布只在自身 SQLite
+事务内原子写 outbox，确定性分析、Evidence 更新和投影重建由独立 worker 异步完成。
+
+旧 revision 的 Evidence 必须先写 append-only `evidence-detached` 再转
+`superseded`；来源删除/退役转 `orphaned`。worker 在提交分析前重新加载完整
+source bundle 并复核 revision/hash，source drift 任务记为 `superseded`，不得把过期
+Evidence 写为 active。KG-R2 不写 Review Event、Schedule State、Manual Intent 或
+FSRS，不调用 DeepSeek 建图。
+
+新增 `KG_INCREMENTAL_SYNC_ENABLED` 独立控制消费者；代码、Compose 与
+`.env.example` 默认均为 `0`。内容事务不受该开关影响，关闭期间仍安全积累 outbox。
+首次启用必须经过 Git 外只读 plan、hash-gated apply、SQLite backup 与报告验收。
+
+真实 Compose volume 已于 2026-07-17 完成首次 KG-R2 验收。初始 plan 识别 86 个 R0 后缺失来源；首次 apply 后的二次审计发现 `kg-evidence-v1` 未把语言纳入身份，导致 36 个场景 Study Item 的 EN/JA Evidence 冲突。实现升级为 `kg-evidence-v2` 后重新受控 apply，最终 active Evidence 为 1159、活动来源语言重复为 0、场景 EN/JA 缺失为 0、outbox 仅有 86 条 succeeded，最终 reconciliation plan 为零。全过程没有写 Review Event、Schedule State、Manual Intent、Learning Plan、Daily Queue 或 FSRS；SQLite integrity 为 `ok`、外键违规为 0。详细证据与恢复点见运行手册 §8.5 和 KG-R2 测试报告。

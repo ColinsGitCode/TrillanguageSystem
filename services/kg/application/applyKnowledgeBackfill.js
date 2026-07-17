@@ -241,5 +241,6 @@ module.exports = {
   applyKnowledgeBackfill,
   analysisForResolvedCandidate,
   analysisForUnresolvedCandidate,
+  persistUnresolvedCandidate,
   tableCounts,
 };

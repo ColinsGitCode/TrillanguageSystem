@@ -185,3 +185,87 @@ docker compose exec -T viewer node scripts/maintenance/kgR1PlanningCanary.js \
 首次启用前后两份报告均为 `overallPass=true`。真实 volume 有 1 条 score 8 的 Graph signal，代表性 20 项集合中 Study Item 7 从 baseline 索引 6 细排到索引 0；集合、bucket、available/due 三键不变，强制失败精确回退。启用前/后 reader p95 分别为 0.0013ms / 0.0014ms，500 次探针均未超过 10ms；网络调用和 18 张观察表计数变化均为 0。
 
 本地环境已设为 `KG_ENABLED=1`、`KG_PLANNING_ENABLED=1`、`KG_LLM_ENRICHMENT_ENABLED=0`；代码与示例环境默认值仍全关。当前 API 返回 `plan:null`、`queue:null / not-created`，所以 planning 处于无持久化队列消费者的休眠状态。详细证据见 `Docs/TestReports/Knowledge_Graph_KG_R1_Canary_20260717.md`，JSON 报告留在业务卷、禁止进入 Git。
+
+## 8. KG-R2 增量事实维护
+
+KG-R2 新增第四个独立开关：
+
+| 开关 | 能力 | 默认值 |
+|---|---|---:|
+| `KG_INCREMENTAL_SYNC_ENABLED` | 消费表 49 outbox，维护 Evidence 与增量投影 | `0` |
+
+在线卡片和教材发布无论此开关是否开启，都会在自己的事务内写 outbox。关闭开关只停止消费，不丢任务。
+
+### 8.1 启用前卷备份
+
+migration 005 首次进入真实卷之前，停止 viewer 并归档整个业务卷：
+
+```bash
+docker compose stop viewer
+
+docker run --rm \
+  -v three_lans_system_trilingual_records:/source:ro \
+  -v "$BACKUP_DIR:/backup" alpine:3.20 \
+  tar -czf /backup/trilingual-records-before-kg-r2.tar.gz -C /source .
+
+tar -tzf "$BACKUP_DIR/trilingual-records-before-kg-r2.tar.gz"
+docker compose start viewer
+```
+
+### 8.2 只读 reconciliation plan
+
+保持 `KG_INCREMENTAL_SYNC_ENABLED=0`。migration 005 应用后运行：
+
+```bash
+docker compose exec -T viewer node scripts/maintenance/kgR2IncrementalSync.js \
+  --db=/data/trilingual_records/trilingual_records.db \
+  --output=/data/trilingual_records/kg-r2/kg-r2-plan.json
+```
+
+报告路径必须是 Git 外新文件。审核 `activeJobs`、`absentJobs`、descriptor 样本和 `planHash`；若已完成 R0 且此后没有内容变更，计划应为空。非空项必须能解释为 R0 后新增/修订/删除的来源。
+
+### 8.3 hash-gated apply
+
+```bash
+docker compose exec -T viewer node scripts/maintenance/kgR2IncrementalSync.js --apply \
+  --db=/data/trilingual_records/trilingual_records.db \
+  --expected-plan-hash="$PLAN_HASH" \
+  --backup=/data/trilingual_records/kg-r2/backups/sqlite-before-kg-r2.db \
+  --report=/data/trilingual_records/kg-r2/reports/kg-r2-apply-report.json
+```
+
+脚本会重新生成 plan；hash 漂移时拒绝执行。apply 创建 SQLite backup、幂等入队并同步 drain 当前任务，失败任务留在 outbox。必须检查：`overallPass=true`、`failed=0`、SQLite integrity 为 `ok`、外键违规为 0，Review Event/Schedule State/Manual Intent 计数不变。
+
+### 8.4 开启 worker 与回退
+
+apply 通过后才把本地 `KG_INCREMENTAL_SYNC_ENABLED=1`，重建 viewer。代码、Compose 和 `.env.example` 默认值继续为 `0`。检查日志包含 `KG incremental source sync enabled`，且 outbox 的 `queued/running/failed` 最终为 0。
+
+异常时立即把该开关设回 `0` 并重建；不要清空 outbox。若错误规则已改变 Evidence，停 viewer 后按 §5 的 WAL/SHM 安全流程恢复本节 apply 前 SQLite backup。
+
+### 8.5 2026-07-17 首次 KG-R2 运行记录
+
+首次迁移前完成业务卷归档：
+
+- 路径：`/Users/xueguodong/Library/Application Support/ThreeLANS/Backups/kg-r2-20260717/trilingual-records-before-kg-r2.tar.gz`
+- SHA-256：`2fec2dd72117106173e159f2850ae81fc8064f655826715c055a0565259df145`
+
+migration 005 应用后，首份 reconciliation plan 发现 R0 后共有 86 个来源缺少当前 Evidence：三语英文 45、三语日文 4、日语语法 1、场景双语 36。plan hash 为 `b1ae4289e8217b236607b237a21b6829c686420477c30f14793545b723f77478`。首次 apply 成功处理 86 个任务、失败 0；报告 hash 为 `1b197f54ac742dcea556bce14e37042f626b4e748e0027613a7ffedca953af5e`。
+
+首次 apply 后的强制复核发现：场景 Study Item 同时产生 EN/JA Evidence，但旧 `kg-evidence-v1` 身份未包含语言，两个方向发生 identity collision，仍有 36 个日语方向缺失。该批次没有忽略或手工补库，而是升级为 `kg-evidence-v2`，将 `language` 纳入 Evidence identity，并让 worker 仅分析当前缺失语言。修复 plan 共 36 项，hash 为 `73d5792c0dc104c8c407ffba0757a1d453e71c66bc3b215958e8d50b1825c4cb`；第二次 apply 重排 36 个已成功任务并全部通过，最终报告 hash 为 `1a2089782739093711e7bf4659f92b5d3546ffb3f1ee1861659db3d6cde2f419`。
+
+最终只读 reconciliation plan 为零任务，hash 为 `b32314357ab3a46d7f37e3d3eb50506a92d46b68f63233254e5a5b4a37c2bfc0`。验收结果：
+
+| 项目 | 结果 |
+|---|---:|
+| outbox | succeeded 86；queued/running/failed 0 |
+| KG Evidence / active Evidence | 1159 / 1159 |
+| active source-language 重复 | 0 |
+| 场景 EN/JA Evidence 缺失 | 0 |
+| Review Events / Schedule States / Manual Intents | 0 / 0 / 0 |
+| Learning Plans / Daily Queues | 0 / 0 |
+| SQLite integrity / foreign-key violations | `ok` / 0 |
+| lint / React typecheck | 通过 / 通过 |
+| unit / integration / smoke | 338/338 / 62/62 / 7/7 通过 |
+| Docker build/runtime | React production build 通过，npm audit 0 vulnerabilities，viewer/health 正常 |
+
+最终本地环境已启用 `KG_INCREMENTAL_SYNC_ENABLED=1`；代码、Compose 与 `.env.example` 默认值继续为 `0`。viewer 启动日志为 `recovered=0, planned=0, queued=0`，说明 worker 已运行但没有积压。plan、apply report 与 SQLite backup 均保存在 `/data/trilingual_records/kg-r2/`，禁止进入 Git。完整验收报告见 `Docs/TestReports/Knowledge_Graph_KG_R2_Incremental_Maintenance_20260717.md`。

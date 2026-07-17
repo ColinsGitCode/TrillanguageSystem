@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { textbookError } = require('../../textbooks/textbookErrors');
+const { enqueueJob: enqueueKgSourceSyncJob } = require('./kgSourceSyncJobs');
 
 const TEXTBOOK_DECISION_VERSION = 'textbook-publish-v1';
 const TEXTBOOK_STATE_VERSION = 'textbook-admission-v1';
@@ -561,6 +562,53 @@ function publishTrack(db, trackId, {
         current_revision_id=?, pending_revision_id=NULL, updated_at_utc=?
       WHERE id=?
     `).run(generationId, timestamp, track.revision_id, timestamp, track.id);
+
+    const synchronizedItems = db.prepare(`
+      SELECT id, content_revision, content_hash, lifecycle
+      FROM study_items WHERE source_generation_id = ? ORDER BY id
+    `).all(generationId);
+    for (const item of synchronizedItems) {
+      enqueueKgSourceSyncJob(db, {
+        operation: item.lifecycle === 'active' ? 'active' : 'absent',
+        sourceKind: 'study_item',
+        sourceRefId: Number(item.id),
+        sourceRevision: Number(item.content_revision),
+        sourceContentHash: item.content_hash,
+      }, { now: timestamp });
+    }
+    for (const expression of expressions) {
+      for (const language of ['en', 'ja']) {
+        enqueueKgSourceSyncJob(db, {
+          operation: 'active',
+          sourceKind: 'textbook_expression',
+          sourceRefId: Number(expression.expression_id),
+          sourceRevision: Number(track.revision_number),
+          language,
+          sourceContentHash: language === 'en' ? expression.en_unit_hash : expression.ja_unit_hash,
+        }, { now: timestamp });
+      }
+    }
+
+    const retiredEvidenceSources = db.prepare(`
+      SELECT DISTINCT evidence.source_ref_id, evidence.source_revision,
+        evidence.language, evidence.source_content_hash
+      FROM kg_evidence evidence
+      JOIN textbook_expressions expression ON expression.id = evidence.source_ref_id
+      WHERE evidence.source_kind = 'textbook_expression'
+        AND evidence.lifecycle = 'active'
+        AND expression.track_id = ?
+        AND expression.lifecycle = 'retired'
+    `).all(track.id);
+    for (const source of retiredEvidenceSources) {
+      enqueueKgSourceSyncJob(db, {
+        operation: 'absent',
+        sourceKind: 'textbook_expression',
+        sourceRefId: Number(source.source_ref_id),
+        sourceRevision: Number(source.source_revision),
+        language: source.language,
+        sourceContentHash: source.source_content_hash,
+      }, { now: timestamp });
+    }
 
     return {
       track: getTrack(db, track.id),

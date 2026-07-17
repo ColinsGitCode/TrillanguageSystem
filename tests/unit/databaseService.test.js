@@ -159,6 +159,10 @@ test.describe('databaseService — generations CRUD', () => {
           { unit_key: 'ja', unit_kind: 'trilingual_ja' },
         ]
       );
+      assert.equal(
+        db.db.prepare("SELECT COUNT(*) AS count FROM kg_source_sync_jobs WHERE operation='active'").get().count,
+        2
+      );
       assert.throws(
         () => db.db.prepare('UPDATE generations SET content_hash = NULL WHERE id = ?').run(id),
         /content_hash must be a SHA-256 hash/
@@ -256,6 +260,10 @@ test.describe('databaseService — generations CRUD', () => {
       assert.equal(item.source_generation_id, id);
       assert.equal(item.lifecycle, 'archived');
       assert.equal(item.lifecycle_reason, 'source-deleted');
+      assert.equal(
+        db.db.prepare("SELECT COUNT(*) AS count FROM kg_source_sync_jobs WHERE operation='absent' AND source_ref_id=?").get(itemId).count,
+        1
+      );
     } finally { db.close(); }
   });
 

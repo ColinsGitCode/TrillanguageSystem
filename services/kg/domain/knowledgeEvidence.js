@@ -2,7 +2,7 @@
 
 const { normalizeKnowledgeText, sha256, stableJson } = require('./knowledgeIdentity');
 
-const EVIDENCE_RULE_VERSION = 'kg-evidence-v1';
+const EVIDENCE_RULE_VERSION = 'kg-evidence-v2';
 const SOURCE_KINDS = new Set(['generation', 'study_item', 'textbook_expression']);
 
 function assertSha256(value, label) {
@@ -30,11 +30,13 @@ function buildEvidence({
   if (!['primary', 'context'].includes(evidenceRole)) throw new TypeError(`Unsupported evidence role: ${evidenceRole}`);
 
   const normalizedContentHash = assertSha256(sourceContentHash, 'sourceContentHash');
+  const normalizedLanguage = String(language || '').trim().toLowerCase();
   const identityPayload = {
     identityVersion: EVIDENCE_RULE_VERSION,
     sourceKind: normalizedSourceKind,
     sourceRefId: normalizedRefId,
     sourceRevision: normalizedRevision,
+    language: normalizedLanguage,
     locator,
     sourceContentHash: normalizedContentHash,
   };
@@ -44,7 +46,7 @@ function buildEvidence({
     sourceRefId: normalizedRefId,
     sourceRevision: normalizedRevision,
     sourceContentHash: normalizedContentHash,
-    language: String(language || '').trim().toLowerCase(),
+    language: normalizedLanguage,
     sourceText: normalizeKnowledgeText(sourceText, language),
     locator,
     evidenceRole,

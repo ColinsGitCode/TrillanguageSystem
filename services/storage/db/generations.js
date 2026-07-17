@@ -9,6 +9,7 @@ const { safeJsonParse } = require('./helpers');
 const cardTags = require('./cardTags');
 const { contentHash } = require('../../dataPreparation/rules');
 const { expandStudyUnits, stableJson } = require('../../learning/application/materializeStudyItems');
+const { enqueueJob: enqueueKgSourceSyncJob } = require('./kgSourceSyncJobs');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 const CARDS_FACTORY_SCOPE = `g.card_type <> 'textbook_track'`;
 const CARDS_FACTORY_SCOPE_UNQUALIFIED = `card_type <> 'textbook_track'`;
@@ -111,7 +112,7 @@ function insertGeneration(db, data) {
           ) VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, ?)
         `);
         for (const unit of units) {
-          insertStudyItem.run(
+          const studyItemId = Number(insertStudyItem.run(
             generationId,
             generationId,
             unit.unitKey,
@@ -120,7 +121,14 @@ function insertGeneration(db, data) {
             persistedContentHash,
             timestamp,
             timestamp
-          );
+          ).lastInsertRowid);
+          enqueueKgSourceSyncJob(db, {
+            operation: 'active',
+            sourceKind: 'study_item',
+            sourceRefId: studyItemId,
+            sourceRevision: 1,
+            sourceContentHash: persistedContentHash,
+          }, { now: timestamp });
         }
       }
 
@@ -297,11 +305,25 @@ function removeWithLearningState(db, id) {
   const transaction = db.transaction(() => {
     const generation = db.prepare('SELECT id FROM generations WHERE id = ?').get(id);
     if (!generation) throw new Error(`Generation with id ${id} not found`);
+    const timestamp = new Date().toISOString();
+    const sourceItems = db.prepare(`
+      SELECT id, content_revision, content_hash FROM study_items
+      WHERE generation_id = ? AND lifecycle <> 'archived'
+    `).all(id);
     const archived = db.prepare(`
       UPDATE study_items
       SET lifecycle = 'archived', lifecycle_reason = 'source-deleted', updated_at_utc = ?
       WHERE generation_id = ? AND lifecycle <> 'archived'
-    `).run(new Date().toISOString(), id).changes;
+    `).run(timestamp, id).changes;
+    for (const item of sourceItems) {
+      enqueueKgSourceSyncJob(db, {
+        operation: 'absent',
+        sourceKind: 'study_item',
+        sourceRefId: Number(item.id),
+        sourceRevision: Number(item.content_revision),
+        sourceContentHash: item.content_hash,
+      }, { now: timestamp });
+    }
     const deleted = db.prepare('DELETE FROM generations WHERE id = ?').run(id).changes;
     return { deleted, archivedStudyItems: archived };
   });

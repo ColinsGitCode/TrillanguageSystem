@@ -235,6 +235,44 @@ class KgRepository {
     );
   }
 
+  listActiveEvidenceForSource(sourceKind, sourceRefId, language = '') {
+    const languageClause = language ? 'AND language = ?' : '';
+    return this.db.prepare(`
+      SELECT * FROM kg_evidence
+      WHERE source_kind = ? AND source_ref_id = ? AND lifecycle = 'active'
+        ${languageClause}
+      ORDER BY id
+    `).all(...(language
+      ? [sourceKind, Number(sourceRefId), language]
+      : [sourceKind, Number(sourceRefId)]));
+  }
+
+  transitionEvidenceLifecycle({ evidenceId, lifecycle, now }) {
+    if (!['superseded', 'orphaned'].includes(lifecycle)) {
+      throw new TypeError(`Unsupported evidence lifecycle transition: ${lifecycle}`);
+    }
+    const pointIds = this.db.prepare(`
+      SELECT DISTINCT point_id FROM kg_point_evidence_links
+      WHERE evidence_id = ? AND lifecycle = 'active'
+      ORDER BY point_id
+    `).all(Number(evidenceId)).map((row) => Number(row.point_id));
+    this.db.prepare(`
+      UPDATE kg_point_evidence_links
+      SET lifecycle = 'superseded', updated_at_utc = ?
+      WHERE evidence_id = ? AND lifecycle = 'active'
+    `).run(now, Number(evidenceId));
+    this.db.prepare(`
+      UPDATE kg_evidence SET lifecycle = ?, updated_at_utc = ?
+      WHERE id = ? AND lifecycle = 'active'
+    `).run(lifecycle, now, Number(evidenceId));
+    this.db.prepare(`
+      UPDATE kg_resolution_cases
+      SET status = 'superseded', revision = revision + 1, updated_at_utc = ?
+      WHERE evidence_id = ? AND status = 'open'
+    `).run(now, Number(evidenceId));
+    return pointIds;
+  }
+
   getCaseById(id) {
     return caseDto(this.db.prepare('SELECT * FROM kg_resolution_cases WHERE id = ?').get(Number(id)));
   }

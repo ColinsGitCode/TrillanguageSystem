@@ -19,6 +19,7 @@ const testResetDomain = require('./db/testReset');
 const cardTagsDomain = require('./db/cardTags');
 const textbooksDomain = require('./db/textbooks');
 const migrationRunner = require('./db/migrationRunner');
+const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
 const { runWithSqliteBusyRetry } = require('./sqliteBusyRetry');
 const { normalizeTagValue } = require('../dataPreparation/rules');
@@ -359,6 +360,42 @@ class DatabaseService {
 
   publishTextbookTrack(id, payload = {}) {
     return this.withBusyRetry(() => textbooksDomain.publishTrack(this.db, id, payload));
+  }
+
+  enqueueKgSourceSyncJob(descriptor, options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.enqueueJob(this.db, descriptor, options));
+  }
+
+  enqueueKgSourceSyncJobs(descriptors, options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.enqueueJobs(this.db, descriptors, options));
+  }
+
+  claimNextKgSourceSyncJob(options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.claimNextJob(this.db, options));
+  }
+
+  finishKgSourceSyncJob(id, status, result = {}, options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.finishJob(this.db, id, status, result, options));
+  }
+
+  failKgSourceSyncJob(id, error, options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.failJob(this.db, id, error, options));
+  }
+
+  recoverStaleKgSourceSyncJobs(options = {}) {
+    return this.withBusyRetry(() => kgSourceSyncJobsDomain.recoverStaleRunningJobs(this.db, options));
+  }
+
+  getNextKgSourceSyncRetryTs() {
+    return kgSourceSyncJobsDomain.nextRetryTs(this.db);
+  }
+
+  getKgSourceSyncSummary() {
+    return kgSourceSyncJobsDomain.summary(this.db);
+  }
+
+  listKgSourceSyncJobs(options = {}) {
+    return kgSourceSyncJobsDomain.listJobs(this.db, options);
   }
 
   previewTextbookDerivation(expressionId, payload = {}) {

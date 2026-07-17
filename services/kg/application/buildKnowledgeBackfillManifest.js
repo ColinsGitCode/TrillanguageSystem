@@ -30,7 +30,15 @@ function classifyText(text, language, preferredKind) {
   return 'phrase';
 }
 
-function studyItemSources(db) {
+function positiveIds(values) {
+  return [...new Set((values || []).map(Number).filter((value) => Number.isSafeInteger(value) && value > 0))];
+}
+
+function studyItemSources(db, options = {}) {
+  const sourceRefIds = positiveIds(options.sourceRefIds);
+  const sourceFilter = sourceRefIds.length
+    ? `AND item.id IN (${sourceRefIds.map(() => '?').join(',')})`
+    : '';
   const rows = db.prepare(`
     SELECT item.*, generation.phrase, generation.card_type, generation.markdown_content,
       generation.en_translation, generation.ja_translation, generation.zh_translation,
@@ -41,8 +49,9 @@ function studyItemSources(db) {
     WHERE item.lifecycle = 'active'
       AND admission.status IN ('eligible', 'whole-card-only')
       AND admission.materialization_disposition IN ('create-items', 'adopt-existing')
+      ${sourceFilter}
     ORDER BY item.id
-  `).all();
+  `).all(...sourceRefIds);
   const sources = [];
   const unresolved = [];
   for (const row of rows) {
@@ -99,7 +108,11 @@ function studyItemSources(db) {
   return { sources, unresolved, rowCount: rows.length };
 }
 
-function publishedTextbookSources(db) {
+function publishedTextbookSources(db, options = {}) {
+  const sourceRefIds = positiveIds(options.sourceRefIds);
+  const sourceFilter = sourceRefIds.length
+    ? `AND expression.id IN (${sourceRefIds.map(() => '?').join(',')})`
+    : '';
   return db.prepare(`
     SELECT expression.id AS expression_id, revision.revision_number,
       expression_revision.official_en_text, expression_revision.official_ja_text,
@@ -111,8 +124,9 @@ function publishedTextbookSources(db) {
     JOIN textbook_expression_revisions expression_revision
       ON expression_revision.expression_id = expression.id AND expression_revision.revision_id = revision.id
     WHERE track.status = 'published' AND revision.status = 'published'
+      ${sourceFilter}
     ORDER BY track.id, expression_revision.display_ordinal
-  `).all().flatMap((row) => ['en', 'ja'].map((language) => ({
+  `).all(...sourceRefIds).flatMap((row) => ['en', 'ja'].map((language) => ({
     sourceKind: 'textbook_expression',
     sourceRefId: Number(row.expression_id),
     sourceRevision: Number(row.revision_number),
@@ -122,6 +136,29 @@ function publishedTextbookSources(db) {
     text: language === 'en' ? row.official_en_text : row.official_ja_text,
     preferredKind: 'phrase',
   })));
+}
+
+function sourceMatchesJob(source, job) {
+  return source.sourceKind === job.sourceKind
+    && Number(source.sourceRefId) === Number(job.sourceRefId)
+    && Number(source.sourceRevision) === Number(job.sourceRevision)
+    && source.sourceContentHash === job.sourceContentHash
+    && (!job.language || source.language === job.language);
+}
+
+function sourceBundleForJob(db, job) {
+  if (job.sourceKind === 'study_item') {
+    const bundle = studyItemSources(db, { sourceRefIds: [job.sourceRefId] });
+    const sources = bundle.sources.filter((source) => sourceMatchesJob(source, job));
+    const unresolved = bundle.unresolved.filter((source) => sourceMatchesJob(source, job));
+    return { sources, unresolved, current: sources.length > 0 || unresolved.length > 0 };
+  }
+  if (job.sourceKind === 'textbook_expression') {
+    const sources = publishedTextbookSources(db, { sourceRefIds: [job.sourceRefId] })
+      .filter((source) => sourceMatchesJob(source, job));
+    return { sources, unresolved: [], current: sources.length > 0 };
+  }
+  return { sources: [], unresolved: [], current: false };
 }
 
 async function analyzeSource(source, analyzeJapanese) {
@@ -270,10 +307,13 @@ async function buildKnowledgeBackfillManifest({ db, now = new Date().toISOString
 module.exports = {
   EXTRACTOR_VERSION,
   MANIFEST_VERSION,
+  analyzeSource,
   buildKnowledgeBackfillManifest,
   classifyText,
   prepareSourceText,
   publishedTextbookSources,
+  sourceBundleForJob,
+  sourceMatchesJob,
   stripJapaneseRuby,
   studyItemSources,
 };

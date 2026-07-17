@@ -49,6 +49,10 @@ const LEARNING_P3_TABLES = Object.freeze([
   'learning_manual_queue_intents',
 ]);
 
+const KG_R2_TABLES = Object.freeze([
+  'kg_source_sync_jobs',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -113,6 +117,14 @@ function assertLearningP3Postconditions(db) {
   );
   const missing = LEARNING_P3_TABLES.filter((table) => !existing.has(table));
   if (missing.length) throw new Error(`Learning P3 migration missing tables: ${missing.join(', ')}`);
+}
+
+function assertKnowledgeGraphR2Postconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = KG_R2_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Knowledge Graph R2 migration missing tables: ${missing.join(', ')}`);
 }
 
 function parseMigrationDirectives(migration) {
@@ -213,6 +225,7 @@ function runMigrations(db, options = {}) {
   assertTextbookP1Postconditions(db);
   assertKnowledgeGraphP1Postconditions(db);
   assertLearningP3Postconditions(db);
+  assertKnowledgeGraphR2Postconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
@@ -220,11 +233,13 @@ module.exports = {
   BASELINE_VERSION,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
+  KG_R2_TABLES,
   LEARNING_P3_TABLES,
   LEARNING_P0_TABLES,
   TEXTBOOK_P1_TABLES,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,
+  assertKnowledgeGraphR2Postconditions,
   assertLearningP3Postconditions,
   assertTextbookP1Postconditions,
   ensureMigrationTable,

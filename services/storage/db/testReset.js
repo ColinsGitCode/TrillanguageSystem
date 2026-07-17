@@ -12,6 +12,7 @@
 
 const TABLES_IN_DELETE_ORDER = [
   // Knowledge Graph 2.0 (read models and append-only facts before parents)
+  'kg_source_sync_jobs',
   'kg_planning_signals',
   'kg_point_stats',
   'kg_lookup_events',
