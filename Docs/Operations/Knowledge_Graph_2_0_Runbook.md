@@ -1,6 +1,6 @@
 # 知识图谱 2.0 运行手册
 
-> 状态：KG-R0 受控回填与启用手册
+> 状态：KG-R0 受控回填与 KG-R1 Planning Canary 运行手册
 > 适用范围：本地单用户、Docker Compose 项目 `three_lans_system`、桌面端 `/knowledge`
 > 内容边界：回填 Manifest、SQLite 备份与 apply 报告保存在本地业务卷，禁止进入 Git
 
@@ -138,3 +138,50 @@ docker run --rm \
 人工运行验收使用只读结果选择检查英文短语 `continuous integration (ci)` 与日语 `乾杯`：结果选择不写 lookup；只有显式提交英文查找才写入一条 resolved lookup。日语纯假名 `はし` 的显式提交新增一条 unresolved lookup 和一个待确认 case，不创建 KP。英语正文配日语语言、中文正文配英语语言均在事实写入前返回 `KG_INVALID_INPUT`，数据库计数不变。验收结束时 `KG_ENABLED=1`，`KG_PLANNING_ENABLED=0`，`KG_LLM_ENRICHMENT_ENABLED=0`；两条验收 lookup 均为真实 append-only 用户行为记录，不回删。
 
 边界核验：KG-R0 没有调用 DeepSeek 建图，没有写 Review Event、Schedule State、Manual Intent 或 FSRS；规划 reader 仍关闭。Manifest、apply report、SQLite backup 与卷归档全部保留在 Git 外。
+
+## 7. KG-R1 小范围观察与 Planning Canary
+
+KG-R1 不通过创建生产学习计划来制造测试数据。若当前库尚无 `learning_plans`、持久化队列或复习事件，Canary 使用当前合格 Study Item 和同一 SQLite snapshot 构造一份**只读代表性队列预览**，分别执行 planning 关闭、真实 Graph reader 开启和强制 reader 失败三条路径。它不调用 `ensureTodayQueue()`，不写 profile、plan、queue、Review Event、Schedule State、lookup 或 FSRS。
+
+### 7.1 首次启用前运行
+
+保持 `KG_ENABLED=1`、`KG_PLANNING_ENABLED=0`、`KG_LLM_ENRICHMENT_ENABLED=0`。重建包含 Canary 工具的 viewer 后执行：
+
+```bash
+docker compose exec -T viewer node scripts/maintenance/kgR1PlanningCanary.js \
+  --db=/data/trilingual_records/trilingual_records.db \
+  --output=/data/trilingual_records/kg-r1/kg-r1-canary-before-enable.json \
+  --daily-action-goal=20 \
+  --daily-new-limit=20 \
+  --iterations=500
+```
+
+报告路径必须是 Git 外的新文件；工具拒绝覆盖。数据库以 `readonly` 打开并执行 `PRAGMA query_only=ON`。`daily-new-limit=20` 只是让当前稀疏信号样本进入同快照比较，不会创建或修改用户计划。
+
+### 7.2 必须全部通过的门禁
+
+- `sqliteIntegrityOk` 与 `foreignKeysOk`；
+- 真实 `kg_planning_signals` 至少一条，且至少一个信号进入代表性基础集合；
+- planning 开关前后 Study Item 集合完全一致；
+- 每个 Study Item 的 bucket、`availableAtUtc` 与 `dueAtUtc` 完全一致；
+- 强制 reader 失败时，集合与顺序精确回退到 baseline；
+- query plan 使用 `study_item_id INTEGER PRIMARY KEY` 单点读取；
+- reader p95 `< 5ms`，500 次探针无一次超过 provider `10ms` 硬预算；
+- Canary 执行期间网络调用为 0；
+- 报告前后 18 张 KG/LA 观察表计数完全一致。
+
+若真实信号没有进入前 20 个代表性新单元，报告必须失败，而不是把“没有覆盖”误报成通过。应先通过真实 lookup 和投影重建获得可观察信号，或在不超过产品上限的前提下显式调整 Canary 的 `daily-new-limit`，不得在脚本内伪造生产信号。
+
+### 7.3 开启、复验与立即回退
+
+首次报告全部通过后，才允许把**本地运行环境**的 `KG_PLANNING_ENABLED` 设为 `1` 并重建 viewer；代码、Compose 与 `.env.example` 默认值继续保持 `0`。重建后再次使用新的输出路径执行同一命令，并检查 `/api/health`。
+
+当前没有生产学习计划时，planning 只处于“能力已开启但无持久化队列消费者”的休眠状态；不得为了观察而替用户创建计划。以后产生真实队列后，检查 queue snapshot 的 `graph-contract` diagnostics 和 explanation，仍必须满足集合/base-key 不变。
+
+任一门禁失败、reader 延迟超限、健康检查异常或队列集合/base-key 漂移时，立即设 `KG_PLANNING_ENABLED=0` 并重建 viewer。关闭 reader 不删除 lookup、projection 或其他 append-only 事实；`KG_LLM_ENRICHMENT_ENABLED` 全程保持 `0`。
+
+### 7.4 2026-07-17 首次 KG-R1 运行记录
+
+首次启用前后两份报告均为 `overallPass=true`。真实 volume 有 1 条 score 8 的 Graph signal，代表性 20 项集合中 Study Item 7 从 baseline 索引 6 细排到索引 0；集合、bucket、available/due 三键不变，强制失败精确回退。启用前/后 reader p95 分别为 0.0013ms / 0.0014ms，500 次探针均未超过 10ms；网络调用和 18 张观察表计数变化均为 0。
+
+本地环境已设为 `KG_ENABLED=1`、`KG_PLANNING_ENABLED=1`、`KG_LLM_ENRICHMENT_ENABLED=0`；代码与示例环境默认值仍全关。当前 API 返回 `plan:null`、`queue:null / not-created`，所以 planning 处于无持久化队列消费者的休眠状态。详细证据见 `Docs/TestReports/Knowledge_Graph_KG_R1_Canary_20260717.md`，JSON 报告留在业务卷、禁止进入 Git。

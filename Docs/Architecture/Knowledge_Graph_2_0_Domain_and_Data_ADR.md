@@ -1171,3 +1171,13 @@ KG-P0-P3 交付的是 schema、确定性规则和运行时闭环；既有学习�
 最终批准的 v3 Manifest hash 为 `b79afaf97f1a1c1fd445fc150060ffc925ec7de3759a15460857085f77037275`。v3c apply 插入 855 个 KP、1107 个 surface、1123 条 Evidence、255 个可物化 unresolved case，回填本身写入 lookup 0 条；语言错位与残留标记违规均为 0。`study_items=1141` 保持不变，Review Event、Schedule State 与 Manual Intent 均保持 0，SQLite `integrity_check=ok` 且外键违规为 0。
 
 运行时抽样同时修正了一个所有权偏差：typeahead 搜索结果点击只能选择并读取 KP，不得调用 lookup mutation；只有用户显式提交“查找”才写 append-only lookup。E2E 对 `/api/kg/lookups` 设置失败拦截并断言结果选择发送 0 次请求。最终桌面验收覆盖英文 resolved、日语 kanji reading、pure-kana unresolved 与错误语言输入拒绝；本地运行环境只启用 `KG_ENABLED`，planning 与 LLM enrichment 继续关闭。
+
+---
+
+## 26. KG-R1 小范围观察与 Planning Canary（2026-07-17）
+
+KG-R1 增加 `runPlanningCanary` 与 `kg:r1:canary` 只读维护入口。工具以 `readonly + PRAGMA query_only` 打开真实 SQLite，在同一 snapshot 上对 baseline、真实 Graph reader 和强制失败 reader 执行相同的 `buildQueueCandidates`，不创建 plan/profile/queue，不写 lookup、Review Event、Schedule State、Manual Intent 或 FSRS。报告强制使用 Git 外不可覆盖路径。
+
+真实 volume 首次启用前后两轮均通过全部门禁：1134 个候选行中取代表性 20 项，唯一真实 Graph signal 把 Study Item 7 从索引 6 细排到索引 0；Study Item 集合与每项 bucket、available/due 三键完全一致，强制失败精确恢复 baseline。500 次 reader 探针的 p95 为 0.0013ms / 0.0014ms，均无超过 10ms；query plan 使用整数主键，网络调用和 18 张观察表计数变化为 0，SQLite integrity 为 `ok`、外键违规为 0。
+
+本地运行环境据此启用 `KG_PLANNING_ENABLED=1`，保留 `KG_LLM_ENRICHMENT_ENABLED=0`；代码、Compose 和 `.env.example` 默认值继续全部关闭。当前真实库没有学习计划、持久化队列、Schedule State 或 Review Event，因此 KG-R1 只确认 planning 能力安全启用，未虚报真实用户队列 explanation 验收。首个真实计划/队列产生后须补 queue snapshot 观察；在此之前不得为验收伪造用户计划。
