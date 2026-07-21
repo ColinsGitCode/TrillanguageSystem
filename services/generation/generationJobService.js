@@ -3,6 +3,7 @@
 const defaultDbService = require('../storage/databaseService');
 const { GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS } = require('../../lib/serverConfig');
 const { errorCodeOf, isRetriableCode } = require('../llm/llmErrors');
+const { CARD_VALIDATION_FAILED_CODE } = require('../../lib/generationHelpers');
 const log = require('../../lib/logger').child({ module: 'svc/generation-worker' });
 
 class GenerationJobService {
@@ -183,9 +184,16 @@ class GenerationJobService {
   }
 
   classifyTransientError(err) {
-    const sqliteCode = String(err?.code || '').toUpperCase();
-    if (sqliteCode === 'SQLITE_BUSY' || sqliteCode === 'SQLITE_LOCKED') {
+    const rawCode = String(err?.code || '').toUpperCase();
+    if (rawCode === 'SQLITE_BUSY' || rawCode === 'SQLITE_LOCKED') {
       return { retryable: true, code: 'SQLITE_BUSY', status: null };
+    }
+
+    // A response that parses but misses the card contract is LLM output
+    // variance, not a permanent fault: re-roll within maxRetries instead of
+    // burning the job on a single bad generation.
+    if (rawCode === CARD_VALIDATION_FAILED_CODE) {
+      return { retryable: true, code: CARD_VALIDATION_FAILED_CODE, status: null };
     }
 
     const status = Number(err?.status || err?.payload?.status || 0) || null;
@@ -209,14 +217,21 @@ class GenerationJobService {
 
   getRetryDelayMs(job, transientCode = '') {
     const sqliteRetry = transientCode === 'SQLITE_BUSY';
-    const defaultBaseMs = sqliteRetry ? 500 : 60_000;
-    const defaultMaxMs = sqliteRetry ? 5_000 : 5 * 60_000;
+    // A card-validation re-roll is not provider stress, so it backs off fast
+    // instead of waiting out the rate-limit/capacity window.
+    const validationRetry = transientCode === CARD_VALIDATION_FAILED_CODE;
+    const defaultBaseMs = sqliteRetry ? 500 : (validationRetry ? 2_000 : 60_000);
+    const defaultMaxMs = sqliteRetry ? 5_000 : (validationRetry ? 15_000 : 5 * 60_000);
     const baseEnv = sqliteRetry
       ? process.env.GENERATION_JOB_SQLITE_RETRY_BASE_MS
-      : process.env.GENERATION_JOB_TRANSIENT_RETRY_BASE_MS;
+      : (validationRetry
+        ? process.env.GENERATION_JOB_VALIDATION_RETRY_BASE_MS
+        : process.env.GENERATION_JOB_TRANSIENT_RETRY_BASE_MS);
     const maxEnv = sqliteRetry
       ? process.env.GENERATION_JOB_SQLITE_RETRY_MAX_MS
-      : process.env.GENERATION_JOB_TRANSIENT_RETRY_MAX_MS;
+      : (validationRetry
+        ? process.env.GENERATION_JOB_VALIDATION_RETRY_MAX_MS
+        : process.env.GENERATION_JOB_TRANSIENT_RETRY_MAX_MS);
     const baseMs = Math.max(250, Number(baseEnv || defaultBaseMs));
     const maxMs = Math.max(baseMs, Number(maxEnv || defaultMaxMs));
     const exponent = Math.max(0, Number(job?.attempts || 1) - 1);

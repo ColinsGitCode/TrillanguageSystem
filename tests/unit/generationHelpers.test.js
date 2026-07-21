@@ -9,6 +9,7 @@ const {
   buildPersistedAudioTasks,
   validateGeneratedContent,
   extractMarkdownProviderResponse,
+  getCardResponseValidationErrors,
   validateSanitizedCardResponse,
 } = require('../../lib/generationHelpers');
 
@@ -575,5 +576,24 @@ test.describe('validateSanitizedCardResponse', () => {
       ),
       false
     );
+  });
+
+  test.it('reports which rule failed so operators can act on the failure', () => {
+    // Job #399 failed with a generic message; the reason must now be explicit.
+    const blockCountErrors = getCardResponseValidationErrors(
+      { markdown: scenarioCard(11) },
+      'scenario_phrase'
+    );
+    assert.equal(blockCountErrors.length, 1);
+    assert.match(blockCountErrors[0], /12 expression blocks/);
+
+    const missingSectionErrors = getCardResponseValidationErrors(
+      { markdown: trilingualCard().replace('## 3. 中文', '## 3. Chinese') },
+      'trilingual'
+    );
+    assert.match(missingSectionErrors.join('; '), /missing required sections/);
+
+    assert.deepEqual(getCardResponseValidationErrors(null), ['provider response contained no markdown']);
+    assert.deepEqual(getCardResponseValidationErrors({ markdown: scenarioCard() }, 'scenario_phrase'), []);
   });
 });

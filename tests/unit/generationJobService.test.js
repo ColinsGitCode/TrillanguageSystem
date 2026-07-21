@@ -202,4 +202,34 @@ test.describe('GenerationJobService', () => {
       status: 504,
     });
   });
+
+  test.it('re-rolls card validation failures instead of failing on one bad generation', () => {
+    const service = new GenerationJobService({ dbService: {} });
+    const error = Object.assign(
+      new Error('DeepSeek markdown response failed card validation: scenario_phrase requires exactly 12 expression blocks'),
+      { code: 'CARD_VALIDATION_FAILED' }
+    );
+    assert.deepEqual(service.classifyTransientError(error), {
+      retryable: true,
+      code: 'CARD_VALIDATION_FAILED',
+      status: null,
+    });
+  });
+
+  test.it('backs off card validation re-rolls faster than provider capacity waits', () => {
+    const service = new GenerationJobService({ dbService: {} });
+    assert.equal(service.getRetryDelayMs({ attempts: 1 }, 'CARD_VALIDATION_FAILED'), 2_000);
+    assert.equal(service.getRetryDelayMs({ attempts: 2 }, 'CARD_VALIDATION_FAILED'), 4_000);
+    // Capacity/rate-limit backoff stays on the slow path.
+    assert.equal(service.getRetryDelayMs({ attempts: 1 }, 'RATE_LIMITED'), 60_000);
+  });
+
+  test.it('still fails permanently on errors that a re-roll cannot fix', () => {
+    const service = new GenerationJobService({ dbService: {} });
+    assert.deepEqual(service.classifyTransientError(new Error('Invalid folder name')), {
+      retryable: false,
+      code: '',
+      status: null,
+    });
+  });
 });

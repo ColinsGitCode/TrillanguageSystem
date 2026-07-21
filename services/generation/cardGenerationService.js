@@ -26,7 +26,8 @@ const {
   resolveDeepSeekModel,
 } = require('../../lib/serverConfig');
 const {
-  validateSanitizedCardResponse,
+  CARD_VALIDATION_FAILED_CODE,
+  getCardResponseValidationErrors,
   extractMarkdownProviderResponse,
 } = require('../../lib/generationHelpers');
 
@@ -45,8 +46,14 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
 
   perf.mark('llmCall');
   const response = await deepseekService.generateMarkdown(prompt, { model, timeoutMs });
-  if (!validateSanitizedCardResponse(response, cardType)) {
-    throw new Error('DeepSeek markdown response failed card validation');
+  const validationErrors = getCardResponseValidationErrors(response, cardType);
+  if (validationErrors.length) {
+    const error = new Error(
+      `DeepSeek markdown response failed card validation: ${validationErrors.join('; ')}`
+    );
+    error.code = CARD_VALIDATION_FAILED_CODE;
+    error.details = validationErrors;
+    throw error;
   }
   const markdown = extractMarkdownProviderResponse(response);
   const audioTasks = buildAudioTasksFromMarkdown(markdown);
