@@ -93,6 +93,7 @@ test.describe('React root shell', () => {
     await page.goto('/');
     const trigger = page.getByRole('button', { name: '后台活动' });
     await expect(trigger).toBeVisible();
+    await expect(page.locator('.react-app-shell')).toHaveAttribute('data-shell-events-ready', 'true');
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent('three-lans:shell-feedback', {
         detail: {

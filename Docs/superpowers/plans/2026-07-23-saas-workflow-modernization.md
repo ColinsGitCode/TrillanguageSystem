@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**Completed / Accepted · 35 项全部完成（2026-07-23）**
+> 状态：**Completed / Accepted · 35 项全部完成（2026-07-23）**；实施偏差与重型验收复核见 [§8](#8-实施实况与偏差记录2026-07-23-独立复核补记)（提交按阶段合并；已知 E2E 竞态已稳定）
 >
 > 日期：2026-07-23
 >
@@ -1261,3 +1261,53 @@ docker compose -p three_lans_system ps
 - [x] DS-W2 教材迁移验收；
 - [x] DS-W3 横向扩展验收；
 - [x] Final 完整验收。
+
+## 8. 实施实况与偏差记录（2026-07-23 独立复核补记）
+
+本节用于让计划自述与实际 git 历史和测试事实一致，避免后人对照时困惑。终态功能完整并通过重型验收，但实施过程与计划约定有两处偏差，如实记录如下。
+
+### 8.1 提交粒度：按阶段合并，未逐任务拆分
+
+§0/§4/§5 要求“35 个可独立验证任务、每个任务独立提交”（§5 还明确 Task 8-13 各自独立、Task 15-18 按 schema→storage→service→route 独立）。实际实施把整个阶段压成了单个提交。真实映射：
+
+| 计划任务 | 实际提交 |
+|---|---|
+| Task 1-5（Gate 0 基线/边界/contract/amendment/门禁） | `96291ff` + `61d4bf1` + `1033711` |
+| Task 6-14（DS-W1 共享原语 + Cloudscape POC + 采用表） | `23c5f60 feat(ui): add typed workflow primitives` |
+| Task 15-28（DS-W2 schema/storage/operation/API/前端/迁移/门禁） | `74e05ac feat(textbooks): migrate courses to resumable workflow` |
+| Task 29（Shell 横向反馈/Activity） | `d785f9a` |
+| Task 30（Cards Factory 异步反馈） | `40a157c` |
+| Task 31（Learning Plan Review Summary） | `471d4dd` |
+| Task 32（KG unresolved Task workbench） | `487d7af` |
+| Task 33（Review Session 对齐） | `799f88b` |
+| Task 34（DS-W3 横向门禁） | `5615bf7` |
+| Task 35（Final 验收封板） | `d4fcf05` |
+
+**影响**：终态功能完整，但计划承诺的“逐任务可独立回滚/审查”的提交轨迹并不存在——DS-W1 六个共享原语、DS-W2 的 schema→storage→service→route 各步均无独立提交。若需回退单个子能力，只能在阶段提交内部做局部 revert，粒度不及计划设想。后续同类计划若仍以可回滚性为目标，应按 §5 逐任务/逐步提交，而非阶段末一次性提交。
+
+### 8.2 重型验收复核结果（本次实跑，非仅勾选）
+
+| 门禁 | 结果 |
+|---|---|
+| lint / typecheck:react | 干净 |
+| test:unit | 347/347 |
+| test:integration | 63/63 |
+| build:react / test:architecture | 通过（源码门禁 + React Router root 所有权 OK） |
+| smoke | 7/7 |
+| test:textbooks:acceptance | 44 通过，TC-P4 acceptance gates passed |
+| 容器全栈重建 + `/api/health` | 4 容器 Up、health 200（构建曾两次撞瞬态网络 `DeadlineExceeded`，重试后通过，属环境而非代码） |
+| test:e2e | **44/44 通过**；原 flaky 用例另做 20 次重复验证，20/20 通过（见 8.3） |
+
+### 8.3 已知竞态的稳定化结果（test-stability，已解决）
+
+`tests/e2e/app-shell.spec.js` 的 `typed shell feedback and activity survive navigation without taking domain ownership` 曾在全量套件下偶发失败。根因是按钮可见只证明 React 已提交 DOM，不证明负责 `three-lans:shell-feedback` / `three-lans:shell-activity` 的 `useEffect` 已挂载 window listener；测试在该间隙派发自定义事件时会丢失命令。
+
+稳定化处理：
+
+- `ProductShell` 在两个 listener 挂载后将根节点 `data-shell-events-ready` 设为 `true`；
+- E2E 在派发事件前显式等待该只读就绪信号，不再依赖固定延时或渲染时序；
+- 目标用例 `--repeat-each=20` 为 20/20 通过；
+- 完整 `test:e2e` 为 44/44 通过；
+- lint 与 `typecheck:react` 同时通过。
+
+**复核结论**：计划所述开发现状属实，Final PASS 成立。测试稳定性未决项已关闭；仅保留 §8.1 的提交粒度偏差作为不可追溯修饰、但已如实记录的实施事实。

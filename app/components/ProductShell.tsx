@@ -51,6 +51,7 @@ export function ProductShell({ active, title, children }: Props) {
   const [activityOpen, setActivityOpen] = useState(false);
   const [activities, setActivities] = useState<ShellActivityCommand[]>([]);
   const [feedback, setFeedback] = useState<Array<ShellFeedbackCommand & { id: string }>>([]);
+  const [shellEventsReady, setShellEventsReady] = useState(false);
   const mobileNavButtonRef = useRef<HTMLButtonElement>(null);
   const mobileNavRef = useRef<HTMLElement>(null);
   const activityButtonRef = useRef<HTMLButtonElement>(null);
@@ -94,6 +95,7 @@ export function ProductShell({ active, title, children }: Props) {
     };
     window.addEventListener(SHELL_FEEDBACK_EVENT, onFeedback);
     window.addEventListener(SHELL_ACTIVITY_EVENT, onActivity);
+    setShellEventsReady(true);
     return () => {
       window.removeEventListener(SHELL_FEEDBACK_EVENT, onFeedback);
       window.removeEventListener(SHELL_ACTIVITY_EVENT, onActivity);
@@ -132,7 +134,10 @@ export function ProductShell({ active, title, children }: Props) {
   const healthUnhealthy = isHealthUnhealthy(healthQuery.data, healthQuery.isError);
 
   return (
-    <div className={`react-app-shell${sidebarCompact ? ' sidebar-compact' : ''}`}>
+    <div
+      className={`react-app-shell${sidebarCompact ? ' sidebar-compact' : ''}`}
+      data-shell-events-ready={shellEventsReady}
+    >
       <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
         <div className="brand-block">
           <span className="brand-bars"><i /><i /><i /></span>
