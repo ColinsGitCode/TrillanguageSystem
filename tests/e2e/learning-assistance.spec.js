@@ -88,7 +88,8 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await expect(page.getByRole('alert')).toContainText('当前评分尚未写入');
     await expect(page.getByRole('button', { name: /重来/ })).toBeDisabled();
     await page.getByRole('button', { name: '重试提交' }).click();
-    await expect(page.getByRole('status')).toContainText('上一项已保存');
+    await expect(page.locator('.learning-schedule-explanation')).toContainText('上一项已保存');
+    await expect(page.locator('.learning-session-status')).toContainText('已保存');
     await expect.poll(async () => {
       const response = await request.get('/api/learning/queues/today');
       return (await response.json()).queue.progress.actionCount;

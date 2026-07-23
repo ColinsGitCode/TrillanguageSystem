@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink, Play, SkipForward, Volume2, X } from 'lucide-r
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
+import { ErrorSummary, SaveStatus, type WorkflowError } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { CardModal } from '../card-modal/CardModal';
 import { renderCardMarkdown } from '../card-modal/markdown';
@@ -20,14 +21,15 @@ type PendingReview = {
   responseMs: number;
 };
 
-function reviewErrorMessage(error: Error) {
+function reviewWorkflowError(error: Error): WorkflowError {
   if (error instanceof ApiError && error.payload && typeof error.payload === 'object' && 'code' in error.payload) {
     const code = String((error.payload as { code?: string }).code || '');
-    if (code === 'LEARNING_SCHEDULE_CONFLICT') return '这项内容的调度状态已变化。返回今日学习后重新进入再评分。';
-    if (code === 'LEARNING_SOURCE_INELIGIBLE' || code === 'LEARNING_ITEM_ARCHIVED') return '当前卡片已归档或不再符合学习条件。请跳过此项。';
-    if (code === 'LEARNING_STORAGE_BUSY') return '学习记录存储正忙。当前评分尚未写入，可以使用同一请求重试。';
+    if (code === 'LEARNING_SCHEDULE_CONFLICT') return { code, message: '这项内容的调度状态已变化。返回今日学习后重新进入再评分。' };
+    if (code === 'LEARNING_SOURCE_INELIGIBLE' || code === 'LEARNING_ITEM_ARCHIVED') return { code, message: '当前卡片已归档或不再符合学习条件。请跳过此项。' };
+    if (code === 'LEARNING_STORAGE_BUSY') return { code, message: '学习记录存储正忙。当前评分尚未写入，可以使用同一请求重试。', retryable: true };
+    return { code: code || 'LEARNING_REVIEW_FAILED', message: error.message || '评分未保存。当前项已保留。', retryable: true };
   }
-  return error.message || '评分未保存。当前项已保留。';
+  return { code: 'LEARNING_REVIEW_FAILED', message: error.message || '评分未保存。当前项已保留。', retryable: true };
 }
 
 function SessionSummary({ session, onBack }: { session: LearningSession; onBack: () => void }) {
@@ -80,7 +82,7 @@ export function ReviewSessionPage() {
   const queryClient = useQueryClient();
   const promptStartedAt = useRef(Date.now());
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
-  const [reviewError, setReviewError] = useState('');
+  const [reviewError, setReviewError] = useState<WorkflowError | null>(null);
   const [lastExplanation, setLastExplanation] = useState<ReviewResponse['publicExplanation'] | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [fullCard, setFullCard] = useState<CardSelection | null>(null);
@@ -100,7 +102,7 @@ export function ReviewSessionPage() {
   useEffect(() => {
     promptStartedAt.current = Date.now();
     setPendingReview(null);
-    setReviewError('');
+    setReviewError(null);
   }, [entry?.id]);
 
   const setSession = (next: LearningSession) => {
@@ -121,10 +123,10 @@ export function ReviewSessionPage() {
     onSuccess: (data) => {
       setLastExplanation(data.publicExplanation);
       setPendingReview(null);
-      setReviewError('');
+      setReviewError(null);
       setSession(data.session);
     },
-    onError: (error) => setReviewError(reviewErrorMessage(error)),
+    onError: (error) => setReviewError(reviewWorkflowError(error)),
   });
   const endMutation = useMutation({
     mutationFn: () => learningApi.endSession(session!.id),
@@ -225,8 +227,24 @@ export function ReviewSessionPage() {
               return <button key={option.value} className={`grade-${option.tone}${selected ? ' selected' : ''}`} type="button" disabled={!revealed || Boolean(pendingReview) || reviewMutation.isPending} onClick={() => submitRating(option.value)}><strong>{option.label}</strong><small>{option.value} · {selected && reviewMutation.isPending ? '保存中…' : selected && reviewError ? '待重试' : option.hint}</small></button>;
             })}
           </div>
-          <span className="learning-key-hint">快捷键 1–4</span>
-          {reviewError && pendingReview && <div className="learning-review-error" role="alert"><span>{reviewError}</span><button type="button" disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate(pendingReview)}>重试提交</button><button type="button" onClick={() => { setPendingReview(null); setReviewError(''); }}>更改评分</button></div>}
+          <div className="learning-session-status">
+            <SaveStatus state={reviewMutation.isPending ? 'saving' : reviewError ? 'failed' : lastExplanation ? 'saved' : 'clean'} />
+            <span className="learning-key-hint">快捷键 1–4</span>
+          </div>
+          {reviewError && pendingReview && (
+            <div className="learning-review-error">
+              <ErrorSummary
+                errors={[reviewError]}
+                onRetry={() => reviewMutation.mutate(pendingReview)}
+                retryLabel="重试提交"
+                onDismiss={() => {
+                  setPendingReview(null);
+                  setReviewError(null);
+                }}
+                dismissLabel="更改评分"
+              />
+            </div>
+          )}
         </footer>
       </div>
 

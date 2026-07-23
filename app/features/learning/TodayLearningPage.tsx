@@ -2,6 +2,8 @@ import { ArrowRight, CalendarClock, CheckCircle2, Factory, Play, Settings2 } fro
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
+import { ErrorSummary, type WorkflowError } from '../../components/workflow';
+import { ApiError } from '../../lib/api/client';
 import { learningApi } from './learning-api';
 import { entryPresentation, reasonLabel } from './learning-format';
 import type { DailyQueue, QueueEntry } from './types';
@@ -15,6 +17,21 @@ function queueMetrics(queue: DailyQueue | null) {
     due: unfinished.filter((entry) => entry.reason.includes('due-today')).length,
     difficult: unfinished.filter((entry) => entry.reason === 'difficult-reappearance' || entry.reason.includes('recent-failure')).length,
     fresh: unfinished.filter((entry) => entry.reason === 'new').length,
+  };
+}
+
+function learningWorkflowError(error: unknown, fallbackCode: string): WorkflowError {
+  if (error instanceof ApiError && error.payload && typeof error.payload === 'object' && 'code' in error.payload) {
+    return {
+      code: String((error.payload as { code?: unknown }).code || fallbackCode),
+      message: error.message || '学习服务暂时无法完成请求。',
+      retryable: true,
+    };
+  }
+  return {
+    code: fallbackCode,
+    message: error instanceof Error ? error.message : '学习服务暂时无法完成请求。',
+    retryable: true,
   };
 }
 
@@ -67,7 +84,20 @@ export function TodayLearningPage() {
   }
 
   if (planQuery.isError || queueQuery.isError || sessionQuery.isError) {
-    return <ProductShell active="today" title="今日学习"><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><h1>今日学习暂时无法读取</h1><p>Cards Factory 仍可正常使用。请稍后重试学习服务。</p><button className="learning-primary-button" type="button" onClick={() => window.location.reload()}>重新加载</button></section></ProductShell>;
+    const error = planQuery.error || queueQuery.error || sessionQuery.error;
+    return (
+      <ProductShell active="today" title="今日学习">
+        <section className="surface learning-empty">
+          <CalendarClock aria-hidden="true" />
+          <h1>今日学习暂时无法读取</h1>
+          <p>Cards Factory 仍可正常使用。请稍后重试学习服务。</p>
+          <ErrorSummary
+            errors={[learningWorkflowError(error, 'LEARNING_TODAY_LOAD_FAILED')]}
+            onRetry={() => void Promise.all([planQuery.refetch(), queueQuery.refetch(), sessionQuery.refetch()])}
+          />
+        </section>
+      </ProductShell>
+    );
   }
 
   if (!plan) {
@@ -93,7 +123,25 @@ export function TodayLearningPage() {
   }
 
   if (!queue) {
-    return <ProductShell active="today" title="今日学习"><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><p className="eyebrow">DAILY QUEUE</p><h1>{planQuery.data?.scopePreview.studyItemCount ? '今日队列尚未生成' : '当前范围没有合格学习单元'}</h1><p>{planQuery.data?.scopePreview.studyItemCount ? '队列只在你确认后生成，不会在后台静默改变。' : '调整学习范围，或先在 Cards Factory 创建合格卡片。'}</p>{planQuery.data?.scopePreview.studyItemCount ? <button className="learning-primary-button" type="button" disabled={ensureMutation.isPending} onClick={() => ensureMutation.mutate()}><Play aria-hidden="true" /> {ensureMutation.isPending ? '生成中…' : '生成今日队列'}</button> : <button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 调整学习范围</button>}</section></ProductShell>;
+    return (
+      <ProductShell active="today" title="今日学习">
+        <section className="surface learning-empty">
+          <CalendarClock aria-hidden="true" />
+          <p className="eyebrow">DAILY QUEUE</p>
+          <h1>{planQuery.data?.scopePreview.studyItemCount ? '今日队列尚未生成' : '当前范围没有合格学习单元'}</h1>
+          <p>{planQuery.data?.scopePreview.studyItemCount ? '队列只在你确认后生成，不会在后台静默改变。' : '调整学习范围，或先在 Cards Factory 创建合格卡片。'}</p>
+          {ensureMutation.isError && (
+            <ErrorSummary
+              errors={[learningWorkflowError(ensureMutation.error, 'LEARNING_QUEUE_CREATE_FAILED')]}
+              onRetry={() => ensureMutation.mutate()}
+            />
+          )}
+          {planQuery.data?.scopePreview.studyItemCount
+            ? <button className="learning-primary-button" type="button" disabled={ensureMutation.isPending} onClick={() => ensureMutation.mutate()}><Play aria-hidden="true" /> {ensureMutation.isPending ? '生成中…' : '生成今日队列'}</button>
+            : <button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 调整学习范围</button>}
+        </section>
+      </ProductShell>
+    );
   }
 
   if (queue.status === 'completed' || (!metrics.unfinished.length && queue.progress.actionCount > 0)) {
@@ -117,6 +165,13 @@ export function TodayLearningPage() {
           <div><p className="eyebrow">今日学习 · {queue.learningDay} · {queue.timeZone.toUpperCase()}</p><h1>{activeSession ? '继续上次的会话' : `今天还有 ${metrics.unfinished.length} 个学习行动`}</h1><p>{activeSession ? `已提交 ${activeSession.reviewSummary.total} 项，未评分内容不会产生记录。` : '到期内容优先，新单元按计划上限加入。'}</p></div>
           <button className="learning-primary-button" type="button" disabled={startMutation.isPending} onClick={() => activeSession ? navigate('/learn/session') : startMutation.mutate(queue.id)}><Play aria-hidden="true" /> {activeSession ? '继续学习' : startMutation.isPending ? '正在开始…' : '开始学习'}</button>
         </header>
+
+        {startMutation.isError && (
+          <ErrorSummary
+            errors={[learningWorkflowError(startMutation.error, 'LEARNING_SESSION_START_FAILED')]}
+            onRetry={() => startMutation.mutate(queue.id)}
+          />
+        )}
 
         <section className="learning-stat-strip" aria-label="今日学习统计">
           <div><span>今日已完成</span><strong>{queue.progress.actionCount}<small> / {queue.progress.actionGoal}</small></strong></div>
