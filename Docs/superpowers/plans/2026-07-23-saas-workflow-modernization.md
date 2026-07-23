@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**In Progress · Gate 0、DS-W1 与 DS-W2 已完成，DS-W3 执行中**
+> 状态：**In Progress · Gate 0、DS-W1、DS-W2 与 DS-W3 已完成，进入 Final**
 >
 > 日期：2026-07-23
 >
@@ -1035,12 +1035,12 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] Shell 统一承载 Flash、Activity 和右侧 Tools；
-- [ ] 页面通过 typed command 发布反馈，不直接操纵 DOM；
-- [ ] 全局反馈不重复领域审计；
-- [ ] Activity 可恢复 Card generation 和 textbook operation；
-- [ ] 关闭后焦点返回触发按钮；
-- [ ] health 仍保持单一 query owner。
+- [x] Shell 统一承载 Flash、Activity 和右侧 Tools；
+- [x] 页面通过 typed command 发布反馈，不直接操纵 DOM；
+- [x] 全局反馈不重复领域审计；
+- [x] Activity 可恢复 Card generation 和 textbook operation；
+- [x] 关闭后焦点返回触发按钮；
+- [x] health 仍保持单一 query owner。
 
 **验收**：Shell 不拥有教材发布、Learning 或 KG 领域状态。
 
@@ -1057,11 +1057,11 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] 创建生成任务后向 Shell Activity 登记；
-- [ ] 失败、重试、取消和成功使用统一 feedback；
-- [ ] 队列详情可复用 AsyncOperationPanel 的展示层；
-- [ ] 仍使用 generation_jobs 领域，不迁入 textbook operation；
-- [ ] centered dialog 的既有关闭行为保持。
+- [x] 创建生成任务后向 Shell Activity 登记；
+- [x] 失败、重试、取消和成功使用统一 feedback；
+- [x] 队列详情复用统一 operation 状态语义和展示层；
+- [x] 仍使用 generation_jobs 领域，不迁入 textbook operation；
+- [x] centered dialog 的既有关闭行为保持。
 
 **验收**：卡片生成不增加 Wizard，既有队列 API 不变。
 
@@ -1077,12 +1077,12 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] 保持单页配置，不改造成多页 Wizard；
-- [ ] 保存前展示范围、Study Item 数、预计天数和移出数量；
-- [ ] Change link 返回对应 fieldset；
-- [ ] preview revision 变化阻止保存；
-- [ ] 暂停/恢复继续使用独立确认；
-- [ ] FSRS 和 queue 逻辑不变。
+- [x] 保持单页配置，不改造成多页 Wizard；
+- [x] 保存前展示范围、Study Item 数、预计天数和移出数量；
+- [x] Change link 返回对应 fieldset；
+- [x] preview revision 变化阻止保存；
+- [x] 暂停/恢复继续使用独立确认；
+- [x] FSRS 和 queue 逻辑不变。
 
 **验收**：计划缩小范围和教材 Track 预选场景全绿。
 
@@ -1099,12 +1099,12 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] unresolved 列表使用 TaskRail；
-- [ ] 候选、证据、词形和审计进入 ContextTools；
-- [ ] 接受/拆分/合并使用 ReviewSummary；
-- [ ] AI enrichment 只显示 proposal，不自动接受；
-- [ ] KG feature flag 关闭时保持降级；
-- [ ] 不写 FSRS。
+- [x] unresolved 列表使用 TaskRail；
+- [x] 候选、证据、词形和审计进入 ContextTools；
+- [x] resolve/dismiss 使用 ReviewSummary；split/merge 保持为独立身份迁移边界；
+- [x] AI enrichment 只显示 proposal，不自动接受；
+- [x] KG feature flag 关闭时保持降级；
+- [x] 不写 FSRS。
 
 **验收**：现有 lookup、加入本次学习和 planning 边界不变。
 
@@ -1121,12 +1121,12 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] 不显示 Stage rail、Task workbench 或复杂 Tools；
-- [ ] 只复用错误反馈、保存/提交状态和 Session Summary；
-- [ ] reveal 门禁和四档评分不变；
-- [ ] 评分失败固定当前项；
-- [ ] session 结束后显示摘要和返回入口；
-- [ ] 键盘流程保持。
+- [x] 不显示 Stage rail、Task workbench 或复杂 Tools；
+- [x] 只复用错误反馈、保存/提交状态和 Session Summary；
+- [x] reveal 门禁和四档评分不变；
+- [x] 评分失败固定当前项；
+- [x] session 结束后显示摘要和返回入口；
+- [x] 键盘流程保持。
 
 **验收**：连续专注会话仍然低干扰，不被 SaaS Shell 过度包装。
 
@@ -1145,13 +1145,13 @@ npm run test:textbooks:acceptance
 
 **检查**：
 
-- [ ] 同类 feedback、review、activity 和 retry 行为一致；
-- [ ] 不同流程模型保持差异；
-- [ ] Cards Factory 不是 Wizard；
-- [ ] Learning Plan 是单页 + Review；
-- [ ] KG unresolved 是 Task workbench；
-- [ ] Review Session 是 Focused session；
-- [ ] 所有领域所有权边界保持。
+- [x] 同类 feedback、review、activity 和 retry 行为一致；
+- [x] 不同流程模型保持差异；
+- [x] Cards Factory 不是 Wizard；
+- [x] Learning Plan 是单页 + Review；
+- [x] KG unresolved 是 Task workbench；
+- [x] Review Session 是 Focused session；
+- [x] 所有领域所有权边界保持。
 
 **验收**：
 
@@ -1257,5 +1257,5 @@ docker compose -p three_lans_system ps
 - [x] TC-D2 workflow amendment Accepted；
 - [x] Cloudscape POC 采用表确认；
 - [x] DS-W2 教材迁移验收；
-- [ ] DS-W3 横向扩展验收；
+- [x] DS-W3 横向扩展验收；
 - [ ] Final 完整验收。

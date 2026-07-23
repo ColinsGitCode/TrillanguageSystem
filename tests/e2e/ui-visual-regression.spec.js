@@ -53,7 +53,8 @@ function visualMasks(page) {
   return [
     page.locator('#heroTaskQueueElapsed'),
     page.locator('.queue-event-time'),
-    page.locator('time')
+    page.locator('time'),
+    page.getByTestId('react-folder-list').locator('button')
   ];
 }
 
