@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>教材课程复杂流程原型 · Three LANS</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f4f6f8;
+      --surface: #ffffff;
+      --subtle: #f0f3f6;
+      --text: #172033;
+      --muted: #5d687a;
+      --faint: #8290a3;
+      --border: #d9e0e8;
+      --border-strong: #bfc9d5;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-soft: #eaf1ff;
+      --textbook: #db2777;
+      --textbook-soft: #fff0f6;
+      --success: #08785b;
+      --success-soft: #e8f7f1;
+      --warning: #a35b08;
+      --warning-soft: #fff3dc;
+      --danger: #bd3247;
+      --danger-soft: #fff0f2;
+      --shadow-overlap: 0 10px 28px rgb(23 32 51 / 12%);
+      --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --font-ja: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-width: 1180px; min-height: 100%; margin: 0; }
+    body { color: var(--text); background: var(--canvas); font: 14px/1.45 var(--font-sans); letter-spacing: 0; }
+    button, input, textarea { font: inherit; letter-spacing: 0; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    .eyebrow { margin: 0 0 4px; color: var(--faint); font: 700 11px/1.2 var(--font-mono); text-transform: uppercase; }
+    .mono { font-family: var(--font-mono); }
+
+    .app { display: grid; grid-template-columns: 194px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 18px 12px 14px; background: var(--surface); border-right: 1px solid var(--border); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; }
+    .brand-rail { display: grid; grid-template-columns: repeat(3, 4px); gap: 3px; height: 30px; }
+    .brand-rail i { display: block; border-radius: 2px; background: var(--primary); }
+    .brand-rail i:nth-child(2) { background: var(--textbook); }
+    .brand-rail i:nth-child(3) { background: #0d9488; }
+    .brand strong, .brand small { display: block; }
+    .brand strong { font-size: 15px; }
+    .brand small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .nav-label { margin: 10px 10px 6px; color: var(--faint); font: 700 10px/1 var(--font-mono); text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; margin: 2px 0; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
+    .nav-item::before { width: 14px; color: var(--faint); content: "•"; font-size: 18px; text-align: center; }
+    .nav-item.active { color: var(--primary); background: var(--primary-soft); font-weight: 700; }
+    .nav-item.active::before { content: "▦"; font-size: 14px; }
+    .sidebar-footer { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 12px 8px 0; color: var(--muted); border-top: 1px solid var(--border); font-size: 12px; }
+    .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+
+    .main { min-width: 0; }
+    .topbar { position: sticky; z-index: 10; top: 0; display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 20px; background: rgb(244 246 248 / 94%); border-bottom: 1px solid var(--border); backdrop-filter: blur(10px); }
+    .breadcrumb { color: var(--muted); font-size: 12px; }
+    .breadcrumb strong { color: var(--text); }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .save-state { display: inline-flex; align-items: center; min-width: 92px; color: var(--muted); font-size: 12px; }
+    .save-state::before { width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--success); content: ""; }
+    .save-state.saving::before { background: var(--warning); }
+    .save-state.unsaved::before { background: var(--danger); }
+    .button { min-height: 34px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); cursor: pointer; font-weight: 650; }
+    .button:hover { border-color: #8fa0b5; background: #f9fafb; }
+    .button.primary { color: white; background: var(--primary); border-color: var(--primary); }
+    .button.primary:hover { background: var(--primary-hover); }
+    .button.danger { color: var(--danger); }
+    .icon-button { width: 34px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; }
+
+    .page { padding: 16px 20px 20px; }
+    .workflow-head { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 70px; padding: 14px 16px 14px 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 8px 8px 0 0; }
+    .workflow-head::before { position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--textbook); content: ""; }
+    .workflow-head h1 { margin: 0; font-size: 22px; line-height: 1.2; }
+    .workflow-head p:last-child { margin: 4px 0 0; color: var(--muted); }
+    .workflow-meta { display: flex; align-items: center; gap: 18px; }
+    .workflow-meta div { min-width: 92px; }
+    .workflow-meta span, .workflow-meta strong { display: block; }
+    .workflow-meta span { color: var(--faint); font: 700 10px/1.2 var(--font-mono); text-transform: uppercase; }
+    .workflow-meta strong { margin-top: 5px; font-size: 13px; }
+
+    .stage-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 8px 8px; }
+    .stage { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 54px; padding: 8px 12px; border: 0; border-right: 1px solid var(--border); background: transparent; cursor: pointer; text-align: left; }
+    .stage:last-child { border-right: 0; }
+    .stage:hover { background: #f9fafb; }
+    .stage.active { background: var(--primary-soft); box-shadow: inset 0 -3px var(--primary); }
+    .stage .number { display: grid; place-items: center; width: 26px; height: 26px; color: var(--muted); background: var(--subtle); border: 1px solid var(--border); border-radius: 50%; font: 700 11px/1 var(--font-mono); }
+    .stage.done .number { color: white; background: var(--success); border-color: var(--success); }
+    .stage.active .number { color: white; background: var(--primary); border-color: var(--primary); }
+    .stage strong, .stage small { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stage strong { font-size: 13px; }
+    .stage small { margin-top: 2px; color: var(--faint); font-size: 10px; }
+
+    .workspace { display: grid; grid-template-columns: 242px minmax(440px, 1fr) 338px; min-height: calc(100vh - 212px); margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; }
+    .task-rail, .context-tools { min-width: 0; background: #fbfcfd; }
+    .task-rail { border-right: 1px solid var(--border); }
+    .context-tools { border-left: 1px solid var(--border); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; min-height: 54px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .panel-head h2 { margin: 0; font-size: 15px; }
+    .count { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 7px; color: var(--muted); background: var(--subtle); border: 1px solid var(--border); border-radius: 999px; font: 700 11px/1 var(--font-mono); }
+    .task-filter { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .task-filter button { flex: 1; min-height: 29px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; color: var(--muted); font-size: 11px; }
+    .task-filter button.active { color: var(--primary); background: var(--primary-soft); font-weight: 700; }
+    .task-list { padding: 6px; }
+    .task { display: grid; grid-template-columns: 30px minmax(0, 1fr) 9px; align-items: center; gap: 7px; width: 100%; min-height: 54px; margin: 2px 0; padding: 7px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
+    .task:hover { background: var(--subtle); }
+    .task.active { background: var(--textbook-soft); border-color: #f3a6c7; }
+    .task-index { color: var(--textbook); font: 700 11px/1 var(--font-mono); }
+    .task strong, .task small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task strong { font-size: 12px; }
+    .task small { margin-top: 3px; color: var(--faint); font-size: 10px; }
+    .task-status { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+    .task-status.done { background: var(--success); }
+    .task-status.warn { background: var(--warning); }
+
+    .stage-content { position: relative; display: flex; min-width: 0; flex-direction: column; }
+    .content-scroll { flex: 1; min-height: 0; padding: 18px; }
+    .content-title { display: flex; align-items: start; justify-content: space-between; margin-bottom: 16px; }
+    .content-title h2 { margin: 0; font-size: 19px; }
+    .content-title p { margin: 5px 0 0; color: var(--muted); }
+    .status-badge { flex: none; padding: 5px 8px; color: var(--success); background: var(--success-soft); border: 1px solid #aadfca; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .status-badge.warn { color: var(--warning); background: var(--warning-soft); border-color: #e9c88f; }
+    .field { margin: 0 0 15px; }
+    .field label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .field label span { color: var(--faint); font: 500 10px/1 var(--font-mono); }
+    .field input, .field textarea { width: 100%; padding: 10px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; }
+    .field textarea { min-height: 76px; resize: vertical; }
+    .field.japanese textarea { font-family: var(--font-ja); font-size: 16px; }
+    .hint { margin: -7px 0 15px; color: var(--faint); font-size: 11px; }
+    .inline-summary { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border); border-radius: 6px; }
+    .inline-summary div { padding: 10px; border-right: 1px solid var(--border); }
+    .inline-summary div:last-child { border-right: 0; }
+    .inline-summary span, .inline-summary strong { display: block; }
+    .inline-summary span { color: var(--faint); font-size: 10px; }
+    .inline-summary strong { margin-top: 4px; font-size: 13px; }
+
+    .sticky-actions { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 10px 14px; background: rgb(255 255 255 / 96%); border-top: 1px solid var(--border); box-shadow: 0 -8px 18px rgb(23 32 51 / 5%); }
+    .action-group { display: flex; gap: 8px; }
+    .action-note { color: var(--faint); font-size: 11px; }
+
+    .tools-section { padding: 14px; border-bottom: 1px solid var(--border); }
+    .tools-section:last-child { border-bottom: 0; }
+    .tools-section h3 { margin: 0 0 10px; font-size: 13px; }
+    .source-box { padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+    .source-box p { margin: 0; font-size: 12px; }
+    .source-box small { display: block; margin-top: 6px; color: var(--faint); font: 10px/1.4 var(--font-mono); }
+    .check-list { display: grid; gap: 7px; }
+    .check { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; }
+    .check b { color: var(--success); font-size: 11px; }
+    .activity { display: grid; gap: 10px; }
+    .activity div { position: relative; padding-left: 15px; color: var(--muted); font-size: 11px; }
+    .activity div::before { position: absolute; top: 5px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); content: ""; }
+    .activity strong { display: block; color: var(--text); font-size: 11px; }
+
+    .import-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+    .dropzone { display: grid; place-items: center; min-height: 170px; padding: 24px; border: 1px dashed #9db0c5; border-radius: 6px; background: #f8fafc; text-align: center; }
+    .dropzone strong { display: block; font-size: 15px; }
+    .dropzone p { margin: 6px 0 14px; color: var(--muted); }
+    .manifest-card { padding: 14px; background: var(--subtle); border: 1px solid var(--border); border-radius: 6px; }
+    .manifest-card dl { margin: 12px 0 0; }
+    .manifest-card div { display: flex; justify-content: space-between; margin: 8px 0; font-size: 11px; }
+    .manifest-card dt { color: var(--muted); }
+    .manifest-card dd { margin: 0; font-family: var(--font-mono); }
+
+    .review-sections { display: grid; gap: 12px; }
+    .review-section { border: 1px solid var(--border); border-radius: 6px; }
+    .review-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 74px; align-items: center; min-height: 45px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    .review-row:last-child { border-bottom: 0; }
+    .review-row dt { color: var(--muted); font-weight: 700; }
+    .review-row dd { margin: 0; }
+    .review-row button { justify-self: end; border: 0; background: transparent; color: var(--primary); cursor: pointer; font-weight: 700; }
+    .warning-box { padding: 12px; color: var(--warning); background: var(--warning-soft); border: 1px solid #e9c88f; border-radius: 6px; }
+
+    .steps { border: 1px solid var(--border); border-radius: 6px; }
+    .step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: start; gap: 10px; min-height: 62px; padding: 12px; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: 0; }
+    .step-mark { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--muted); background: var(--subtle); border: 1px solid var(--border); font: 700 11px/1 var(--font-mono); }
+    .step.success .step-mark { color: white; background: var(--success); border-color: var(--success); }
+    .step.running .step-mark { color: white; background: var(--primary); border-color: var(--primary); }
+    .step.failed .step-mark { color: white; background: var(--danger); border-color: var(--danger); }
+    .step h3 { margin: 1px 0 3px; font-size: 13px; }
+    .step p { margin: 0; color: var(--muted); font-size: 11px; }
+    .step-state { padding-top: 3px; color: var(--faint); font: 700 10px/1 var(--font-mono); text-transform: uppercase; }
+    .step.failed .step-state { color: var(--danger); }
+    .progress { height: 7px; margin-top: 9px; overflow: hidden; background: #e5eaf0; border-radius: 999px; }
+    .progress i { display: block; width: 56%; height: 100%; background: var(--primary); }
+    .error-detail { margin-top: 9px; padding: 9px; color: var(--danger); background: var(--danger-soft); border-radius: 5px; font-size: 11px; }
+
+    .complete { display: grid; place-items: center; min-height: 410px; text-align: center; }
+    .complete-mark { display: grid; place-items: center; width: 54px; height: 54px; margin: 0 auto 14px; color: white; background: var(--success); border-radius: 50%; font-size: 24px; }
+    .complete h2 { margin: 0; font-size: 22px; }
+    .complete p { max-width: 520px; margin: 8px auto 18px; color: var(--muted); }
+    .complete-actions { display: flex; justify-content: center; gap: 8px; }
+
+    .prototype-note { position: fixed; right: 18px; bottom: 16px; z-index: 20; padding: 8px 10px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow-overlap); font: 10px/1 var(--font-mono); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-rail" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div><strong>Three LANS</strong><small>Learning workspace</small></div>
+      </div>
+      <p class="nav-label">学习</p>
+      <button class="nav-item" type="button">今日学习</button>
+      <button class="nav-item" type="button">学习计划</button>
+      <button class="nav-item active" type="button">教材课程</button>
+      <button class="nav-item" type="button">知识点查找</button>
+      <p class="nav-label">生产</p>
+      <button class="nav-item" type="button">Cards Factory</button>
+      <div class="sidebar-footer"><i class="health-dot"></i><span>服务正常</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb">教材课程 / 合成教材 / <strong>Track 03</strong></div>
+        <div class="top-actions">
+          <span id="saveState" class="save-state">已保存 14:32</span>
+          <button class="icon-button" type="button" title="查看活动" aria-label="查看活动">≡</button>
+          <button class="button" type="button">退出流程</button>
+        </div>
+      </header>
+
+      <div class="page">
+        <section class="workflow-head">
+          <div>
+            <p class="eyebrow">Textbook workflow · human review first</p>
+            <h1>Track 03 · 周末安排</h1>
+            <p>校对合成教材内容，确认后再发布到学习辅助。</p>
+          </div>
+          <div class="workflow-meta">
+            <div><span>Expressions</span><strong>8 条</strong></div>
+            <div><span>Study units</span><strong>16 个</strong></div>
+            <div><span>Track status</span><strong id="trackStatus">校对中</strong></div>
+          </div>
+        </section>
+
+        <nav id="stageNav" class="stage-nav" aria-label="教材发布流程">
+          <button class="stage done" type="button" data-stage="import"><span class="number">✓</span><span><strong>导入草稿</strong><small>Manifest 已验证</small></span></button>
+          <button class="stage active" type="button" data-stage="review"><span class="number">2</span><span><strong>校对内容</strong><small>6 / 8 已确认</small></span></button>
+          <button class="stage" type="button" data-stage="summary"><span class="number">3</span><span><strong>发布检查</strong><small>范围与影响</small></span></button>
+          <button class="stage" type="button" data-stage="processing"><span class="number">4</span><span><strong>后台处理</strong><small>TTS 与学习单元</small></span></button>
+          <button class="stage" type="button" data-stage="complete"><span class="number">5</span><span><strong>完成</strong><small>结果与下一步</small></span></button>
+        </nav>
+
+        <section id="workspace" class="workspace" aria-live="polite"></section>
+      </div>
+    </main>
+  </div>
+  <div class="prototype-note">DESKTOP PROTOTYPE · SYNTHETIC CONTENT</div>
+
+  <script>
+    const tasks = [
+      { id: '01', en: 'I usually take a walk before breakfast.', ja: '朝食の前に、よく散歩します。', zh: '我通常在早餐前散步。', state: 'done' },
+      { id: '02', en: 'Would you like to visit the market?', ja: '市場に行ってみませんか。', zh: '要不要去市场看看？', state: 'done' },
+      { id: '03', en: 'The train leaves just after noon.', ja: '電車は正午を少し過ぎてから出ます。', zh: '列车在正午稍后出发。', state: 'done' },
+      { id: '04', en: 'Let us meet near the library entrance.', ja: '図書館の入口の近くで会いましょう。', zh: '我们在图书馆入口附近见面吧。', state: 'done' },
+      { id: '05', en: 'I need to finish one thing first.', ja: '先に一つだけ終わらせる必要があります。', zh: '我需要先完成一件事。', state: 'done' },
+      { id: '06', en: 'We can decide after checking the weather.', ja: '天気を確認してから決められます。', zh: '我们可以查看天气后再决定。', state: 'done' },
+      { id: '07', en: 'Please send me the meeting place.', ja: '待ち合わせ場所を送ってください。', zh: '请把见面地点发给我。', state: 'warn' },
+      { id: '08', en: 'I will bring something to drink.', ja: '何か飲み物を持っていきます。', zh: '我会带些喝的东西。', state: '' }
+    ];
+    let currentStage = 'review';
+    let currentTask = 6;
+    let processFailed = true;
+
+    const workspace = document.getElementById('workspace');
+    const saveState = document.getElementById('saveState');
+    const trackStatus = document.getElementById('trackStatus');
+
+    function taskRail() {
+      return `
+        <aside class="task-rail">
+          <header class="panel-head"><div><p class="eyebrow">Expression queue</p><h2>表达校对</h2></div><span class="count">8</span></header>
+          <div class="task-filter"><button class="active" type="button">全部</button><button type="button">待处理 2</button></div>
+          <div class="task-list">
+            ${tasks.map((task, index) => `
+              <button class="task ${index === currentTask ? 'active' : ''}" type="button" data-task="${index}">
+                <span class="task-index">${task.id}</span>
+                <span><strong>${task.en}</strong><small>${task.ja}</small></span>
+                <i class="task-status ${task.state}"></i>
+              </button>`).join('')}
+          </div>
+        </aside>`;
+    }
+
+    function tools(task) {
+      return `
+        <aside class="context-tools">
+          <header class="panel-head"><div><p class="eyebrow">Context tools</p><h2>来源与检查</h2></div></header>
+          <section class="tools-section">
+            <h3>来源</h3>
+            <div class="source-box"><p>Manifest expression ${task.id}</p><small>source=synthetic · revision=3<br>hash=7f31…c2a9 · reviewed_by=user</small></div>
+          </section>
+          <section class="tools-section">
+            <h3>确定性检查</h3>
+            <div class="check-list">
+              <div class="check"><span>EN / JA 配对</span><b>通过</b></div>
+              <div class="check"><span>汉字 ruby</span><b>通过</b></div>
+              <div class="check"><span>中文提示</span><b>通过</b></div>
+              <div class="check"><span>重复表达</span><b>未发现</b></div>
+            </div>
+          </section>
+          <section class="tools-section">
+            <h3>最近活动</h3>
+            <div class="activity">
+              <div><strong>中文提示已修改</strong>14:31 · draft revision 3</div>
+              <div><strong>日语 ruby 已验证</strong>14:28 · deterministic</div>
+              <div><strong>Manifest 已导入</strong>13:54 · hash verified</div>
+            </div>
+          </section>
+        </aside>`;
+    }
+
+    function reviewView() {
+      const task = tasks[currentTask];
+      workspace.innerHTML = `
+        ${taskRail()}
+        <section class="stage-content">
+          <div class="content-scroll">
+            <div class="content-title"><div><p class="eyebrow">Expression ${task.id}</p><h2>校对英日中表达</h2><p>官方原文与派生提示分开保存。修改只更新草稿。</p></div><span class="status-badge ${task.state === 'warn' ? 'warn' : ''}">${task.state === 'done' ? '已确认' : task.state === 'warn' ? '需要确认' : '未处理'}</span></div>
+            <div class="field"><label>English official <span>OFFICIAL · LOCK SOURCE</span></label><textarea id="enField">${task.en}</textarea></div>
+            <div class="field japanese"><label>Japanese official + ruby <span>OFFICIAL · RUBY EDITABLE</span></label><textarea id="jaField">${task.ja}</textarea></div>
+            <p class="hint">注音只附着在对应汉字上；假名本身不重复标注。</p>
+            <div class="field"><label>中文学习提示 <span>AI DERIVED · USER EDITABLE</span></label><textarea id="zhField">${task.zh}</textarea></div>
+            <div class="inline-summary"><div><span>单句音频</span><strong>EN / JA 待生成</strong></div><div><span>重点短语</span><strong>2 个候选</strong></div><div><span>学习单元</span><strong>2 个</strong></div></div>
+          </div>
+          <footer class="sticky-actions"><span class="action-note">草稿自动保存不会发布内容</span><div class="action-group"><button class="button" id="saveButton" type="button">保存草稿</button><button class="button primary" id="confirmButton" type="button">确认并处理下一条</button></div></footer>
+        </section>
+        ${tools(task)}`;
+
+      workspace.querySelectorAll('[data-task]').forEach((button) => button.addEventListener('click', () => {
+        currentTask = Number(button.dataset.task);
+        render();
+      }));
+      workspace.querySelectorAll('textarea').forEach((field) => field.addEventListener('input', () => setSaveState('unsaved')));
+      document.getElementById('saveButton').addEventListener('click', saveDraft);
+      document.getElementById('confirmButton').addEventListener('click', () => {
+        tasks[currentTask].state = 'done';
+        currentTask = Math.min(tasks.length - 1, currentTask + 1);
+        saveDraft(render);
+      });
+    }
+
+    function importView() {
+      workspace.innerHTML = `
+        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Import</p><h2>草稿来源</h2></div></header><div class="task-list"><button class="task active" type="button"><span class="task-index">01</span><span><strong>Manifest</strong><small>已完成 dry-run</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">02</span><span><strong>官方 Track</strong><small>本地媒体已登记</small></span><i class="task-status done"></i></button></div></aside>
+        <section class="stage-content"><div class="content-scroll"><div class="content-title"><div><p class="eyebrow">Stage 1</p><h2>导入教材草稿</h2><p>只接受 Git 外 Manifest；应用内 OCR 不参与教材识别。</p></div><span class="status-badge">已完成</span></div><div class="import-layout"><div class="dropzone"><div><strong>daily-english/track-03/manifest.json</strong><p>Manifest hash 与媒体根均已验证</p><button class="button" type="button">重新选择 Manifest</button></div></div><div class="manifest-card"><p class="eyebrow">Dry-run result</p><strong>可以安全导入</strong><dl><div><dt>Expressions</dt><dd>8</dd></div><div><dt>Official audio</dt><dd>1</dd></div><div><dt>Warnings</dt><dd>0</dd></div><div><dt>Hash</dt><dd>7f31…c2a9</dd></div></dl></div></div></div><footer class="sticky-actions"><span class="action-note">导入不会自动发布到学习计划</span><div class="action-group"><button class="button" type="button">重新运行 dry-run</button><button class="button primary" type="button" data-next="review">进入内容校对</button></div></footer></section>
+        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Import checks</p><h2>导入边界</h2></div></header><section class="tools-section"><div class="check-list"><div class="check"><span>路径位于受控根</span><b>通过</b></div><div class="check"><span>Manifest schema</span><b>通过</b></div><div class="check"><span>SHA-256</span><b>通过</b></div><div class="check"><span>版权内容进入 Git</span><b>否</b></div></div></section></aside>`;
+      bindNext();
+    }
+
+    function summaryView() {
+      workspace.innerHTML = `
+        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Review</p><h2>发布检查</h2></div></header><div class="task-list"><button class="task active" type="button"><span class="task-index">A</span><span><strong>内容完整性</strong><small>8 条表达</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">B</span><span><strong>学习范围</strong><small>16 个单元</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">C</span><span><strong>媒体与 TTS</strong><small>1 + 16 项</small></span><i class="task-status warn"></i></button></div></aside>
+        <section class="stage-content"><div class="content-scroll"><div class="content-title"><div><p class="eyebrow">Stage 3</p><h2>发布前检查</h2><p>确认发布范围、来源和后台任务。返回修改不会丢失已完成校对。</p></div><span class="status-badge">可以发布</span></div><div class="review-sections"><dl class="review-section"><div class="review-row"><dt>教材内容</dt><dd>8 条英日表达，中文提示均已确认</dd><button type="button" data-next="review">修改</button></div><div class="review-row"><dt>学习辅助</dt><dd>发布后新增 8 English + 8 Japanese 单元</dd><button type="button">查看范围</button></div><div class="review-row"><dt>官方音频</dt><dd>1 个受控本地 Track，不会被 TTS 覆盖</dd><button type="button">检查媒体</button></div><div class="review-row"><dt>单句 TTS</dt><dd>发布后异步生成 16 个音频任务</dd><button type="button">查看语音</button></div></dl><div class="warning-box"><strong>发布不会立即增加今日新单元。</strong> 新单元仍受当前学习计划范围和 daily new limit 控制。</div></div></div><footer class="sticky-actions"><button class="button" type="button" data-next="review">返回校对</button><div class="action-group"><button class="button primary" type="button" data-next="processing">发布 8 条表达</button></div></footer></section>
+        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Impact</p><h2>发布影响</h2></div></header><section class="tools-section"><div class="check-list"><div class="check"><span>Track generation</span><b>创建 1</b></div><div class="check"><span>Study Items</span><b>创建 16</b></div><div class="check"><span>Review Events</span><b>创建 0</b></div><div class="check"><span>今日队列</span><b>不直接修改</b></div></div></section><section class="tools-section"><h3>确认主体</h3><div class="source-box"><p>当前本地用户</p><small>human_reviewed=true<br>publish_revision=4</small></div></section></aside>`;
+      bindNext();
+    }
+
+    function processingView() {
+      workspace.innerHTML = `
+        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Operation</p><h2>后台处理</h2></div><span class="count">4</span></header><div class="task-list"><button class="task active" type="button"><span class="task-index">01</span><span><strong>发布 Track 投影</strong><small>已完成</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">02</span><span><strong>物化学习单元</strong><small>已完成</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">03</span><span><strong>生成单句 TTS</strong><small>${processFailed ? '1 个任务失败' : '处理中'}</small></span><i class="task-status ${processFailed ? 'warn' : ''}"></i></button></div></aside>
+        <section class="stage-content"><div class="content-scroll"><div class="content-title"><div><p class="eyebrow">Stage 4 · job tx-2048</p><h2>${processFailed ? '后台处理需要注意' : '正在完成后台处理'}</h2><p>页面关闭后任务仍会继续；重新进入时从服务端恢复进度。</p></div><span class="status-badge ${processFailed ? 'warn' : ''}">${processFailed ? '部分失败' : '运行中'}</span></div><div class="steps"><article class="step success"><span class="step-mark">✓</span><div><h3>验证并发布 Track</h3><p>Track revision 4 已发布，来源 hash 已记录。</p></div><span class="step-state">Succeeded</span></article><article class="step success"><span class="step-mark">✓</span><div><h3>物化 16 个学习单元</h3><p>8 English + 8 Japanese，未直接修改今日队列。</p></div><span class="step-state">Succeeded</span></article><article class="step ${processFailed ? 'failed' : 'running'}"><span class="step-mark">${processFailed ? '!' : '3'}</span><div><h3>生成单句 TTS</h3><p>${processFailed ? '15 个成功，1 个日语音频等待重试。已成功结果不会重复生成。' : '正在重试最后 1 个日语音频，预计少于 20 秒。'}</p>${processFailed ? '<div class="error-detail"><strong>TTS_JA_TIMEOUT</strong><br>语音服务未在时限内返回。可安全重试失败任务。</div>' : '<div class="progress"><i></i></div>'}</div><span class="step-state">${processFailed ? 'Failed' : 'Running'}</span></article><article class="step"><span class="step-mark">4</span><div><h3>完成索引与增量事实同步</h3><p>等待 TTS 步骤完成后执行。</p></div><span class="step-state">Pending</span></article></div></div><footer class="sticky-actions"><span class="action-note">已发布内容和 15 个成功音频保持不变</span><div class="action-group">${processFailed ? '<button id="retryButton" class="button primary" type="button">只重试失败任务</button>' : '<button class="button" type="button">后台继续运行</button><button class="button primary" type="button" data-next="complete">查看完成摘要</button>'}</div></footer></section>
+        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Job details</p><h2>执行信息</h2></div></header><section class="tools-section"><div class="source-box"><p>textbook-publish-v1</p><small>job=tx-2048 · idempotency=pub-03-r4<br>started=14:36:08 · retryable=true</small></div></section><section class="tools-section"><h3>写入边界</h3><div class="check-list"><div class="check"><span>重复 Review Event</span><b>0</b></div><div class="check"><span>重复 Study Item</span><b>0</b></div><div class="check"><span>今日队列写入</span><b>0</b></div></div></section></aside>`;
+      const retry = document.getElementById('retryButton');
+      if (retry) retry.addEventListener('click', () => {
+        processFailed = false;
+        render();
+        window.setTimeout(() => {
+          document.querySelector('[data-next="complete"]')?.focus();
+        }, 100);
+      });
+      bindNext();
+    }
+
+    function completeView() {
+      workspace.innerHTML = `
+        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Result</p><h2>完成摘要</h2></div></header><div class="task-list"><button class="task active" type="button"><span class="task-index">✓</span><span><strong>Track 03 已发布</strong><small>revision 4</small></span><i class="task-status done"></i></button></div></aside>
+        <section class="stage-content"><div class="content-scroll complete"><div><span class="complete-mark">✓</span><p class="eyebrow">Workflow completed</p><h2>教材 Track 已准备完成</h2><p>8 条表达、16 个学习单元和 16 个单句音频已完成。学习单元将按照计划范围和每日新单元上限进入学习。</p><div class="complete-actions"><button class="button" type="button" data-next="review">返回教材内容</button><button class="button primary" type="button">查看学习计划</button></div></div></div></section>
+        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Outcome</p><h2>结果</h2></div></header><section class="tools-section"><div class="check-list"><div class="check"><span>Expressions</span><b>8 published</b></div><div class="check"><span>Study Items</span><b>16 active</b></div><div class="check"><span>Single TTS</span><b>16 success</b></div><div class="check"><span>Official Track</span><b>available</b></div></div></section><section class="tools-section"><h3>审计</h3><div class="source-box"><p>发布由本地用户确认</p><small>revision=4 · job=tx-2048<br>completed=14:38:42</small></div></section></aside>`;
+      bindNext();
+    }
+
+    function setSaveState(state) {
+      saveState.className = `save-state ${state || ''}`;
+      saveState.textContent = state === 'saving' ? '保存中…' : state === 'unsaved' ? '有未保存修改' : '已保存 14:32';
+    }
+
+    function saveDraft(after) {
+      setSaveState('saving');
+      window.setTimeout(() => {
+        setSaveState('');
+        if (typeof after === 'function') after();
+      }, 500);
+    }
+
+    function bindNext() {
+      document.querySelectorAll('[data-next]').forEach((button) => button.addEventListener('click', () => {
+        currentStage = button.dataset.next;
+        render();
+      }));
+    }
+
+    function render() {
+      document.querySelectorAll('[data-stage]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.stage === currentStage);
+      });
+      trackStatus.textContent = currentStage === 'complete' ? '已完成' : currentStage === 'processing' ? '处理中' : currentStage === 'summary' ? '待发布' : currentStage === 'import' ? '草稿' : '校对中';
+      if (currentStage === 'import') importView();
+      if (currentStage === 'review') reviewView();
+      if (currentStage === 'summary') summaryView();
+      if (currentStage === 'processing') processingView();
+      if (currentStage === 'complete') completeView();
+    }
+
+    document.querySelectorAll('[data-stage]').forEach((button) => button.addEventListener('click', () => {
+      currentStage = button.dataset.stage;
+      render();
+    }));
+    render();
+  </script>
+</body>
+</html>

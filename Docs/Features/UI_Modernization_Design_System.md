@@ -1,6 +1,7 @@
 # 全站 UI 现代化设计系统与 App Shell
 
-> 状态：**修订后的实施基线（待开发）** · 2026-07
+> 状态：**历史实施基线 · 视觉原则继续有效，旧静态页面与 Shell 实施路径已失效** · 2026-07
+> 当前增补：[SaaS App Shell 与复杂长流程设计及开发规范](SaaS_App_Shell_and_Complex_Workflow_Design_Guidelines.md)
 > 产品定位：**学习优先的三语学习工作台**，系统运维能力降为二级入口
 > 视觉方向：**专业、克制、清晰的现代 SaaS**，保留 Three LANS 的语言与卡型识别
 > 布局决策：**左侧边栏 App Shell** · 响应式抽屉 · 明暗主题
@@ -13,7 +14,9 @@
 
 ## 0. 文档角色与权威边界
 
-本文是 **Three LANS 全站 UI 的正式横向基线**，负责定义：
+2026-07-23 治理说明：本文形成于 React Router 全栈迁移前。本文关于 token、领域色、视觉克制、可见焦点和安静学习工作台的原则继续有效；其中 `public/*.html`、旧命令式模块、Mission Control、Knowledge Hub/OPS、旧 SRS 导航和旧 Shell DOM 属于历史实施路径，不再代表当前运行系统。当前运行事实以 `CLAUDE.md`、实际 `app/` 代码和 `Docs/README.md` 为准；React Router 时代的 App Shell 与复杂长流程横向规范以上述增补文档为准。
+
+本文曾作为 **Three LANS 全站 UI 的正式横向基线**，当前继续负责保留以下视觉决策的历史来源：
 
 - 产品级导航和 App Shell；
 - 全站颜色、字体、间距、圆角、阴影与动效 token；
