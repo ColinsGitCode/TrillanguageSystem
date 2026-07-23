@@ -68,6 +68,11 @@ test('unresolved Japanese lookup stays reversible until a revision-checked user 
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM kg_points').get().count, 0);
 
   const caseId = lookup.body.lookup.resolutionCase.id;
+  const openCases = await api('GET', '/api/kg/resolution-cases?status=open');
+  assert.equal(openCases.status, 200);
+  assert.equal(openCases.body.resolutionCases.length, 1);
+  assert.equal(openCases.body.resolutionCases[0].id, caseId);
+
   const decided = await api('POST', `/api/kg/resolution-cases/${caseId}/decisions`, {
     body: {
       eventKey: 'api:decision:hashi:0001',
@@ -85,6 +90,10 @@ test('unresolved Japanese lookup stays reversible until a revision-checked user 
   assert.equal(decided.status, 200);
   assert.equal(decided.body.resolutionCase.status, 'resolved');
   assert.equal(decided.body.point.canonicalForm, '橋');
+  const remainingOpenCases = await api('GET', '/api/kg/resolution-cases?status=open');
+  assert.equal(remainingOpenCases.body.resolutionCases.length, 0);
+  const resolvedCases = await api('GET', '/api/kg/resolution-cases?status=resolved');
+  assert.equal(resolvedCases.body.resolutionCases[0].resolvedPointId, decided.body.point.id);
 
   const stale = await api('POST', `/api/kg/resolution-cases/${caseId}/decisions`, {
     body: {

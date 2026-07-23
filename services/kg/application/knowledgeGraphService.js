@@ -95,6 +95,13 @@ class KnowledgeGraphService {
     return resolutionCase;
   }
 
+  listResolutionCases({ status = 'open', limit = 50 } = {}) {
+    if (!['open', 'resolved', 'dismissed', 'superseded'].includes(status)) {
+      throw invalidInput(`Unsupported resolution status: ${status}`);
+    }
+    return this.repo.listResolutionCases({ status, limit });
+  }
+
   async lookup(command = {}) {
     const eventKey = requireEventKey(command.eventKey);
     const language = String(command.language || '').trim().toLowerCase();

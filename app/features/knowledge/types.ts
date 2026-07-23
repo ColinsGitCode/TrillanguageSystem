@@ -63,10 +63,24 @@ export type ResolutionCase = {
   id: number;
   caseKind: string;
   language: KnowledgeLanguage;
+  kindHint: KnowledgeKind;
+  surfaceFormId?: number | null;
+  evidenceId?: number | null;
   normalizedInput: string;
-  candidates: unknown[];
+  candidates: Array<{
+    pointId?: number;
+    kind?: KnowledgeKind;
+    language?: KnowledgeLanguage;
+    canonicalForm?: string;
+    canonicalReading?: string;
+    reason?: string;
+    source?: 'rule' | 'llm-proposal' | 'user';
+  }>;
   status: 'open' | 'resolved' | 'dismissed' | 'superseded';
   revision: number;
+  resolvedPointId?: number | null;
+  createdAtUtc?: string;
+  updatedAtUtc?: string;
 };
 
 export type LookupResult = {

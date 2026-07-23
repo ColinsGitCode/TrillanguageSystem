@@ -281,6 +281,16 @@ class KgRepository {
     return caseDto(this.db.prepare('SELECT * FROM kg_resolution_cases WHERE case_key = ?').get(caseKey));
   }
 
+  listResolutionCases({ status = 'open', limit = 50 } = {}) {
+    const normalizedLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    return this.db.prepare(`
+      SELECT * FROM kg_resolution_cases
+      WHERE status = ?
+      ORDER BY updated_at_utc DESC, id DESC
+      LIMIT ?
+    `).all(status, normalizedLimit).map(caseDto);
+  }
+
   insertCase(data) {
     this.db.prepare(`
       INSERT OR IGNORE INTO kg_resolution_cases(

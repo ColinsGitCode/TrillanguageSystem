@@ -69,6 +69,13 @@ router.get('/api/kg/points/:id/evidence', route((req, res) => send(res, {
   evidence: service.getEvidence(req.params.id),
 })));
 
+router.get('/api/kg/resolution-cases', route((req, res) => send(res, {
+  resolutionCases: service.listResolutionCases({
+    status: req.query.status,
+    limit: req.query.limit,
+  }),
+})));
+
 router.get('/api/kg/resolution-cases/:id', route((req, res) => send(res, {
   resolutionCase: service.getResolutionCase(req.params.id),
 })));

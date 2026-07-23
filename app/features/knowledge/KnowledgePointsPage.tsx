@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -13,11 +13,18 @@ import {
   X,
 } from 'lucide-react';
 import { ProductShell } from '../../components/ProductShell';
+import {
+  ContextTools,
+  ReviewSummary,
+  TaskWorkbench,
+  type WorkflowTask,
+  type WorkflowTaskState,
+} from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { learningApi } from '../learning/learning-api';
 import type { StudyItem } from '../learning/types';
 import { knowledgeApi } from './knowledge-api';
-import type { KnowledgeKind, KnowledgeLanguage, KnowledgePointSummary } from './types';
+import type { KnowledgeKind, KnowledgeLanguage, KnowledgePointSummary, ResolutionCase } from './types';
 
 const languageLabels: Record<KnowledgeLanguage, string> = { en: 'English', ja: '日本語', zh: '中文' };
 const kindLabels: Record<KnowledgeKind, string> = { lexeme: '词语', phrase: '短语', grammar_pattern: '语法' };
@@ -40,7 +47,12 @@ export function KnowledgePointsPage() {
   const [language, setLanguage] = useState<KnowledgeLanguage>('ja');
   const [kind, setKind] = useState<KnowledgeKind>('lexeme');
   const [selectedPointId, setSelectedPointId] = useState<number | null>(null);
-  const [unresolvedText, setUnresolvedText] = useState('');
+  const [resolutionMode, setResolutionMode] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
+  const [resolutionFilter, setResolutionFilter] = useState<'all' | WorkflowTaskState>('all');
+  const [resolutionForm, setResolutionForm] = useState({ canonicalForm: '', canonicalReading: '', senseDiscriminator: '' });
+  const [resolutionReview, setResolutionReview] = useState<'resolve' | 'dismiss' | null>(null);
+  const [resolutionError, setResolutionError] = useState('');
   const [confirmItem, setConfirmItem] = useState<StudyItem | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
@@ -58,6 +70,16 @@ export function KnowledgePointsPage() {
     queryKey: ['knowledge', 'point', selectedPointId],
     queryFn: () => knowledgeApi.point(selectedPointId!),
     enabled: selectedPointId !== null,
+  });
+  const resolutionCasesQuery = useQuery({
+    queryKey: ['knowledge', 'resolution-cases', 'open'],
+    queryFn: () => knowledgeApi.resolutionCases('open'),
+    enabled: availabilityQuery.isSuccess,
+  });
+  const resolutionCaseQuery = useQuery({
+    queryKey: ['knowledge', 'resolution-case', selectedCaseId],
+    queryFn: () => knowledgeApi.resolutionCase(selectedCaseId!),
+    enabled: availabilityQuery.isSuccess && selectedCaseId !== null,
   });
   const planQuery = useQuery({ queryKey: ['learning', 'plan'], queryFn: learningApi.plan });
   const queueQuery = useQuery({ queryKey: ['learning', 'queue', 'today'], queryFn: learningApi.todayQueue });
@@ -83,6 +105,35 @@ export function KnowledgePointsPage() {
     .filter((item): item is StudyItem => Boolean(item));
   const queuedItemIds = new Set((queueQuery.data?.queue?.entries || []).map((entry) => entry.studyItemId));
   const intentByItem = new Map((intentsQuery.data?.intents || []).map((intent) => [intent.studyItemId, intent]));
+  const resolutionCases = resolutionCasesQuery.data?.resolutionCases || [];
+  const selectedCase = resolutionCaseQuery.data?.resolutionCase
+    || resolutionCases.find((item) => item.id === selectedCaseId)
+    || null;
+  const resolutionTasks = useMemo<WorkflowTask[]>(() => resolutionCases.map((item, index) => ({
+    id: String(item.id),
+    ordinal: index + 1,
+    title: item.normalizedInput,
+    summary: `${languageLabels[item.language]} · ${kindLabels[item.kindHint] || item.kindHint}`,
+    state: 'needs_attention',
+    reasons: [item.caseKind],
+    metadata: { revision: item.revision, caseKind: item.caseKind },
+  })), [resolutionCases]);
+
+  useEffect(() => {
+    if (!resolutionMode || selectedCaseId || !resolutionCases.length) return;
+    setSelectedCaseId(resolutionCases[0].id);
+  }, [resolutionCases, resolutionMode, selectedCaseId]);
+
+  useEffect(() => {
+    if (!selectedCase) return;
+    const preferred = selectedCase.candidates[0];
+    setResolutionForm({
+      canonicalForm: preferred?.canonicalForm || '',
+      canonicalReading: preferred?.canonicalReading || selectedCase.normalizedInput,
+      senseDiscriminator: '',
+    });
+    setResolutionError('');
+  }, [selectedCase?.id, selectedCase?.revision]);
 
   const lookupMutation = useMutation({
     mutationFn: (point?: KnowledgePointSummary) => knowledgeApi.lookup({
@@ -95,10 +146,60 @@ export function KnowledgePointsPage() {
     onSuccess: (data) => {
       if (data.lookup.point) {
         setSelectedPointId(data.lookup.point.id);
-        setUnresolvedText('');
+        setResolutionMode(false);
+        setSelectedCaseId(null);
       } else {
         setSelectedPointId(null);
-        setUnresolvedText(data.lookup.resolutionCase?.normalizedInput || query.trim());
+        setSelectedCaseId(data.lookup.resolutionCase?.id || null);
+        setResolutionMode(true);
+      }
+    },
+  });
+  const resolutionMutation = useMutation({
+    mutationFn: ({ resolutionCase, action }: { resolutionCase: ResolutionCase; action: 'resolve' | 'dismiss' }) => (
+      knowledgeApi.decideResolutionCase(resolutionCase.id, {
+        eventKey: `resolution:${crypto.randomUUID()}`,
+        action,
+        revision: resolutionCase.revision,
+        ...(action === 'resolve' ? {
+          point: {
+            kind: resolutionCase.kindHint,
+            language: resolutionCase.language,
+            canonicalForm: resolutionForm.canonicalForm.trim(),
+            canonicalReading: resolutionForm.canonicalReading.trim(),
+            senseDiscriminator: resolutionForm.senseDiscriminator.trim(),
+          },
+        } : {}),
+        publicReason: action === 'resolve'
+          ? 'User confirmed the canonical knowledge point in the unresolved workbench.'
+          : 'User dismissed the unresolved case in the workbench.',
+      })
+    ),
+    onSuccess: async (data) => {
+      setResolutionReview(null);
+      setResolutionError('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['knowledge', 'resolution-cases'] }),
+        queryClient.invalidateQueries({ queryKey: ['knowledge', 'search'] }),
+      ]);
+      if (data.point) {
+        setSelectedPointId(data.point.id);
+        setResolutionMode(false);
+        setSelectedCaseId(null);
+        setActionMessage('待确认项已归属到知识点；学习调度状态没有被修改。');
+      } else {
+        setSelectedCaseId(null);
+        setActionMessage('待确认项已忽略；历史 lookup 事实保持不变。');
+      }
+    },
+    onError: async (error) => {
+      const code = apiCode(error);
+      setResolutionError(code === 'KG_RESOLUTION_STALE'
+        ? '该待确认项已在其它页面更新。请刷新候选后重新确认。'
+        : error instanceof Error ? error.message : '暂时无法保存裁决。');
+      if (code === 'KG_RESOLUTION_STALE') {
+        await queryClient.invalidateQueries({ queryKey: ['knowledge', 'resolution-case'] });
+        await queryClient.invalidateQueries({ queryKey: ['knowledge', 'resolution-cases'] });
       }
     },
   });
@@ -144,10 +245,23 @@ export function KnowledgePointsPage() {
             <p>查找行为会成为学习信号，但不会直接改写 FSRS 调度。</p>
           </div>
           <form onSubmit={submitLookup}>
-            <div className="knowledge-segments" aria-label="查找语言">
-              {(Object.keys(languageLabels) as KnowledgeLanguage[]).map((value) => (
-                <button type="button" aria-pressed={language === value} className={language === value ? 'selected' : ''} key={value} onClick={() => setLanguage(value)}>{languageLabels[value]}</button>
-              ))}
+            <div className="knowledge-command-meta">
+              <div className="knowledge-segments" aria-label="查找语言">
+                {(Object.keys(languageLabels) as KnowledgeLanguage[]).map((value) => (
+                  <button type="button" aria-pressed={language === value} className={language === value ? 'selected' : ''} key={value} onClick={() => setLanguage(value)}>{languageLabels[value]}</button>
+                ))}
+              </div>
+              <button
+                className={resolutionMode ? 'knowledge-resolution-trigger selected' : 'knowledge-resolution-trigger'}
+                type="button"
+                aria-pressed={resolutionMode}
+                onClick={() => {
+                  setResolutionMode(true);
+                  setSelectedPointId(null);
+                }}
+              >
+                待确认 <span>{resolutionCases.length}</span>
+              </button>
             </div>
             <label>
               <Search aria-hidden="true" />
@@ -169,6 +283,100 @@ export function KnowledgePointsPage() {
           </section>
         ) : availabilityQuery.isError ? (
           <section className="surface knowledge-disabled"><AlertCircle aria-hidden="true" /><h2>知识点服务暂时不可用</h2><p>请稍后重试，学习调度会继续按基础策略运行。</p></section>
+        ) : resolutionMode ? (
+          <section className="surface knowledge-resolution-workflow" data-testid="knowledge-resolution-workbench">
+            <TaskWorkbench
+              tasks={resolutionTasks}
+              activeId={selectedCaseId ? String(selectedCaseId) : null}
+              filter={resolutionFilter}
+              onFilter={setResolutionFilter}
+              onSelect={(id) => setSelectedCaseId(Number(id))}
+              tools={(
+                <ContextTools
+                  title="裁决上下文"
+                  sections={selectedCase ? [
+                    {
+                      label: '候选',
+                      value: selectedCase.candidates.length ? (
+                        <ul>{selectedCase.candidates.map((candidate, index) => (
+                          <li key={`${candidate.canonicalForm || 'candidate'}-${index}`}>
+                            <strong>{candidate.canonicalForm || '未命名候选'}</strong>
+                            {candidate.canonicalReading && <span>{candidate.canonicalReading}</span>}
+                            <small>{candidate.source === 'llm-proposal' ? 'AI proposal · 未接受' : candidate.reason || '候选证据'}</small>
+                          </li>
+                        ))}</ul>
+                      ) : <p>确定性分析没有生成可安全接受的候选。</p>,
+                    },
+                    {
+                      label: '词形',
+                      value: <p><strong>{selectedCase.normalizedInput}</strong><br />{languageLabels[selectedCase.language]} · {kindLabels[selectedCase.kindHint]}</p>,
+                    },
+                    {
+                      label: '证据',
+                      value: <p>{selectedCase.evidenceId ? `Evidence #${selectedCase.evidenceId}` : '本案例来自显式 lookup，没有内容 Evidence。'}</p>,
+                    },
+                    {
+                      label: '审计',
+                      value: <p>Case #{selectedCase.id}<br />Revision {selectedCase.revision}<br />{selectedCase.caseKind}</p>,
+                    },
+                  ] : []}
+                />
+              )}
+            >
+              {!selectedCase ? (
+                <div className="knowledge-placeholder">
+                  <AlertCircle aria-hidden="true" />
+                  <h2>{resolutionCasesQuery.isLoading ? '正在读取待确认项…' : '没有待确认项'}</h2>
+                  <p>确定性规则无法安全归属的输入会出现在这里。</p>
+                  <button type="button" onClick={() => setResolutionMode(false)}>返回知识点查找</button>
+                </div>
+              ) : (
+                <div className="knowledge-resolution-editor">
+                  <header>
+                    <div><p className="eyebrow">UNRESOLVED · REV {selectedCase.revision}</p><h2>{selectedCase.normalizedInput}</h2><p>只接受人工确认的规范身份；AI enrichment 候选始终只是 proposal。</p></div>
+                    <button type="button" onClick={() => setResolutionMode(false)}>返回查找</button>
+                  </header>
+                  {resolutionError && <div className="knowledge-resolution-error" role="alert">{resolutionError}</div>}
+                  {selectedCase.candidates.length > 0 && (
+                    <section>
+                      <h3>候选身份</h3>
+                      <div className="knowledge-candidate-grid">
+                        {selectedCase.candidates.map((candidate, index) => (
+                          <button
+                            key={`${candidate.canonicalForm || 'candidate'}-${index}`}
+                            type="button"
+                            onClick={() => setResolutionForm({
+                              canonicalForm: candidate.canonicalForm || '',
+                              canonicalReading: candidate.canonicalReading || '',
+                              senseDiscriminator: '',
+                            })}
+                          >
+                            <strong>{candidate.canonicalForm || '未命名候选'}</strong>
+                            <span>{candidate.canonicalReading || '无读音'}</span>
+                            <small>{candidate.source === 'llm-proposal' ? 'AI proposal · 需要人工确认' : candidate.reason || '确定性候选'}</small>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  <fieldset>
+                    <legend>人工确认的知识点身份</legend>
+                    <label>规范形<input value={resolutionForm.canonicalForm} onChange={(event) => setResolutionForm({ ...resolutionForm, canonicalForm: event.target.value })} placeholder="例如：橋" /></label>
+                    <label>读音<input value={resolutionForm.canonicalReading} onChange={(event) => setResolutionForm({ ...resolutionForm, canonicalReading: event.target.value })} placeholder="例如：はし" /></label>
+                    <label>义项标识（可选）<input value={resolutionForm.senseDiscriminator} onChange={(event) => setResolutionForm({ ...resolutionForm, senseDiscriminator: event.target.value })} placeholder="仅在需要区分同形义项时填写" /></label>
+                  </fieldset>
+                  <div className="knowledge-resolution-boundary">
+                    <strong>身份迁移边界</strong>
+                    <p>拆分/合并会改写 KP transition 与 Evidence 投影，必须走专门的身份迁移流程；本待确认队列只执行 revision-checked resolve/dismiss。</p>
+                  </div>
+                  <footer>
+                    <button type="button" onClick={() => setResolutionReview('dismiss')}>忽略此项</button>
+                    <button type="button" className="primary" disabled={!resolutionForm.canonicalForm.trim()} onClick={() => setResolutionReview('resolve')}>检查并确认归属</button>
+                  </footer>
+                </div>
+              )}
+            </TaskWorkbench>
+          </section>
         ) : (
           <div className="knowledge-workbench">
             <aside className="surface knowledge-results">
@@ -184,7 +392,8 @@ export function KnowledgePointsPage() {
                     className={selectedPointId === result.id ? 'selected' : ''}
                     onClick={() => {
                       setSelectedPointId(result.id);
-                      setUnresolvedText('');
+                      setResolutionMode(false);
+                      setSelectedCaseId(null);
                     }}
                   >
                     <span>{languageLabels[result.language]} · {kindLabels[result.kind]}</span>
@@ -196,8 +405,7 @@ export function KnowledgePointsPage() {
             </aside>
 
             <main className="surface knowledge-point-panel">
-              {!point && !unresolvedText && <div className="knowledge-placeholder"><BookOpenCheck aria-hidden="true" /><h2>选择或提交一个知识点</h2><p>这里会显示规范形、相关词形和来源证据。</p></div>}
-              {unresolvedText && <div className="knowledge-unresolved"><AlertCircle aria-hidden="true" /><p className="eyebrow">UNRESOLVED</p><h2>{unresolvedText}</h2><p>确定性分析无法安全归属。它已进入待确认，不会被强行附着到错误知识点。</p></div>}
+              {!point && <div className="knowledge-placeholder"><BookOpenCheck aria-hidden="true" /><h2>选择或提交一个知识点</h2><p>这里会显示规范形、相关词形和来源证据。</p></div>}
               {point && (
                 <>
                   <header className="knowledge-point-head">
@@ -234,6 +442,35 @@ export function KnowledgePointsPage() {
           </div>
         )}
       </div>
+
+      {resolutionReview && selectedCase && (
+        <div className="knowledge-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResolutionReview(null); }}>
+          <section className="knowledge-resolution-review" role="alertdialog" aria-modal="true" aria-label="确认知识点裁决">
+            <button className="icon-button" type="button" aria-label="返回待确认项" onClick={() => setResolutionReview(null)}><X aria-hidden="true" /></button>
+            <ReviewSummary
+              title={resolutionReview === 'resolve' ? '确认知识点归属' : '确认忽略待确认项'}
+              description="该命令只写入 KG resolution event 与投影，不会写 FSRS 或学习计划。"
+              items={[
+                { id: 'input', label: '待确认输入', value: selectedCase.normalizedInput },
+                { id: 'identity', label: '目标身份', value: resolutionReview === 'resolve' ? resolutionForm.canonicalForm : '不归属' },
+                { id: 'language', label: '语言 / 类型', value: `${languageLabels[selectedCase.language]} · ${kindLabels[selectedCase.kindHint]}` },
+                { id: 'revision', label: 'Case revision', value: selectedCase.revision },
+                { id: 'candidates', label: '候选数量', value: selectedCase.candidates.length },
+                { id: 'effect', label: '调度影响', value: '无 FSRS 写入', tone: 'success' },
+              ]}
+              warnings={[
+                '原始 lookup 事实保持不变，裁决通过 append-only event 留痕。',
+                ...(selectedCase.candidates.some((candidate) => candidate.source === 'llm-proposal')
+                  ? ['存在 AI proposal；本次仍需以人工选择作为唯一接受依据。']
+                  : []),
+              ]}
+              actionLabel={resolutionReview === 'resolve' ? `确认归属为 ${resolutionForm.canonicalForm}` : '确认忽略此项'}
+              actionDisabled={resolutionMutation.isPending || (resolutionReview === 'resolve' && !resolutionForm.canonicalForm.trim())}
+              onAction={() => resolutionMutation.mutate({ resolutionCase: selectedCase, action: resolutionReview })}
+            />
+          </section>
+        </div>
+      )}
 
       {confirmItem && (
         <div className="knowledge-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmItem(null); }}>
