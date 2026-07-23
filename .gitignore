@@ -1,4 +1,6 @@
 node_modules
+experiments/cloudscape-workflow/node_modules/
+experiments/cloudscape-workflow/dist/
 npm-debug.log*
 server.log
 .DS_Store

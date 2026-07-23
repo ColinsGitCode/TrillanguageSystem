@@ -45,6 +45,8 @@ SaaS 化只改造页面组织、人工确认、发布反馈和学习体验，不
 
 ### 1.1 Cloudscape 采用方式
 
+2026-07-23 DS-W1 POC 已完成。生产决策为：**不引入 Cloudscape 组件包和 global styles；吸收 AppLayout、Flashbar、Steps、Tools 与 Review 的信息架构和可访问性模式，由 Three LANS typed primitives 包装实现。** 版本、体积和逐组件采用表见 `Docs/TestReports/Cloudscape_Workflow_POC_Assessment_20260723.md`。
+
 1. 采用 Cloudscape Foundation 作为信息架构、密度、层级、反馈和无障碍的参考基线；
 2. 采用 `AppLayoutToolbar` 的概念模型：左侧导航、中央工作区、右侧 Tools、Drawer、Split Panel 和全局反馈；
 3. 当前 `ProductShell` 演进为应用级布局协调器，不立即整体替换；

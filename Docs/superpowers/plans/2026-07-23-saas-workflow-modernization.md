@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**In Progress · 用户已确认全部 35 项任务，Gate 0 执行中**
+> 状态：**In Progress · Gate 0 与 DS-W1 已完成，DS-W2 执行中**
 >
 > 日期：2026-07-23
 >
@@ -1236,7 +1236,7 @@ docker compose -p three_lans_system ps
 - [x] 用户确认本执行计划；
 - [x] Gate 0 开始执行；
 - [x] TC-D2 workflow amendment Accepted；
-- [ ] Cloudscape POC 采用表确认；
+- [x] Cloudscape POC 采用表确认；
 - [ ] DS-W2 教材迁移验收；
 - [ ] DS-W3 横向扩展验收；
 - [ ] Final 完整验收。

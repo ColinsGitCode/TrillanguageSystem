@@ -27,6 +27,7 @@ module.exports = [
       'codex_prompt/**',
       'database/**',       // raw SQL only
       'prompts/**',
+      'experiments/**',   // isolated POCs have their own build contract
     ],
   },
   js.configs.recommended,

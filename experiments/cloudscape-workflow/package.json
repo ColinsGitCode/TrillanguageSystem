@@ -1,0 +1,17 @@
+{
+  "name": "three-lans-cloudscape-workflow-poc",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@cloudscape-design/components": "3.0.1333",
+    "@vitejs/plugin-react": "5.1.4",
+    "vite": "7.3.6",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {}
+}
