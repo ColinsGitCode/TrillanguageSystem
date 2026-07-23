@@ -2,3 +2,9 @@ node_modules
 npm-debug.log*
 .DS_Store
 .git
+.env
+build
+data
+logs
+output
+trilingual_records

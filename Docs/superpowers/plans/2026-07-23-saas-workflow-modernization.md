@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**In Progress · Gate 0、DS-W1、DS-W2 与 DS-W3 已完成，进入 Final**
+> 状态：**Completed / Accepted · 35 项全部完成（2026-07-23）**
 >
 > 日期：2026-07-23
 >
@@ -147,12 +147,12 @@ Task 1-3
 
 **步骤**：
 
-- [ ] 记录 1280x800 与 1440x900 教材空态、draft、verified、published 状态；
-- [ ] 固定现有导入、verify、publish、TTS、标红、派生卡和互斥播放行为；
-- [ ] 固定 ProductShell 展开/折叠、主题、健康轮询和键盘焦点；
-- [ ] 记录当前 `TextbookCoursesPage.tsx`、`ProductShell.tsx` 和 CSS 行数；
-- [ ] 对动态时间、job id 和 hash 使用最小 mask；
-- [ ] 不新增移动端截图。
+- [x] 记录 1280x800 与 1440x900 教材空态、draft、verified、published 状态；
+- [x] 固定现有导入、verify、publish、TTS、标红、派生卡和互斥播放行为；
+- [x] 固定 ProductShell 展开/折叠、主题、健康轮询和键盘焦点；
+- [x] 记录当前 `TextbookCoursesPage.tsx`、`ProductShell.tsx` 和 CSS 行数；
+- [x] 对动态时间、job id 和 hash 使用最小 mask；
+- [x] 不新增移动端截图。
 
 **测试**：
 
@@ -183,12 +183,12 @@ npx playwright test tests/e2e/ui-quality-regression.spec.js tests/e2e/ui-visual-
 
 **步骤**：
 
-- [ ] 断言教材页面不存在截图文件输入、OCR 按钮或自动配对入口；
-- [ ] 断言空态引导用户通过 Codex Skill 创建 Track；
-- [ ] 断言 intake 只接受或展示 Git 外 Manifest 身份/hash；
-- [ ] 断言 fixture 的 `import.skillName` 为 `import-textbook-track`；
-- [ ] 断言 imported draft 已包含 EN/JA/ZH/ruby/confidence；
-- [ ] 断言未经 verify 不创建 generation、Study Item 或 Review Event。
+- [x] 断言教材页面不存在截图文件输入、OCR 按钮或自动配对入口；
+- [x] 断言空态引导用户通过 Codex Skill 创建 Track；
+- [x] 断言 intake 只接受或展示 Git 外 Manifest 身份/hash；
+- [x] 断言 fixture 的 `import.skillName` 为 `import-textbook-track`；
+- [x] 断言 imported draft 已包含 EN/JA/ZH/ruby/confidence；
+- [x] 断言未经 verify 不创建 generation、Study Item 或 Review Event。
 
 **测试**：
 
@@ -218,15 +218,15 @@ npx playwright test tests/e2e/textbooks.spec.js
 
 **步骤**：
 
-- [ ] 定义 Stage：`intake / review / release / processing / complete`；
-- [ ] 定义 URL：`/textbooks?track=<id>&stage=<stage>&task=<expressionRevisionId>&operation=<id>`；
-- [ ] 只把 ID、Stage、筛选和选中项放 URL，不放教材原文；
-- [ ] 定义非法或过期参数的归一化和回退规则；
-- [ ] 定义 Track/revision/review/operation 到 Stage 的映射；
-- [ ] 明确 intake 对已导入 Track 默认完成，页面首次进入 review；
-- [ ] 定义浏览器后退、刷新、深链接和离开保护；
-- [ ] 定义 `TextbookWorkflowViewModel` 的字段、来源和可执行命令；
-- [ ] 把原型中的演示状态与真实 contract 对照。
+- [x] 定义 Stage：`intake / review / release / processing / complete`；
+- [x] 定义 URL：`/textbooks?track=<id>&stage=<stage>&task=<expressionRevisionId>&operation=<id>`；
+- [x] 只把 ID、Stage、筛选和选中项放 URL，不放教材原文；
+- [x] 定义非法或过期参数的归一化和回退规则；
+- [x] 定义 Track/revision/review/operation 到 Stage 的映射；
+- [x] 明确 intake 对已导入 Track 默认完成，页面首次进入 review；
+- [x] 定义浏览器后退、刷新、深链接和离开保护；
+- [x] 定义 `TextbookWorkflowViewModel` 的字段、来源和可执行命令；
+- [x] 把原型中的演示状态与真实 contract 对照。
 
 **测试/审查**：
 
@@ -254,16 +254,16 @@ npx playwright test tests/e2e/textbooks.spec.js
 
 **必须决策**：
 
-- [ ] 是否新增 `textbook_expression_review_states` 作为可重建/可更新确认投影；
-- [ ] review 状态是否固定为 `pending / needs_attention / confirmed`；
-- [ ] 如何记录 reviewer、confirmed time、revision 和原因，但不复制正文；
-- [ ] copy-on-write PATCH 如何生成新的 Track revision；
-- [ ] 旧 review state 如何在新 revision 中继承或失效；
-- [ ] 是否新增 `textbook_operations` 与 `textbook_operation_events`；
-- [ ] operation kind、状态、幂等键、payload hash、step 和结果 contract；
-- [ ] publish 成功、TTS 局部失败时如何保持已提交事实；
-- [ ] restart recovery、局部 retry 和取消边界；
-- [ ] operation 日志不得包含教材原文。
+- [x] 是否新增 `textbook_expression_review_states` 作为可重建/可更新确认投影；
+- [x] review 状态是否固定为 `pending / needs_attention / confirmed`；
+- [x] 如何记录 reviewer、confirmed time、revision 和原因，但不复制正文；
+- [x] copy-on-write PATCH 如何生成新的 Track revision；
+- [x] 旧 review state 如何在新 revision 中继承或失效；
+- [x] 是否新增 `textbook_operations` 与 `textbook_operation_events`；
+- [x] operation kind、状态、幂等键、payload hash、step 和结果 contract；
+- [x] publish 成功、TTS 局部失败时如何保持已提交事实；
+- [x] restart recovery、局部 retry 和取消边界；
+- [x] operation 日志不得包含教材原文。
 
 **门禁**：
 
@@ -291,12 +291,12 @@ npx playwright test tests/e2e/textbooks.spec.js
 
 **检查**：
 
-- [ ] Task 1 基线重复通过；
-- [ ] Task 2 Skill 边界测试通过；
-- [ ] Task 3 状态/URL/view-model contract 已确认；
-- [ ] Task 4 TC-D2 amendment 已 Accepted；
-- [ ] 生产页面、schema 和 API 尚未因 POC 改动；
-- [ ] 工作树只含 Gate 0 范围变更。
+- [x] Task 1 基线重复通过；
+- [x] Task 2 Skill 边界测试通过；
+- [x] Task 3 状态/URL/view-model contract 已确认；
+- [x] Task 4 TC-D2 amendment 已 Accepted；
+- [x] 生产页面、schema 和 API 尚未因 POC 改动；
+- [x] 工作树只含 Gate 0 范围变更。
 
 **测试**：
 
@@ -330,12 +330,12 @@ npx playwright test tests/e2e/app-shell.spec.js tests/e2e/textbooks.spec.js
 
 **步骤**：
 
-- [ ] 独立安装并锁定待评估 Cloudscape 版本；
-- [ ] 不修改根 `package.json`；
-- [ ] 创建包含 AppLayout、Wizard、SideNavigation、Flashbar、Progressive Steps 的最小场景；
-- [ ] 创建同场景的 Three LANS 自研原语版本；
-- [ ] 禁止加载 Cloudscape global styles 到主应用；
-- [ ] 输出构建体积、CSS 数量、运行时依赖和 license 清单。
+- [x] 独立安装并锁定待评估 Cloudscape 版本；
+- [x] 不修改根 `package.json`；
+- [x] 创建包含 AppLayout、Wizard、SideNavigation、Flashbar、Progressive Steps 的最小场景；
+- [x] 创建同场景的 Three LANS 自研原语版本；
+- [x] 禁止加载 Cloudscape global styles 到主应用；
+- [x] 输出构建体积、CSS 数量、运行时依赖和 license 清单。
 
 **测试**：
 
@@ -366,13 +366,13 @@ node scripts/tests/cloudscapeWorkflowPoc.mjs
 
 **步骤**：
 
-- [ ] 对比布局密度、surface、border、focus、status、spacing 和 typography；
-- [ ] 验证 Open Sans/global styles 是否覆盖现有字体与 tokens；
-- [ ] 测量 1280/1440 桌面布局；
-- [ ] 验证 dark theme 与 reduced motion；
-- [ ] 记录 Cloudscape responsive 行为，但不纳入移动端验收；
-- [ ] 建立 token 映射表和禁止映射清单；
-- [ ] 记录组件包、CSS 和 gzip 体积差异。
+- [x] 对比布局密度、surface、border、focus、status、spacing 和 typography；
+- [x] 验证 Open Sans/global styles 是否覆盖现有字体与 tokens；
+- [x] 测量 1280/1440 桌面布局；
+- [x] 验证 dark theme 与 reduced motion；
+- [x] 记录 Cloudscape responsive 行为，但不纳入移动端验收；
+- [x] 建立 token 映射表和禁止映射清单；
+- [x] 记录组件包、CSS 和 gzip 体积差异。
 
 **验收**：
 
@@ -399,15 +399,15 @@ node scripts/tests/cloudscapeWorkflowPoc.mjs
 
 **步骤**：
 
-- [ ] 定义 `WorkflowStage`、`WorkflowTask`、`WorkflowCommand`；
-- [ ] 定义 save 状态、operation 状态和 error summary；
-- [ ] 定义 Stage 可达性与跳转原因；
-- [ ] 定义领域数据与 UI 派生数据边界；
-- [ ] 禁止 reducer 直接调用 API；
-- [ ] 禁止组件根据文案猜状态。
-- [ ] 仅在 `WORKFLOW_POC_ENABLED=1` 时把 `/workflow-poc` 交给 React Router；
-- [ ] 非 POC 环境访问 `/workflow-poc` 必须保持 404；
-- [ ] POC route 只消费合成数据，不访问业务 API。
+- [x] 定义 `WorkflowStage`、`WorkflowTask`、`WorkflowCommand`；
+- [x] 定义 save 状态、operation 状态和 error summary；
+- [x] 定义 Stage 可达性与跳转原因；
+- [x] 定义领域数据与 UI 派生数据边界；
+- [x] 禁止 reducer 直接调用 API；
+- [x] 禁止组件根据文案猜状态。
+- [x] 仅在 `WORKFLOW_POC_ENABLED=1` 时把 `/workflow-poc` 交给 React Router；
+- [x] 非 POC 环境访问 `/workflow-poc` 必须保持 404；
+- [x] POC route 只消费合成数据，不访问业务 API。
 
 **测试**：
 
@@ -433,12 +433,12 @@ node scripts/tests/cloudscapeWorkflowPoc.mjs
 
 **步骤**：
 
-- [ ] 支持 breadcrumb、对象身份、save 状态和退出动作；
-- [ ] 支持 compact Stage 导航、完成/当前/锁定/失败；
-- [ ] Stage 点击只触发外部 callback，不拥有领域命令；
-- [ ] 切换 Stage 后 H1 接收焦点；
-- [ ] 保证 1280 和 1440 无水平溢出；
-- [ ] 不实现移动抽屉。
+- [x] 支持 breadcrumb、对象身份、save 状态和退出动作；
+- [x] 支持 compact Stage 导航、完成/当前/锁定/失败；
+- [x] Stage 点击只触发外部 callback，不拥有领域命令；
+- [x] 切换 Stage 后 H1 接收焦点；
+- [x] 保证 1280 和 1440 无水平溢出；
+- [x] 不实现移动抽屉。
 
 **测试**：
 
@@ -465,12 +465,12 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 支持全部、待确认、低置信度、已确认筛选；
-- [ ] 支持当前 Task 深链接和焦点恢复；
-- [ ] 支持 Task 删除/确认后移动到下一项；
-- [ ] Tools 显示来源、确定性检查、活动和技术详情；
-- [ ] 默认密度适合桌面扫描，详情区保持舒适阅读；
-- [ ] 不使用卡片嵌套卡片。
+- [x] 支持全部、待确认、低置信度、已确认筛选；
+- [x] 支持当前 Task 深链接和焦点恢复；
+- [x] 支持 Task 删除/确认后移动到下一项；
+- [x] Tools 显示来源、确定性检查、活动和技术详情；
+- [x] 默认密度适合桌面扫描，详情区保持舒适阅读；
+- [x] 不使用卡片嵌套卡片。
 
 **验收**：
 
@@ -494,12 +494,12 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 支持 `clean / dirty / saving / saved / failed / conflict`；
-- [ ] 保存失败保留用户输入；
-- [ ] Error Summary 聚焦并跳转字段；
-- [ ] revision conflict 提供刷新和比较入口；
-- [ ] route、关闭标签页和浏览器返回均有未保存保护；
-- [ ] 成功保存后不抢夺当前输入焦点。
+- [x] 支持 `clean / dirty / saving / saved / failed / conflict`；
+- [x] 保存失败保留用户输入；
+- [x] Error Summary 聚焦并跳转字段；
+- [x] revision conflict 提供刷新和比较入口；
+- [x] route、关闭标签页和浏览器返回均有未保存保护；
+- [x] 成功保存后不抢夺当前输入焦点。
 
 **验收**：
 
@@ -520,11 +520,11 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 显示范围、数量、diff、警告、来源和不可逆影响；
-- [ ] 支持 Change link 返回对应 Stage/Task；
-- [ ] 主按钮文案包含具体动作和数量；
-- [ ] Review 只展示服务端 preview，不自行重算；
-- [ ] preview revision 变化时阻止执行。
+- [x] 显示范围、数量、diff、警告、来源和不可逆影响；
+- [x] 支持 Change link 返回对应 Stage/Task；
+- [x] 主按钮文案包含具体动作和数量；
+- [x] Review 只展示服务端 preview，不自行重算；
+- [x] preview revision 变化时阻止执行。
 
 **验收**：合成教材发布和学习计划缩小范围两种场景均通过。
 
@@ -543,12 +543,12 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 支持 queued/running/succeeded/partially_failed/failed/cancelled；
-- [ ] 显示 step 状态、公开错误码和可重试性；
-- [ ] 只重试失败 step，不重复成功写入；
-- [ ] 页面重载后通过 operation id 恢复；
-- [ ] Activity 只展示公开摘要；
-- [ ] `aria-live=polite` 宣告完成，不主动抢焦点。
+- [x] 支持 queued/running/succeeded/partially_failed/failed/cancelled；
+- [x] 显示 step 状态、公开错误码和可重试性；
+- [x] 只重试失败 step，不重复成功写入；
+- [x] 页面重载后通过 operation id 恢复；
+- [x] Activity 只展示公开摘要；
+- [x] `aria-live=polite` 宣告完成，不主动抢焦点。
 
 **验收**：重试和刷新不会创建重复 operation 或重复领域事实。
 
@@ -572,13 +572,13 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 对 AppLayout、SideNavigation、Flashbar、Wizard、Progressive Steps 逐项裁决；
-- [ ] 标注“直接使用 / 包装使用 / 保持自研”；
-- [ ] 若采用，固定版本、license、单组件 import 和测试工具；
-- [ ] 若拒绝，从根依赖和构建中彻底移除；
-- [ ] 删除临时 `/workflow-poc` route，并增加生产 404 回归；
-- [ ] 运行 bundle 前后对比；
-- [ ] 用户确认采用表。
+- [x] 对 AppLayout、SideNavigation、Flashbar、Wizard、Progressive Steps 逐项裁决；
+- [x] 标注“直接使用 / 包装使用 / 保持自研”；
+- [x] 若采用，固定版本、license、单组件 import 和测试工具；
+- [x] 若拒绝，从根依赖和构建中彻底移除；
+- [x] 删除临时 `/workflow-poc` route，并增加生产 404 回归；
+- [x] 运行 bundle 前后对比；
+- [x] 用户确认采用表。
 
 **门禁**：未完成采用表，不进入 DS-W2。
 
@@ -629,13 +629,13 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 
 **步骤**：
 
-- [ ] 按 Accepted amendment 创建 review projection；
-- [ ] 创建 textbook operation 与 append-only event 表；
-- [ ] 增加 status、revision、idempotency 和 FK/CHECK；
-- [ ] 建立运行中唯一约束和查询索引；
-- [ ] 新安装与存量迁移结果一致；
-- [ ] test reset 正确清理测试数据；
-- [ ] 不修改既有 expression revision 不可变 trigger。
+- [x] 按 Accepted amendment 创建 review projection；
+- [x] 创建 textbook operation 与 append-only event 表；
+- [x] 增加 status、revision、idempotency 和 FK/CHECK；
+- [x] 建立运行中唯一约束和查询索引；
+- [x] 新安装与存量迁移结果一致；
+- [x] test reset 正确清理测试数据；
+- [x] 不修改既有 expression revision 不可变 trigger。
 
 **测试**：
 
@@ -658,14 +658,14 @@ node --test tests/unit/migrationRunner.test.js tests/unit/databaseService.test.j
 
 **步骤**：
 
-- [ ] 读取 revision、expression、review state 和 completion；
-- [ ] PATCH 单表达时复制未变内容并创建新 Track revision；
-- [ ] 重算 per-direction hash 和 Track content hash；
-- [ ] 继承未变 expression 的确认状态；
-- [ ] 修改过的 expression 回到 pending/needs_attention；
-- [ ] expected revision 不匹配返回稳定冲突；
-- [ ] 全部写入在单事务中完成；
-- [ ] 禁止原地 UPDATE expression revision。
+- [x] 读取 revision、expression、review state 和 completion；
+- [x] PATCH 单表达时复制未变内容并创建新 Track revision；
+- [x] 重算 per-direction hash 和 Track content hash；
+- [x] 继承未变 expression 的确认状态；
+- [x] 修改过的 expression 回到 pending/needs_attention；
+- [x] expected revision 不匹配返回稳定冲突；
+- [x] 全部写入在单事务中完成；
+- [x] 禁止原地 UPDATE expression revision。
 
 **验收**：
 
@@ -687,13 +687,13 @@ node --test tests/unit/migrationRunner.test.js tests/unit/databaseService.test.j
 
 **步骤**：
 
-- [ ] enqueue、claim、append event、finish 和 retry；
-- [ ] operation payload 使用 hash 和 ID，不复制教材正文；
-- [ ] publish/TTS/sync step 保持幂等；
-- [ ] 服务启动时恢复 stale running；
-- [ ] shutdown 等待当前 step 或安全释放；
-- [ ] 局部失败只重试失败 step；
-- [ ] 已成功 publish 不因 TTS 失败回滚。
+- [x] enqueue、claim、append event、finish 和 retry；
+- [x] operation payload 使用 hash 和 ID，不复制教材正文；
+- [x] publish/TTS/sync step 保持幂等；
+- [x] 服务启动时恢复 stale running；
+- [x] shutdown 等待当前 step 或安全释放；
+- [x] 局部失败只重试失败 step；
+- [x] 已成功 publish 不因 TTS 失败回滚。
 
 **验收**：
 
@@ -727,13 +727,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] workflow endpoint 返回服务端 view-model；
-- [ ] PATCH 必须携带 expected revision；
-- [ ] review 命令必须携带 expression revision；
-- [ ] operation 创建必须携带 idempotency key 和 preview revision；
-- [ ] 统一 stable error codes；
-- [ ] 日志只记录 ID、计数、hash 前缀和 error code；
-- [ ] API-only harness 全覆盖。
+- [x] workflow endpoint 返回服务端 view-model；
+- [x] PATCH 必须携带 expected revision；
+- [x] review 命令必须携带 expression revision；
+- [x] operation 创建必须携带 idempotency key 和 preview revision；
+- [x] 统一 stable error codes；
+- [x] 日志只记录 ID、计数、hash 前缀和 error code；
+- [x] API-only harness 全覆盖。
 
 **验收**：
 
@@ -754,12 +754,12 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 定义 workflow/review/operation API 类型；
-- [ ] adapter 把服务端 view-model 转成共享 Workflow 类型；
-- [ ] 不在组件内解析 raw JSON；
-- [ ] ApiError 映射 revision conflict、operation failure 和 review incomplete；
-- [ ] query key 包含 Track/revision/operation；
-- [ ] mutation 后只失效必要 query。
+- [x] 定义 workflow/review/operation API 类型；
+- [x] adapter 把服务端 view-model 转成共享 Workflow 类型；
+- [x] 不在组件内解析 raw JSON；
+- [x] ApiError 映射 revision conflict、operation failure 和 review incomplete；
+- [x] query key 包含 Track/revision/operation；
+- [x] mutation 后只失效必要 query。
 
 **验收**：`TextbookCoursesPage` 不再自行推断 Stage、确认数量或 operation 状态。
 
@@ -776,12 +776,12 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 解析并规范化 track/stage/task/operation；
-- [ ] 选择 Track/Task 时 replace 或 push 符合 contract；
-- [ ] 刷新恢复当前上下文；
-- [ ] 后退/前进恢复 Stage 与 Task；
-- [ ] 过期 Task 回退到首个待确认项；
-- [ ] URL 不包含原文、路径或 hash。
+- [x] 解析并规范化 track/stage/task/operation；
+- [x] 选择 Track/Task 时 replace 或 push 符合 contract；
+- [x] 刷新恢复当前上下文；
+- [x] 后退/前进恢复 Stage 与 Task；
+- [x] 过期 Task 回退到首个待确认项；
+- [x] URL 不包含原文、路径或 hash。
 
 **验收**：复制 URL 到新标签页能恢复相同工作上下文。
 
@@ -803,12 +803,12 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 页面只协调 query/mutation/route，不渲染所有细节；
-- [ ] 复用 DS-W1 共享原语；
-- [ ] 各组件通过显式 props 接收领域命令；
-- [ ] 现有 OfficialAudio、highlight 和 selection 行为不丢失；
-- [ ] 去除重复消息、重复标题和不必要 surface；
-- [ ] 保持 desktop-only。
+- [x] 页面只协调 query/mutation/route，不渲染所有细节；
+- [x] 复用 DS-W1 共享原语；
+- [x] 各组件通过显式 props 接收领域命令；
+- [x] 现有 OfficialAudio、highlight 和 selection 行为不丢失；
+- [x] 去除重复消息、重复标题和不必要 surface；
+- [x] 保持 desktop-only。
 
 **验收**：
 
@@ -833,13 +833,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] Skill 保持 dry-run 后停下并请求用户确认；
-- [ ] 用户确认后，Skill 通过正式 import API 创建 draft；
-- [ ] Skill 返回 Track ID 和 `/textbooks?track=<id>&stage=review`；
-- [ ] 页面正常入口不要求用户粘贴截图、绝对路径或 OCR 结果；
-- [ ] 技术 Manifest intake 仅保留为受控高级入口或操作详情；
-- [ ] 无 Track 空态明确提示在 Codex 中运行 Skill；
-- [ ] 页面首屏显示“Skill 已完成解析，本页负责人审与学习”。
+- [x] Skill 保持 dry-run 后停下并请求用户确认；
+- [x] 用户确认后，Skill 通过正式 import API 创建 draft；
+- [x] Skill 返回 Track ID 和 `/textbooks?track=<id>&stage=review`；
+- [x] 页面正常入口不要求用户粘贴截图、绝对路径或 OCR 结果；
+- [x] 技术 Manifest intake 仅保留为受控高级入口或操作详情；
+- [x] 无 Track 空态明确提示在 Codex 中运行 Skill；
+- [x] 页面首屏显示“Skill 已完成解析，本页负责人审与学习”。
 
 **验收**：
 
@@ -860,13 +860,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 默认优先显示 low-confidence、non-literal、missing ruby、pairing warning；
-- [ ] 支持全部、待确认、需注意、已确认筛选；
-- [ ] 列表显示序号、EN/JA 摘要和状态；
-- [ ] 详情预填 EN/JA/ZH/ruby/phrases/grammar；
-- [ ] official-source 与 AI-derived/user-edited 有明显来源标识；
-- [ ] Context Tools 显示 source span、hash、provenance 和确定性检查；
-- [ ] 不把每条表达做成独立 Wizard。
+- [x] 默认优先显示 low-confidence、non-literal、missing ruby、pairing warning；
+- [x] 支持全部、待确认、需注意、已确认筛选；
+- [x] 列表显示序号、EN/JA 摘要和状态；
+- [x] 详情预填 EN/JA/ZH/ruby/phrases/grammar；
+- [x] official-source 与 AI-derived/user-edited 有明显来源标识；
+- [x] Context Tools 显示 source span、hash、provenance 和确定性检查；
+- [x] 不把每条表达做成独立 Wizard。
 
 **验收**：
 
@@ -888,13 +888,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 用户修改产生 dirty 状态；
-- [ ] 保存调用 copy-on-write PATCH 并接收新 revision；
-- [ ] 保存成功更新 URL/query，不丢当前 Task；
-- [ ] 409 conflict 显示 Error Summary 和重新载入；
-- [ ] 确认操作绑定准确 expression revision；
-- [ ] 修改已确认表达后自动回到 needs_attention；
-- [ ] 离开保护覆盖路由和标签关闭。
+- [x] 用户修改产生 dirty 状态；
+- [x] 保存调用 copy-on-write PATCH 并接收新 revision；
+- [x] 保存成功更新 URL/query，不丢当前 Task；
+- [x] 409 conflict 显示 Error Summary 和重新载入；
+- [x] 确认操作绑定准确 expression revision；
+- [x] 修改已确认表达后自动回到 needs_attention；
+- [x] 离开保护覆盖路由和标签关闭。
 
 **验收**：
 
@@ -915,12 +915,12 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 使用服务端 publish preview；
-- [ ] 展示表达数、Study Item 数、官方音频、缺失 TTS 和计划影响；
-- [ ] 未确认表达阻止发布并链接回对应 Task；
-- [ ] 主动作写“发布 N 条表达”；
-- [ ] 携带 expected track/plan/review revision；
-- [ ] preview 过期时阻止提交并刷新。
+- [x] 使用服务端 publish preview；
+- [x] 展示表达数、Study Item 数、官方音频、缺失 TTS 和计划影响；
+- [x] 未确认表达阻止发布并链接回对应 Task；
+- [x] 主动作写“发布 N 条表达”；
+- [x] 携带 expected track/plan/review revision；
+- [x] preview 过期时阻止提交并刷新。
 
 **验收**：Review Summary 与最终 operation 执行范围逐项一致。
 
@@ -938,13 +938,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 发布命令返回 operation ID；
-- [ ] 轮询 operation，页面关闭后服务端继续；
-- [ ] 显示 publish/materialize/TTS/sync step；
-- [ ] TTS 局部失败只重试失败 step；
-- [ ] 成功 step 不重复执行；
-- [ ] 完成摘要显示 published expressions、Study Items、TTS 和 official Track；
-- [ ] 失败后仍可返回教材浏览和已成功内容。
+- [x] 发布命令返回 operation ID；
+- [x] 轮询 operation，页面关闭后服务端继续；
+- [x] 显示 publish/materialize/TTS/sync step；
+- [x] TTS 局部失败只重试失败 step；
+- [x] 成功 step 不重复执行；
+- [x] 完成摘要显示 published expressions、Study Items、TTS 和 official Track；
+- [x] 失败后仍可返回教材浏览和已成功内容。
 
 **验收**：
 
@@ -967,13 +967,13 @@ POST  /api/textbooks/operations/:id/retry
 
 **步骤**：
 
-- [ ] 官方 Track 播放器在 review/learning context 可用；
-- [ ] 单句 EN/JA TTS 与官方 Track 互斥；
-- [ ] 已发布内容保留选区标红；
-- [ ] 派生三语卡/语法卡继续使用规范化去重关系；
-- [ ] 完成页链接到教材浏览和学习计划；
-- [ ] `/learn/plan?textbookTrack=<id>` 可预选该 Track，但不自动保存；
-- [ ] daily new limit 仍由学习计划控制。
+- [x] 官方 Track 播放器在 review/learning context 可用；
+- [x] 单句 EN/JA TTS 与官方 Track 互斥；
+- [x] 已发布内容保留选区标红；
+- [x] 派生三语卡/语法卡继续使用规范化去重关系；
+- [x] 完成页链接到教材浏览和学习计划；
+- [x] `/learn/plan?textbookTrack=<id>` 可预选该 Track，但不自动保存；
+- [x] daily new limit 仍由学习计划控制。
 
 **验收**：
 
@@ -1166,6 +1166,8 @@ npm run test:textbooks:acceptance
 
 ## Final：完整验收与发布
 
+> 验收状态：**PASS**。完整证据见 `Docs/TestReports/SaaS_Workflow_Final_Acceptance_20260723.md`。
+
 ### Task 35：全容器重建、真实运行验收与文档封板
 
 **文件**：
@@ -1178,17 +1180,17 @@ npm run test:textbooks:acceptance
 
 **步骤**：
 
-- [ ] 备份 Docker volume 和 SQLite；
-- [ ] 重建 `three_lans_system` 全部必要容器；
-- [ ] 确认 `/api/health` 和 `http://127.0.0.1:3010`；
-- [ ] 使用合成 fixture 完成全流程；
-- [ ] 使用真实本地教材只做人工 smoke，不进入截图或日志；
-- [ ] 验证官方整轨、EN/JA TTS、标红、派生卡和学习计划；
-- [ ] 验证失败重试、刷新恢复、后退/前进和离开保护；
-- [ ] 验证数据库无重复 Study Item、Review Event 或 operation；
-- [ ] 验证 rollback 和 feature flag；
-- [ ] 更新文档状态为 Implemented/Accepted；
-- [ ] 确认工作树和本地/远端提交一致。
+- [x] 备份 Docker volume 和 SQLite；
+- [x] 重建 `three_lans_system` 全部必要容器；
+- [x] 确认 `/api/health` 和 `http://127.0.0.1:3010`；
+- [x] 使用合成 fixture 完成全流程；
+- [x] 使用真实本地教材只做人工 smoke，不进入截图或日志；
+- [x] 验证官方整轨、EN/JA TTS、标红、派生卡和学习计划；
+- [x] 验证失败重试、刷新恢复、后退/前进和离开保护；
+- [x] 验证数据库无重复 Study Item、Review Event 或 operation；
+- [x] 验证 rollback 和 feature flag；
+- [x] 更新文档状态为 Implemented/Accepted；
+- [x] 确认工作树和本地/远端提交一致。
 
 **完整测试**：
 
@@ -1258,4 +1260,4 @@ docker compose -p three_lans_system ps
 - [x] Cloudscape POC 采用表确认；
 - [x] DS-W2 教材迁移验收；
 - [x] DS-W3 横向扩展验收；
-- [ ] Final 完整验收。
+- [x] Final 完整验收。

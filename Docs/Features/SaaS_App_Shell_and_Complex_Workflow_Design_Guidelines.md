@@ -1,6 +1,6 @@
 # SaaS App Shell 与复杂长流程设计及开发规范
 
-> 状态：**Draft · 待可视化原型确认**
+> 状态：**Implemented / Accepted · DS-W0-DS-W3 与 Final 已于 2026-07-23 验收**
 >
 > 日期：2026-07-23
 >
@@ -497,30 +497,30 @@ type WorkflowStageView = {
 - [x] 完成 Cloudscape/Foundation 与复杂长流程调研；
 - [x] 建立本文 Draft；
 - [x] 完成教材课程桌面可视化原型；
-- [ ] 用户确认 Shell、Stage、Task、Tools、Review 和 Job 结构；
+- [x] 用户确认 Shell、Stage、Task、Tools、Review 和 Job 结构。
 
 ### DS-W1：共享原语 POC
 
-- 在独立 POC 中实现 `WorkflowShell`、`StageNavigation`、`ReviewSummary`、`AsyncOperationPanel`；
-- 不改数据库，不改教材正式状态机；
-- 对比自研原语与 Cloudscape 组件包的体积、主题冲突、测试和可维护性；
-- 形成“直接使用 / 包装使用 / 保持自研”的组件决策表。
+- [x] 在独立 POC 中实现 `WorkflowShell`、`StageNavigation`、`ReviewSummary`、`AsyncOperationPanel`；
+- [x] 不改数据库，不改教材正式状态机；
+- [x] 对比自研原语与 Cloudscape 组件包的体积、主题冲突、测试和可维护性；
+- [x] 形成“直接使用 / 包装使用 / 保持自研”的组件决策表。
 
 ### DS-W2：教材课程迁移
 
-- 拆分 `TextbookCoursesPage.tsx`；
-- URL 化 Track/Stage/Task；
-- 统一保存、错误、发布检查和后台处理体验；
-- 保持「Codex Skill 外部解析，页面人工确认与学习」，不新增教材截图上传或 OCR 流程；
-- 保留 TC-D0/TC-D2 的版权、人工确认、媒体和学习接入边界；
-- 完成桌面 E2E、visual、API 与回归。
+- [x] 拆分 `TextbookCoursesPage.tsx`；
+- [x] URL 化 Track/Stage/Task；
+- [x] 统一保存、错误、发布检查和后台处理体验；
+- [x] 保持「Codex Skill 外部解析，页面人工确认与学习」，不新增教材截图上传或 OCR 流程；
+- [x] 保留 TC-D0/TC-D2 的版权、人工确认、媒体和学习接入边界；
+- [x] 完成桌面 E2E、visual、API 与回归。
 
 ### DS-W3：横向扩展
 
-- Cards Factory 接入统一异步反馈；
-- Learning Plan 接入 Review Summary；
-- KG unresolved 接入 Task workbench；
-- Review Session 只消费焦点、通知和 Session Summary 原语，不套用 Wizard。
+- [x] Cards Factory 接入统一异步反馈；
+- [x] Learning Plan 接入 Review Summary；
+- [x] KG unresolved 接入 Task workbench；
+- [x] Review Session 只消费焦点、通知和 Session Summary 原语，不套用 Wizard。
 
 ## 12. 验收门禁
 
@@ -534,7 +534,18 @@ type WorkflowStageView = {
 - [x] 原型在支持的 1280 和 1440 桌面视口无水平溢出、重叠和不可达操作；
 - [x] 本文与 TC/LA/KG Accepted 文档无领域冲突；
 - [x] 用户重申教材截图始终由 Codex Skill 解析，页面主要负责人工确认、发布和学习；
-- [ ] 实施前建立状态转移表与 API/view-model contract。
+- [x] 实施前建立状态转移表与 API/view-model contract。
+
+## 12.1 实施验收记录
+
+2026-07-23 已完成 35 项实施任务。生产实现采用 Three LANS typed primitives，不引入 Cloudscape 组件包或 global styles；Cloudscape 只作为 AppLayout、反馈、Review、Tools、异步任务和可访问性模式参考。
+
+完整验收包括：lint、TypeScript、347 项 unit、63 项 integration、React Router 架构所有权、教材 acceptance、44 项桌面 E2E/visual、7 项 smoke、Docker 全服务重建、真实 volume 只读数据不变量与真实教材页面只读 smoke。详细证据见：
+
+- `Docs/TestReports/Cloudscape_Workflow_POC_Assessment_20260723.md`；
+- `Docs/TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md`；
+- `Docs/TestReports/SaaS_Workflow_DS_W3_Acceptance_20260723.md`；
+- `Docs/TestReports/SaaS_Workflow_Final_Acceptance_20260723.md`。
 
 ## 13. 明确不做
 
