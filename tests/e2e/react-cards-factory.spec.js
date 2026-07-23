@@ -61,11 +61,32 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await page.getByTestId('react-phrase-input').fill('React 场景入队验证');
     await page.getByTestId('react-generate-button').click();
     await expect(page.getByRole('status')).toContainText('已加入共享任务队列');
+    await expect(page.getByTestId('shell-feedback')).toContainText(/生成任务 #\d+ 已加入队列/u);
+    await page.getByRole('button', { name: '后台活动' }).click();
+    await expect(page.getByRole('dialog', { name: '后台活动' })).toContainText('场景表达生成');
+    await page.getByRole('button', { name: '关闭后台活动' }).click();
     await expect.poll(async () => {
       const response = await request.get('/api/generation-jobs?limit=30');
       const jobs = (await response.json()).jobs;
       return jobs.find((job) => job.phraseNormalized === 'React 场景入队验证')?.jobType;
     }).toBe('scenario_phrase');
+  });
+
+  test('P3 restores a selected generation job from the Activity deep link', async ({ page, request }) => {
+    const phrase = `React activity deep link ${Date.now()}`;
+    const created = await request.post('/api/generation-jobs', {
+      data: { phrase, card_type: 'trilingual', source_mode: 'input' },
+    });
+    expect(created.ok()).toBeTruthy();
+    const id = (await created.json()).job.id;
+
+    await page.goto(`/?queue=1&job=${id}`);
+    const dialog = page.getByRole('dialog', { name: '队列管理' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('option', { name: new RegExp(`#${id}`) })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('react-queue-timeline')).toContainText(`#${id}`);
+    await page.getByTestId('react-queue-close').click();
+    await expect(page).not.toHaveURL(/queue=1/u);
   });
 
   test('P3 OCR uploads, cleans and fills the shared text input', async ({ page }) => {
@@ -103,6 +124,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await page.locator('.queue-job').filter({ hasText: phrase }).click();
     await expect(page.getByTestId('react-queue-timeline')).toContainText('FAILED');
     await page.getByRole('button', { name: '重试失败' }).click();
+    await expect(page.getByTestId('shell-feedback')).toContainText(/已重新加入 \d+ 个失败任务/u);
     await expect.poll(async () => {
       const response = await request.get(`/api/generation-jobs/${id}`);
       return (await response.json()).job.status;

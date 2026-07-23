@@ -5,6 +5,12 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductShell } from '../../components/ProductShell';
+import {
+  publishShellActivity,
+  publishShellFeedback,
+  readStoredActivities,
+  type ShellActivityStatus,
+} from '../../components/shell';
 import { ApiError } from '../../lib/api/client';
 import { CardModal } from '../card-modal/CardModal';
 import { factoryApi } from './factory-api';
@@ -50,6 +56,19 @@ function queueCounts(jobs: GenerationJob[]) {
   }, {} as Record<string, number>);
 }
 
+function shellStatusForJob(status: GenerationJob['status']): ShellActivityStatus {
+  if (status === 'success') return 'succeeded';
+  return status;
+}
+
+function jobActivitySummary(job: GenerationJob) {
+  if (job.status === 'queued') return `任务 #${job.id} 正在等待生成`;
+  if (job.status === 'running') return `任务 #${job.id} 正在生成`;
+  if (job.status === 'success') return `任务 #${job.id} 已生成学习卡`;
+  if (job.status === 'failed') return `任务 #${job.id} 生成失败`;
+  return `任务 #${job.id} 已取消`;
+}
+
 export function CardsFactory() {
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
@@ -58,6 +77,7 @@ export function CardsFactory() {
   const [selectedFolder, setSelectedFolder] = useState('');
   const [selectedCard, setSelectedCard] = useState<CardSelection | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [selectedQueueJobId, setSelectedQueueJobId] = useState<number | null>(null);
   const [libraryMode, setLibraryMode] = useState<'folders' | 'history'>('folders');
   const [historySearch, setHistorySearch] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
@@ -67,6 +87,8 @@ export function CardsFactory() {
   const [notice, setNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastSuccessRef = useRef(0);
+  const trackedJobIdsRef = useRef<Set<number>>(new Set());
+  const publishedJobStatusRef = useRef<Map<number, GenerationJob['status']>>(new Map());
 
   const healthQuery = useQuery({
     queryKey: ['health'], queryFn: factoryApi.health, enabled: hydrated, refetchInterval: 15_000,
@@ -113,19 +135,110 @@ export function CardsFactory() {
     }
   }, [jobs, queryClient]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    for (const item of readStoredActivities()) {
+      if (item.kind !== 'generation-job') continue;
+      const id = Number(item.id);
+      if (Number.isInteger(id)) trackedJobIdsRef.current.add(id);
+    }
+
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedId = Number(params.get('job'));
+      setQueueOpen(params.get('queue') === '1');
+      setSelectedQueueJobId(Number.isInteger(requestedId) && requestedId > 0 ? requestedId : null);
+    };
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, [hydrated]);
+
+  useEffect(() => {
+    for (const job of jobs) {
+      const shouldTrack = trackedJobIdsRef.current.has(job.id)
+        || job.status === 'queued'
+        || job.status === 'running';
+      if (!shouldTrack) continue;
+      trackedJobIdsRef.current.add(job.id);
+      const previousStatus = publishedJobStatusRef.current.get(job.id);
+      if (previousStatus === job.status) continue;
+      publishedJobStatusRef.current.set(job.id, job.status);
+      publishShellActivity({
+        id: String(job.id),
+        kind: 'generation-job',
+        status: shellStatusForJob(job.status),
+        title: `${CARD_CONFIG[job.jobType]?.label || '学习卡'}生成`,
+        summary: jobActivitySummary(job),
+        href: `/?queue=1&job=${job.id}`,
+      });
+      if (previousStatus && job.status === 'success') {
+        publishShellFeedback({
+          id: `generation-success-${job.id}`,
+          tone: 'success',
+          message: `任务 #${job.id} 已生成完成`,
+          actionLabel: '查看队列',
+          actionHref: `/?queue=1&job=${job.id}`,
+        });
+      } else if (previousStatus && job.status === 'failed') {
+        publishShellFeedback({
+          id: `generation-failed-${job.id}`,
+          tone: 'error',
+          message: `任务 #${job.id} 生成失败`,
+          actionLabel: '查看并重试',
+          actionHref: `/?queue=1&job=${job.id}`,
+        });
+      }
+    }
+  }, [jobs]);
+
+  const setQueueRoute = (open: boolean, jobId?: number | null) => {
+    setQueueOpen(open);
+    setSelectedQueueJobId(jobId || null);
+    const url = new URL(window.location.href);
+    if (open) {
+      url.searchParams.set('queue', '1');
+      if (jobId) url.searchParams.set('job', String(jobId));
+      else url.searchParams.delete('job');
+    } else {
+      url.searchParams.delete('queue');
+      url.searchParams.delete('job');
+    }
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+
   const enqueueMutation = useMutation({
     mutationFn: ({ value, sourceMode }: { value: string; sourceMode: SourceMode }) => factoryApi.enqueue({
       phrase: value,
       cardType,
       sourceMode,
     }),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      trackedJobIdsRef.current.add(data.job.id);
+      publishedJobStatusRef.current.set(data.job.id, data.job.status);
+      publishShellActivity({
+        id: String(data.job.id),
+        kind: 'generation-job',
+        status: shellStatusForJob(data.job.status),
+        title: `${CARD_CONFIG[data.job.jobType]?.label || '学习卡'}生成`,
+        summary: jobActivitySummary(data.job),
+        href: `/?queue=1&job=${data.job.id}`,
+      });
+      publishShellFeedback({
+        id: `generation-created-${data.job.id}`,
+        tone: 'success',
+        message: `生成任务 #${data.job.id} 已加入队列`,
+        actionLabel: '查看队列',
+        actionHref: `/?queue=1&job=${data.job.id}`,
+      });
       setPhrase('');
       setNotice('已加入共享任务队列');
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
     },
     onError: (error) => {
-      setNotice(error instanceof ApiError && error.status === 409 ? '该内容已在队列中' : `入队失败：${error.message}`);
+      const message = error instanceof ApiError && error.status === 409 ? '该内容已在队列中' : `入队失败：${error.message}`;
+      setNotice(message);
+      publishShellFeedback({ tone: error instanceof ApiError && error.status === 409 ? 'warning' : 'error', message });
     },
   });
   const ocrMutation = useMutation({
@@ -269,7 +382,7 @@ export function CardsFactory() {
             {notice && <div className="inline-notice" role="status">{notice}<button type="button" aria-label="关闭提示" onClick={() => setNotice('')}><X /></button></div>}
           </article>
 
-          <button className={`surface queue-status queue-status-${activeJob?.status || 'idle'}`} type="button" data-testid="react-queue-status" onClick={() => setQueueOpen(true)}>
+          <button className={`surface queue-status queue-status-${activeJob?.status || 'idle'}`} type="button" data-testid="react-queue-status" onClick={() => setQueueRoute(true, activeJob?.id)}>
             <div className="surface-heading"><div><p className="eyebrow">TASK QUEUE</p><h2>队列管理</h2></div><span>点击查看详情</span></div>
             <div className="queue-current"><i /><strong>{activeJob?.status?.toUpperCase() || 'IDLE'}</strong><span>{activeJob?.phraseNormalized || 'Task Queue Idle'}</span></div>
             <div className="queue-progress"><i style={{ width: `${jobs.length ? ((Number(summary.success || 0) + Number(summary.failed || 0)) / jobs.length) * 100 : 0}%` }} /></div>
@@ -351,7 +464,14 @@ export function CardsFactory() {
           </article>
         </section>
 
-        <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} jobs={jobs} summary={summary} />
+        <QueuePanel
+          open={queueOpen}
+          onClose={() => setQueueRoute(false)}
+          jobs={jobs}
+          summary={summary}
+          selectedJobId={selectedQueueJobId}
+          onSelectJob={(jobId) => setQueueRoute(true, jobId)}
+        />
         {selectedCard && <CardModal selection={selectedCard} onClose={() => setSelectedCard(null)} />}
       </div>
     </ProductShell>

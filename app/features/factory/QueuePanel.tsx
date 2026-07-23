@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { publishShellFeedback } from '../../components/shell';
 import { factoryApi } from './factory-api';
 import type { GenerationJob, QueueSummary } from './types';
 
@@ -19,11 +20,15 @@ export function QueuePanel({
   onClose,
   jobs,
   summary,
+  selectedJobId,
+  onSelectJob,
 }: {
   open: boolean;
   onClose: () => void;
   jobs: GenerationJob[];
   summary: QueueSummary;
+  selectedJobId?: number | null;
+  onSelectJob?: (jobId: number) => void;
 }) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -42,11 +47,30 @@ export function QueuePanel({
     mutationFn: async () => {
       const failed = jobs.filter((job) => job.status === 'failed');
       await Promise.all(failed.map((job) => factoryApi.retry(job.id)));
+      return failed.length;
     },
-    onSuccess: refresh,
+    onSuccess: async (count) => {
+      publishShellFeedback({ tone: 'success', message: `已重新加入 ${count} 个失败任务` });
+      await refresh();
+    },
+    onError: (error) => publishShellFeedback({ tone: 'error', message: `重试失败：${error.message}` }),
   });
-  const clearMutation = useMutation({ mutationFn: factoryApi.clearDone, onSuccess: refresh });
-  const cancelMutation = useMutation({ mutationFn: factoryApi.cancel, onSuccess: refresh });
+  const clearMutation = useMutation({
+    mutationFn: factoryApi.clearDone,
+    onSuccess: async () => {
+      publishShellFeedback({ tone: 'success', message: '已清理完成任务' });
+      await refresh();
+    },
+    onError: (error) => publishShellFeedback({ tone: 'error', message: `清理失败：${error.message}` }),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: factoryApi.cancel,
+    onSuccess: async (_, jobId) => {
+      publishShellFeedback({ tone: 'warning', message: `任务 #${jobId} 已取消` });
+      await refresh();
+    },
+    onError: (error) => publishShellFeedback({ tone: 'error', message: `取消失败：${error.message}` }),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -56,6 +80,16 @@ export function QueuePanel({
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (selectedJobId && jobs.some((job) => job.id === selectedJobId)) {
+      setSelectedId(selectedJobId);
+      return;
+    }
+    if (selectedId && jobs.some((job) => job.id === selectedId)) return;
+    setSelectedId(jobs[0]?.id || null);
+  }, [jobs, open, selectedId, selectedJobId]);
 
   if (!open) return null;
   return (
@@ -92,8 +126,13 @@ export function QueuePanel({
               <button
                 type="button"
                 key={job.id}
+                role="option"
+                aria-selected={selected?.id === job.id}
                 className={`queue-job queue-${job.status}${selected?.id === job.id ? ' active' : ''}`}
-                onClick={() => setSelectedId(job.id)}
+                onClick={() => {
+                  setSelectedId(job.id);
+                  onSelectJob?.(job.id);
+                }}
               >
                 <span className="queue-job-top"><b>#{job.id}</b><i>{STATUS_LABEL[job.status] || job.status}</i></span>
                 <strong>{job.phraseNormalized}</strong>
