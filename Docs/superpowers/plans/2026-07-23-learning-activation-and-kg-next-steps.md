@@ -81,11 +81,13 @@ LA-R1 真实学习启用与运行验收
 
 ### 5.1 LA-R1-0 前置确认
 
-- [ ] 确认当前 Compose 服务、`/api/health`、SQLite integrity 与外键状态正常；
-- [ ] 确认 KG outbox 没有 `queued/running/failed` 积压；
-- [ ] 记录创建计划前的 Plans/Queues/Review Events/Schedule States/KG Lookup 计数；
-- [ ] 创建一次 Git 外 SQLite backup，仅作灾难恢复，不用于抹除正常学习历史；
-- [ ] 明确学习时区。现有 Accepted 基线和默认配置为 `Asia/Shanghai`；若要改成 `Asia/Tokyo`，必须在第一份队列生成前作为独立产品决策完成，不允许运行中静默切换。
+- [x] 确认当前 Compose 服务、`/api/health`、SQLite integrity 与外键状态正常；
+- [x] 确认 KG outbox 没有 `queued/running/failed` 积压；
+- [x] 记录创建计划前的 Plans/Queues/Review Events/Schedule States/KG Lookup 计数；
+- [x] 创建一次 Git 外 SQLite backup，仅作灾难恢复，不用于抹除正常学习历史；
+- [x] 学习时区已在第一份队列生成前确认为 `Asia/Tokyo`；代码、运行配置和 Accepted 基线同步修订，运行中不得静默切换。
+
+运行前证据见 `Docs/TestReports/Learning_Assistance_LA_R1_Preflight_20260723.md`。
 
 ### 5.2 推荐的首个计划
 
@@ -283,8 +285,8 @@ POC 未通过时保持确定性 KG v1，不影响 LA-R1/LA-R2 继续运行。
 ## 12. 当前立即行动清单
 
 - [ ] 用户确认本文顺序和 LA-R1 推荐范围；
-- [ ] 用户确认第一份队列使用 `Asia/Shanghai`，或在创建前另行决定 `Asia/Tokyo`；
-- [ ] 创建 LA-R1 运行前备份与基线快照；
+- [x] 用户已确认第一份队列使用 `Asia/Tokyo`；
+- [x] 创建 LA-R1 运行前备份与基线快照；
 - [ ] 用户在 `/learn/plan` 创建 Track 01 + 日语语法计划（20/5）；
 - [ ] 生成第一份真实 Daily Queue；
 - [ ] 完成首日功能验收；

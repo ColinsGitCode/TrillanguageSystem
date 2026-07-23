@@ -12,6 +12,7 @@ services:
       - PORT=3010
       - RECORDS_PATH=/data/trilingual_records
       - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
+      - LEARNING_TIMEZONE=${LEARNING_TIMEZONE:-Asia/Tokyo}
       - DB_PATH=/data/trilingual_records/trilingual_records.db
       - TEXTBOOK_FEATURE_ENABLED=${TEXTBOOK_FEATURE_ENABLED:-true}
       - KG_ENABLED=${KG_ENABLED:-0}

@@ -2,7 +2,7 @@
 
 const { Temporal } = require('@js-temporal/polyfill');
 
-const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
+const PRODUCT_DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 
 function toInstant(value) {
   try {
@@ -21,6 +21,10 @@ function validateTimeZone(timeZone) {
     throw new RangeError(`Invalid IANA time zone: ${timeZone}`, { cause: error });
   }
 }
+
+const DEFAULT_TIME_ZONE = validateTimeZone(
+  process.env.LEARNING_TIMEZONE || PRODUCT_DEFAULT_TIME_ZONE
+);
 
 function learningDay(instant, timeZone = DEFAULT_TIME_ZONE) {
   const zone = validateTimeZone(timeZone);
@@ -49,6 +53,7 @@ function dayBounds(day, timeZone = DEFAULT_TIME_ZONE) {
 
 module.exports = {
   DEFAULT_TIME_ZONE,
+  PRODUCT_DEFAULT_TIME_ZONE,
   dayBounds,
   learningDay,
   toInstant,

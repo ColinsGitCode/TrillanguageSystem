@@ -23,7 +23,7 @@
 - v1 只有一个活动计划；
 - 默认每日行动目标 20、每日新单元上限 5；
 - 到期和逾期优先于新单元；
-- 默认学习时区为 `Asia/Shanghai`；
+- 默认学习时区为 `Asia/Tokyo`（2026-07-23，在首份真实队列创建前确认修订）；
 - 知识图谱、标签和 LLM 不拥有调度结果。
 
 代码和 schema 只有在本文通过后才能进入 LA-P0。实施中若发现必须改变产品行为，应先修订 LA-D0；若只改变技术实现，应先更新本文并记录原因。
@@ -297,7 +297,7 @@ interface SchedulerPort {
 
 - 所有事实时间存 UTC ISO-8601（带 `Z`）或 Unix epoch，禁止存无时区本地时间；
 - Review Event 额外保存提交时计算出的 `learning_day`（`YYYY-MM-DD`）和 `time_zone`；
-- 默认 `time_zone='Asia/Shanghai'`，使用 IANA 标识；
+- 默认 `time_zone='Asia/Tokyo'`，使用 IANA 标识；
 - `learning_profiles.revision` 随 time zone 或 scheduler parameters 修改而单调递增；
 - v1 学习日边界为当地 `00:00`，不提供自定义凌晨切日；
 - 所有学习日和边界换算必须经过统一 Time Service；实现使用成熟 IANA 时区库或 Temporal-compatible adapter，允许在 adapter 内使用 `Intl.DateTimeFormat(..., { timeZone })` 做格式化，但禁止自行拼接固定 UTC offset 或只靠当前 offset 推导日界线；

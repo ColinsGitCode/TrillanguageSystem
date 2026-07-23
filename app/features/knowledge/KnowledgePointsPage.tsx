@@ -141,7 +141,7 @@ export function KnowledgePointsPage() {
       inputText: point?.canonicalForm || query.trim(),
       language: point?.language || language,
       kindHint: point?.kind || kind,
-      timeZone: planQuery.data?.profile.timeZone || 'Asia/Shanghai',
+      timeZone: planQuery.data?.profile.timeZone || 'Asia/Tokyo',
     }),
     onSuccess: (data) => {
       if (data.lookup.point) {

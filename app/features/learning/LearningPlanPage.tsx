@@ -35,7 +35,7 @@ export function LearningPlanPage() {
   const [scope, setScope] = useState<LearningScope | null>(null);
   const [dailyGoal, setDailyGoal] = useState(20);
   const [dailyNew, setDailyNew] = useState(5);
-  const [timeZone, setTimeZone] = useState('Asia/Shanghai');
+  const [timeZone, setTimeZone] = useState('Asia/Tokyo');
   const [dateEnabled, setDateEnabled] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
   const [reviewPlanRevision, setReviewPlanRevision] = useState<number | null>(null);
@@ -52,7 +52,7 @@ export function LearningPlanPage() {
     setScope(structuredClone(source.scope));
     setDailyGoal(source.dailyActionGoal);
     setDailyNew(source.dailyNewLimit);
-    setTimeZone(planQuery.data.profile.timeZone || 'Asia/Shanghai');
+    setTimeZone(planQuery.data.profile.timeZone || 'Asia/Tokyo');
     setDateEnabled(Boolean(source.scope.dateRange));
   }, [planQuery.data, scope]);
 
