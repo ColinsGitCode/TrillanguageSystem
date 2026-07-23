@@ -24,6 +24,8 @@ export const learningApi = {
     scope: LearningScope;
     scopePreview: ScopePreview;
     admissionSummary: Record<string, number>;
+    planRevision: number;
+    profileRevision: number;
   }>('/api/learning/plan/preview', {
     method: 'POST',
     body: JSON.stringify({ scope }),

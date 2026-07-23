@@ -66,6 +66,8 @@ test.describe('Learning Assistance 2.0 API', () => {
     assert.equal(preview.status, 200);
     assert.equal(preview.body.scopePreview.generationCount, 1);
     assert.equal(preview.body.scopePreview.studyItemCount, 1);
+    assert.equal(preview.body.planRevision, 0);
+    assert.equal(preview.body.profileRevision, 0);
     assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_plans').get().count, 0);
 
     const options = await api('GET', '/api/learning/scope-options');
@@ -101,6 +103,9 @@ test.describe('Learning Assistance 2.0 API', () => {
     assert.equal(created.status, 200);
     assert.equal(created.body.plan.revision, 1);
     assert.equal(created.body.scopePreview.studyItemCount, 3);
+    const revisedPreview = await api('POST', '/api/learning/plan/preview', { body: { scope } });
+    assert.equal(revisedPreview.body.planRevision, 1);
+    assert.equal(revisedPreview.body.profileRevision, 1);
 
     const stale = await api('PUT', '/api/learning/plan', {
       body: { expectedRevision: 0, scope, dailyActionGoal: 20, dailyNewLimit: 2 },

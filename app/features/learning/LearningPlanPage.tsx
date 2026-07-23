@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags } from 'lucide-react';
+import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
+import { ReviewSummary } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { learningApi } from './learning-api';
 import type { LearningScope } from './types';
@@ -37,6 +38,7 @@ export function LearningPlanPage() {
   const [timeZone, setTimeZone] = useState('Asia/Shanghai');
   const [dateEnabled, setDateEnabled] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
+  const [reviewPlanRevision, setReviewPlanRevision] = useState<number | null>(null);
   const [confirmPause, setConfirmPause] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -59,6 +61,7 @@ export function LearningPlanPage() {
     queryFn: () => learningApi.previewPlan(scope as LearningScope),
     enabled: Boolean(scope),
     staleTime: 0,
+    refetchInterval: confirmSave ? 1500 : false,
   });
 
   const saveMutation = useMutation({
@@ -74,7 +77,13 @@ export function LearningPlanPage() {
       await queryClient.invalidateQueries({ queryKey: ['learning'] });
       navigate('/learn');
     },
-    onError: (error) => setNotice(apiMessage(error)),
+    onError: async (error) => {
+      setNotice(apiMessage(error));
+      if (error instanceof ApiError && error.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: ['learning', 'plan'] });
+        await previewQuery.refetch();
+      }
+    },
   });
 
   const statusMutation = useMutation({
@@ -150,8 +159,23 @@ export function LearningPlanPage() {
   const preview = previewQuery.data?.scopePreview || planQuery.data?.scopePreview;
   const theoreticalDays = dailyNew > 0 && preview ? Math.ceil(preview.studyItemCount / dailyNew) : null;
   const isReduction = Boolean(planQuery.data?.plan && preview && preview.studyItemCount < planQuery.data.scopePreview.studyItemCount);
+  const removedItemCount = Math.max(0, (planQuery.data?.scopePreview.studyItemCount || 0) - (preview?.studyItemCount || 0));
   const textbookScopeMissingTracks = Boolean(scope?.cardTypes.includes('textbook_track') && !scope.textbookTrackIds?.length);
+  const currentPreviewPlanRevision = previewQuery.data?.planRevision ?? planQuery.data?.plan?.revision ?? 0;
+  const reviewRevisionStale = reviewPlanRevision !== null && currentPreviewPlanRevision !== reviewPlanRevision;
   const visibleTags = useMemo(() => (optionsQuery.data?.tags || []).filter((tag) => ['topic', 'fn', 'tag'].includes(tag.namespace)).slice(0, 18), [optionsQuery.data]);
+  const openSaveReview = () => {
+    setReviewPlanRevision(currentPreviewPlanRevision);
+    setConfirmSave(true);
+  };
+  const changeReviewField = (target: string) => {
+    setConfirmSave(false);
+    requestAnimationFrame(() => {
+      const field = document.getElementById(target);
+      field?.scrollIntoView({ block: 'center' });
+      field?.querySelector<HTMLElement>('button, input, select')?.focus({ preventScroll: true });
+    });
+  };
 
   if (planQuery.isLoading || !scope) {
     return <ProductShell active="plan" title="学习计划"><div className="learning-loading">正在读取学习计划…</div></ProductShell>;
@@ -172,7 +196,7 @@ export function LearningPlanPage() {
         {notice && <div className="learning-banner danger" role="status">{notice}</div>}
         <div className="learning-plan-grid">
           <section className="surface learning-plan-form">
-            <fieldset>
+            <fieldset id="learning-scope-languages">
               <legend>学习语言方向</legend>
               <div className="learning-choice-row">
                 {(['en', 'ja'] as const).map((language) => (
@@ -184,7 +208,7 @@ export function LearningPlanPage() {
               {!scope.languages.includes('en') || !scope.languages.includes('ja') ? <p className="field-note">场景表达固定为 EN+JA，因此当前不会进入范围。</p> : null}
             </fieldset>
 
-            <fieldset>
+            <fieldset id="learning-scope-card-types">
               <legend>学习卡型</legend>
               <div className="learning-card-type-choices">
                 {CARD_TYPES.map((type) => (
@@ -196,7 +220,7 @@ export function LearningPlanPage() {
             </fieldset>
 
             {scope.cardTypes.includes('textbook_track') && (
-              <fieldset>
+              <fieldset id="learning-scope-textbooks">
                 <legend><BookOpen aria-hidden="true" /> 教材 Track</legend>
                 <div className="learning-tag-list">
                   {textbookTracks.map((track) => {
@@ -214,7 +238,7 @@ export function LearningPlanPage() {
               </fieldset>
             )}
 
-            <fieldset>
+            <fieldset id="learning-scope-dates">
               <legend><CalendarRange aria-hidden="true" /> 日期范围</legend>
               <label className="learning-toggle"><input type="checkbox" checked={dateEnabled} onChange={(event) => {
                 const enabled = event.target.checked;
@@ -227,7 +251,7 @@ export function LearningPlanPage() {
               {dateEnabled && scope.dateRange && <div className="learning-date-row"><label>开始<input type="date" value={scope.dateRange.from} onChange={(event) => setScope({ ...scope, dateRange: { ...scope.dateRange!, from: event.target.value } })} /></label><label>结束<input type="date" value={scope.dateRange.to} onChange={(event) => setScope({ ...scope, dateRange: { ...scope.dateRange!, to: event.target.value } })} /></label></div>}
             </fieldset>
 
-            <fieldset>
+            <fieldset id="learning-scope-tags">
               <legend><Tags aria-hidden="true" /> Active 标签</legend>
               <div className="learning-tag-list">
                 {visibleTags.map((tag) => {
@@ -238,7 +262,7 @@ export function LearningPlanPage() {
               </div>
             </fieldset>
 
-            <div className="learning-number-grid">
+            <div className="learning-number-grid" id="learning-daily-limits">
               <label>每日行动目标 <small>已提交评分数</small><input type="number" min="5" max="100" value={dailyGoal} onChange={(event) => setDailyGoal(Math.min(100, Math.max(5, Number(event.target.value))))} /></label>
               <label>每日新单元上限 <small>0 = 只清到期项</small><input type="number" min="0" max="50" value={dailyNew} onChange={(event) => setDailyNew(Math.min(50, Math.max(0, Number(event.target.value))))} /></label>
             </div>
@@ -258,14 +282,71 @@ export function LearningPlanPage() {
             </dl>
             {preview?.studyItemCount === 0 && <div className="learning-banner warning">当前组合没有合格学习单元。放宽语言、卡型、日期或标签范围。</div>}
             {theoreticalDays && theoreticalDays > 180 ? <div className="learning-banner info">当前范围较大。可以先缩小范围，学习状态会在将来扩展范围时继续沿用。</div> : null}
-            <button className="learning-primary-button" type="button" disabled={saveMutation.isPending || previewQuery.isFetching || !preview?.studyItemCount || textbookScopeMissingTracks} onClick={() => isReduction ? setConfirmSave(true) : saveMutation.mutate()}>
-              <Save aria-hidden="true" /> {saveMutation.isPending ? '保存中…' : '保存并生成今日队列'}
+            <button className="learning-primary-button" type="button" disabled={saveMutation.isPending || previewQuery.isFetching || !preview?.studyItemCount || textbookScopeMissingTracks} onClick={openSaveReview}>
+              <Save aria-hidden="true" /> {saveMutation.isPending ? '保存中…' : '检查并保存计划'}
             </button>
           </aside>
         </div>
       </div>
 
-      {confirmSave && <div className="learning-dialog-backdrop"><section className="surface learning-dialog" role="alertdialog" aria-modal="true" aria-label="确认修改学习范围"><h2>确认修改学习范围？</h2><p>将有 <strong>{Math.max(0, (planQuery.data?.scopePreview.studyItemCount || 0) - (preview?.studyItemCount || 0))}</strong> 个学习单元移出当前范围。既有复习状态与历史完整保留，恢复范围后继续排队。</p><div><button type="button" onClick={() => setConfirmSave(false)}>取消</button><button className="learning-primary-button" type="button" onClick={() => saveMutation.mutate()}>确认修改</button></div></section></div>}
+      {confirmSave && (
+        <div className="learning-dialog-backdrop">
+          <section className="learning-plan-review-dialog" role="alertdialog" aria-modal="true" aria-label="确认学习计划">
+            <button className="icon-button learning-plan-review-close" type="button" aria-label="返回修改计划" onClick={() => setConfirmSave(false)}><X aria-hidden="true" /></button>
+            <ReviewSummary
+              title={planQuery.data?.plan ? '确认学习计划调整' : '确认建立学习计划'}
+              description="范围预览由服务端生成；保存后才会重建今日队列。"
+              items={[
+                {
+                  id: 'scope',
+                  label: '学习范围',
+                  value: `${scope.languages.map((language) => language.toUpperCase()).join(' + ')} · ${scope.cardTypes.length} 种卡型`,
+                  changeTarget: 'learning-scope-card-types',
+                },
+                {
+                  id: 'items',
+                  label: '学习单元',
+                  value: `${preview?.studyItemCount || 0} 个`,
+                  tone: 'success',
+                },
+                {
+                  id: 'days',
+                  label: '预计引入时间',
+                  value: theoreticalDays ? `约 ${theoreticalDays} 学习日` : '只清到期项',
+                  changeTarget: 'learning-daily-limits',
+                },
+                {
+                  id: 'removed',
+                  label: '移出当前范围',
+                  value: `${removedItemCount} 个`,
+                  tone: isReduction ? 'warning' : 'default',
+                  changeTarget: 'learning-scope-card-types',
+                },
+                {
+                  id: 'daily',
+                  label: '每日新单元',
+                  value: `${dailyNew} 个`,
+                  changeTarget: 'learning-daily-limits',
+                },
+                {
+                  id: 'textbooks',
+                  label: '教材 Track',
+                  value: `${scope.textbookTrackIds?.length || 0} 个`,
+                  changeTarget: 'learning-scope-textbooks',
+                },
+              ]}
+              warnings={[
+                ...(isReduction ? [`${removedItemCount} 个单元将移出当前范围；历史与调度状态不会删除。`] : []),
+                ...(reviewRevisionStale ? ['计划 revision 已变化。请返回刷新并重新检查范围。'] : []),
+              ]}
+              actionLabel={`保存 ${preview?.studyItemCount || 0} 个单元并生成今日队列`}
+              actionDisabled={saveMutation.isPending || reviewRevisionStale}
+              onAction={() => saveMutation.mutate()}
+              onChange={changeReviewField}
+            />
+          </section>
+        </div>
+      )}
       {confirmPause && <div className="learning-dialog-backdrop"><section className="surface learning-dialog" role="alertdialog" aria-modal="true" aria-label="确认暂停学习计划"><h2>暂停学习计划？</h2><p>暂停后不再自动生成今日队列。所有复习状态和历史都会保留，恢复后继续安排。</p><div><button type="button" onClick={() => setConfirmPause(false)}>取消</button><button className="learning-primary-button" type="button" onClick={() => statusMutation.mutate('paused')}>确认暂停</button></div></section></div>}
     </ProductShell>
   );

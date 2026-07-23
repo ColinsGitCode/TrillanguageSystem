@@ -359,6 +359,24 @@
   font-weight: 700;
 }
 
+.workflow-review-summary dl button {
+  margin-top: var(--space-2);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-action);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.workflow-review-summary dl button svg {
+  width: 14px;
+  height: 14px;
+}
+
 .workflow-review-warnings {
   margin: 0 var(--space-3);
   padding: var(--space-3) var(--space-6);
@@ -371,6 +389,22 @@
   display: flex;
   justify-content: flex-end;
   padding: var(--space-3);
+}
+
+.workflow-review-summary footer button.primary {
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  color: var(--color-text-inverse);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.workflow-review-summary footer button.primary:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .workflow-operation ol {

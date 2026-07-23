@@ -507,10 +507,14 @@ class LearningService {
 
   previewPlan(input = {}) {
     const scope = normalizeScope(input.scope || DEFAULT_SCOPE);
+    const plan = this.db.prepare('SELECT revision FROM learning_plans WHERE id = 1').get() || null;
+    const profile = this.db.prepare('SELECT revision FROM learning_profiles WHERE id = 1').get() || null;
     return {
       scope,
       scopePreview: this._scopePreview(scope),
       admissionSummary: this._admissionSummary(),
+      planRevision: Number(plan?.revision || 0),
+      profileRevision: Number(profile?.revision || 0),
     };
   }
 

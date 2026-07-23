@@ -46,7 +46,15 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
 
     const newLimit = page.getByLabel('每日新单元上限 0 = 只清到期项');
     await newLimit.fill('3');
-    await page.getByRole('button', { name: '保存并生成今日队列' }).click();
+    await page.getByRole('button', { name: '检查并保存计划' }).click();
+    const review = page.getByRole('alertdialog', { name: '确认学习计划' });
+    await expect(review).toContainText('15 个');
+    await expect(review).toContainText('约 5 学习日');
+    await review.locator('dl > div').filter({ hasText: '学习范围' }).getByRole('button', { name: '修改' }).click();
+    await expect(review).toBeHidden();
+    await expect(page.getByRole('button', { name: /三语卡片/ })).toBeFocused();
+    await page.getByRole('button', { name: '检查并保存计划' }).click();
+    await page.getByRole('button', { name: '保存 15 个单元并生成今日队列' }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await expect(page.getByTestId('today-learning-page')).toBeVisible();
     await expect(page.locator('.learning-queue-row')).toHaveCount(3);
@@ -91,6 +99,29 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await expect(page.getByRole('alertdialog', { name: '结束本次会话' })).toBeVisible();
     await page.getByRole('button', { name: '结束并查看摘要' }).click();
     await expect(page.getByTestId('learning-session-summary')).toContainText('已提交 1 个评分');
+  });
+
+  test('blocks saving when the reviewed plan revision changes', async ({ page, request }) => {
+    await page.goto('/learn/plan');
+    await page.getByRole('button', { name: '检查并保存计划' }).click();
+    const review = page.getByRole('alertdialog', { name: '确认学习计划' });
+    await expect(review).toBeVisible();
+
+    const current = await (await request.get('/api/learning/plan')).json();
+    const changed = await request.put('/api/learning/plan', {
+      data: {
+        expectedRevision: current.plan.revision,
+        scope: current.plan.scope,
+        dailyActionGoal: current.plan.dailyActionGoal,
+        dailyNewLimit: current.plan.dailyNewLimit,
+        timeZone: current.profile.timeZone,
+      },
+    });
+    expect(changed.ok()).toBeTruthy();
+
+    await expect(review).toContainText('计划 revision 已变化', { timeout: 5_000 });
+    await expect(review.getByRole('button', { name: /保存 \d+ 个单元并生成今日队列/ })).toBeDisabled();
+    await request.post('/api/learning/queues/today');
   });
 
   test('renders the learning area as a contained desktop workspace', async ({ page }) => {

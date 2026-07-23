@@ -51,7 +51,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .sidebar-compact .sidebar-status { flex-direction: column; justify-content: center; }
 .sidebar-compact .sidebar-tools { margin-left: 0; flex-direction: column; }
 
-.react-workspace { min-width: 0; padding: 20px; }
+.react-workspace { min-width: 0; padding: 20px 72px 20px 20px; }
 .mobile-topbar { display: none; }
 .shell-tools { position: fixed; z-index: 72; top: 18px; right: 20px; display: flex; gap: 6px; }
 .shell-activity-trigger { position: relative; background: var(--color-bg-elevated); box-shadow: var(--shadow-sm); }
