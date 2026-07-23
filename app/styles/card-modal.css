@@ -34,6 +34,13 @@
 .react-card-renderer code { padding: 2px 5px; background: var(--color-bg-subtle); border-radius: var(--radius-sm); font-family: var(--font-mono); }
 .react-card-renderer ruby { ruby-position: over; }
 .react-card-renderer rt { color: var(--color-text-tertiary); font: 600 12px/1 var(--font-ja); }
+/* Furigana remains readable, but drag selection should land on the Japanese base text. */
+.react-card-renderer rt,
+.react-card-renderer rp {
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
 .react-card-renderer .audio-btn { width: 31px; height: 31px; display: inline-grid; place-items: center; margin-left: 7px; padding: 0; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: 50%; cursor: pointer; font-size: 12px; vertical-align: middle; }
 .react-card-renderer .audio-btn.is-playing { color: var(--color-text-inverse); background: var(--color-primary); border-color: var(--color-primary); }
 .react-card-renderer mark.study-highlight-red { color: inherit; background: color-mix(in srgb, var(--color-danger) 24%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-danger) 65%, transparent); }
@@ -103,6 +110,7 @@
   display: inline-flex;
   align-items: stretch;
   gap: 2px;
+  max-width: calc(100vw - 16px);
   padding: 4px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
@@ -113,6 +121,30 @@
               transform var(--duration-fast) var(--ease-standard);
 }
 .card-selection-toolbar[data-placement="below"] { transform: translate(-50%, 8px); }
+.card-selection-toolbar .csa-selection-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(220px, 34vw);
+  padding: 0 7px;
+  color: var(--color-text-secondary);
+  font: 600 12px/1 var(--font-sans);
+}
+.card-selection-toolbar .csa-selection-preview span {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font: 700 10px/1 var(--font-mono);
+  text-transform: uppercase;
+}
+.card-selection-toolbar .csa-selection-preview strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .card-selection-toolbar button {
   display: inline-flex;
   align-items: center;

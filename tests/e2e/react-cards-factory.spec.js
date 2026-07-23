@@ -133,6 +133,35 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await expect(opener).toBeFocused();
   });
 
+  test('P4 keeps furigana readable without making it a selection target', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const ruby = page.getByTestId('react-card-content').locator('ruby').first();
+    const rubyBase = await ruby.evaluate((node) => {
+      const clone = node.cloneNode(true);
+      clone.querySelectorAll('rt, rp').forEach((annotation) => annotation.remove());
+      return clone.textContent.trim();
+    });
+    const annotation = ruby.locator('rt').first();
+    await expect(annotation).toHaveCSS('user-select', 'none');
+    await expect(annotation).toHaveCSS('pointer-events', 'none');
+    const annotationHit = await annotation.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.tagName.toLowerCase();
+    });
+    expect(annotationHit).not.toBe('rt');
+
+    await ruby.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      node.closest('[data-testid="react-card-content"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', rubyBase);
+  });
+
   test('P4 persists a selected-text highlight and restores it on reopen', async ({ page }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
@@ -146,6 +175,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
       selection.addRange(range);
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', '解释');
     const highlight = page.getByRole('button', { name: '标红选区' });
     await expect(highlight).toBeEnabled();
     await highlight.click();
@@ -153,6 +183,59 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await page.getByTestId('react-card-modal-close').click();
     await opener.click();
     await expect(page.locator('mark.study-highlight-red')).toHaveCount(1);
+  });
+
+  test('P4 previews the selected phrase and enqueues that exact phrase', async ({ page }) => {
+    let resolveQueuedRequest;
+    const queuedRequest = new Promise((resolve) => { resolveQueuedRequest = resolve; });
+    await page.route('**/api/generation-jobs', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      resolveQueuedRequest(route.request().postDataJSON());
+      return route.fulfill({ json: { success: true, job: { id: 999, status: 'queued' }, summary: {} } });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await page.getByTestId('react-card-content').evaluate((container) => {
+      const text = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('E2E'))?.firstChild;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const preview = page.getByTestId('card-selection-preview');
+    const selectedPhrase = await preview.getAttribute('title');
+    expect(selectedPhrase).toBeTruthy();
+    await page.getByRole('button', { name: '生成卡片' }).click();
+    await page.getByRole('menuitem', { name: '单词卡' }).click();
+    await expect(queuedRequest).resolves.toMatchObject({
+      phrase: selectedPhrase,
+      card_type: 'trilingual',
+      source_mode: 'selection',
+    });
+  });
+
+  test('P4 keeps the selection toolbar inside the desktop viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await page.getByTestId('react-card-content').evaluate((container) => {
+      const text = container.querySelector('h1')?.firstChild;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, Math.min(2, text.nodeValue.length));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const box = await page.locator('.card-selection-toolbar').boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(8);
+    expect(box.x + box.width).toBeLessThanOrEqual(1272);
   });
 
   test('P4 sanitizer blocks script, style and event attributes while preserving ruby', async ({ page }) => {

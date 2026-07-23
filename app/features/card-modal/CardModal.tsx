@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { factoryApi } from '../factory/factory-api';
@@ -34,11 +34,18 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedRangeRef = useRef<Range | null>(null);
   const selectedTextRef = useRef('');
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [renderedHtml, setRenderedHtml] = useState('');
   const [hasSelection, setHasSelection] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [toolbar, setToolbar] = useState<{ top: number; left: number; placeBelow: boolean; phrase: string } | null>(null);
+  const [toolbar, setToolbar] = useState<{
+    top: number;
+    left: number;
+    anchorLeft: number;
+    placeBelow: boolean;
+    phrase: string;
+  } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [genMenuOpen, setGenMenuOpen] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
@@ -121,6 +128,27 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!toolbar) return;
+    const clampToViewport = () => {
+      const node = toolbarRef.current;
+      if (!node) return;
+      const viewportPadding = 8;
+      const halfWidth = node.getBoundingClientRect().width / 2;
+      const minimum = viewportPadding + halfWidth;
+      const maximum = window.innerWidth - viewportPadding - halfWidth;
+      const left = minimum > maximum
+        ? window.innerWidth / 2
+        : Math.min(maximum, Math.max(minimum, toolbar.anchorLeft));
+      setToolbar((current) => (
+        current && Math.abs(current.left - left) > 0.5 ? { ...current, left } : current
+      ));
+    };
+    clampToViewport();
+    window.addEventListener('resize', clampToViewport);
+    return () => window.removeEventListener('resize', clampToViewport);
+  }, [toolbar?.anchorLeft, toolbar?.phrase]);
+
   const generateMutation = useMutation({
     mutationFn: (vars: { phrase: string; cardType: CardType }) => factoryApi.enqueue({
       phrase: vars.phrase,
@@ -181,13 +209,16 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       return;
     }
     selectedRangeRef.current = candidate.range.cloneRange();
-    selectedTextRef.current = window.getSelection()?.toString() || candidate.rawText;
+    // Keep highlight recovery aligned with the ruby-free phrase shown in the toolbar.
+    selectedTextRef.current = candidate.rawText;
     setHasSelection(true);
     const rect = candidate.range.getBoundingClientRect();
     const placeBelow = rect.top < 64;
+    const anchorLeft = rect.left + rect.width / 2;
     setToolbar({
       top: placeBelow ? rect.bottom : rect.top,
-      left: rect.left + rect.width / 2,
+      left: anchorLeft,
+      anchorLeft,
       placeBelow,
       phrase: candidate.normalized,
     });
@@ -272,6 +303,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
 
         {tab === 'content' && !readOnly && toolbar && (
           <div
+            ref={toolbarRef}
             className="card-selection-toolbar"
             data-placement={toolbar.placeBelow ? 'below' : 'above'}
             style={{ top: toolbar.top, left: toolbar.left }}
@@ -279,6 +311,15 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             aria-label="选区操作"
             onMouseDown={(event) => event.preventDefault()}
           >
+            <output
+              className="csa-selection-preview"
+              data-testid="card-selection-preview"
+              title={toolbar.phrase}
+            >
+              <span>已选</span>
+              <strong>{toolbar.phrase}</strong>
+            </output>
+            <span className="csa-sep" aria-hidden="true" />
             <button type="button" className="csa-highlight" onClick={() => void saveHighlight()}>
               <Highlighter aria-hidden="true" /> 标红
             </button>
