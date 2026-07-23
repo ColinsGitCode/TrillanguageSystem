@@ -44,6 +44,7 @@
 - Features/prototypes/kg-d1-prototype.html：已确认的 KG-D1 桌面端 12 状态原型，覆盖显式 lookup、重复查找、队列内/外边界、一次性加入学习、日语词形关系、unresolved、KP 三类证据、精确重复生成、受限细排与降级态；
 - Architecture/Knowledge_Graph_2_0_Domain_and_Data_ADR.md：已接受的 KG-D2 领域与数据 ADR（2026-07-16 Accepted）。定义智能来源四层模型（L0 事实 / L1 确定性分析 / L2 DeepSeek 异步提案 / L3 裁决），DeepSeek 只作异步 proposal、不进同步队列不写 FSRS；11 张 `kg_*` 表 + 1 张 LA 手动入队表（表 37-48）；KP 分层身份、可逆 split/merge、unresolved 工作流、append-only lookup 幂等、`kg-lookup-signal-v1` 只读细排、`加入本次学习` 的共享 bucket 5 amendment；§21-§26 已登记 KG-P0-P3、KG-R0 与 KG-R1 的实施、真实 volume 回填、Canary、reader 性能和显式加入学习验收；
 - Architecture/Knowledge_Graph_2_0_Incremental_Maintenance_ADR.md：KG-R2 增量事实维护基线。定义表 49 transaction-local outbox、在线卡片/教材发布原子入队、source revision/hash 双重重验、Evidence superseded/orphaned、增量投影、restart recovery、hash-gated reconciliation 与默认关闭的独立 worker；
+- superpowers/plans/2026-07-23-learning-activation-and-kg-next-steps.md：当前 NEXT STEPS 执行草案。固定 LA-R1 真实学习启用 -> LA-R2 14 学习日复盘 -> KG-R3 unresolved 人工评估集 -> KG-D3/P4 DeepSeek 异步 proposal 的顺序、门禁与交付物；
 - Operations/Knowledge_Graph_2_0_Runbook.md：KG-R0 的卷级备份、稳定 Manifest 审核、hash-gated apply、投影验收，以及 KG-R1 同快照 Planning Canary、分级启用和恢复手册；
 - TestReports/Knowledge_Graph_KG_R1_Canary_20260717.md：KG-R1 真实 volume 启用前后 Canary 证据、性能、零写入边界和本地开关状态；
 - TestReports/Knowledge_Graph_KG_R2_Incremental_Maintenance_20260717.md：KG-R2 真实 volume 增量回填、场景 EN/JA Evidence 身份修复、最终零 reconciliation、零学习调度写入与 worker 启用证据；
