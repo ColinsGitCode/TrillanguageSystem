@@ -40,8 +40,9 @@
 - ../skills/import-textbook-track/SKILL.md：TC-P0 教材 Track 导入 Skill；实际 Manifest、截图、官方音频和 dry-run summary 留在 Git 外；
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：全栈迁移前的 UI 现代化历史实施基线；其 token、领域色、视觉克制与安静学习工作台原则继续有效，旧静态页面和 Shell 路径已失效；
-- Features/SaaS_App_Shell_and_Complex_Workflow_Design_Guidelines.md：React Router 时代的 SaaS App Shell 与复杂长流程 Draft 横向规范。定义 Cloudscape 参考采用边界、四类流程模型、Stage/Task/Step、保存恢复、Review、异步 Job、AI proposal、共享 Workflow 原语、状态/API/测试 contract，以及教材课程首个样板；
-- Features/prototypes/saas-textbook-workflow-prototype.html：SaaS 复杂长流程桌面可视化原型，使用合成内容覆盖导入、校对、发布检查、后台处理、局部失败重试和完成摘要；
+- Features/SaaS_App_Shell_and_Complex_Workflow_Design_Guidelines.md：React Router 时代的 SaaS App Shell 与复杂长流程 Draft 横向规范。定义 Cloudscape 参考采用边界、四类流程模型、Stage/Task/Step、保存恢复、Review、异步 Job、AI proposal 与共享 Workflow 原语；教材始终由 Codex Skill 在应用外解析，页面只接收草稿并负责人工确认、发布和学习；
+- Features/prototypes/saas-textbook-workflow-prototype.html：SaaS 复杂长流程桌面可视化原型，使用合成内容覆盖 Skill 草稿接收、人工确认、发布检查、后台处理、局部失败重试和学习入口；
+- superpowers/plans/2026-07-23-saas-workflow-modernization.md：SaaS App Shell 与复杂长流程现代化详细开发任务表。共 35 个可独立验证任务，按 Gate 0、DS-W1 Cloudscape POC、DS-W2 教材迁移、DS-W3 横向扩展和 Final 完整验收推进；
 - Features/Knowledge_Graph_2_0_Product_Definition.md：已确认的 KG-D0 产品定义。把「重复查询」重构为检索困难信号、把「近似词形」重构为知识关联；定义 `lexeme/phrase/grammar_pattern` 三类知识点身份、append-only 显式 lookup 事件语义、日语 basic-form+lemma-reading 规范化与 `inflection-of/polite-of/evidence-of` 确定性关系；Study Item 仍是唯一正式调度单位，KP 只做跨内容组织、查询与只读聚合，图信号只经可降级的 `graphPlanningSignalProvider` 对基础队列受限细排，绝不写 FSRS；
 - Features/prototypes/kg-d1-prototype.html：已确认的 KG-D1 桌面端 12 状态原型，覆盖显式 lookup、重复查找、队列内/外边界、一次性加入学习、日语词形关系、unresolved、KP 三类证据、精确重复生成、受限细排与降级态；
 - Architecture/Knowledge_Graph_2_0_Domain_and_Data_ADR.md：已接受的 KG-D2 领域与数据 ADR（2026-07-16 Accepted）。定义智能来源四层模型（L0 事实 / L1 确定性分析 / L2 DeepSeek 异步提案 / L3 裁决），DeepSeek 只作异步 proposal、不进同步队列不写 FSRS；11 张 `kg_*` 表 + 1 张 LA 手动入队表（表 37-48）；KP 分层身份、可逆 split/merge、unresolved 工作流、append-only lookup 幂等、`kg-lookup-signal-v1` 只读细排、`加入本次学习` 的共享 bucket 5 amendment；§21-§26 已登记 KG-P0-P3、KG-R0 与 KG-R1 的实施、真实 volume 回填、Canary、reader 性能和显式加入学习验收；

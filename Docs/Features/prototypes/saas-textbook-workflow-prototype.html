@@ -236,7 +236,7 @@
           <div>
             <p class="eyebrow">Textbook workflow · human review first</p>
             <h1>Track 03 · 周末安排</h1>
-            <p>校对合成教材内容，确认后再发布到学习辅助。</p>
+            <p>Codex Skill 已完成截图解析；本页只负责人工确认、发布与学习。</p>
           </div>
           <div class="workflow-meta">
             <div><span>Expressions</span><strong>8 条</strong></div>
@@ -246,11 +246,11 @@
         </section>
 
         <nav id="stageNav" class="stage-nav" aria-label="教材发布流程">
-          <button class="stage done" type="button" data-stage="import"><span class="number">✓</span><span><strong>导入草稿</strong><small>Manifest 已验证</small></span></button>
-          <button class="stage active" type="button" data-stage="review"><span class="number">2</span><span><strong>校对内容</strong><small>6 / 8 已确认</small></span></button>
+          <button class="stage done" type="button" data-stage="import"><span class="number">✓</span><span><strong>接收 Skill 草稿</strong><small>Manifest 已验证</small></span></button>
+          <button class="stage active" type="button" data-stage="review"><span class="number">2</span><span><strong>人工确认</strong><small>6 / 8 已确认</small></span></button>
           <button class="stage" type="button" data-stage="summary"><span class="number">3</span><span><strong>发布检查</strong><small>范围与影响</small></span></button>
           <button class="stage" type="button" data-stage="processing"><span class="number">4</span><span><strong>后台处理</strong><small>TTS 与学习单元</small></span></button>
-          <button class="stage" type="button" data-stage="complete"><span class="number">5</span><span><strong>完成</strong><small>结果与下一步</small></span></button>
+          <button class="stage" type="button" data-stage="complete"><span class="number">5</span><span><strong>进入学习</strong><small>结果与下一步</small></span></button>
         </nav>
 
         <section id="workspace" class="workspace" aria-live="polite"></section>
@@ -354,9 +354,9 @@
 
     function importView() {
       workspace.innerHTML = `
-        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Import</p><h2>草稿来源</h2></div></header><div class="task-list"><button class="task active" type="button"><span class="task-index">01</span><span><strong>Manifest</strong><small>已完成 dry-run</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">02</span><span><strong>官方 Track</strong><small>本地媒体已登记</small></span><i class="task-status done"></i></button></div></aside>
-        <section class="stage-content"><div class="content-scroll"><div class="content-title"><div><p class="eyebrow">Stage 1</p><h2>导入教材草稿</h2><p>只接受 Git 外 Manifest；应用内 OCR 不参与教材识别。</p></div><span class="status-badge">已完成</span></div><div class="import-layout"><div class="dropzone"><div><strong>daily-english/track-03/manifest.json</strong><p>Manifest hash 与媒体根均已验证</p><button class="button" type="button">重新选择 Manifest</button></div></div><div class="manifest-card"><p class="eyebrow">Dry-run result</p><strong>可以安全导入</strong><dl><div><dt>Expressions</dt><dd>8</dd></div><div><dt>Official audio</dt><dd>1</dd></div><div><dt>Warnings</dt><dd>0</dd></div><div><dt>Hash</dt><dd>7f31…c2a9</dd></div></dl></div></div></div><footer class="sticky-actions"><span class="action-note">导入不会自动发布到学习计划</span><div class="action-group"><button class="button" type="button">重新运行 dry-run</button><button class="button primary" type="button" data-next="review">进入内容校对</button></div></footer></section>
-        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Import checks</p><h2>导入边界</h2></div></header><section class="tools-section"><div class="check-list"><div class="check"><span>路径位于受控根</span><b>通过</b></div><div class="check"><span>Manifest schema</span><b>通过</b></div><div class="check"><span>SHA-256</span><b>通过</b></div><div class="check"><span>版权内容进入 Git</span><b>否</b></div></div></section></aside>`;
+        <aside class="task-rail"><header class="panel-head"><div><p class="eyebrow">Skill output</p><h2>草稿来源</h2></div></header><div class="task-list"><button class="task active" type="button"><span class="task-index">01</span><span><strong>Codex Skill</strong><small>截图解析已完成</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">02</span><span><strong>Manifest</strong><small>dry-run 已通过</small></span><i class="task-status done"></i></button><button class="task" type="button"><span class="task-index">03</span><span><strong>官方 Track</strong><small>本地媒体已登记</small></span><i class="task-status done"></i></button></div></aside>
+        <section class="stage-content"><div class="content-scroll"><div class="content-title"><div><p class="eyebrow">Stage 1</p><h2>接收 Skill 产出的教材草稿</h2><p>截图识别、英日配对、中文提示和 ruby 已由 Codex Skill 在页面外完成；本页不提供教材 OCR。</p></div><span class="status-badge">已完成</span></div><div class="import-layout"><div class="dropzone"><div><strong>daily-english/track-03/manifest.json</strong><p>Skill 产出、Manifest hash 与媒体根均已验证</p><button class="button" type="button">查看 Skill 产出摘要</button></div></div><div class="manifest-card"><p class="eyebrow">Dry-run result</p><strong>可以进入人工确认</strong><dl><div><dt>Expressions</dt><dd>8</dd></div><div><dt>Official audio</dt><dd>1</dd></div><div><dt>Warnings</dt><dd>0</dd></div><div><dt>Hash</dt><dd>7f31…c2a9</dd></div></dl></div></div></div><footer class="sticky-actions"><span class="action-note">接收草稿不会自动确认或发布</span><div class="action-group"><button class="button" type="button">查看低置信度项</button><button class="button primary" type="button" data-next="review">进入人工确认</button></div></footer></section>
+        <aside class="context-tools"><header class="panel-head"><div><p class="eyebrow">Intake checks</p><h2>责任边界</h2></div></header><section class="tools-section"><div class="check-list"><div class="check"><span>截图解析主体</span><b>Codex Skill</b></div><div class="check"><span>应用内教材 OCR</span><b>无</b></div><div class="check"><span>Manifest schema / SHA-256</span><b>通过</b></div><div class="check"><span>版权内容进入 Git</span><b>否</b></div></div></section></aside>`;
       bindNext();
     }
 

@@ -29,6 +29,18 @@
 - App Shell、密度、横向反馈、复杂流程导航、焦点与共享组件契约，以本文为准；
 - 本文不得通过 UI 设计新增数据库状态或绕过领域门禁；UI 阶段优先从现有领域状态和 Job 状态派生。
 
+### 0.1 教材课程不可改变的责任边界
+
+SaaS 化只改造页面组织、人工确认、发布反馈和学习体验，不改变 TC-D0 已确认的教材处理责任：
+
+1. 用户把教材截图和可选官方 Track 音频提供给当前 Codex 任务；
+2. Codex 通过 `import-textbook-track` Skill 在应用外完成图像理解、英日配对、中文学习提示、汉字 ruby、重点与置信度分析，并产出 Git 外 draft Manifest；
+3. 页面只接收 Skill 已生成的结构化草稿，并负责人工确认、必要修订、发布检查、音频使用和学习；
+4. 页面不提供教材截图上传 OCR、自动版面解析、从空白开始的英日配对或用户重做 Skill 已完成工作的入口；
+5. 校对工作台必须预填充 Skill 结果，优先展示低置信度、非直译、错配风险和人工修订项，而不是把全部表达呈现为空白录入任务。
+
+任何 Shell、Stage、Task、Tools 或 Cloudscape 组件决策都不得将上述责任从 Codex Skill 转移到应用页面。
+
 ## 1. 已确认决策
 
 ### 1.1 Cloudscape 采用方式
@@ -47,7 +59,7 @@
 
 | 流程模型 | 判断标准 | Three LANS 适用场景 | 主结构 |
 |---|---|---|---|
-| 分阶段配置 | 步骤相互依赖、后一步依赖前一步结果 | 教材导入与发布、首次学习计划 | Stage/Wizard + Review |
+| 分阶段配置 | 步骤相互依赖、后一步依赖前一步结果 | 教材 Skill 草稿接收与发布、首次学习计划 | Stage/Wizard + Review |
 | 多任务工作台 | 多个任务可独立处理、顺序可变 | 教材逐句校对、KG unresolved | Task list + Detail tools |
 | 异步后台执行 | 页面关闭后仍需继续、可失败重试 | 卡片生成、TTS、发布物化、KG worker | Job progress + Activity |
 | 连续专注会话 | 用户重复完成同类动作、需要低干扰 | 每日学习、复习评分 | Focused session |
@@ -82,7 +94,7 @@
 阶段名称使用用户可控制、可识别的任务：
 
 ```text
-导入草稿 -> 校对内容 -> 发布检查 -> 后台处理 -> 完成
+接收 Skill 草稿 -> 人工确认 -> 发布检查 -> 后台发布 -> 进入学习
 ```
 
 不得把阶段命名为 `INSERT`、`materialize`、`worker`、`projection` 或模型内部步骤。技术细节进入 Activity 或 Details。
@@ -399,14 +411,15 @@ type WorkflowStageView = {
 ### 9.1 教材课程：首个样板
 
 ```text
-导入草稿
-  -> 校对内容（Task workbench）
+接收 Skill 草稿（不识别截图，只验证 Manifest）
+  -> 人工确认（Task workbench）
   -> 发布检查（Review Summary）
   -> 后台处理（Manifest/TTS/Study Item Jobs）
-  -> 完成摘要
+  -> 完成摘要与学习入口
 ```
 
-- 表达校对是 Task list，不是 20 页 Wizard；
+- 截图识别和结构化在 Codex Skill 内完成，不在此页复制 OCR 或编排流程；
+- 页面打开时已有预填充表达；表达校对是例外优先的 Task list，不是 20 页 Wizard；
 - 右侧 Tools 显示当前表达 EN/JA/ZH、ruby、来源和校验；
 - 发布按钮只在 Review Stage 出现；
 - TTS 和物化进度由持久 Job 表示；
@@ -496,6 +509,7 @@ type WorkflowStageView = {
 - 拆分 `TextbookCoursesPage.tsx`；
 - URL 化 Track/Stage/Task；
 - 统一保存、错误、发布检查和后台处理体验；
+- 保持「Codex Skill 外部解析，页面人工确认与学习」，不新增教材截图上传或 OCR 流程；
 - 保留 TC-D0/TC-D2 的版权、人工确认、媒体和学习接入边界；
 - 完成桌面 E2E、visual、API 与回归。
 
@@ -517,6 +531,7 @@ type WorkflowStageView = {
 - [x] 原型不含真实教材原文；
 - [x] 原型在支持的 1280 和 1440 桌面视口无水平溢出、重叠和不可达操作；
 - [x] 本文与 TC/LA/KG Accepted 文档无领域冲突；
+- [x] 用户重申教材截图始终由 Codex Skill 解析，页面主要负责人工确认、发布和学习；
 - [ ] 实施前建立状态转移表与 API/view-model contract。
 
 ## 13. 明确不做
@@ -526,6 +541,8 @@ type WorkflowStageView = {
 - 不把全站改成 Wizard；
 - 不把所有信息放入卡片或嵌套卡片；
 - 不让 AI 自动接受关系或发布教材；
+- 不在应用内新增教材截图上传、OCR、版面解析或英日自动配对；
+- 不要求用户在页面重新录入 Codex Skill 已提取的教材内容；
 - 不在原型阶段修改生产数据库、API 或真实 Track；
 - 不因采用 Cloudscape 参考就放弃 Three LANS 的品牌、语言和学习卡视觉。
 
