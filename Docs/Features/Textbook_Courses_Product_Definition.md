@@ -1,6 +1,6 @@
 # 教材课程产品定义（TC-D0）
 
-> 状态：**TC-D0-TC-D2 已确认；TC-P0-TC-P4 已于 2026-07-15 完成并通过验收；Track 01 已导入 draft，内容仍由人工在页面确认后才能发布**
+> 状态：**TC-D0-TC-D2 已确认；2026-07-23 SaaS workflow amendment 已确认；Track 内容仍由人工逐表达确认后才能发布**
 > 日期：2026-07-14
 > 当前运行基线：[CLAUDE.md](../../CLAUDE.md)
 > 学习产品基线：[学习辅助 2.0 产品定义](Learning_Assistance_2_0_Product_Definition.md)
@@ -453,6 +453,15 @@ Track 从 verified 进入 published 时，UI 必须预览：表达数、将新�
 TC-D2 被接受时，LA-D2 文档、完整 schema、versioned migration 和实现测试必须在同一变更中同步，不能让两份 ADR 描述不同的当前不变量。
 
 ## 14. 服务降级与异常状态
+
+### 14.1 SaaS 长流程补充
+
+- 页面只接收 Codex Skill 产出的结构化 draft，不增加教材截图上传、OCR 或自动配对；
+- 逐表达状态为 `pending / needs_attention / confirmed`，确认数量必须来自服务端；
+- 用户修改已确认表达后，该表达回到 `needs_attention`；
+- 发布前展示服务端 Review Summary；存在未确认表达或 preview 过期时阻止发布；
+- 发布、物化、TTS 与同步使用可恢复 operation；页面关闭不取消服务端执行；
+- TTS 局部失败可单独重试，已经成功的发布和 Study Item 不重复写入。
 
 | 异常 | v1 行为 |
 |---|---|

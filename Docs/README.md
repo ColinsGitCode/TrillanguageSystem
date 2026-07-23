@@ -42,6 +42,7 @@
 - Features/UI_Modernization_Design_System.md：全栈迁移前的 UI 现代化历史实施基线；其 token、领域色、视觉克制与安静学习工作台原则继续有效，旧静态页面和 Shell 路径已失效；
 - Features/SaaS_App_Shell_and_Complex_Workflow_Design_Guidelines.md：React Router 时代的 SaaS App Shell 与复杂长流程 Draft 横向规范。定义 Cloudscape 参考采用边界、四类流程模型、Stage/Task/Step、保存恢复、Review、异步 Job、AI proposal 与共享 Workflow 原语；教材始终由 Codex Skill 在应用外解析，页面只接收草稿并负责人工确认、发布和学习；
 - Features/prototypes/saas-textbook-workflow-prototype.html：SaaS 复杂长流程桌面可视化原型，使用合成内容覆盖 Skill 草稿接收、人工确认、发布检查、后台处理、局部失败重试和学习入口；
+- Architecture/SaaS_Workflow_State_URL_and_View_Model_Contract.md：已接受的复杂流程 Stage、深链接、服务端 view-model、保存/冲突与命令所有权 contract；
 - superpowers/plans/2026-07-23-saas-workflow-modernization.md：SaaS App Shell 与复杂长流程现代化详细开发任务表。共 35 个可独立验证任务，按 Gate 0、DS-W1 Cloudscape POC、DS-W2 教材迁移、DS-W3 横向扩展和 Final 完整验收推进；
 - Features/Knowledge_Graph_2_0_Product_Definition.md：已确认的 KG-D0 产品定义。把「重复查询」重构为检索困难信号、把「近似词形」重构为知识关联；定义 `lexeme/phrase/grammar_pattern` 三类知识点身份、append-only 显式 lookup 事件语义、日语 basic-form+lemma-reading 规范化与 `inflection-of/polite-of/evidence-of` 确定性关系；Study Item 仍是唯一正式调度单位，KP 只做跨内容组织、查询与只读聚合，图信号只经可降级的 `graphPlanningSignalProvider` 对基础队列受限细排，绝不写 FSRS；
 - Features/prototypes/kg-d1-prototype.html：已确认的 KG-D1 桌面端 12 状态原型，覆盖显式 lookup、重复查找、队列内/外边界、一次性加入学习、日语词形关系、unresolved、KP 三类证据、精确重复生成、受限细排与降级态；

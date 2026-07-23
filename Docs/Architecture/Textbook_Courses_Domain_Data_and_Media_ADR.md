@@ -1,6 +1,6 @@
 # 教材课程领域、数据、Manifest、API 与媒体 ADR（TC-D2）
 
-> 状态：**Accepted（2026-07-14）；TC-P0-TC-P4 已于 2026-07-15 完成并通过架构验收**
+> 状态：**Accepted（2026-07-14）；SaaS workflow amendment 于 2026-07-23 Accepted**
 > 日期：2026-07-14
 > 产品权威：[教材课程产品定义（TC-D0）](../Features/Textbook_Courses_Product_Definition.md)
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
@@ -8,6 +8,18 @@
 > 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P4 已完成运行时、桌面 UI、学习集成、备份恢复、完整自动化验收与真实 Track 01 本地 smoke；官方音频自动句级切分与知识图谱仍后置
 
 ## 0. 决策状态与权威边界
+
+### 0.1 2026-07-23 SaaS workflow amendment
+
+教材长流程新增三类正式能力，且不改变原有不可变 revision、verify/publish 事务与 Study Item 所有权：
+
+1. `textbook_expression_review_states` 是当前 Track revision 的可更新确认投影，状态固定为 `pending / needs_attention / confirmed`。它记录 expression revision、reviewer、reason 与时间，不复制正文；
+2. 校对 PATCH 必须 copy-on-write：携带 expected revision，复制未变 expression，修改项创建新的 expression revision 与 Track revision。未变项可继承确认；修改项回到 `needs_attention`；
+3. `textbook_operations` 与 append-only `textbook_operation_events` 负责 publish/materialize/TTS/KG sync 的可恢复后台执行。operation 只存 ID、hash、计数、公开错误码和步骤结果，不存教材正文。
+
+operation kind 固定为 `release / tts / sync`，状态固定为 `queued / running / succeeded / partially_failed / failed / cancelled`。相同幂等键和 payload hash 返回同一 operation；相同键不同 hash 返回 409。发布成功是已提交事实，后续 TTS 或 sync 失败不得回滚发布；重试只执行失败步骤。
+
+逐表达确认是发布前置条件。UI localStorage 不能成为确认真源，`generation_jobs` 不能冒充教材 operation。服务重启将 stale running 恢复为 queued，worker 在步骤边界安全恢复。
 
 本文是教材课程的 TC-D2 ADR，负责把已确认的 TC-D0 产品承诺和 TC-D1 桌面原型转换为可实施的数据、Manifest、API、媒体和学习域 contract。
 

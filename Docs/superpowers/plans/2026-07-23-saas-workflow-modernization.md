@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**Draft · 任务已拆解，待用户确认后执行**
+> 状态：**In Progress · 用户已确认全部 35 项任务，Gate 0 执行中**
 >
 > 日期：2026-07-23
 >
@@ -1233,9 +1233,9 @@ docker compose -p three_lans_system ps
 - [x] 教材桌面原型已建立；
 - [x] 用户重申 Skill 外部解析、页面人工确认与学习边界；
 - [x] 任务已拆解到文件、依赖、测试、验收和提交；
-- [ ] 用户确认本执行计划；
-- [ ] Gate 0 开始执行；
-- [ ] TC-D2 workflow amendment Accepted；
+- [x] 用户确认本执行计划；
+- [x] Gate 0 开始执行；
+- [x] TC-D2 workflow amendment Accepted；
 - [ ] Cloudscape POC 采用表确认；
 - [ ] DS-W2 教材迁移验收；
 - [ ] DS-W3 横向扩展验收；
