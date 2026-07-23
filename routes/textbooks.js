@@ -7,6 +7,8 @@ const { TextbookImportService } = require('../services/textbooks/textbookImportS
 const { TextbookError } = require('../services/textbooks/textbookErrors');
 const { streamGeneratedAudio, streamOfficialAudio } = require('../services/textbooks/textbookMediaService');
 const { TextbookTtsService } = require('../services/textbooks/textbookTtsService');
+const textbookOperationService = require('../services/textbooks/textbookOperationService');
+const { TextbookWorkflowService } = require('../services/textbooks/textbookWorkflowService');
 const {
   deleteTrackHighlight,
   getTrackHighlight,
@@ -25,6 +27,7 @@ const importService = new TextbookImportService({
   sourceRoot: TEXTBOOK_SOURCE_ROOT,
 });
 const textbookTtsService = new TextbookTtsService({ dbService, workPath: TEXTBOOK_WORK_PATH });
+const textbookWorkflowService = new TextbookWorkflowService({ dbService });
 
 function textbookDerivationFolder(expression) {
   const courseKey = String(expression?.course_key || 'course')
@@ -94,6 +97,57 @@ router.get('/api/textbooks/tracks/:id', route((req, res) => {
   const track = dbService.getTextbookTrack(req.params.id);
   if (!track) return res.status(404).json({ error: 'Not found', code: 'TEXTBOOK_TRACK_NOT_FOUND' });
   return send(res, { track });
+}));
+
+router.get('/api/textbooks/tracks/:id/workflow', route((req, res) => {
+  const workflow = textbookWorkflowService.getWorkflow(req.params.id, req.query.operation || null);
+  return send(res, { workflow });
+}));
+
+router.get('/api/textbooks/revisions/:id', route((req, res) => {
+  const revision = dbService.getTextbookRevision(req.params.id);
+  if (!revision) return res.status(404).json({ error: 'Not found', code: 'TEXTBOOK_REVISION_NOT_FOUND' });
+  return send(res, { revision });
+}));
+
+router.patch('/api/textbooks/revisions/:id', route((req, res) => {
+  const result = dbService.copyTextbookRevision(req.params.id, req.body || {});
+  const track = dbService.getTextbookTrack(result.trackId);
+  const workflow = textbookWorkflowService.getWorkflow(result.trackId);
+  return send(res, { result, track, workflow });
+}));
+
+router.put('/api/textbooks/revisions/:id/expressions/:expressionId/review', route((req, res) => {
+  const review = dbService.updateTextbookReviewState(
+    req.params.id,
+    req.params.expressionId,
+    req.body || {}
+  );
+  const revision = dbService.getTextbookRevision(req.params.id);
+  const workflow = textbookWorkflowService.getWorkflow(revision.track_id);
+  return send(res, { review, workflow });
+}));
+
+router.post('/api/textbooks/tracks/:id/operations', route((req, res) => {
+  const operation = textbookOperationService.enqueue(req.params.id, req.body || {});
+  return res.status(202).json({ success: true, operation });
+}));
+
+router.get('/api/textbooks/operations/:id', route((req, res) => {
+  const operation = dbService.getTextbookOperation(req.params.id);
+  if (!operation) return res.status(404).json({ error: 'Not found', code: 'TEXTBOOK_OPERATION_NOT_FOUND' });
+  return send(res, { operation });
+}));
+
+router.get('/api/textbooks/operations/:id/events', route((req, res) => {
+  const operation = dbService.getTextbookOperation(req.params.id);
+  if (!operation) return res.status(404).json({ error: 'Not found', code: 'TEXTBOOK_OPERATION_NOT_FOUND' });
+  return send(res, { events: dbService.listTextbookOperationEvents(req.params.id) });
+}));
+
+router.post('/api/textbooks/operations/:id/retry', route((req, res) => {
+  const operation = textbookOperationService.retry(req.params.id);
+  return res.status(202).json({ success: true, operation });
 }));
 
 router.get('/api/textbooks/search', route((req, res) => {

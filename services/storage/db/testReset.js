@@ -26,6 +26,9 @@ const TABLES_IN_DELETE_ORDER = [
   'kg_points',
 
   // Textbook Courses (immutable facts are reset only in test mode)
+  'textbook_operation_events',
+  'textbook_operations',
+  'textbook_expression_review_states',
   'textbook_card_derivations',
   'textbook_expression_revisions',
   'textbook_expressions',
@@ -77,6 +80,8 @@ function truncateAll(db) {
           'textbook_revision_delete_block',
           'textbook_expression_revision_delete_block',
           'textbook_asset_delete_block',
+          'textbook_operation_events_update_block',
+          'textbook_operation_events_delete_block',
           'kg_resolution_events_update_block',
           'kg_resolution_events_delete_block',
           'kg_point_transitions_update_block',
@@ -91,7 +96,23 @@ function truncateAll(db) {
     for (const table of TABLES_IN_DELETE_ORDER) {
       // Wrap in a check: a malformed table name in this list would otherwise
       // break the whole reset silently. SQLite throws `no such table` here.
-      db.prepare(`DELETE FROM ${table}`).run();
+      if (table === 'textbook_track_revisions') {
+        let remaining = db.prepare('SELECT COUNT(*) AS count FROM textbook_track_revisions').get().count;
+        while (remaining > 0) {
+          const deleted = db.prepare(`
+            DELETE FROM textbook_track_revisions
+            WHERE id NOT IN (
+              SELECT parent_revision_id
+              FROM textbook_track_revisions
+              WHERE parent_revision_id IS NOT NULL
+            )
+          `).run().changes;
+          if (!deleted) throw new Error('Unable to delete textbook revision dependency chain');
+          remaining -= deleted;
+        }
+      } else {
+        db.prepare(`DELETE FROM ${table}`).run();
+      }
     }
     for (const trigger of immutableTriggers) {
       if (trigger.sql) db.exec(trigger.sql);

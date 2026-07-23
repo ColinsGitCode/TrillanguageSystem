@@ -1,6 +1,6 @@
 # Three LANS SaaS App Shell 与复杂长流程现代化实施计划
 
-> 状态：**In Progress · Gate 0 与 DS-W1 已完成，DS-W2 执行中**
+> 状态：**In Progress · Gate 0、DS-W1 与 DS-W2 已完成，DS-W3 执行中**
 >
 > 日期：2026-07-23
 >
@@ -594,6 +594,25 @@ npx playwright test tests/e2e/workflow-primitives.spec.js
 ---
 
 ## DS-W2：教材课程生产迁移
+
+> 完成状态：Task 15-28 已于 2026-07-23 实施并通过 [`SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md`](../../TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md)。以下清单保留为实施规格；最终证据为 unit 347/347、integration 63/63、smoke 7/7、desktop E2E/visual 38/38。
+
+| Task | 状态 |
+|---|---|
+| 15 workflow schema 与 migration 006 | [x] |
+| 16 copy-on-write 与 review projection | [x] |
+| 17 可恢复 TextbookOperationService | [x] |
+| 18 workflow/review/operation API | [x] |
+| 19 前端 types/API/adapter | [x] |
+| 20 URL 工作上下文 | [x] |
+| 21 页面协调器与组件拆分 | [x] |
+| 22 Skill 正式 handoff | [x] |
+| 23 异常优先人工确认 | [x] |
+| 24 草稿保存与冲突恢复 | [x] |
+| 25 发布 Review Summary | [x] |
+| 26 后台处理、重试与完成摘要 | [x] |
+| 27 媒体、标红、派生卡与学习入口 | [x] |
+| 28 DS-W2 门禁 | [x] |
 
 ### Task 15：新增 workflow schema 与 migration 006
 
@@ -1237,6 +1256,6 @@ docker compose -p three_lans_system ps
 - [x] Gate 0 开始执行；
 - [x] TC-D2 workflow amendment Accepted；
 - [x] Cloudscape POC 采用表确认；
-- [ ] DS-W2 教材迁移验收；
+- [x] DS-W2 教材迁移验收；
 - [ ] DS-W3 横向扩展验收；
 - [ ] Final 完整验收。

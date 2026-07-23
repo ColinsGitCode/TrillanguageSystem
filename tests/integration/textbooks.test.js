@@ -150,6 +150,29 @@ function expression(key, ordinal, en, ja, zh) {
   };
 }
 
+async function confirmAllExpressions(trackId) {
+  const workflowResponse = await api('GET', `/api/textbooks/tracks/${trackId}/workflow`);
+  assert.equal(workflowResponse.status, 200);
+  const { workflow } = workflowResponse.body;
+  for (const task of workflow.review.tasks) {
+    const confirmed = await api(
+      'PUT',
+      `/api/textbooks/revisions/${workflow.track.revisionId}/expressions/${task.expressionId}/review`,
+      {
+        body: {
+          expressionRevisionId: task.expressionRevisionId,
+          status: 'confirmed',
+          reviewer: 'integration-test',
+        },
+      }
+    );
+    assert.equal(confirmed.status, 200);
+  }
+  const completed = await api('GET', `/api/textbooks/tracks/${trackId}/workflow`);
+  assert.equal(completed.body.workflow.review.confirmed, completed.body.workflow.review.total);
+  return completed.body.workflow;
+}
+
 test.beforeEach(() => resetState());
 
 test('textbook imports validate, persist draft rows, and stay out of Cards Factory history/search', async () => {
@@ -215,6 +238,12 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   assert.equal(history.status, 200);
   assert.equal(history.body.records.length, 0);
 
+  const blocked = await api('POST', `/api/textbooks/revisions/${revisionId}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.code, 'TEXTBOOK_REVIEW_INCOMPLETE');
+  await confirmAllExpressions(imported.body.track.id);
   const verified = await api('POST', `/api/textbooks/revisions/${revisionId}/verify`, {
     body: { expectedTrackStatus: 'draft' },
   });
@@ -237,6 +266,7 @@ test('verified textbook track publishes textbook study items and creates derivat
   });
   const revisionId = imported.body.track.revision_id;
   const trackId = imported.body.track.id;
+  await confirmAllExpressions(trackId);
   await api('POST', `/api/textbooks/revisions/${revisionId}/verify`, {
     body: { expectedTrackStatus: 'draft' },
   });
@@ -474,6 +504,7 @@ test('publishing a revised Track updates only the direction whose unit hash chan
     },
   });
   const trackId = importedFirst.body.track.id;
+  await confirmAllExpressions(trackId);
   await api('POST', `/api/textbooks/revisions/${importedFirst.body.track.revision_id}/verify`, {
     body: { expectedTrackStatus: 'draft' },
   });
@@ -497,6 +528,7 @@ test('publishing a revised Track updates only the direction whose unit hash chan
   assert.equal(importedSecond.status, 200);
   assert.equal(importedSecond.body.track.status, 'draft');
   assert.equal(importedSecond.body.track.revision_number, 2);
+  await confirmAllExpressions(trackId);
   await api('POST', `/api/textbooks/revisions/${importedSecond.body.track.revision_id}/verify`, {
     body: { expectedTrackStatus: 'draft' },
   });
@@ -516,4 +548,63 @@ test('publishing a revised Track updates only the direction whose unit hash chan
     { unit_key: 'expr:02:en', content_revision: 1 },
     { unit_key: 'expr:02:ja', content_revision: 1 },
   ]);
+});
+
+test('textbook release operation is idempotent, observable, and resumable by id', async () => {
+  const fixture = await createManifestFixture();
+  const imported = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: fixture.manifestRelative,
+      expectedManifestHash: fixture.manifestHash,
+    },
+  });
+  const trackId = imported.body.track.id;
+  const workflow = await confirmAllExpressions(trackId);
+  const verified = await api('POST', `/api/textbooks/revisions/${workflow.track.revisionId}/verify`, {
+    body: { expectedTrackStatus: 'draft' },
+  });
+  assert.equal(verified.status, 200);
+  const preview = await api('GET', `/api/textbooks/tracks/${trackId}/publish-preview`);
+  const command = {
+    kind: 'release',
+    idempotencyKey: `integration-release-${trackId}`,
+    previewRevision: `${workflow.track.revisionId}:${preview.body.preview.planRevision}`,
+    payload: {
+      expectedTrackRevision: workflow.track.revisionNumber,
+      confirmUnitCount: preview.body.preview.unitCount,
+      expectedPlanRevision: preview.body.preview.planRevision,
+      includeTts: false,
+    },
+  };
+  const stalePreview = await api('POST', `/api/textbooks/tracks/${trackId}/operations`, {
+    body: { ...command, previewRevision: 'stale:preview', idempotencyKey: `${command.idempotencyKey}-stale` },
+  });
+  assert.equal(stalePreview.status, 409);
+  assert.equal(stalePreview.body.code, 'TEXTBOOK_PREVIEW_REVISION_CONFLICT');
+  const created = await api('POST', `/api/textbooks/tracks/${trackId}/operations`, { body: command });
+  assert.equal(created.status, 202);
+  const repeated = await api('POST', `/api/textbooks/tracks/${trackId}/operations`, { body: command });
+  assert.equal(repeated.status, 202);
+  assert.equal(repeated.body.operation.id, created.body.operation.id);
+  const conflict = await api('POST', `/api/textbooks/tracks/${trackId}/operations`, {
+    body: { ...command, payload: { ...command.payload, includeTts: true } },
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.code, 'TEXTBOOK_IDEMPOTENCY_CONFLICT');
+
+  let operation = created.body.operation;
+  for (let attempt = 0; attempt < 30 && ['queued', 'running'].includes(operation.status); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    operation = (await api('GET', `/api/textbooks/operations/${operation.id}`)).body.operation;
+  }
+  assert.equal(operation.status, 'succeeded');
+  const events = await api('GET', `/api/textbooks/operations/${operation.id}/events`);
+  assert.equal(events.status, 200);
+  assert.ok(events.body.events.some((event) => event.event_type === 'created'));
+  assert.ok(events.body.events.some((event) => event.event_type === 'finished'));
+  assert.equal(dbService.db.prepare("SELECT COUNT(*) AS count FROM generations WHERE card_type = 'textbook_track'").get().count, 1);
+  assert.equal(dbService.db.prepare("SELECT COUNT(*) AS count FROM study_items WHERE unit_kind LIKE 'textbook_%'").get().count, 4);
+
+  const noOcr = await api('POST', `/api/textbooks/tracks/${trackId}/ocr`, { body: {} });
+  assert.equal(noOcr.status, 404);
 });

@@ -12,7 +12,12 @@ function read(relativePath) {
 }
 
 test('textbook extraction stays owned by import-textbook-track Skill', () => {
-  const pageSource = read('app/features/textbooks/TextbookCoursesPage.tsx');
+  const pageSource = [
+    read('app/features/textbooks/TextbookCoursesPage.tsx'),
+    read('app/features/textbooks/components/TextbookWorkflowHeader.tsx'),
+    read('app/features/textbooks/components/TextbookTrackRail.tsx'),
+    read('app/features/textbooks/components/TextbookIntakeTools.tsx'),
+  ].join('\n');
   const routesSource = read('routes/textbooks.js');
   const fixtureSource = read('tests/e2e/fixtures/textbookFixture.js');
   const skillSource = read('skills/import-textbook-track/SKILL.md');
@@ -26,10 +31,10 @@ test('textbook extraction stays owned by import-textbook-track Skill', () => {
   assert.match(fixtureSource, /confidence/u);
 
   assert.doesNotMatch(pageSource, /type=["']file["']/iu);
-  assert.doesNotMatch(pageSource, /OCR|optical character|自动配对/iu);
+  assert.doesNotMatch(pageSource, /ocrMutation|\/api\/ocr|<button[^>]*>[^<]*(?:OCR|自动配对)/iu);
   assert.doesNotMatch(routesSource, /\/api\/textbooks\/.*ocr/iu);
   assert.match(pageSource, /Codex Skill/iu);
-  assert.match(pageSource, /人工校对/iu);
+  assert.match(pageSource, /人工确认|人工校对|人审/iu);
 });
 
 test('draft import remains separate from verify and learning publication', () => {

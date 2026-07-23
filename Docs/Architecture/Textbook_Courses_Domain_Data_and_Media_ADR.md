@@ -1108,3 +1108,18 @@ TC-P4 完成完整验收、业务备份、运行手册和文档封板。它不�
 3. expression revision locator 变化会把所有方向误判为内容更新；现 content revision 只由逐方向 unit hash 或 unit kind 变化驱动，locator 可无噪声刷新。
 
 最终门禁：unit 294/294、integration 57/57、API smoke 7/7、desktop E2E/visual 32/32、lint/typecheck/build/Compose contract 全绿。真实 Track 01 只在本机 Git 外校验并以 draft 导入；20 组表达、40 个候选单元、2 张来源图、1 个官方音频，`expr:20` pairing 保持低置信度等待人工确认。生产数据库仍为 0 个 `textbook_track` generation 和 0 个教材 Study Item。
+
+## 24. DS-W2 SaaS workflow 实施记录（2026-07-23）
+
+本轮实现 2026-07-23 amendment，不修改 TC-D2 原有来源、学习和媒体边界：
+
+- migration 006 与 `schema.sql` 同步增加 `textbook_expression_review_states`、`textbook_operations` 和 `textbook_operation_events`；
+- copy-on-write 修订保持表达修订不可变，并按变更方向重算 unit hash；
+- verify 和 release 都要求当前 revision 的全部表达已确认；
+- release operation 使用 Track、kind、preview revision、idempotency key 和 payload hash 建立完整命令身份；
+- operation event 保持 append-only，启动恢复 stale running，重试跳过已成功步骤；
+- workflow view-model 是 Stage、计数、可执行命令和异常任务的唯一服务端来源；
+- URL 只保存 Track、Stage、Task 和 operation ID，不保存教材正文、路径或 hash；
+- 应用仍无教材 OCR/截图导入端点，Skill 仅通过正式 API 导入已批准 draft。
+
+实现期间修复了两项边界问题：幂等重放必须先于可变 Track 状态校验；测试数据清理必须按叶子到根删除 Track revision 自引用链。验收结果为 unit 347/347、integration 63/63、API smoke 7/7、desktop E2E/visual 38/38，详见 [`../TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md`](../TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md)。

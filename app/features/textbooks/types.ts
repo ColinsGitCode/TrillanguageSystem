@@ -152,3 +152,115 @@ export type TextbookImportSummary = {
   unitCounts: { textbookEn: number; textbookJa: number; total: number };
   hashes: { manifestFileHash: string; sourceFingerprint: string; contentHash: string };
 };
+
+export type TextbookReviewState = 'pending' | 'needs_attention' | 'confirmed';
+
+export type TextbookReviewTask = {
+  id: string;
+  expressionId: number;
+  expressionRevisionId: number;
+  ordinal: number;
+  title: string;
+  summary: string;
+  state: TextbookReviewState;
+  reasons: string[];
+  confidence: Record<string, number>;
+  source: {
+    spans: Array<Record<string, unknown>>;
+    provenance: Record<string, unknown>;
+    enUnitHash: string;
+    jaUnitHash: string;
+  };
+  content: {
+    officialEnText: string;
+    officialJaText: string;
+    zhCueText: string;
+    jaRubyHtml: string;
+    phraseAnalysisJson: string;
+    grammarPointsJson: string;
+    editorNote: string | null;
+  };
+};
+
+export type TextbookOperationStatus = 'queued' | 'running' | 'succeeded' | 'partially_failed' | 'failed' | 'cancelled';
+
+export type TextbookOperationStepResult = {
+  status: TextbookOperationStatus;
+  errorCode?: string | null;
+  retryable?: boolean;
+  summary?: string | null;
+  result?: unknown;
+};
+
+export type TextbookOperation = {
+  id: number;
+  track_id: number;
+  track_revision_id: number;
+  kind: 'release' | 'tts' | 'sync';
+  status: TextbookOperationStatus;
+  idempotency_key: string;
+  preview_revision: string | null;
+  current_step: string | null;
+  attempts: number;
+  public_summary: string | null;
+  error_code: string | null;
+  created_at_utc: string;
+  updated_at_utc: string;
+  finished_at_utc: string | null;
+  result: {
+    command?: Record<string, unknown>;
+    steps?: Record<string, TextbookOperationStepResult>;
+    published?: boolean;
+  };
+};
+
+export type TextbookOperationEvent = {
+  id: number;
+  operation_id: number;
+  sequence: number;
+  event_type: string;
+  step: string | null;
+  status: TextbookOperationStatus;
+  public_summary: string | null;
+  error_code: string | null;
+  retryable: 0 | 1;
+  occurred_at_utc: string;
+};
+
+export type TextbookWorkflow = {
+  track: {
+    id: number;
+    title: string;
+    status: TextbookTrackSummary['status'];
+    revisionId: number;
+    revisionNumber: number;
+    courseKey: string;
+    trackNumber: number;
+  };
+  stage: 'intake' | 'review' | 'release' | 'processing' | 'complete';
+  review: {
+    total: number;
+    confirmed: number;
+    needsAttention: number;
+    pending: number;
+    tasks: TextbookReviewTask[];
+  };
+  release: {
+    available: boolean;
+    previewRevision: string;
+    expressionCount: number;
+    unitCount: number;
+    planRevision: number;
+    dailyNewLimit: number | null;
+    shortestIntroductionDays: number | null;
+    warnings: string[];
+  };
+  operation: TextbookOperation | null;
+  commands: {
+    saveDraft: boolean;
+    updateReview: boolean;
+    verify: boolean;
+    release: boolean;
+    retry: boolean;
+  };
+};

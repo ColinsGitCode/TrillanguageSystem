@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
 import { ApiError } from '../../lib/api/client';
 import { learningApi } from './learning-api';
@@ -26,6 +26,8 @@ function apiMessage(error: Error) {
 
 export function LearningPlanPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const textbookPrefillApplied = useRef(false);
   const queryClient = useQueryClient();
   const planQuery = useQuery({ queryKey: ['learning', 'plan'], queryFn: learningApi.plan });
   const optionsQuery = useQuery({ queryKey: ['learning', 'scope-options'], queryFn: learningApi.scopeOptions });
@@ -86,6 +88,25 @@ export function LearningPlanPage() {
   });
 
   const textbookTracks = optionsQuery.data?.textbookTracks || [];
+  const requestedTextbookTrackId = Number(searchParams.get('textbookTrack')) || null;
+  useEffect(() => {
+    if (textbookPrefillApplied.current || !scope || !requestedTextbookTrackId || !textbookTracks.length) return;
+    if (!textbookTracks.some((track) => track.id === requestedTextbookTrackId)) {
+      textbookPrefillApplied.current = true;
+      setNotice('指定的教材 Track 尚未发布，未修改当前计划草稿。');
+      return;
+    }
+    textbookPrefillApplied.current = true;
+    setScope({
+      ...scope,
+      version: 2,
+      cardTypes: scope.cardTypes.includes('textbook_track')
+        ? scope.cardTypes
+        : [...scope.cardTypes, 'textbook_track'],
+      textbookTrackIds: [requestedTextbookTrackId],
+    });
+    setNotice('已预选该教材 Track。请检查范围后手动保存；系统不会自动修改学习计划。');
+  }, [requestedTextbookTrackId, scope, textbookTracks]);
   const toggleLanguage = (language: 'en' | 'ja') => {
     if (!scope) return;
     const exists = scope.languages.includes(language);

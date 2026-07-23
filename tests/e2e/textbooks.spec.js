@@ -7,6 +7,7 @@ const { createTextbookManifestFixture } = require('./fixtures/textbookFixture');
 
 const repoRoot = path.resolve(__dirname, '../..');
 let fixture;
+let publishedTrackId;
 
 async function assertContainedDesktop(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
@@ -27,72 +28,108 @@ async function selectText(page, selector, start, end) {
   await target.dispatchEvent('mouseup');
 }
 
-test.describe.serial('Textbook Courses TC-P4 desktop acceptance', () => {
+test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
     fixture = await createTextbookManifestFixture(repoRoot);
   });
 
-  test('renders the Git-external empty state at 1280x720', async ({ page }) => {
-    const browserErrors = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(message.text());
-    });
-    page.on('pageerror', (error) => browserErrors.push(error.message));
+  test('renders the Skill-owned empty state without OCR controls', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/textbooks');
     await expect(page.getByTestId('textbook-courses-page')).toBeVisible();
-    await expect(page.getByText('暂无课程。先导入 Track 草稿。')).toBeVisible();
+    await expect(page.getByText('还没有教材草稿')).toBeVisible();
+    await expect(page.getByText(/import-textbook-track/u)).toBeVisible();
+    await expect(page.locator('input[type="file"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /OCR|自动配对/iu })).toHaveCount(0);
     await assertContainedDesktop(page);
     await expect(page).toHaveScreenshot('textbook-courses-empty-desktop.png', { animations: 'disabled' });
-    expect(browserErrors).toEqual([]);
   });
 
-  test('imports, verifies and publishes a Track at 1440x900', async ({ page }) => {
+  test('imports, revises, confirms and releases through a resumable operation', async ({ page }) => {
     const browserErrors = [];
     page.on('console', (message) => {
       if (message.type() === 'error') browserErrors.push(message.text());
     });
     page.on('pageerror', (error) => browserErrors.push(error.message));
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/textbooks');
-    await page.getByLabel('Manifest relative path').fill(fixture.manifestRelative);
-    await page.getByLabel('Expected manifest hash').fill(fixture.manifestHash);
-    await page.getByRole('button', { name: 'Dry-run' }).click();
-    await expect(page.getByText(/dry-run ok .* 2 expressions .* 4 study candidates/u)).toBeVisible();
-    await page.getByRole('button', { name: 'Import draft' }).click();
-    await expect(page.getByText('已导入 Track 1，等待人工校对')).toBeVisible();
-    await expect(page.getByText('待校对 · 2 expressions · 1 low-confidence')).toBeVisible();
-    await page.getByRole('button', { name: '确认校对' }).click();
-    await expect(page.getByText(/已确认 .* 4 study units/u)).toBeVisible();
-    await page.getByRole('button', { name: '发布到学习计划' }).click();
-    await expect(page.getByText('已发布到学习系统：4 个单元，insert 4 / update 0')).toBeVisible();
-    await expect(page.getByRole('button', { name: '生成单句语音' })).toBeEnabled();
-    await expect(page.getByText('根据中文提示说出教材英文原句')).toHaveCount(0);
-    await page.getByPlaceholder('Search English / Japanese / Chinese cue').fill('ready');
-    await expect(page.locator('.textbook-search-results').getByText('I am ready now.')).toBeVisible();
-    const layout = await page.evaluate(() => {
-      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
-      const top = box('.textbook-command-strip');
-      const left = box('.textbook-sidebar-panel');
-      const center = box('.textbook-main-column');
-      const right = box('.textbook-detail-panel');
-      return { topHeight: top.height, leftWidth: left.width, centerWidth: center.width, rightWidth: right.width };
+    await page.route('**/api/textbooks/tracks/*/operations', async (route) => {
+      const payload = route.request().postDataJSON();
+      payload.payload.includeTts = false;
+      await route.continue({ postData: JSON.stringify(payload) });
     });
-    expect(layout.topHeight).toBeLessThanOrEqual(120);
-    expect(layout.leftWidth).toBeLessThanOrEqual(150);
-    expect(layout.centerWidth).toBeLessThanOrEqual(400);
-    expect(layout.rightWidth).toBeGreaterThanOrEqual(620);
-    expect(layout.centerWidth / layout.leftWidth).toBeGreaterThanOrEqual(2.2);
-    expect(layout.rightWidth / layout.centerWidth).toBeGreaterThanOrEqual(1.6);
+    await page.goto('/textbooks');
+    await page.getByText('高级 Manifest intake').click();
+    await page.getByLabel('Manifest relative path').fill(fixture.manifestRelative);
+    await page.getByLabel('Expected SHA-256').fill(fixture.manifestHash);
+    await page.getByRole('button', { name: 'Dry-run' }).click();
+    await expect(page.getByText(/dry-run ok .* 2 expressions .* 4 units/u)).toBeVisible();
+    await page.getByRole('button', { name: 'Import draft' }).click();
+    await expect(page).toHaveURL(/\/textbooks\?track=\d+&stage=review&task=\d+/u);
+    publishedTrackId = Number(new URL(page.url()).searchParams.get('track'));
+    await expect(page.getByRole('heading', { name: 'Compact Morning Practice' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /需注意\s*1/u })).toHaveAttribute('aria-pressed', 'true');
+
+    const taskBeforeSave = new URL(page.url()).searchParams.get('task');
+    await page.getByLabel('中文提示').fill('我已准备好。');
+    await page.getByRole('button', { name: '保存新修订' }).click();
+    await expect(page.getByText('已保存')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get('task')).not.toBe(taskBeforeSave);
+    await page.reload();
+    await expect(page.getByLabel('中文提示')).toHaveValue('我已准备好。');
+
+    await page.getByRole('button', { name: '确认此表达' }).click();
+    await expect(page.getByText('1/2 已确认')).toBeVisible();
+    await page.getByRole('button', { name: /待确认\s*1/u }).click();
+    await page.getByRole('button', { name: '确认此表达' }).click();
+    await expect(page).toHaveURL(/stage=release/u);
+    await expect(page.getByRole('heading', { name: '发布前复核' })).toBeVisible();
+    await expect(page.getByText('2 / 2')).toBeVisible();
+    await expect(page.locator('.workflow-review-summary dl > div').filter({ hasText: 'Study Items' })).toContainText('4');
+    let operationReads = 0;
+    await page.route(/\/api\/textbooks\/operations\/\d+$/u, async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      operationReads += 1;
+      if (operationReads <= 2) {
+        payload.operation.status = 'queued';
+        payload.operation.public_summary = '后台任务已创建';
+      }
+      await route.fulfill({ response, json: payload });
+    });
+    await page.getByRole('button', { name: '发布 2 条表达' }).click();
+    await expect(page).toHaveURL(/stage=processing.*operation=\d+|operation=\d+.*stage=processing/u);
+    const processingUrl = page.url();
+    await page.reload();
+    await expect(page).toHaveURL(processingUrl);
+    await expect(page.getByText(/后台处理|教材已发布/u).first()).toBeVisible();
+    await expect(page).toHaveURL(/stage=complete/u, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: '教材 Track 已可学习' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '加入学习计划' })).toHaveAttribute('href', `/learn/plan?textbookTrack=${publishedTrackId}`);
+
+    await page.getByPlaceholder('Search English / Japanese / Chinese').fill('ready');
+    await expect(page.locator('.textbook-search-results').getByText('I am ready now.')).toBeVisible();
     await assertContainedDesktop(page);
     await expect(page).toHaveScreenshot('textbook-courses-published-desktop.png', { animations: 'disabled' });
     expect(browserErrors).toEqual([]);
   });
 
+  test('restores a deep-linked Track and task across history navigation', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
+    await expect(page.getByRole('heading', { name: '教材 Track 已可学习' })).toBeVisible();
+    const expressionButtons = page.locator('.textbook-published-list li button');
+    await expressionButtons.nth(1).click();
+    const secondUrl = page.url();
+    await expressionButtons.nth(0).click();
+    await page.goBack();
+    await expect(page).toHaveURL(secondUrl);
+    await expect(expressionButtons.nth(1)).toHaveClass(/active/u);
+  });
+
   test('persists highlights and creates a normalized derivation job', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/textbooks');
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
     await expect(page.locator('[data-textbook-language="en"]').first()).toContainText('Start here.');
     await selectText(page, '[data-textbook-language="en"]', 0, 5);
     const markButton = page.getByRole('button', { name: '标红选区' });
@@ -138,7 +175,7 @@ test.describe.serial('Textbook Courses TC-P4 desktop acceptance', () => {
         }
       };
     });
-    await page.route('**/api/textbooks/tracks/*', async (route) => {
+    await page.route(/\/api\/textbooks\/tracks\/\d+$/u, async (route) => {
       const response = await route.fetch();
       if (!response.ok()) return route.fulfill({ response });
       const payload = await response.json();
@@ -158,7 +195,7 @@ test.describe.serial('Textbook Courses TC-P4 desktop acceptance', () => {
       await route.fulfill({ response, json: payload });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/textbooks');
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
     await page.getByRole('button', { name: '播放 EN' }).click();
     await page.locator('.textbook-audio audio').evaluate((audio) => audio.play());
     const events = await page.evaluate(() => window.__mediaEvents);

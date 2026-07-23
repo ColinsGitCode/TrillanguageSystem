@@ -634,4 +634,16 @@ TC-P3 已完成教材发布、Card Derivation API、学习辅助物化与计划�
 - [x] 学习历史可按教材 EN/JA 单元筛选；
 - [x] 选区派生卡写入 `textbook_card_derivations`，使用 `(expression_id, selection_hash, target_card_type)` 去重，并创建 generation job。
 
-TC-P3 未完成且明确后置：教材高亮持久化、正式单句 TTS 资产、派生卡完成后自动回写 `target_generation_id`。
+TC-P4 已完成教材高亮持久化、正式单句 TTS、派生任务完成态同步与完整架构验收。
+
+2026-07-23 的 DS-W2 SaaS workflow 迁移在不改变产品边界的前提下补齐了：
+
+- [x] Skill 批准后通过正式 API 导入 draft，并返回 `/textbooks?track=<id>&stage=review`；
+- [x] 逐表达 `pending / needs_attention / confirmed` 服务端投影；
+- [x] copy-on-write 草稿修订与逐方向 hash 影响控制；
+- [x] `review / release / processing / complete` 深链接恢复；
+- [x] release preview、幂等 operation、append-only event、重启恢复和局部重试；
+- [x] 发布成功、TTS 局部失败时保持已提交教材与学习事实；
+- [x] 官方音频、单句 TTS、标红、派生卡与学习计划 Track 预选回归。
+
+完整证据见 [`../TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md`](../TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md)。

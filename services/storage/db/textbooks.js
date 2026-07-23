@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { textbookError } = require('../../textbooks/textbookErrors');
 const { enqueueJob: enqueueKgSourceSyncJob } = require('./kgSourceSyncJobs');
+const { ensureReviewStates, reviewSummary } = require('./textbookWorkflow');
 
 const TEXTBOOK_DECISION_VERSION = 'textbook-publish-v1';
 const TEXTBOOK_STATE_VERSION = 'textbook-admission-v1';
@@ -214,6 +215,8 @@ function importDraft(db, { manifest, manifestRelativePath, manifestHash }) {
         timestamp
       );
     }
+
+    ensureReviewStates(db, trackId, revisionId, timestamp);
 
     db.prepare('UPDATE textbook_tracks SET pending_revision_id = ?, status = ?, updated_at_utc = ? WHERE id = ?')
       .run(revisionId, 'draft', timestamp, trackId);
@@ -839,6 +842,16 @@ function verifyRevision(db, revisionId, { expectedTrackStatus } = {}) {
       WHERE revision_id = ? AND availability <> 'available'
     `).get(revisionId).count;
     if (unavailableAssets > 0) throw textbookError('TEXTBOOK_MEDIA_NOT_FOUND', 409);
+    ensureReviewStates(db, revision.track_id, revisionId, timestamp);
+    const reviews = reviewSummary(db, revisionId);
+    if (reviews.total === 0 || reviews.confirmed !== reviews.total) {
+      throw textbookError('TEXTBOOK_REVIEW_INCOMPLETE', 409, {
+        total: reviews.total,
+        confirmed: reviews.confirmed,
+        needsAttention: reviews.needsAttention,
+        pending: reviews.pending,
+      });
+    }
 
     db.prepare(`
       UPDATE textbook_track_revisions
@@ -890,6 +903,7 @@ function searchExpressions(db, query, limit = 20) {
     JOIN textbook_tracks tr ON tr.id = rev.track_id
     JOIN textbook_courses c ON c.id = tr.course_id
     WHERE textbook_expressions_fts MATCH @query
+      AND rev.id = COALESCE(tr.pending_revision_id, tr.current_revision_id)
     ORDER BY rank
     LIMIT @limit
   `).all({ query, limit });

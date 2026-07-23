@@ -34,7 +34,9 @@ Never default the source root to the repository. Never copy textbook text into G
 10. Save a `textbook-track-manifest/v1` draft outside Git with placeholder 64-character hashes.
 11. Run `scripts/validate-manifest.mjs --write-hashes` to compute unit/source/content hashes, validate schema and assets, and write a content-free dry-run summary.
 12. Run the same validator again without `--write-hashes`. The second summary must have identical hashes and counts.
-13. Stop at the dry-run. Ask for content confirmation before any future import API call. Never access SQLite from this Skill.
+13. Stop at the dry-run. Ask for explicit content confirmation before importing. Never access SQLite from this Skill.
+14. After the user confirms, call the running application's formal `POST /api/textbooks/imports` endpoint with only `manifestRelativePath` and `expectedManifestHash`. Do not call storage modules or execute SQL.
+15. Return the created Track ID and the review handoff URL `/textbooks?track=<id>&stage=review`. The page owns human review, revision, verify, release, TTS processing, highlighting, derivation and learning integration.
 
 ## Commands
 
@@ -69,3 +71,5 @@ Stop and report a blocking error when:
 ## Report
 
 Return only the local Manifest/summary locations, counts, hash values, low-confidence expression keys, and blocking warnings. Do not repeat the textbook's full text in the report.
+
+After an approved import, also return the Track ID and `/textbooks?track=<id>&stage=review`. Do not claim the Track is verified or published; those remain human-controlled application stages.

@@ -747,3 +747,632 @@
   font-size: 11px;
   line-height: 1.45;
 }
+
+/* SaaS workflow migration: desktop-only textbook course workbench. */
+.textbook-page {
+  display: grid;
+  gap: 10px;
+}
+
+.textbook-workflow-header {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px 10px 18px;
+  border: 1px solid var(--color-border);
+  border-left: 5px solid #e94b86;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.textbook-workflow-header h1,
+.textbook-workflow-header p {
+  margin: 0;
+}
+
+.textbook-workflow-header h1 {
+  margin-top: 2px;
+  font-size: 20px;
+}
+
+.textbook-workflow-header p:not(.eyebrow) {
+  max-width: 760px;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.textbook-workflow-header .textbook-audio {
+  min-height: 48px;
+  grid-template-columns: 100px minmax(0, 1fr);
+  padding: 5px 7px;
+}
+
+.textbook-workflow-header .textbook-audio audio {
+  height: 30px;
+}
+
+.textbook-workflow-header .textbook-audio small {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.textbook-intake-tools {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.textbook-intake-tools > label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.textbook-intake-tools > label span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.textbook-intake-tools > label svg {
+  width: 16px;
+  color: var(--color-text-tertiary);
+}
+
+.textbook-intake-tools input {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-primary);
+}
+
+.textbook-intake-tools > details {
+  min-width: 210px;
+}
+
+.textbook-intake-tools > details > summary {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.textbook-intake-tools > details > summary svg {
+  width: 15px;
+}
+
+.textbook-intake-tools > details[open] {
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.textbook-intake-tools > details p,
+.textbook-intake-tools > details small {
+  margin: 6px 0;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.textbook-intake-tools > details label {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.textbook-intake-tools > details > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.textbook-intake-tools button,
+.textbook-review-editor button,
+.textbook-published-browser button,
+.textbook-completion-summary a,
+.textbook-completion-summary button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.textbook-intake-tools button.primary,
+.textbook-review-editor button.primary,
+.textbook-completion-summary a.primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.textbook-intake-tools button:disabled,
+.textbook-review-editor button:disabled,
+.textbook-published-browser button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.textbook-intake-tools > .textbook-search-results {
+  position: absolute;
+  z-index: 5;
+  top: 38px;
+  left: 8px;
+  width: min(620px, calc(100% - 240px));
+  max-height: 220px;
+  padding: 6px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.textbook-workflow-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.textbook-track-rail {
+  position: sticky;
+  top: 10px;
+  max-height: calc(100dvh - 20px);
+  overflow: auto;
+  padding: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+}
+
+.textbook-track-rail h2,
+.textbook-track-rail h3,
+.textbook-track-rail p {
+  margin: 0;
+}
+
+.textbook-track-rail h2 {
+  font-size: 16px;
+}
+
+.textbook-track-rail > section {
+  padding-top: 10px;
+}
+
+.textbook-track-rail > section h3 {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.textbook-track-rail > section p {
+  margin: 3px 0 7px;
+  color: var(--color-text-tertiary);
+  font: 600 9px/1.25 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.textbook-track-rail > section button {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  gap: 3px;
+  margin-bottom: 6px;
+  padding: 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.textbook-track-rail > section button.selected {
+  border-color: #e94b86;
+  background: color-mix(in srgb, #e94b86 9%, var(--color-bg-surface));
+  box-shadow: inset 2px 0 #e94b86;
+}
+
+.textbook-track-rail > section button span,
+.textbook-track-rail > section button small {
+  color: var(--color-text-tertiary);
+  font: 700 8px/1.2 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.textbook-track-rail .textbook-empty-list {
+  min-height: 150px;
+}
+
+.textbook-track-rail .textbook-empty-list span {
+  font-size: 10px;
+}
+
+.textbook-advanced-intake {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.textbook-workflow-layout .workflow-shell {
+  overflow: hidden;
+}
+
+.textbook-workflow-layout .workflow-header {
+  padding: 10px 12px 8px;
+}
+
+.textbook-workflow-layout .workflow-header h1 {
+  font-size: 18px;
+}
+
+.textbook-workflow-layout .workflow-stage-nav button {
+  min-height: 34px;
+  font-size: 11px;
+}
+
+.textbook-workflow-layout .workflow-task-workbench {
+  grid-template-columns: 190px minmax(360px, 1fr) 220px;
+  min-height: 520px;
+}
+
+.textbook-workflow-layout .workflow-task-rail ol {
+  max-height: 620px;
+}
+
+.textbook-workflow-layout .workflow-task-detail {
+  padding: 12px;
+}
+
+.textbook-workflow-layout .workflow-context-tools > header,
+.textbook-workflow-layout .workflow-context-tools > section {
+  padding: 10px;
+}
+
+.textbook-workflow-layout .workflow-context-tools p,
+.textbook-workflow-layout .workflow-context-tools li,
+.textbook-workflow-layout .workflow-context-tools code {
+  margin: 4px 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.textbook-workflow-layout .workflow-context-tools pre {
+  max-height: 130px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--color-text-tertiary);
+  font: 9px/1.35 var(--font-mono);
+}
+
+.textbook-deterministic-checks {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.textbook-deterministic-checks .ok {
+  color: var(--color-success);
+}
+
+.textbook-deterministic-checks .warning {
+  color: var(--color-warning);
+}
+
+.textbook-review-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.textbook-review-editor > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.textbook-review-editor h2,
+.textbook-review-editor p {
+  margin: 0;
+}
+
+.textbook-review-state {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.textbook-review-state.is-needs_attention {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.textbook-review-state.is-confirmed {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.textbook-source-legend {
+  display: flex;
+  gap: 12px;
+  padding: 7px 9px;
+  border-left: 3px solid #e94b86;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.textbook-review-editor label {
+  display: grid;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.textbook-review-editor textarea {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: 14px/1.5 var(--font-sans);
+}
+
+.textbook-review-editor textarea.code {
+  font: 11px/1.45 var(--font-mono);
+}
+
+.textbook-review-editor details {
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.textbook-review-editor details summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.textbook-review-editor details label {
+  margin-top: 9px;
+}
+
+.textbook-review-editor > footer {
+  position: sticky;
+  bottom: -12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 0 2px;
+  background: var(--color-bg-surface);
+  box-shadow: 0 -8px 16px color-mix(in srgb, var(--color-bg-surface) 90%, transparent);
+}
+
+.textbook-workflow-layout .workflow-error-summary {
+  margin: 10px;
+}
+
+.textbook-workflow-layout .workflow-review-summary,
+.textbook-processing-layout,
+.textbook-completion-summary,
+.textbook-published-browser {
+  margin: 12px;
+}
+
+.textbook-processing-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.5fr) minmax(260px, .7fr);
+  gap: 12px;
+}
+
+.textbook-operation-activity {
+  padding: 12px;
+}
+
+.textbook-operation-activity h2,
+.textbook-operation-activity p {
+  margin: 0;
+}
+
+.textbook-completion-summary {
+  padding: 14px;
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-success) 6%, var(--color-bg-surface));
+}
+
+.textbook-completion-summary > header {
+  display: flex;
+  gap: 10px;
+}
+
+.textbook-completion-summary > header svg {
+  width: 24px;
+  color: var(--color-success);
+}
+
+.textbook-completion-summary h2,
+.textbook-completion-summary p {
+  margin: 0;
+}
+
+.textbook-completion-summary dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.textbook-completion-summary dl > div {
+  padding: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.textbook-completion-summary dt {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.textbook-completion-summary dd {
+  margin: 3px 0 0;
+  font-weight: 700;
+}
+
+.textbook-completion-summary > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.textbook-published-browser {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.textbook-published-list {
+  max-height: 640px;
+  overflow: auto;
+}
+
+.textbook-published-list > header,
+.textbook-study-detail > header {
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.textbook-published-list h2,
+.textbook-published-list p,
+.textbook-study-detail h2,
+.textbook-study-detail p {
+  margin: 0;
+}
+
+.textbook-published-list ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.textbook-published-list li button {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 6px;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  text-align: left;
+}
+
+.textbook-published-list li button.active {
+  background: var(--color-primary-subtle);
+  box-shadow: inset 3px 0 var(--color-primary);
+}
+
+.textbook-published-list li strong,
+.textbook-published-list li small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.textbook-published-list li small,
+.textbook-published-list li i {
+  grid-column: 2;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.textbook-study-detail {
+  overflow: hidden;
+}
+
+.textbook-study-detail .textbook-expression-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.textbook-study-detail .textbook-expression-content > section {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.textbook-study-detail .textbook-expression-content h3 {
+  min-height: 58px;
+  margin: 8px 0;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.textbook-study-detail .textbook-zh-cue {
+  grid-column: 1 / -1;
+}
+
+.textbook-study-detail .textbook-selection-panel,
+.textbook-study-detail .textbook-analysis-list {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.textbook-empty-workbench {
+  min-height: 360px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}

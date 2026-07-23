@@ -18,6 +18,8 @@ const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
 const cardTagsDomain = require('./db/cardTags');
 const textbooksDomain = require('./db/textbooks');
+const textbookWorkflowDomain = require('./db/textbookWorkflow');
+const textbookOperationsDomain = require('./db/textbookOperations');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -352,6 +354,82 @@ class DatabaseService {
 
   verifyTextbookRevision(id, payload = {}) {
     return textbooksDomain.verifyRevision(this.db, id, payload);
+  }
+
+  getTextbookReviewSummary(revisionId) {
+    return textbookWorkflowDomain.reviewSummary(this.db, revisionId);
+  }
+
+  getTextbookRevision(revisionId) {
+    return textbookWorkflowDomain.getRevision(this.db, revisionId);
+  }
+
+  updateTextbookReviewState(revisionId, expressionId, payload = {}) {
+    return this.withBusyRetry(() => textbookWorkflowDomain.updateReviewState(
+      this.db,
+      revisionId,
+      expressionId,
+      payload
+    ));
+  }
+
+  copyTextbookRevision(revisionId, payload = {}) {
+    return this.withBusyRetry(() => textbookWorkflowDomain.copyOnWriteRevision(
+      this.db,
+      revisionId,
+      payload
+    ));
+  }
+
+  createTextbookOperation(trackId, payload = {}) {
+    return this.withBusyRetry(() => textbookOperationsDomain.createOperation(this.db, trackId, payload));
+  }
+
+  getTextbookOperation(operationId) {
+    return textbookOperationsDomain.getOperation(this.db, operationId);
+  }
+
+  getTextbookOperationByIdempotencyKey(idempotencyKey) {
+    return textbookOperationsDomain.getOperationByIdempotencyKey(this.db, idempotencyKey);
+  }
+
+  listTextbookOperationEvents(operationId) {
+    return textbookOperationsDomain.listEvents(this.db, operationId);
+  }
+
+  claimTextbookOperation(operationId) {
+    return this.withBusyRetry(() => textbookOperationsDomain.claimOperation(this.db, operationId));
+  }
+
+  updateTextbookOperationStep(operationId, step, status, options = {}) {
+    return this.withBusyRetry(() => textbookOperationsDomain.updateStep(
+      this.db,
+      operationId,
+      step,
+      status,
+      options
+    ));
+  }
+
+  finishTextbookOperation(operationId, status, options = {}) {
+    return this.withBusyRetry(() => textbookOperationsDomain.finishOperation(
+      this.db,
+      operationId,
+      status,
+      options
+    ));
+  }
+
+  retryTextbookOperation(operationId) {
+    return this.withBusyRetry(() => textbookOperationsDomain.retryOperation(this.db, operationId));
+  }
+
+  recoverTextbookOperations() {
+    return this.withBusyRetry(() => textbookOperationsDomain.recoverStale(this.db));
+  }
+
+  listQueuedTextbookOperationIds() {
+    return textbookOperationsDomain.listQueued(this.db);
   }
 
   previewTextbookPublish(id) {
