@@ -88,4 +88,55 @@ test.describe('React root shell', () => {
     await page.waitForTimeout(500);
     expect(count).toBe(1);
   });
+
+  test('typed shell feedback and activity survive navigation without taking domain ownership', async ({ page }) => {
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: '后台活动' });
+    await expect(trigger).toBeVisible();
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('three-lans:shell-feedback', {
+        detail: {
+          id: 'factory-job-created',
+          tone: 'success',
+          message: '生成任务 #42 已加入队列',
+          actionLabel: '查看队列',
+          actionHref: '/?queue=1&job=42',
+        },
+      }));
+      window.dispatchEvent(new CustomEvent('three-lans:shell-activity', {
+        detail: {
+          id: '42',
+          kind: 'generation-job',
+          status: 'running',
+          title: '三语卡生成',
+          summary: '任务 #42 正在生成',
+          href: '/?queue=1&job=42',
+        },
+      }));
+    });
+
+    await expect(page.getByTestId('shell-feedback')).toContainText('生成任务 #42 已加入队列');
+    await expect(trigger).toContainText('1');
+    await trigger.click();
+    await expect(page.getByRole('dialog', { name: '后台活动' })).toContainText('三语卡生成');
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '后台活动' })).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    await page.reload();
+    await page.getByRole('button', { name: '后台活动' }).click();
+    await expect(page.getByRole('dialog', { name: '后台活动' })).toContainText('任务 #42 正在生成');
+  });
+
+  test('activity drawer restores focus after explicit close', async ({ page }) => {
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: '后台活动' });
+    await trigger.click();
+    const drawer = page.getByRole('dialog', { name: '后台活动' });
+    await expect(drawer).toBeVisible();
+    await page.getByRole('button', { name: '关闭后台活动' }).click();
+    await expect(drawer).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
 });

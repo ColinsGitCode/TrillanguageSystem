@@ -15,6 +15,17 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { factoryApi } from '../features/factory/factory-api';
+import {
+  ActivityDrawer,
+  GlobalFeedback,
+  readStoredActivities,
+  SHELL_ACTIVITY_EVENT,
+  SHELL_FEEDBACK_EVENT,
+  ShellTools,
+  storeActivities,
+  type ShellActivityCommand,
+  type ShellFeedbackCommand,
+} from './shell';
 
 export type ProductArea = 'factory' | 'today' | 'plan' | 'history' | 'textbooks' | 'knowledge';
 
@@ -37,8 +48,12 @@ export function ProductShell({ active, title, children }: Props) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCompact, setSidebarCompact] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activities, setActivities] = useState<ShellActivityCommand[]>([]);
+  const [feedback, setFeedback] = useState<Array<ShellFeedbackCommand & { id: string }>>([]);
   const mobileNavButtonRef = useRef<HTMLButtonElement>(null);
   const mobileNavRef = useRef<HTMLElement>(null);
+  const activityButtonRef = useRef<HTMLButtonElement>(null);
   const healthQuery = useQuery({
     queryKey: ['health'],
     queryFn: factoryApi.health,
@@ -54,6 +69,35 @@ export function ProductShell({ active, title, children }: Props) {
     setTheme(next);
     document.documentElement.dataset.theme = next;
     setSidebarCompact(localStorage.getItem('three-lans-sidebar-compact-v1') === 'true');
+    setActivities(readStoredActivities());
+  }, []);
+
+  useEffect(() => {
+    const onFeedback = (event: Event) => {
+      const command = (event as CustomEvent<ShellFeedbackCommand>).detail;
+      if (!command?.message) return;
+      const item = { ...command, id: command.id || `feedback-${Date.now()}-${Math.random()}` };
+      setFeedback((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 3));
+      window.setTimeout(() => setFeedback((current) => current.filter((entry) => entry.id !== item.id)), 6000);
+    };
+    const onActivity = (event: Event) => {
+      const command = (event as CustomEvent<ShellActivityCommand>).detail;
+      if (!command?.id || !command.href) return;
+      setActivities((current) => {
+        const next = [
+          { ...command, updatedAt: command.updatedAt || new Date().toISOString() },
+          ...current.filter((item) => item.id !== command.id || item.kind !== command.kind),
+        ].slice(0, 30);
+        storeActivities(next);
+        return next;
+      });
+    };
+    window.addEventListener(SHELL_FEEDBACK_EVENT, onFeedback);
+    window.addEventListener(SHELL_ACTIVITY_EVENT, onActivity);
+    return () => {
+      window.removeEventListener(SHELL_FEEDBACK_EVENT, onFeedback);
+      window.removeEventListener(SHELL_ACTIVITY_EVENT, onActivity);
+    };
   }, []);
 
   useEffect(() => {
@@ -155,8 +199,21 @@ export function ProductShell({ active, title, children }: Props) {
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>
         </header>
+        <ShellTools
+          activityCount={activities.filter((item) => ['queued', 'running', 'partially_failed', 'failed'].includes(item.status)).length}
+          activityOpen={activityOpen}
+          onToggleActivity={() => setActivityOpen((open) => !open)}
+          activityRef={activityButtonRef}
+        />
+        <GlobalFeedback items={feedback} onDismiss={(id) => setFeedback((current) => current.filter((item) => item.id !== id))} />
         {children}
       </main>
+      <ActivityDrawer
+        open={activityOpen}
+        items={activities}
+        onClose={() => setActivityOpen(false)}
+        triggerRef={activityButtonRef}
+      />
     </div>
   );
 }
