@@ -9,6 +9,7 @@ const databaseModule = require('../../services/storage/databaseService');
 const { DatabaseService } = databaseModule;
 const {
   buildMaterializationPlan,
+  expandStudyUnits,
   materializeLearningP0,
 } = require('../../services/learning/application/materializeStudyItems');
 
@@ -55,6 +56,7 @@ function buildReport() {
       generationId: index + 1,
       cardType,
       contentHash: HASHES[index],
+      scenarioExpressionCount: cardType === 'scenario_phrase' ? 20 : null,
       recommendation: { status, reasons: [`fixture-${status}`] },
     })),
   };
@@ -66,19 +68,28 @@ test.describe('LA-P0 admission and Study Item materializer', () => {
   test.it('expands stable units for all accepted card granularities', () => {
     const plan = buildMaterializationPlan(buildReport());
     assert.equal(plan.admissions.length, 5);
-    assert.equal(plan.items.length, 16);
+    assert.equal(plan.items.length, 24);
     assert.deepEqual(plan.byKind, {
       trilingual_en: 1,
       trilingual_ja: 1,
       grammar_ja: 1,
-      scenario_bilingual: 12,
+      scenario_bilingual: 20,
       whole_card: 1,
     });
     assert.match(plan.identityDigest, /^[a-f0-9]{64}$/u);
     assert.deepEqual(
       plan.items.filter((item) => item.unitKind === 'scenario_bilingual').map((item) => item.unitKey),
-      Array.from({ length: 12 }, (_, index) => `scenario:${String(index + 1).padStart(2, '0')}`)
+      Array.from({ length: 20 }, (_, index) => `scenario:${String(index + 1).padStart(2, '0')}`)
     );
+  });
+
+  test.it('keeps legacy scenario reports at 12 units when no count was recorded', () => {
+    const units = expandStudyUnits({
+      cardType: 'scenario_phrase',
+      recommendation: { status: 'eligible' },
+    });
+    assert.equal(units.length, 12);
+    assert.equal(units.at(-1).unitKey, 'scenario:12');
   });
 
   test.it('dry-runs, applies atomically, and becomes a zero-change rerun', () => {
@@ -93,7 +104,7 @@ test.describe('LA-P0 admission and Study Item materializer', () => {
       const dryRun = materializeLearningP0(service.db, { report });
       assert.equal(dryRun.apply, false);
       assert.deepEqual(dryRun.admissionActions, { insert: 5, update: 0, unchanged: 0 });
-      assert.deepEqual(dryRun.itemActions, { insert: 16, update: 0, unchanged: 0, suspend: 0 });
+      assert.deepEqual(dryRun.itemActions, { insert: 24, update: 0, unchanged: 0, suspend: 0 });
       assert.equal(service.db.prepare('SELECT COUNT(*) AS count FROM study_items').get().count, 0);
 
       const applied = materializeLearningP0(service.db, {
@@ -101,8 +112,8 @@ test.describe('LA-P0 admission and Study Item materializer', () => {
         apply: true,
         now: () => '2026-07-14T00:00:00.000Z',
       });
-      assert.equal(applied.expectedStudyItems, 16);
-      assert.equal(service.db.prepare('SELECT COUNT(*) AS count FROM study_items').get().count, 16);
+      assert.equal(applied.expectedStudyItems, 24);
+      assert.equal(service.db.prepare('SELECT COUNT(*) AS count FROM study_items').get().count, 24);
       assert.equal(service.db.prepare('SELECT COUNT(*) AS count FROM learning_source_admissions').get().count, 5);
       assert.equal(service.db.prepare(
         "SELECT COUNT(*) AS count FROM learning_source_admissions WHERE materialization_disposition = 'exclude'"
@@ -110,7 +121,7 @@ test.describe('LA-P0 admission and Study Item materializer', () => {
 
       const rerun = materializeLearningP0(service.db, { report });
       assert.deepEqual(rerun.admissionActions, { insert: 0, update: 0, unchanged: 5 });
-      assert.deepEqual(rerun.itemActions, { insert: 0, update: 0, unchanged: 16, suspend: 0 });
+      assert.deepEqual(rerun.itemActions, { insert: 0, update: 0, unchanged: 24, suspend: 0 });
       assert.equal(rerun.identityDigest, dryRun.identityDigest);
     } finally {
       service.close();

@@ -2,7 +2,7 @@
 
 > ADR 状态：**Accepted / 已实施 LA-P0-P4 学习闭环、反馈指标与语义接缝**
 > 日期：2026-07-13
-> 最近修订：2026-07-14（LA-P4 可降级语义 Provider 接缝完成）
+> 最近修订：2026-07-24（新场景卡升级为 20 个表达；历史 12 表达卡兼容保留）
 > 当前阶段：LA-P0-P4 已完成；知识图谱 2.0 保持 KG-D0 后置立项
 > 上位基线：[学习辅助 2.0 设计基线](../Features/Learning_Assistance_2_0_Design_Baseline.md)
 > 产品权威：[学习辅助 2.0 产品定义](../Features/Learning_Assistance_2_0_Product_Definition.md)
@@ -18,7 +18,7 @@
 
 - 三语卡拆为 English / Japanese 两个学习单元；
 - 日语语法卡按整个语法点形成一个学习单元；
-- 场景卡按 12 个表达拆分，每个表达仍是 `EN+JA` 组合单元；
+- 场景卡按源内容中的表达块拆分，每个表达仍是 `EN+JA` 组合单元；新生成卡固定 20 个，历史 12 个表达卡保持原粒度；
 - 使用“重来 / 困难 / 记住 / 简单”四档反馈；
 - v1 只有一个活动计划；
 - 默认每日行动目标 20、每日新单元上限 5；
@@ -138,10 +138,10 @@ source_generation_id + unit_key
 | `trilingual` | `trilingual_en` | `en` | 1 |
 | `trilingual` | `trilingual_ja` | `ja` | 1 |
 | `grammar_ja` | `grammar_ja` | `grammar` | 1 |
-| `scenario_phrase` | `scenario_bilingual` | `scenario:01` ... `scenario:12` | 12 |
+| `scenario_phrase` | `scenario_bilingual` | `scenario:01` ... `scenario:NN` | 新卡 20；历史卡 12 |
 | `whole-card-only` | `whole_card` | `whole` | 1 |
 
-场景序号必须使用两位 canonical 编号。解析器不得根据 DOM 顺序、当前标题文案或数组 index 临时生成不稳定键。
+场景序号必须使用两位 canonical 编号。在线生成只接受连续 `01`-`20`；历史数据回填读取源 Markdown 的实际连续编号并保留 `01`-`12`。解析器不得根据 DOM 顺序、当前标题文案或数组 index 临时生成不稳定键。
 
 ### 4.2 Locator
 
@@ -673,8 +673,8 @@ LA-P1 已在 LA-P0 九表结构上完成，不需要新增 schema 或 `002` migr
 - session 可从持久化 current/revealed entry 恢复；reveal 不产生事件，skip 不产生事件，提前结束将未评分工作退回队列；
 - review 在单个 SQLite transaction 内完成 event insert、Schedule State 乐观版本更新、entry 状态/attempts 和 session 前移；SQLite busy 只重试完整事务；
 - 幂等顺序按本文 §5.3 实现：先验证请求结构和 hash，再先查 `event_key`，相同 key/body 在 session 已前移或 schedule version 已变化后仍返回原事件，异体请求返回 `LEARNING_IDEMPOTENCY_CONFLICT`；
-- `GET /api/learning/items/:id` 按结构化 locator 提取目标 Markdown 单元；场景卡只返回对应 `### 01.`-`### 12.` 表达和对应两条音频，并公开当前 schedule version 供乐观提交；
-- 在线新卡生成事务已补齐 `admission + study_items` 同步物化：三语 2 项、语法 1 项、场景 12 项；测试候选仍只写 unresolved admission，不进入学习池；
+- `GET /api/learning/items/:id` 按结构化 locator 提取目标 Markdown 单元；场景卡只返回 locator 对应的单个 `### NN.` 表达和两条英日音频，并公开当前 schedule version 供乐观提交；
+- 在线新卡生成事务已补齐 `admission + study_items` 同步物化：三语 2 项、语法 1 项、新场景卡 20 项；历史场景卡仍按源内容保留 12 项，测试候选仍只写 unresolved admission，不进入学习池；
 - Cards Factory 删除仍先归档 Study Items，再删除 generation；在线物化后的删除集成回归已覆盖。
 - 最终门禁：lint、280 个 unit、50 个 integration、React typecheck/build、架构 ownership、7 个 smoke probes 和 26 个 Playwright 用例全部通过；`three_lans_system` viewer 已重建，DeepSeek、Kokoro、VOICEVOX、OCR 和 Storage 均为 online；真实 volume 的 637/637/1090 数据量保持不变，读 plan/queue/item 前后六张工作流表仍为 0。
 

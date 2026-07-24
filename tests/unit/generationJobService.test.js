@@ -206,7 +206,7 @@ test.describe('GenerationJobService', () => {
   test.it('re-rolls card validation failures instead of failing on one bad generation', () => {
     const service = new GenerationJobService({ dbService: {} });
     const error = Object.assign(
-      new Error('DeepSeek markdown response failed card validation: scenario_phrase requires exactly 12 expression blocks'),
+      new Error('DeepSeek markdown response failed card validation: scenario_phrase requires exactly 20 expression blocks'),
       { code: 'CARD_VALIDATION_FAILED' }
     );
     assert.deepEqual(service.classifyTransientError(error), {

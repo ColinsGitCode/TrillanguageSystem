@@ -2,6 +2,7 @@
 
 > 状态：**DP0-DP7 已完成并通过最终验收**
 > 日期：2026-07-13
+> 最近修订：2026-07-24（审计同时接受历史 12 表达与当前 20 表达场景卡）
 > 上位产品基线：[学习辅助 2.0 设计基线](Learning_Assistance_2_0_Design_Baseline.md)
 > 标签专题：[卡片分类与标签系统](Card_Classification_and_Tagging.md)
 > 适用数据：Docker volume `three_lans_system_trilingual_records` 中的运行数据
@@ -58,7 +59,7 @@
 DP0-DP7 处理历史数据；新卡由 `executeCardGeneration` 中的在线准入门禁持续满足同一质量边界：
 
 1. 在调用 LLM 前按“规范短语 + 卡型”查询历史卡，默认拒绝重复；只有调用方显式传入 `duplicate_policy=create-version` 才允许生成新版本；
-2. DeepSeek 输出必须通过三类卡各自的 canonical Markdown 结构检查：三语卡包含英/日/中三段与英日例句，语法卡包含 3 条日语例句，场景卡包含 12 组中英日表达；
+2. DeepSeek 输出必须通过三类卡各自的 canonical Markdown 结构检查：三语卡包含英/日/中三段与英日例句，语法卡包含 3 条日语例句，新场景卡包含 20 组中英日表达；历史 12 组场景卡作为兼容格式继续通过数据审计；
 3. 内容与音频先写入目标日期目录下的同卷 `.staging`，不会提前暴露半成品；
 4. 非测试环境中，只要 Markdown 含音频任务，就要求全部 TTS 调用成功、文件存在且非空；任何一项失败都拒绝整张卡；
 5. 文件发布后，`generations`、observability、`audio_files` 和自动 `card_tags` 在同一个 SQLite 事务中写入；hash、标签或音频约束失败时整体回滚；
@@ -429,7 +430,7 @@ DP7 只生成“学习资格视图/报告”，不建表。每张 generation 给
 2. 卡片删除与历史事件保留策略；
 3. 内容 hash 变化后的学习状态迁移；
 4. 学习日时区和跨午夜规则；
-5. 场景卡 12 个表达是否拆分；
+5. 场景卡表达是否按实际数量拆分（当前新卡 20 个，历史卡 12 个）；
 6. 无音频或结构不完整卡片的资格规则；
 7. 重复版本是独立学习对象还是只保留 canonical；
 8. 评分与调度算法的输入边界。

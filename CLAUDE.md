@@ -178,7 +178,7 @@ Required invariants:
 - Japanese ruby annotates only the corresponding kanji;
 - generated audio tasks strip readings before TTS;
 - English audio uses MP3 and Japanese audio uses WAV;
-- scenario cards have an AI-generated title within ten Chinese characters and 12 expression blocks;
+- newly generated scenario cards have an AI-generated title within ten Chinese characters and exactly 20 expression blocks; legacy 12-block cards remain readable and reviewable;
 - card modal has CONTENT and INTEL only;
 - highlights persist through card_highlights;
 - desktop modal height, focus trap, Escape, and focus restoration remain stable.

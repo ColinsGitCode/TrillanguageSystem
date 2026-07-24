@@ -19,6 +19,18 @@ function freshDb() {
   return new DatabaseService(':memory:');
 }
 
+function buildScenarioMarkdown(count = 20) {
+  return [
+    '# 场景测试',
+    '## 1. 场景说明',
+    '- fixture',
+    '## 2. 常用表达',
+    ...Array.from({ length: count }, (_value, index) => (
+      `### ${String(index + 1).padStart(2, '0')}.\n- **中文**: fixture`
+    )),
+  ].join('\n');
+}
+
 // Minimal fixture matching insertGeneration's expected shape. Tests override
 // the fields they care about; everything else is deterministic.
 function buildGenerationFixture(overrides = {}) {
@@ -183,10 +195,15 @@ test.describe('databaseService — generations CRUD', () => {
     } finally { db.close(); }
   });
 
-  test.it('materializes all 12 scenario Study Items in the online generation transaction', () => {
+  test.it('materializes all 20 scenario Study Items in the online generation transaction', () => {
     const db = freshDb();
     try {
-      const fixture = buildGenerationFixture({ generation: { cardType: 'scenario_phrase' } });
+      const fixture = buildGenerationFixture({
+        generation: {
+          cardType: 'scenario_phrase',
+          markdownContent: buildScenarioMarkdown(),
+        },
+      });
       fixture.learningAdmission = {
         status: 'eligible',
         contentHash: 'b'.repeat(64),
@@ -200,9 +217,9 @@ test.describe('databaseService — generations CRUD', () => {
       const items = db.db.prepare(`
         SELECT unit_key, unit_kind FROM study_items WHERE generation_id = ? ORDER BY unit_key
       `).all(id);
-      assert.equal(items.length, 12);
+      assert.equal(items.length, 20);
       assert.deepEqual(items[0], { unit_key: 'scenario:01', unit_kind: 'scenario_bilingual' });
-      assert.deepEqual(items.at(-1), { unit_key: 'scenario:12', unit_kind: 'scenario_bilingual' });
+      assert.deepEqual(items.at(-1), { unit_key: 'scenario:20', unit_kind: 'scenario_bilingual' });
     } finally { db.close(); }
   });
 

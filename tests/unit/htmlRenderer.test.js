@@ -8,7 +8,7 @@ const {
   prepareMarkdownForCard,
 } = require('../../services/generation/htmlRenderer');
 
-function scenarioMarkdown(count = 12) {
+function scenarioMarkdown(count = 20) {
   const lines = [
     '# 空港で道を尋ねる',
     '## 1. 场景说明',
@@ -30,7 +30,7 @@ function scenarioMarkdown(count = 12) {
   return lines.join('\n');
 }
 
-function scenarioExpressionBlocks(count = 12) {
+function scenarioExpressionBlocks(count = 20) {
   const lines = [];
   for (let i = 1; i <= count; i += 1) {
     const padded = String(i).padStart(2, '0');
@@ -119,19 +119,19 @@ test.describe('buildAudioTasksFromMarkdown', () => {
     );
   });
 
-  test.it('extracts 24 scenario expression audio tasks with deterministic suffixes', () => {
+  test.it('extracts 40 scenario expression audio tasks with deterministic suffixes', () => {
     const tasks = buildAudioTasksFromMarkdown(scenarioMarkdown());
 
-    assert.equal(tasks.length, 24);
+    assert.equal(tasks.length, 40);
     assert.deepEqual(
       tasks.map((task) => `${task.lang}:${task.filename_suffix}`),
-      Array.from({ length: 12 }, (_, index) => {
+      Array.from({ length: 20 }, (_, index) => {
         const number = index + 1;
         return [`en:_en_${number}`, `ja:_ja_${number}`];
       }).flat()
     );
     assert.equal(tasks[0].text, 'Where is gate 1?');
-    assert.equal(tasks[23].text, '搭乗口12はどこですか。');
+    assert.equal(tasks[39].text, '搭乗口20はどこですか。');
   });
 
   test.it('strips explicit Japanese readings before TTS text is built', () => {

@@ -1,6 +1,6 @@
 # TTS 模型选型调研与决策（英文 / 日文语音 · 本地 CPU）
 
-> 状态：**当前决策 + 历史实验归档** · 2026-07
+> 状态：**当前决策 + 历史实验归档** · 2026-07（2026-07-24 同步场景卡 20 表达契约）
 > 约束：Mac · CPU 本地部署 · 零成本 / 隐私 · **教学发音准确性优先** · 自用（非对外服务）
 > 关联：[Trilingual Card Generation System](Trilingual_Card_Generation_System.md)
 > 影响文件：`services/generation/ttsService.js` · `lib/generationHelpers.js` · `services/observability/healthCheckService.js` · `services/storage/databaseHelpers.js` · `docker-compose.yml` · `.env.example` · TTS 相关测试
@@ -209,13 +209,13 @@ Style-Bert-VITS2 已完成本地 POC 并被封存。封存原因：
 - **标准短句**：寒暖差、予約変更、引き継ぎ、確認事項等常用表达。
 - **汉字混排**：维修、预约、沟通、业务交接类句子。
 - **片假名外来词**：プロジェクト、エアコン、スケジュール等。
-- **长句断句**：场景卡中 12 条常用表达连续生成。
+- **长句断句**：场景卡中 20 条常用表达连续生成。
 - **运行开销**：记录 cold start、warm 常驻内存、批量生成时间。
 
 验收标准：
 
 - SBV2 生成成功率 >= 95%。
-- 单条短句本地 CPU 生成时间可接受，批量 12 条不阻塞主要工作流。
+- 单条短句本地 CPU 生成时间可接受；场景卡每种语言批量 20 条时需继续观察队列总时延，但仍由后台生成任务承载。
 - 至少 10 组 A/B 听感中，SBV2 在自然度或教学可懂度上**明显**优于 VOICEVOX。
 - 常驻内存和启动成本必须有明确收益解释；否则保持封存。
 
@@ -243,7 +243,7 @@ Style-Bert-VITS2 已完成本地 POC 并被封存。封存原因：
 - Integration：
   - 三语卡：英文 mp3 + 日文 wav。
   - 日语语法卡：日文 wav。
-  - 场景表达卡：当前 prompt/校验要求 12 条英文 mp3 + 12 条日文 wav。
+  - 场景表达卡：当前 prompt/校验要求 20 条英文 mp3 + 20 条日文 wav；历史 12+12 音频卡继续可播放。
   - 不出现中文 audio task。
 - Runtime smoke：
   - `docker compose up -d --build`

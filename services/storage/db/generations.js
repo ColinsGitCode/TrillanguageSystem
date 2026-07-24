@@ -9,6 +9,7 @@ const { safeJsonParse } = require('./helpers');
 const cardTags = require('./cardTags');
 const { contentHash } = require('../../dataPreparation/rules');
 const { expandStudyUnits, stableJson } = require('../../learning/application/materializeStudyItems');
+const { getScenarioExpressionCount } = require('../../../lib/scenarioCardContract');
 const { enqueueJob: enqueueKgSourceSyncJob } = require('./kgSourceSyncJobs');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 const CARDS_FACTORY_SCOPE = `g.card_type <> 'textbook_track'`;
@@ -104,6 +105,9 @@ function insertGeneration(db, data) {
         const units = expandStudyUnits({
           cardType: genData.cardType,
           recommendation: { status: admission.status },
+          scenarioExpressionCount: genData.cardType === 'scenario_phrase'
+            ? getScenarioExpressionCount(genData.markdownContent)
+            : undefined,
         });
         const insertStudyItem = db.prepare(`
           INSERT INTO study_items(

@@ -206,6 +206,9 @@ function buildEligibilityReport({
         folderName: generation.folder_name,
         generationDate: generation.generation_date,
         contentHash: canonicalHash(generation),
+        scenarioExpressionCount: generation.card_type === 'scenario_phrase'
+          ? auditRecord.structure.scenarioExpressionCount
+          : null,
         files: {
           markdown: auditRecord.mdExists,
           html: auditRecord.htmlExists,

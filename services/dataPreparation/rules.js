@@ -4,6 +4,11 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { parseTrilingualMarkdown } = require('../generation/markdownParser');
 const { buildAudioTasksFromMarkdown } = require('../generation/htmlRenderer');
+const {
+  getScenarioExpressionCount,
+  getScenarioExpressionIndices,
+  isSupportedScenarioExpressionCount,
+} = require('../../lib/scenarioCardContract');
 
 const RULE_VERSION = 'tagrules-v1';
 const HIGH_CONFIDENCE_TEST_IDS = new Set([402, 467, 477, 478, 493, 496]);
@@ -227,15 +232,22 @@ function analyzeMarkdown(record, markdown) {
     examples = parsed.sections.ja.examples.length >= 3;
     expectedAudio = audioTasks.filter((task) => task.lang === 'ja').length >= 3;
   } else if (type === 'scenario_phrase') {
-    const headings = (normalized.match(/^###\s+\d{2}\./gm) || []).length;
+    const scenarioIndices = getScenarioExpressionIndices(normalized);
+    const headings = scenarioIndices.length;
+    const sequentialHeadings = scenarioIndices.every((value, index) => value === index + 1);
     const chinese = (normalized.match(/^\s*-\s*\*\*中文\*\*\s*[:：]/gm) || []).length;
     const english = (normalized.match(/^\s*-\s*\*\*英文\*\*\s*[:：]/gm) || []).length;
     const japanese = (normalized.match(/^\s*-\s*\*\*日本語\*\*\s*[:：]/gm) || []).length;
     sections = /^##\s*1\.\s*场景说明/m.test(normalized)
       && /^##\s*2\.\s*常用表达/m.test(normalized);
-    examples = headings === 12 && chinese === 12 && english === 12 && japanese === 12;
-    expectedAudio = audioTasks.filter((task) => task.lang === 'en').length === 12
-      && audioTasks.filter((task) => task.lang === 'ja').length === 12;
+    examples = isSupportedScenarioExpressionCount(headings)
+      && sequentialHeadings
+      && chinese === headings
+      && english === headings
+      && japanese === headings;
+    expectedAudio = isSupportedScenarioExpressionCount(headings)
+      && audioTasks.filter((task) => task.lang === 'en').length === headings
+      && audioTasks.filter((task) => task.lang === 'ja').length === headings;
   }
 
   return {
@@ -244,6 +256,9 @@ function analyzeMarkdown(record, markdown) {
     examples,
     expectedAudio,
     audioTaskCount: audioTasks.length,
+    scenarioExpressionCount: type === 'scenario_phrase'
+      ? getScenarioExpressionCount(normalized)
+      : null,
     reviewRequired: !(parsed.meta.hasTitle && sections && examples && expectedAudio),
   };
 }

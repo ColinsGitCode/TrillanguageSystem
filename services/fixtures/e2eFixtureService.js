@@ -132,6 +132,54 @@ function buildScenarioMarkdown(phrase) {
       en: 'I will also write this in the communication notebook.',
       ja: '連絡帳(れんらくちょう)にも書(か)いておきます。',
       tip: '口头说明后再告知书面记录。'
+    },
+    {
+      zh: '昨晚睡得比平时晚一点。',
+      en: 'My child went to sleep a little later than usual last night.',
+      ja: '昨夜(さくや)はいつもより少(すこ)し遅(おそ)く寝(ね)ました。',
+      tip: '补充可能影响白天状态的睡眠信息。'
+    },
+    {
+      zh: '今天早饭吃得不多。',
+      en: 'My child did not eat much breakfast today.',
+      ja: '今日(きょう)は朝食(ちょうしょく)をあまり食(た)べませんでした。',
+      tip: '描述食欲时避免使用过度严重的措辞。'
+    },
+    {
+      zh: '目前没有发烧。',
+      en: 'There is no fever at the moment.',
+      ja: '今(いま)のところ熱(ねつ)はありません。',
+      tip: '用 at the moment 或 今のところ 限定当前观察。'
+    },
+    {
+      zh: '如果孩子看起来很累，请让孩子休息。',
+      en: 'If my child looks tired, please let my child rest.',
+      ja: '疲(つか)れているようでしたら、休(やす)ませてください。',
+      tip: '给老师留出根据现场状态判断的空间。'
+    },
+    {
+      zh: '请告诉我午睡和午饭的情况。',
+      en: 'Please let me know how nap time and lunch go.',
+      ja: 'お昼寝(ひるね)と昼食(ちゅうしょく)の様子(ようす)を教(おし)えてください。',
+      tip: '接孩子时可用来询问当天状态。'
+    },
+    {
+      zh: '老师，今天需要我准备什么吗？',
+      en: 'Is there anything I should prepare for today?',
+      ja: '今日(きょう)、何(なに)か用意(ようい)するものはありますか。',
+      tip: '交接结束前确认是否有额外准备事项。'
+    },
+    {
+      zh: '如果情况没有变化，就按平时安排活动。',
+      en: 'If nothing changes, the usual routine is fine.',
+      ja: '変(か)わりがなければ、いつもどおりで大丈夫(だいじょうぶ)です。',
+      tip: '说明没有异常时无需特别调整。'
+    },
+    {
+      zh: '麻烦您了，晚上见。',
+      en: 'Thank you for your help. I will see you this evening.',
+      ja: 'よろしくお願(ねが)いします。それでは、夕方(ゆうがた)にまた来(き)ます。',
+      tip: '用简洁的感谢和告别结束交接。'
     }
   ];
 

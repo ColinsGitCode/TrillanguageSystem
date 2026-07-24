@@ -112,10 +112,10 @@ test.describe('POST /api/generate (E2E fixture branch)', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.success, true);
     assert.equal(res.body.card_type, 'scenario_phrase');
-    assert.equal(res.body.llm_output.audio_tasks.length, 24);
+    assert.equal(res.body.llm_output.audio_tasks.length, 40);
     assert.equal(
       (res.body.llm_output.markdown_content.match(/^###\s+\d{2}\./gm) || []).length,
-      12
+      20
     );
 
     const hist = await api('GET', '/api/history?page=1&limit=10');

@@ -2,6 +2,8 @@
 
 Date: 2026-06-16
 
+> Historical baseline: this document records the original 12-expression MVP. Since 2026-07-24, newly generated scenario cards contain exactly 20 expressions and 40 English/Japanese audio tasks; legacy 12-expression cards remain supported. Current behavior is authoritative in `CLAUDE.md` and the LA-D2 ADR.
+
 ## Goal
 
 Add a new learning-card feature that generates common expressions for a specific real-world scenario. The long-term direction is a scenario card that can contain both common expressions and sample dialogue. The first implementation must land the simpler and more stable subset: a scenario expression card.

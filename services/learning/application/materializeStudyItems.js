@@ -2,6 +2,10 @@
 
 const crypto = require('node:crypto');
 const { LEARNING_P0_TABLES, assertLearningP0Postconditions } = require('../../storage/db/migrationRunner');
+const {
+  LEGACY_SCENARIO_EXPRESSION_COUNT,
+  isSupportedScenarioExpressionCount,
+} = require('../../../lib/scenarioCardContract');
 
 const EXTRACTOR_VERSION = 'learning-unit-v1';
 const ADMISSION_STATE_VERSION = 'learning-admission-v1';
@@ -46,7 +50,15 @@ function expandStudyUnits(card) {
     }];
   }
   if (card.cardType === 'scenario_phrase') {
-    return Array.from({ length: 12 }, (_, index) => {
+    const expressionCount = Number(
+      card.scenarioExpressionCount
+      ?? card.structure?.scenarioExpressionCount
+      ?? LEGACY_SCENARIO_EXPRESSION_COUNT
+    );
+    if (!isSupportedScenarioExpressionCount(expressionCount)) {
+      throw new Error(`Unsupported scenario expression count: ${expressionCount}`);
+    }
+    return Array.from({ length: expressionCount }, (_, index) => {
       const ordinal = index + 1;
       const sourceHeading = twoDigits(ordinal);
       return {

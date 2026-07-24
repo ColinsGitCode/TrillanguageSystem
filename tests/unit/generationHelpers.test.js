@@ -142,7 +142,7 @@ test.describe('buildPersistedAudioTasks', () => {
 });
 
 test.describe('validateGeneratedContent', () => {
-  function scenarioCard(count = 12, options = {}) {
+  function scenarioCard(count = 20, options = {}) {
     const lines = [
       '# 空港で道を尋ねる',
       '## 1. 场景说明',
@@ -187,7 +187,7 @@ test.describe('validateGeneratedContent', () => {
         '- **英文**: Where is gate 1?',
         '- **英文**: Where is gate 1?\n- **英文**: Where can I find gate 1?'
       )
-      .replace('- **英文**: Where is gate 12?', '- **英语**: Where is gate 12?');
+      .replace('- **英文**: Where is gate 20?', '- **英语**: Where is gate 20?');
   }
 
   test.it('reports non-object input as invalid JSON', () => {
@@ -235,23 +235,23 @@ test.describe('validateGeneratedContent', () => {
     );
   });
 
-  test.it('rejects fewer than 12 scenario expressions', () => {
+  test.it('rejects fewer than 20 scenario expressions', () => {
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(11) },
+        { markdown_content: scenarioCard(19) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
-      ['scenario_phrase requires exactly 12 expression blocks']
+      ['scenario_phrase requires exactly 20 expression blocks']
     );
   });
 
-  test.it('rejects scenario cards without 12 English and 12 Japanese audio lines', () => {
+  test.it('rejects scenario cards without 20 English and 20 Japanese audio lines', () => {
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
+        { markdown_content: scenarioCard(20, { duplicateEnglishNoJapanese: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
-      ['scenario_phrase requires 12 English and 12 Japanese audio lines']
+      ['scenario_phrase requires 20 English and 20 Japanese audio lines']
     );
   });
 
@@ -261,7 +261,7 @@ test.describe('validateGeneratedContent', () => {
         { markdown_content: scenarioCardWithExpressionsInSectionThree() },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
-      ['scenario_phrase requires exactly 12 expression blocks']
+      ['scenario_phrase requires exactly 20 expression blocks']
     );
   });
 
@@ -278,7 +278,7 @@ test.describe('validateGeneratedContent', () => {
   test.it('rejects scenario expression blocks missing Chinese lines', () => {
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(12, { missingChinese: true }) },
+        { markdown_content: scenarioCard(20, { missingChinese: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
@@ -288,7 +288,7 @@ test.describe('validateGeneratedContent', () => {
   test.it('rejects scenario expression blocks missing usage hints', () => {
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(12, { missingUsageHint: true }) },
+        { markdown_content: scenarioCard(20, { missingUsageHint: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
@@ -298,14 +298,14 @@ test.describe('validateGeneratedContent', () => {
   test.it('rejects scenario expression blocks with empty Chinese or usage hint values', () => {
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(12, { emptyChinese: true }) },
+        { markdown_content: scenarioCard(20, { emptyChinese: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
     );
     assert.deepEqual(
       validateGeneratedContent(
-        { markdown_content: scenarioCard(12, { emptyUsageHint: true }) },
+        { markdown_content: scenarioCard(20, { emptyUsageHint: true }) },
         { cardType: 'scenario_phrase', allowMissingHtml: true }
       ),
       ['scenario_phrase requires every expression block to include non-empty Chinese and usage hint lines']
@@ -321,7 +321,7 @@ test.describe('resolveCardAudioTasks', () => {
       '- 丁寧に場所を確認する。',
       '## 2. 常用表达',
     ];
-    for (let i = 1; i <= 12; i += 1) {
+    for (let i = 1; i <= 20; i += 1) {
       const padded = String(i).padStart(2, '0');
       lines.push(
         `### ${padded}.`,
@@ -344,7 +344,7 @@ test.describe('resolveCardAudioTasks', () => {
 
     const tasks = resolveCardAudioTasks(content, 'scenario_phrase');
 
-    assert.equal(tasks.length, 24);
+    assert.equal(tasks.length, 40);
     assert.equal(tasks[0].filename_suffix, '_en_1');
     assert.equal(tasks[1].filename_suffix, '_ja_1');
     assert.equal(tasks[0].text, 'Where is gate 1?');
@@ -386,7 +386,7 @@ test.describe('extractMarkdownProviderResponse', () => {
 });
 
 test.describe('validateSanitizedCardResponse', () => {
-  function scenarioCard(count = 12, options = {}) {
+  function scenarioCard(count = 20, options = {}) {
     const lines = [
       '# 空港で道を尋ねる',
       '## 1. 场景说明',
@@ -431,7 +431,7 @@ test.describe('validateSanitizedCardResponse', () => {
         '- **英文**: Where is gate 1?',
         '- **英文**: Where is gate 1?\n- **英文**: Where can I find gate 1?'
       )
-      .replace('- **英文**: Where is gate 12?', '- **英语**: Where is gate 12?');
+      .replace('- **英文**: Where is gate 20?', '- **英语**: Where is gate 20?');
   }
 
   function trilingualCard() {
@@ -507,17 +507,17 @@ test.describe('validateSanitizedCardResponse', () => {
   test.it('rejects scenario markdown with missing expression audio lines', () => {
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { missingAudioLines: true }) },
+        { markdown: scenarioCard(20, { missingAudioLines: true }) },
         'scenario_phrase'
       ),
       false
     );
   });
 
-  test.it('rejects scenario markdown without 12 English and 12 Japanese audio lines', () => {
+  test.it('rejects scenario markdown without 20 English and 20 Japanese audio lines', () => {
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { duplicateEnglishNoJapanese: true }) },
+        { markdown: scenarioCard(20, { duplicateEnglishNoJapanese: true }) },
         'scenario_phrase'
       ),
       false
@@ -547,14 +547,14 @@ test.describe('validateSanitizedCardResponse', () => {
   test.it('rejects scenario markdown missing Chinese or usage hint lines', () => {
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { missingChinese: true }) },
+        { markdown: scenarioCard(20, { missingChinese: true }) },
         'scenario_phrase'
       ),
       false
     );
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { missingUsageHint: true }) },
+        { markdown: scenarioCard(20, { missingUsageHint: true }) },
         'scenario_phrase'
       ),
       false
@@ -564,14 +564,14 @@ test.describe('validateSanitizedCardResponse', () => {
   test.it('rejects scenario markdown with empty Chinese or usage hint values', () => {
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { emptyChinese: true }) },
+        { markdown: scenarioCard(20, { emptyChinese: true }) },
         'scenario_phrase'
       ),
       false
     );
     assert.equal(
       validateSanitizedCardResponse(
-        { markdown: scenarioCard(12, { emptyUsageHint: true }) },
+        { markdown: scenarioCard(20, { emptyUsageHint: true }) },
         'scenario_phrase'
       ),
       false
@@ -581,11 +581,11 @@ test.describe('validateSanitizedCardResponse', () => {
   test.it('reports which rule failed so operators can act on the failure', () => {
     // Job #399 failed with a generic message; the reason must now be explicit.
     const blockCountErrors = getCardResponseValidationErrors(
-      { markdown: scenarioCard(11) },
+      { markdown: scenarioCard(19) },
       'scenario_phrase'
     );
     assert.equal(blockCountErrors.length, 1);
-    assert.match(blockCountErrors[0], /12 expression blocks/);
+    assert.match(blockCountErrors[0], /20 expression blocks/);
 
     const missingSectionErrors = getCardResponseValidationErrors(
       { markdown: trilingualCard().replace('## 3. 中文', '## 3. Chinese') },

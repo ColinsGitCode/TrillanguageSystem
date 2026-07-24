@@ -82,6 +82,42 @@ test.describe('data preparation rules', () => {
     assert.equal(result.expectedAudio, true);
   });
 
+  test.it('accepts legacy 12-expression and current 20-expression scenario cards', () => {
+    const scenarioMarkdown = (count) => [
+      '# 场景测试',
+      '## 1. 场景说明',
+      '- fixture',
+      '## 2. 常用表达',
+      ...Array.from({ length: count }, (_value, index) => {
+        const ordinal = String(index + 1).padStart(2, '0');
+        return [
+          `### ${ordinal}.`,
+          '- **中文**: 测试',
+          `- **英文**: Scenario ${ordinal}`,
+          `- **日本語**: 場面${ordinal}`,
+          '- **使用提示**: 测试',
+        ].join('\n');
+      }),
+    ].join('\n');
+
+    for (const count of [12, 20]) {
+      const result = analyzeMarkdown({ card_type: 'scenario_phrase' }, scenarioMarkdown(count));
+      assert.equal(result.scenarioExpressionCount, count);
+      assert.equal(result.reviewRequired, false);
+    }
+    assert.equal(
+      analyzeMarkdown({ card_type: 'scenario_phrase' }, scenarioMarkdown(19)).reviewRequired,
+      true
+    );
+    assert.equal(
+      analyzeMarkdown(
+        { card_type: 'scenario_phrase' },
+        scenarioMarkdown(20).replace('### 20.', '### 19.')
+      ).reviewRequired,
+      true
+    );
+  });
+
   test.it('rebuilds trilingual translation projections with the parser', () => {
     const projection = projectionFor({ card_type: 'trilingual' }, `# card
 ## 1. 英文:

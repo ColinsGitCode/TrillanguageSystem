@@ -1,5 +1,7 @@
 # Scenario Expression Cards Implementation Plan
 
+> Historical implementation plan: task examples below preserve the original 12-expression MVP and its commit history. Since 2026-07-24, the active contract is 20 expressions / 40 English-Japanese audio tasks for new cards, with legacy 12-expression cards retained.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a `scenario_phrase` card type that generates 12 Chinese / English / Japanese common expressions for one user-described scene, with ruby and audio playback.
