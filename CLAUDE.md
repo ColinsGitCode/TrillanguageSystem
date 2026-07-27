@@ -62,7 +62,7 @@ TC-P4 runtime support is enabled by default and can be disabled with `TEXTBOOK_F
       -> SQLite + records filesystem
       -> one in-process generation worker
 
-The active Cards Factory frontend is React Router v7 + TypeScript at `/`; `/api/*` remains Express in the same `server.mjs` process. The former `/__rr-poc` route and legacy browser ESM frontend are retired and return 404. The production viewer is an immutable image; do not restore source or node_modules bind mounts.
+The active Cards Factory frontend is React Router v8 + TypeScript at `/`; `/api/*` remains Express in the same `server.mjs` process. The former `/__rr-poc` route and legacy browser ESM frontend are retired and return 404. The production viewer is an immutable image; do not restore source or node_modules bind mounts.
 
 `server.js` is not a second production entry. It is the CommonJS API-only bootstrap used by `tests/integration/_harness.js`; both entrypoints delegate Express construction and startup to `lib/httpRuntime`, while only `server.mjs` mounts React Router and runs in Compose.
 

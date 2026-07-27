@@ -55,6 +55,10 @@ module.exports = [
       'no-control-regex': 'off',
       'no-useless-escape': 'warn',
       'no-async-promise-executor': 'warn',
+      // ESLint 10 added these to `recommended`. Keep the established v9
+      // baseline here; adopt them later in a dedicated code-quality change.
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off',
     },
   },
   {
