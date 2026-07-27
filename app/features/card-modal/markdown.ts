@@ -1,12 +1,12 @@
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { CardType } from '../factory/types';
-
-const ALLOWED_TAGS = ['audio', 'source', 'ruby', 'rt', 'rp', 'button', 'mark'];
-const ALLOWED_ATTR = [
-  'class', 'src', 'data-src', 'data-folder', 'data-card-renderer-version',
-  'data-card-type', 'preload', 'controls', 'href', 'title', 'alt', 'aria-label', 'type',
-];
+import {
+  adaptAudioToButtons,
+  CARD_RENDER_ALLOWED_ATTR,
+  CARD_RENDER_ALLOWED_TAGS,
+  normalizeLoanwordAnnotations,
+} from './card-render-transforms.mjs';
 
 function purify(html: string) {
   if (typeof window === 'undefined') {
@@ -15,40 +15,16 @@ function purify(html: string) {
   const DOMPurify = createDOMPurify(window);
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
-    ADD_TAGS: ALLOWED_TAGS,
-    ADD_ATTR: ALLOWED_ATTR,
+    ADD_TAGS: CARD_RENDER_ALLOWED_TAGS,
+    ADD_ATTR: CARD_RENDER_ALLOWED_ATTR,
     FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
     FORBID_ATTR: ['style'],
   });
 }
 
-function normalizeLoanwordAnnotations(markdown: string) {
-  if (!markdown || markdown.includes('loanword-block')) return markdown || '';
-  return markdown.split(/\r?\n/).map((line) => {
-    const match = line.match(/^\s*-\s*外来语标注[:：]\s*(.*)$/i);
-    if (!match) return line;
-    const items = String(match[1] || '无')
-      .split(/[，,、；;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item) => {
-        const [left, ...rest] = item.split('=');
-        const right = rest.join('=').trim();
-        return `<span class="loanword-tag">${left.trim()}${right ? ` → ${right}` : ''}</span>`;
-      })
-      .join(' ');
-    return `<div class="loanword-block"><span class="loanword-label">外来语标注</span><span>${items}</span></div>`;
-  }).join('\n');
-}
-
 export function renderCardMarkdown(markdown: string, cardType: CardType, folder: string) {
   const parsed = String(marked.parse(normalizeLoanwordAnnotations(markdown || '')));
-  const withAudioButtons = parsed.replace(
-    /<audio\b([^>]*?)\s+src=(['"])([^'"]+)\2([^>]*)>(?:<\/audio>)?/gi,
-    (_match, _pre, _quote, src) => (
-      `<button class="audio-btn" type="button" aria-label="播放语音" data-src="${src}" data-folder="${folder}">▶</button>`
-    )
-  );
+  const withAudioButtons = adaptAudioToButtons(parsed, folder);
   const safe = purify(withAudioButtons);
   return `<div class="react-card-renderer card-type-${cardType}" data-card-renderer-version="2" data-card-type="${cardType}">${safe}</div>`;
 }

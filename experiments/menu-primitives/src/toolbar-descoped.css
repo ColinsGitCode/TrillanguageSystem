@@ -82,4 +82,18 @@
   padding: 8px 12px;
   color: var(--color-text-primary);
 }
-
+.poc-reading-surface {
+  position: fixed;
+  top: 150px;
+  left: 140px;
+  width: 430px;
+  margin: 0;
+  padding: 18px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: 500 14px/1.6 var(--font-sans);
+  outline: none;
+}
+.poc-reading-surface:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }

@@ -5,7 +5,8 @@
   "scripts": {
     "build:baseline": "vite build --outDir dist/baseline",
     "build:radix": "POC_VARIANT=radix vite build --outDir dist/radix",
-    "build:aria": "POC_VARIANT=aria vite build --outDir dist/aria"
+    "build:aria": "POC_VARIANT=aria vite build --outDir dist/aria",
+    "verify": "node verify.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",

@@ -10,7 +10,9 @@ function Toolbar() {
   const [open, setOpen] = useState(false);
   return (
     <div className="card-selection-toolbar" style={{ top: 90, left: 260 }} role="toolbar" aria-label="选区操作"
-      onMouseDown={(e) => e.preventDefault()}>
+      onMouseDown={(event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('button')) event.preventDefault();
+      }}>
       <button type="button" className="csa-highlight">标红</button>
       <span className="csa-sep" aria-hidden="true" />
       <div className="csa-generate-wrap">
