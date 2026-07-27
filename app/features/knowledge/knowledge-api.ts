@@ -21,9 +21,14 @@ export const knowledgeApi = {
     language: KnowledgeLanguage;
     kindHint: KnowledgeKind;
     timeZone: string;
+    sourceContext?: Record<string, unknown>;
   }) => requestJson<{ success: true; lookup: LookupResult }>('/api/kg/lookups', {
     method: 'POST',
-    body: JSON.stringify({ ...payload, interactionKind: 'explicit_lookup', sourceContext: { surface: 'knowledge-page' } }),
+    body: JSON.stringify({
+      ...payload,
+      interactionKind: 'explicit_lookup',
+      sourceContext: payload.sourceContext || { surface: 'knowledge-page' },
+    }),
   }),
   point: (id: number) => requestJson<{ success: true; point: KnowledgePoint }>(`/api/kg/points/${id}`),
   resolutionCases: (status: ResolutionCase['status'] = 'open') => requestJson<{

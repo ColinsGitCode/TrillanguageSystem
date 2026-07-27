@@ -80,3 +80,33 @@ test('keeps unresolved annotations out of rendered content', async () => {
     dom.window.close();
   }
 });
+
+test('maps every supported annotation color to a controlled marker class', async () => {
+  const anchor = await import(moduleUrl('annotation-anchor.mjs'));
+  const renderer = await import(moduleUrl('annotation-render.mjs'));
+  const colors = ['red', 'yellow', 'green', 'blue'];
+
+  for (const [index, color] of colors.entries()) {
+    const dom = new JSDOM(`<div id="root"><p>color ${color}</p></div>`);
+    try {
+      const root = dom.window.document.getElementById('root');
+      const textNode = root.querySelector('p').firstChild;
+      const range = dom.window.document.createRange();
+      range.setStart(textNode, 6);
+      range.setEnd(textNode, 6 + color.length);
+      renderer.applyAnnotations(root, [{
+        id: `018f0f96-5a90-7d75-a2c6-86559b5de95${index + 3}`,
+        selector: anchor.createAnchor(root, range),
+        annotationKind: 'highlight',
+        color,
+        status: 'active',
+      }]);
+
+      const marker = root.querySelector('mark');
+      assert.equal(marker.classList.contains(`study-highlight-${color}`), true);
+      assert.equal(marker.classList.contains('card-annotation-highlight'), true);
+    } finally {
+      dom.window.close();
+    }
+  }
+});

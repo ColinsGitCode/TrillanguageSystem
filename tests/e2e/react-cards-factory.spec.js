@@ -21,6 +21,40 @@ async function enqueueAndWait(request, phrase, cardType) {
   }, { timeout: 30_000, intervals: [100, 200, 500] }).toBe('success');
 }
 
+async function selectVisibleText(page, text, { keyboard = false } = {}) {
+  await page.getByTestId('react-card-content').evaluate((container, options) => {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !String(node.nodeValue || '').includes(options.text)) node = walker.nextNode();
+    if (!node) throw new Error(`Unable to find selection text: ${options.text}`);
+    const start = node.nodeValue.indexOf(options.text);
+    if (options.keyboard) {
+      container.focus();
+      container.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        shiftKey: true,
+        bubbles: true,
+      }));
+    }
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + options.text.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    if (options.keyboard) {
+      document.dispatchEvent(new Event('selectionchange'));
+      container.dispatchEvent(new KeyboardEvent('keyup', {
+        key: 'ArrowRight',
+        shiftKey: true,
+        bubbles: true,
+      }));
+    } else {
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    }
+  }, { text, keyboard });
+}
+
 test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
@@ -217,6 +251,110 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-card-modal-close').click();
     await opener.click();
     await expect(page.locator('mark.study-highlight-red')).toHaveCount(1);
+  });
+
+  test('CA-I1 supports keyboard selection, multicolor updates, copy, KG lookup and unhighlight', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    let lookupPayload = null;
+    await page.route('**/api/kg/lookups', async (route) => {
+      lookupPayload = route.request().postDataJSON();
+      await route.fulfill({
+        json: {
+          success: true,
+          lookup: {
+            id: 81,
+            eventKey: lookupPayload.eventKey,
+            resolution: 'resolved',
+            point: {
+              id: 91,
+              pointKey: 'kp:en:lexeme:deterministic',
+              kind: 'lexeme',
+              language: 'en',
+              canonicalForm: 'deterministic',
+              canonicalReading: '',
+              senseDiscriminator: '',
+              identityVersion: 'kg-point-v1',
+              lifecycle: 'active',
+            },
+            resolutionCase: null,
+            reused: false,
+          },
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'deterministic', { keyboard: true });
+
+    const colorTrigger = page.getByRole('button', { name: '标记选区' });
+    await expect(colorTrigger).toBeFocused();
+    await colorTrigger.click();
+    const created = page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/annotations'
+    ));
+    await page.getByRole('menuitem', { name: '蓝色补充' }).click();
+    expect((await created).status()).toBe(201);
+    const blueMarker = page.locator('mark.study-highlight-blue').filter({ hasText: 'deterministic' });
+    await expect(blueMarker).toHaveCount(1);
+
+    await blueMarker.click();
+    await page.getByRole('button', { name: '复制选区' }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('deterministic');
+
+    await page.getByRole('button', { name: '查知识点' }).click();
+    const inspector = page.getByTestId('card-knowledge-inspector');
+    await expect(inspector).toBeVisible();
+    await expect(inspector.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+    await inspector.getByRole('button', { name: '确认查询' }).click();
+    await expect(inspector.getByRole('region', { name: '知识点查询结果' })).toContainText('deterministic');
+    expect(lookupPayload).toMatchObject({
+      inputText: 'deterministic',
+      language: 'en',
+      kindHint: 'lexeme',
+      timeZone: 'Asia/Tokyo',
+      interactionKind: 'explicit_lookup',
+      sourceContext: {
+        surface: 'card-modal',
+        targetKind: 'generation',
+        quoteExact: 'deterministic',
+      },
+    });
+    await inspector.getByRole('button', { name: '关闭知识点查询' }).click();
+
+    await blueMarker.dispatchEvent('click');
+    await page.getByRole('button', { name: '更改标记颜色' }).click();
+    const updated = page.waitForResponse((response) => (
+      response.request().method() === 'PATCH'
+      && /\/api\/annotations\/[^/]+$/u.test(new URL(response.url()).pathname)
+    ));
+    await page.getByRole('menuitem', { name: '绿色掌握' }).click();
+    expect((await updated).status()).toBe(200);
+    const greenMarker = page.locator('mark.study-highlight-green').filter({ hasText: 'deterministic' });
+    await expect(greenMarker).toHaveCount(1);
+
+    await greenMarker.dispatchEvent('click');
+    const removed = page.waitForResponse((response) => (
+      response.request().method() === 'DELETE'
+      && /\/api\/annotations\/[^/]+$/u.test(new URL(response.url()).pathname)
+    ));
+    await page.getByRole('button', { name: '取消标记' }).click();
+    expect((await removed).status()).toBe(200);
+    await expect(greenMarker).toHaveCount(0);
+  });
+
+  test('CA-I1 requires an explicit language choice for a kanji-only lookup', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await selectVisibleText(page, '昨夜', { keyboard: true });
+    await page.getByRole('button', { name: '查知识点' }).click();
+
+    const inspector = page.getByTestId('card-knowledge-inspector');
+    await expect(inspector).toContainText('汉字选区无法可靠判断');
+    await expect(inspector.getByRole('button', { name: '确认查询' })).toBeDisabled();
+    await inspector.getByRole('button', { name: '日本語' }).click();
+    await expect(inspector.getByRole('button', { name: '确认查询' })).toBeEnabled();
   });
 
   test('P4 previews the selected phrase and enqueues that exact phrase', async ({ page }) => {

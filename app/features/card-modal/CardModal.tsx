@@ -1,10 +1,26 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Eraser,
+  Highlighter,
+  Palette,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { knowledgeApi } from '../knowledge/knowledge-api';
 import { factoryApi } from '../factory/factory-api';
-import type { AnnotationTarget, CardAnnotation } from '../factory/factory-api';
+import type {
+  AnnotationColor,
+  AnnotationTarget,
+  CardAnnotation,
+} from '../factory/factory-api';
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
 import { createAnchor } from './annotation-anchor.mjs';
@@ -16,6 +32,17 @@ import {
   renderCardMarkdown,
 } from './markdown';
 import { IntelPanel } from './IntelPanel';
+import {
+  inferLookupKind,
+  inferLookupLanguage,
+  isKeyboardSelectionKey,
+} from './selection-actions';
+import {
+  SelectionKnowledgePanel,
+} from './SelectionKnowledgePanel';
+import type {
+  KnowledgeLookupDraft,
+} from './SelectionKnowledgePanel';
 
 type Props = {
   selection: CardSelection;
@@ -29,6 +56,41 @@ const CARD_TYPE_LABEL: Record<CardType, string> = {
   scenario_phrase: '场景卡',
 };
 const SELECTION_CARD_TYPES: CardType[] = ['trilingual', 'grammar_ja', 'scenario_phrase'];
+const HIGHLIGHT_COLORS: Array<{
+  value: AnnotationColor;
+  label: string;
+}> = [
+  { value: 'red', label: '红色重点' },
+  { value: 'yellow', label: '黄色提示' },
+  { value: 'green', label: '绿色掌握' },
+  { value: 'blue', label: '蓝色补充' },
+];
+const COLOR_LABEL = Object.fromEntries(
+  HIGHLIGHT_COLORS.map((item) => [item.value, item.label])
+) as Record<AnnotationColor, string>;
+
+type SelectionToolbarState = {
+  top: number;
+  left: number;
+  anchorLeft: number;
+  placeBelow: boolean;
+  phrase: string;
+  rawText: string;
+  annotationId: string | null;
+};
+
+function lookupErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) return '知识点查询失败，请重试。';
+  const payload = error.payload as { code?: string } | null;
+  if (error.status === 404 || payload?.code === 'KG_FEATURE_DISABLED') {
+    return '知识点功能当前未启用。';
+  }
+  if (error.status === 400) {
+    return '选区内容与所选语言不匹配，请重新确认语言或知识类型。';
+  }
+  if (error.status === 409) return '这次查询与已有记录冲突，请重新发起。';
+  return '知识点查询失败，请重试。';
+}
 
 export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const queryClient = useQueryClient();
@@ -38,23 +100,25 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const selectedRangeRef = useRef<Range | null>(null);
   const selectedAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const selectedTextRef = useRef('');
+  const lookupSourceRef = useRef<Record<string, unknown>>({});
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const toolbarFirstActionRef = useRef<HTMLButtonElement>(null);
   const generateTriggerRef = useRef<HTMLButtonElement>(null);
+  const lookupTriggerRef = useRef<HTMLButtonElement>(null);
+  const focusToolbarAfterSelectionRef = useRef(false);
+  const focusKnowledgeAfterMenuRef = useRef(false);
+  const keyboardSelectionRef = useRef(false);
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [renderedHtml, setRenderedHtml] = useState('');
   const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'unavailable'>('pending');
   const [isSavingAnnotation, setIsSavingAnnotation] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [toolbar, setToolbar] = useState<{
-    top: number;
-    left: number;
-    anchorLeft: number;
-    placeBelow: boolean;
-    phrase: string;
-  } | null>(null);
+  const [toolbar, setToolbar] = useState<SelectionToolbarState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [genMenuOpen, setGenMenuOpen] = useState(false);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [knowledgeDraft, setKnowledgeDraft] = useState<KnowledgeLookupDraft | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const annotationStateRef = useRef<{
     target: AnnotationTarget;
@@ -115,6 +179,18 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
         // Radix menus are portaled outside the dialog. Let their own Escape and
         // focus-restoration contract run before considering the dialog close.
         if (target?.closest('.csa-gen-menu')) return;
+        if (target?.closest('.card-knowledge-inspector')) {
+          event.preventDefault();
+          setKnowledgeDraft(null);
+          lookupTriggerRef.current?.focus({ preventScroll: true });
+          return;
+        }
+        if (target?.closest('.card-selection-toolbar')) {
+          event.preventDefault();
+          setToolbar(null);
+          contentRef.current?.focus({ preventScroll: true });
+          return;
+        }
         event.preventDefault();
         onClose();
         return;
@@ -169,20 +245,39 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       const node = toolbarRef.current;
       if (!node) return;
       const viewportPadding = 8;
-      const halfWidth = node.getBoundingClientRect().width / 2;
+      const dimensions = node.getBoundingClientRect();
+      const halfWidth = dimensions.width / 2;
       const minimum = viewportPadding + halfWidth;
       const maximum = window.innerWidth - viewportPadding - halfWidth;
-      const left = minimum > maximum
-        ? window.innerWidth / 2
-        : Math.min(maximum, Math.max(minimum, toolbar.anchorLeft));
-      setToolbar((current) => (
-        current && Math.abs(current.left - left) > 0.5 ? { ...current, left } : current
-      ));
+      setToolbar((current) => {
+        if (!current) return current;
+        const left = minimum > maximum
+          ? window.innerWidth / 2
+          : Math.min(maximum, Math.max(minimum, current.anchorLeft));
+        const minimumTop = current.placeBelow ? 0 : dimensions.height + (viewportPadding * 2);
+        const maximumTop = current.placeBelow
+          ? window.innerHeight - dimensions.height - (viewportPadding * 2)
+          : window.innerHeight - viewportPadding;
+        const top = minimumTop > maximumTop
+          ? window.innerHeight / 2
+          : Math.min(maximumTop, Math.max(minimumTop, current.top));
+        return Math.abs(current.left - left) > 0.5 || Math.abs(current.top - top) > 0.5
+          ? { ...current, left, top }
+          : current;
+      });
     };
     clampToViewport();
     window.addEventListener('resize', clampToViewport);
     return () => window.removeEventListener('resize', clampToViewport);
   }, [toolbar?.anchorLeft, toolbar?.phrase]);
+
+  useEffect(() => {
+    if (!toolbar || !focusToolbarAfterSelectionRef.current) return;
+    focusToolbarAfterSelectionRef.current = false;
+    window.requestAnimationFrame(() => {
+      toolbarFirstActionRef.current?.focus({ preventScroll: true });
+    });
+  }, [toolbar?.annotationId, toolbar?.phrase]);
 
   const generateMutation = useMutation({
     mutationFn: (vars: { phrase: string; cardType: CardType }) => factoryApi.enqueue({
@@ -199,6 +294,8 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       selectedTextRef.current = '';
       setToolbar(null);
       setGenMenuOpen(false);
+      setColorMenuOpen(false);
+      setKnowledgeDraft(null);
       setHasSelection(false);
       showToast(`✦ 已加入生成队列 · ${CARD_TYPE_LABEL[vars.cardType]}`);
     },
@@ -208,13 +305,55 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     },
   });
 
-  const saveHighlight = async () => {
-    const container = contentRef.current;
-    const range = selectedRangeRef.current;
-    if (!container || !range) return;
+  const knowledgeMutation = useMutation({
+    mutationFn: (draft: KnowledgeLookupDraft) => knowledgeApi.lookup({
+      eventKey: `card-lookup:${crypto.randomUUID()}`,
+      inputText: draft.phrase,
+      language: draft.language!,
+      kindHint: draft.kind,
+      timeZone: 'Asia/Tokyo',
+      sourceContext: {
+        surface: 'card-modal',
+        ...lookupSourceRef.current,
+      },
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['knowledge'] });
+    },
+  });
 
+  const renderAnnotationSnapshot = (annotations: CardAnnotation[]) => {
+    const markdown = cardQuery.data?.markdown || '';
+    const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = freshHtml;
+    applyAnnotations(wrapper, annotations);
+    return wrapper.firstElementChild?.outerHTML || freshHtml;
+  };
+
+  const replaceAnnotationSnapshot = (annotations: CardAnnotation[]) => {
+    const state = annotationStateRef.current;
+    if (!state) return;
+    annotationStateRef.current = { ...state, annotations };
+    setRenderedHtml(renderAnnotationSnapshot(annotations));
+  };
+
+  const clearSelectionActions = () => {
+    window.getSelection()?.removeAllRanges();
+    selectedRangeRef.current = null;
+    selectedAnchorRef.current = null;
+    selectedTextRef.current = '';
+    setHasSelection(false);
+    setToolbar(null);
+    setGenMenuOpen(false);
+    setColorMenuOpen(false);
+    setKnowledgeDraft(null);
+    knowledgeMutation.reset();
+  };
+
+  const saveHighlight = async (color: AnnotationColor = 'red') => {
     if (annotationMode !== 'annotations') {
-      showToast('当前卡片无法保存标红，请刷新后重试');
+      showToast('当前卡片无法保存标记，请刷新后重试');
       return;
     }
     const state = annotationStateRef.current;
@@ -223,6 +362,23 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     if (!state || !generationId || !selector || isSavingAnnotation) return;
     setIsSavingAnnotation(true);
     try {
+      const currentId = toolbar?.annotationId;
+      if (currentId) {
+        const current = state.annotations.find((annotation) => annotation.id === currentId);
+        if (!current) throw new Error('Selected annotation is no longer available');
+        const result = await factoryApi.updateAnnotation(current.id, {
+          expectedVersion: current.version,
+          color,
+        });
+        replaceAnnotationSnapshot(state.annotations.map((annotation) => (
+          annotation.id === current.id ? result.annotation : annotation
+        )));
+        clearSelectionActions();
+        showToast(`已改为${COLOR_LABEL[color]}`);
+        return;
+      }
+
+      if (!selectedRangeRef.current) return;
       const result = await factoryApi.createAnnotation({
         id: crypto.randomUUID(),
         targetKind: 'generation',
@@ -230,34 +386,113 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
         expectedTargetRevision: state.target.targetRevision,
         selector,
         annotationKind: 'highlight',
-        color: 'red',
+        color,
       });
-      const annotations = [...state.annotations, result.annotation];
-      annotationStateRef.current = { ...state, annotations };
-      const markdown = cardQuery.data?.markdown || '';
-      const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = freshHtml;
-      applyAnnotations(wrapper, annotations);
-      setRenderedHtml(wrapper.firstElementChild?.outerHTML || freshHtml);
-      window.getSelection()?.removeAllRanges();
-      selectedRangeRef.current = null;
-      selectedAnchorRef.current = null;
-      selectedTextRef.current = '';
-      setHasSelection(false);
-      setToolbar(null);
-      setGenMenuOpen(false);
-      showToast('标红已保存');
+      replaceAnnotationSnapshot([...state.annotations, result.annotation]);
+      clearSelectionActions();
+      showToast(`${COLOR_LABEL[color]}已保存`);
     } catch (error) {
       console.error('Cards Factory annotation save failed', error);
       const conflict = error instanceof ApiError && error.status === 409;
-      showToast(conflict ? '卡片内容或标红已变化，请重新选择' : '标红保存失败，请重试');
+      showToast(conflict ? '卡片内容或标记已变化，请重新选择' : '标记保存失败，请重试');
     } finally {
       setIsSavingAnnotation(false);
     }
   };
 
-  const captureSelection = () => {
+  const removeHighlight = async () => {
+    const state = annotationStateRef.current;
+    const currentId = toolbar?.annotationId;
+    if (!state || !currentId || isSavingAnnotation) return;
+    const current = state.annotations.find((annotation) => annotation.id === currentId);
+    if (!current) return;
+    setIsSavingAnnotation(true);
+    try {
+      await factoryApi.deleteAnnotation(current.id, current.version);
+      replaceAnnotationSnapshot(state.annotations.filter((annotation) => annotation.id !== current.id));
+      clearSelectionActions();
+      showToast('标记已取消');
+    } catch (error) {
+      console.error('Cards Factory annotation removal failed', error);
+      const conflict = error instanceof ApiError && error.status === 409;
+      showToast(conflict ? '标记已在其它页面变化，请重新打开卡片' : '取消标记失败，请重试');
+    } finally {
+      setIsSavingAnnotation(false);
+    }
+  };
+
+  const copySelectedText = async () => {
+    const text = selectedTextRef.current || toolbar?.rawText || toolbar?.phrase || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('选区已复制');
+    } catch {
+      showToast('无法访问剪贴板，请检查浏览器权限');
+    }
+  };
+
+  const openKnowledgeLookup = () => {
+    const phrase = toolbar?.phrase || '';
+    if (!phrase) return;
+    const language = inferLookupLanguage(phrase);
+    const generationId = cardQuery.data?.record?.id;
+    lookupSourceRef.current = {
+      targetKind: 'generation',
+      targetId: generationId || null,
+      annotationId: toolbar?.annotationId || null,
+      quoteExact: selectedAnchorRef.current?.textQuote.exact || phrase,
+      positionStart: selectedAnchorRef.current?.textPosition.start ?? null,
+      positionEnd: selectedAnchorRef.current?.textPosition.end ?? null,
+    };
+    knowledgeMutation.reset();
+    focusKnowledgeAfterMenuRef.current = true;
+    setKnowledgeDraft({
+      phrase,
+      language,
+      kind: inferLookupKind(phrase, language),
+    });
+  };
+
+  const activateAnnotation = (annotationId: string, focusToolbar = false) => {
+    const container = contentRef.current;
+    const state = annotationStateRef.current;
+    const annotation = state?.annotations.find((item) => item.id === annotationId);
+    if (!container || !annotation) return;
+    const fragments = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-annotation-id]')
+    ).filter((node) => node.dataset.annotationId === annotationId);
+    const rects = fragments.map((node) => node.getBoundingClientRect()).filter((rect) => rect.width > 0);
+    if (!rects.length) return;
+    const leftEdge = Math.min(...rects.map((rect) => rect.left));
+    const rightEdge = Math.max(...rects.map((rect) => rect.right));
+    const topEdge = Math.min(...rects.map((rect) => rect.top));
+    const bottomEdge = Math.max(...rects.map((rect) => rect.bottom));
+    const placeBelow = topEdge < 64;
+    const anchorLeft = leftEdge + (rightEdge - leftEdge) / 2;
+
+    window.getSelection()?.removeAllRanges();
+    selectedRangeRef.current = null;
+    selectedAnchorRef.current = annotation.selector;
+    selectedTextRef.current = annotation.selector.textQuote.exact;
+    setHasSelection(false);
+    setKnowledgeDraft(null);
+    knowledgeMutation.reset();
+    focusToolbarAfterSelectionRef.current = focusToolbar;
+    setToolbar({
+      top: placeBelow ? bottomEdge : topEdge,
+      left: anchorLeft,
+      anchorLeft,
+      placeBelow,
+      phrase: annotation.selector.textQuote.exact,
+      rawText: annotation.selector.textQuote.exact,
+      annotationId,
+    });
+    setGenMenuOpen(false);
+    setColorMenuOpen(false);
+  };
+
+  const captureSelection = (focusToolbar = false) => {
     const container = contentRef.current;
     if (!container) return;
     const candidate = buildSelectionCandidate(container);
@@ -268,6 +503,22 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       setHasSelection(false);
       setToolbar(null);
       setGenMenuOpen(false);
+      setColorMenuOpen(false);
+      return;
+    }
+    const overlappingIds = new Set(
+      Array.from(container.querySelectorAll<HTMLElement>('[data-annotation-id]'))
+        .filter((node) => candidate.range.intersectsNode(node))
+        .map((node) => node.dataset.annotationId)
+        .filter((id): id is string => Boolean(id))
+    );
+    if (overlappingIds.size === 1) {
+      activateAnnotation([...overlappingIds][0], focusToolbar);
+      return;
+    }
+    if (overlappingIds.size > 1) {
+      showToast('选区包含多个标记，请点击单个标记后操作');
+      setToolbar(null);
       return;
     }
     selectedRangeRef.current = candidate.range.cloneRange();
@@ -282,28 +533,66 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     const rect = candidate.range.getBoundingClientRect();
     const placeBelow = rect.top < 64;
     const anchorLeft = rect.left + rect.width / 2;
+    setKnowledgeDraft(null);
+    knowledgeMutation.reset();
+    focusToolbarAfterSelectionRef.current = focusToolbar;
     setToolbar({
       top: placeBelow ? rect.bottom : rect.top,
       left: anchorLeft,
       anchorLeft,
       placeBelow,
       phrase: candidate.normalized,
+      rawText: candidate.rawText,
+      annotationId: null,
     });
     setGenMenuOpen(false);
+    setColorMenuOpen(false);
   };
+
+  useEffect(() => {
+    let frame = 0;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && isKeyboardSelectionKey(event.key)) {
+        keyboardSelectionRef.current = true;
+      }
+    };
+    const captureKeyboardSelection = () => {
+      if (!keyboardSelectionRef.current) return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => captureSelection(true));
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!isKeyboardSelectionKey(event.key)) return;
+      captureKeyboardSelection();
+      keyboardSelectionRef.current = false;
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('selectionchange', captureKeyboardSelection);
+    document.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('selectionchange', captureKeyboardSelection);
+      document.removeEventListener('keyup', onKeyUp, true);
+    };
+  });
 
   const handleContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.audio-btn');
-    if (!button) return;
-    const source = button.dataset.src;
-    if (!source) return;
-    audioRef.current?.pause();
-    contentRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
-    const audio = new Audio(`/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`);
-    audioRef.current = audio;
-    button.classList.add('is-playing');
-    audio.addEventListener('ended', () => button.classList.remove('is-playing'), { once: true });
-    audio.play().catch(() => button.classList.remove('is-playing'));
+    if (button) {
+      const source = button.dataset.src;
+      if (!source) return;
+      audioRef.current?.pause();
+      contentRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
+      const audio = new Audio(`/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`);
+      audioRef.current = audio;
+      button.classList.add('is-playing');
+      audio.addEventListener('ended', () => button.classList.remove('is-playing'), { once: true });
+      audio.play().catch(() => button.classList.remove('is-playing'));
+      return;
+    }
+    const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
+    if (marker?.dataset.annotationId) activateAnnotation(marker.dataset.annotationId);
   };
 
   const preserveSelectionOutsideActions = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -317,7 +606,32 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
 
   const restoreReadingFocus = (event: Event) => {
     event.preventDefault();
+    if (focusKnowledgeAfterMenuRef.current) {
+      focusKnowledgeAfterMenuRef.current = false;
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('.card-knowledge-inspector')?.focus({ preventScroll: true });
+      });
+      return;
+    }
     contentRef.current?.focus({ preventScroll: true });
+  };
+
+  const handleToolbarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+    ).filter((button) => button.offsetParent !== null);
+    if (!buttons.length) return;
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? buttons.length - 1
+        : event.key === 'ArrowLeft'
+          ? (currentIndex <= 0 ? buttons.length - 1 : currentIndex - 1)
+          : (currentIndex + 1) % buttons.length;
+    event.preventDefault();
+    buttons[nextIndex]?.focus();
   };
 
   const cardContent = renderedHtml ? (
@@ -325,11 +639,17 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       ref={contentRef}
       className="react-card-markdown"
       data-testid="react-card-content"
-      tabIndex={-1}
-      onMouseUp={captureSelection}
+      tabIndex={0}
+      aria-label="学习卡片正文，可选择文字后操作"
+      onMouseUp={() => captureSelection(false)}
       onClick={handleContentClick}
       onContextMenuCapture={(event) => {
-        if (!hasSelection) event.stopPropagation();
+        const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
+        if (marker?.dataset.annotationId) {
+          activateAnnotation(marker.dataset.annotationId);
+          return;
+        }
+        if (!hasSelection && !toolbar?.annotationId) event.stopPropagation();
       }}
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
@@ -385,14 +705,49 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
                       aria-label="选区操作菜单"
                       onCloseAutoFocus={restoreReadingFocus}
                     >
+                      <ContextMenu.Sub>
+                        <ContextMenu.SubTrigger className="csa-menu-subtrigger csa-highlight">
+                          <Palette aria-hidden="true" />
+                          {toolbar?.annotationId ? '更改颜色' : '标记颜色'}
+                          <ChevronRight aria-hidden="true" />
+                        </ContextMenu.SubTrigger>
+                        <ContextMenu.Portal>
+                          <ContextMenu.SubContent className="csa-gen-menu csa-color-menu" aria-label="选择标记颜色">
+                            {HIGHLIGHT_COLORS.map((color) => (
+                              <ContextMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
+                                <button
+                                  type="button"
+                                  disabled={isSavingAnnotation}
+                                  onClick={() => void saveHighlight(color.value)}
+                                >
+                                  <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
+                                  {color.label}
+                                </button>
+                              </ContextMenu.Item>
+                            ))}
+                          </ContextMenu.SubContent>
+                        </ContextMenu.Portal>
+                      </ContextMenu.Sub>
+                      {toolbar?.annotationId && (
+                        <ContextMenu.Item asChild>
+                          <button
+                            type="button"
+                            className="csa-remove-highlight"
+                            disabled={isSavingAnnotation}
+                            onClick={() => void removeHighlight()}
+                          >
+                            <Eraser aria-hidden="true" /> 取消标记
+                          </button>
+                        </ContextMenu.Item>
+                      )}
                       <ContextMenu.Item asChild>
-                        <button
-                          type="button"
-                          className="csa-highlight"
-                          disabled={annotationMode !== 'annotations' || isSavingAnnotation}
-                          onClick={() => void saveHighlight()}
-                        >
-                          <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}
+                        <button type="button" onClick={() => void copySelectedText()}>
+                          <Copy aria-hidden="true" /> 复制
+                        </button>
+                      </ContextMenu.Item>
+                      <ContextMenu.Item asChild>
+                        <button type="button" onClick={openKnowledgeLookup}>
+                          <Search aria-hidden="true" /> 查知识点
                         </button>
                       </ContextMenu.Item>
                       <ContextMenu.Separator className="csa-menu-separator" />
@@ -442,6 +797,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             role="toolbar"
             aria-label="选区操作"
             onMouseDown={preserveSelectionOutsideActions}
+            onKeyDown={handleToolbarKeyDown}
           >
             <output
               className="csa-selection-preview"
@@ -452,13 +808,69 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
               <strong>{toolbar.phrase}</strong>
             </output>
             <span className="csa-sep" aria-hidden="true" />
+            <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  ref={toolbarFirstActionRef}
+                  type="button"
+                  className="csa-highlight"
+                  disabled={annotationMode !== 'annotations' || isSavingAnnotation}
+                  aria-label={toolbar.annotationId ? '更改标记颜色' : '标记选区'}
+                >
+                  {toolbar.annotationId ? <Palette aria-hidden="true" /> : <Highlighter aria-hidden="true" />}
+                  {isSavingAnnotation ? '保存中…' : toolbar.annotationId ? '改色' : '标记'}
+                  <ChevronDown aria-hidden="true" className="csa-caret" />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="csa-gen-menu csa-color-menu"
+                  sideOffset={5}
+                  align="start"
+                >
+                  {HIGHLIGHT_COLORS.map((color) => (
+                    <DropdownMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
+                      <button
+                        type="button"
+                        disabled={isSavingAnnotation}
+                        onClick={() => void saveHighlight(color.value)}
+                      >
+                        <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
+                        {color.label}
+                      </button>
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            {toolbar.annotationId && (
+              <button
+                type="button"
+                className="csa-icon-action csa-remove-highlight"
+                aria-label="取消标记"
+                title="取消标记"
+                disabled={isSavingAnnotation}
+                onClick={() => void removeHighlight()}
+              >
+                <Eraser aria-hidden="true" />
+              </button>
+            )}
             <button
               type="button"
-              className="csa-highlight"
-              disabled={annotationMode !== 'annotations' || isSavingAnnotation}
-              onClick={() => void saveHighlight()}
+              className="csa-icon-action"
+              aria-label="复制选区"
+              title="复制选区"
+              onClick={() => void copySelectedText()}
             >
-              <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}
+              <Copy aria-hidden="true" />
+            </button>
+            <button
+              ref={lookupTriggerRef}
+              type="button"
+              className="csa-knowledge"
+              onClick={openKnowledgeLookup}
+            >
+              <Search aria-hidden="true" /> 查知识点
             </button>
             <span className="csa-sep" aria-hidden="true" />
             <div className="csa-generate-wrap">
@@ -497,6 +909,29 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
               </DropdownMenu.Root>
             </div>
           </div>
+        )}
+
+        {knowledgeDraft && (
+          <SelectionKnowledgePanel
+            draft={knowledgeDraft}
+            result={knowledgeMutation.data?.lookup || null}
+            error={knowledgeMutation.isError ? lookupErrorMessage(knowledgeMutation.error) : ''}
+            pending={knowledgeMutation.isPending}
+            onChange={(next) => {
+              knowledgeMutation.reset();
+              setKnowledgeDraft(next);
+            }}
+            onSubmit={() => {
+              if (knowledgeDraft.language && !knowledgeMutation.isPending) {
+                knowledgeMutation.mutate(knowledgeDraft);
+              }
+            }}
+            onClose={() => {
+              setKnowledgeDraft(null);
+              knowledgeMutation.reset();
+              (lookupTriggerRef.current || contentRef.current)?.focus({ preventScroll: true });
+            }}
+          />
         )}
 
         {toast && <div className="card-selection-toast" role="status">{toast}</div>}

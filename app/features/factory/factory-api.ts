@@ -26,6 +26,8 @@ export type CardAnnotation = RenderableCardAnnotation & {
   updatedAtUtc: string;
 };
 
+export type AnnotationColor = 'red' | 'yellow' | 'green' | 'blue';
+
 export type AnnotationTarget = {
   targetKind: CardAnnotation['targetKind'];
   targetId: number;
@@ -89,12 +91,22 @@ export const factoryApi = {
     expectedTargetRevision: string;
     selector: CardAnnotationSelector;
     annotationKind: 'highlight';
-    color: 'red';
+    color: AnnotationColor;
   }) => requestJson<{
     success: true;
     annotation: CardAnnotation;
   }>('/api/annotations', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  updateAnnotation: (id: string, payload: {
+    expectedVersion: number;
+    color: AnnotationColor;
+  }) => requestJson<{
+    success: true;
+    annotation: CardAnnotation;
+  }>(`/api/annotations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   }),
   deleteAnnotation: (id: string, expectedVersion: number) => requestJson<{

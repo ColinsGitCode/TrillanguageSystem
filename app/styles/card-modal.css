@@ -43,7 +43,11 @@
 }
 .react-card-renderer .audio-btn { width: 31px; height: 31px; display: inline-grid; place-items: center; margin-left: 7px; padding: 0; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: 50%; cursor: pointer; font-size: 12px; vertical-align: middle; }
 .react-card-renderer .audio-btn.is-playing { color: var(--color-text-inverse); background: var(--color-primary); border-color: var(--color-primary); }
-.react-card-renderer mark.study-highlight-red { color: inherit; background: color-mix(in srgb, var(--color-danger) 24%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-danger) 65%, transparent); }
+.react-card-renderer mark.card-annotation-highlight { color: inherit; border-radius: 2px; cursor: pointer; }
+.react-card-renderer mark.study-highlight-red { background: color-mix(in srgb, var(--color-danger) 24%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-danger) 65%, transparent); }
+.react-card-renderer mark.study-highlight-yellow { background: color-mix(in srgb, var(--color-warning) 28%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-warning) 70%, transparent); }
+.react-card-renderer mark.study-highlight-green { background: color-mix(in srgb, var(--color-success) 22%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-success) 62%, transparent); }
+.react-card-renderer mark.study-highlight-blue { background: color-mix(in srgb, var(--color-primary) 20%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-primary) 60%, transparent); }
 .loanword-block { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .loanword-label, .loanword-tag { padding: 3px 8px; border-radius: var(--radius-full); font-size: 12px; }
 .loanword-label { color: var(--color-text-inverse); background: var(--color-data-purple); }
@@ -160,6 +164,7 @@
   transition: background var(--duration-fast) var(--ease-standard);
 }
 .card-selection-toolbar .csa-highlight { color: var(--color-danger); }
+.card-selection-toolbar .csa-knowledge { color: var(--color-data-purple); }
 .card-selection-toolbar .csa-generate { color: var(--color-primary); }
 .card-selection-toolbar button:hover:not(:disabled),
 .csa-gen-menu button:hover:not(:disabled),
@@ -174,6 +179,8 @@
 .card-selection-toolbar .csa-sep { width: 1px; margin: 3px 0; background: var(--color-border); }
 .card-selection-toolbar .csa-generate-wrap { position: relative; display: inline-flex; }
 .card-selection-toolbar .csa-caret { width: 13px; height: 13px; margin-left: -2px; opacity: .7; }
+.card-selection-toolbar .csa-icon-action { width: 30px; justify-content: center; padding-inline: 6px; color: var(--color-text-secondary); }
+.card-selection-toolbar .csa-remove-highlight { color: var(--color-danger); }
 
 /* —— 生成卡片:卡型选择菜单 —— */
 .csa-gen-menu {
@@ -197,6 +204,133 @@
 .csa-menu-subtrigger { border: 0; }
 .csa-menu-subtrigger svg:last-child { margin-left: auto; }
 .csa-menu-separator { height: 1px; margin: 4px 0; background: var(--color-border); }
+.csa-color-menu { min-width: 156px; }
+.csa-color-swatch {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border: 1px solid color-mix(in srgb, currentColor 32%, var(--color-border));
+  border-radius: 3px;
+}
+.csa-color-swatch.is-red { color: var(--color-danger); background: var(--color-danger); }
+.csa-color-swatch.is-yellow { color: var(--color-warning); background: var(--color-warning); }
+.csa-color-swatch.is-green { color: var(--color-success); background: var(--color-success); }
+.csa-color-swatch.is-blue { color: var(--color-primary); background: var(--color-primary); }
+.csa-gen-menu .csa-highlight { color: var(--color-danger); }
+.csa-gen-menu .csa-remove-highlight { color: var(--color-danger); }
+
+/* —— 选区知识点查询:显式确认语言和类型后才记录 lookup —— */
+.card-knowledge-inspector {
+  position: absolute;
+  z-index: 125;
+  top: 158px;
+  right: 18px;
+  width: 360px;
+  max-height: calc(100% - 176px);
+  overflow: auto;
+  padding: 14px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-left: 4px solid var(--color-data-purple);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+}
+.card-knowledge-inspector:focus { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.card-knowledge-inspector > header {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+}
+.card-knowledge-inspector > header > svg { width: 18px; height: 18px; color: var(--color-data-purple); }
+.card-knowledge-inspector > header div { min-width: 0; }
+.card-knowledge-inspector > header span {
+  display: block;
+  color: var(--color-text-tertiary);
+  font: 700 10px/1 var(--font-mono);
+}
+.card-knowledge-inspector > header strong { display: block; margin-top: 4px; font-size: 15px; }
+.card-knowledge-inspector blockquote {
+  margin: 12px 0;
+  padding: 9px 10px;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle);
+  border-left: 3px solid var(--color-data-purple);
+  font: 600 13px/1.45 var(--font-sans);
+  overflow-wrap: anywhere;
+}
+.card-knowledge-inspector fieldset { margin: 10px 0 0; padding: 0; border: 0; }
+.card-knowledge-inspector legend {
+  margin-bottom: 6px;
+  color: var(--color-text-tertiary);
+  font: 700 10px/1 var(--font-mono);
+  text-transform: uppercase;
+}
+.card-knowledge-segments {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.card-knowledge-segments button {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: 600 12px/1 var(--font-sans);
+}
+.card-knowledge-segments button[aria-pressed="true"] {
+  color: var(--color-primary);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+.card-knowledge-segments button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
+.card-knowledge-hint { margin: 6px 0 0; color: var(--color-warning); font-size: 11px; line-height: 1.45; }
+.card-knowledge-submit {
+  width: 100%;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 12px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  cursor: pointer;
+  font-weight: 650;
+}
+.card-knowledge-submit svg { width: 15px; height: 15px; }
+.card-knowledge-submit:disabled { border-color: var(--color-border); color: var(--color-text-disabled); background: var(--color-bg-subtle); cursor: not-allowed; }
+.card-knowledge-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.card-knowledge-error svg { width: 15px; height: 15px; flex: 0 0 15px; }
+.card-knowledge-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.card-knowledge-result span { color: var(--color-success); font: 700 10px/1 var(--font-mono); }
+.card-knowledge-result strong { display: block; margin-top: 7px; font-size: 18px; overflow-wrap: anywhere; }
+.card-knowledge-result p { margin: 5px 0 0; color: var(--color-text-secondary); }
+.card-knowledge-result small { display: block; margin-top: 8px; color: var(--color-text-tertiary); line-height: 1.45; }
+.card-knowledge-result.unresolved span { color: var(--color-warning); }
+.card-knowledge-result a { display: inline-block; margin-top: 8px; color: var(--color-primary); font-weight: 650; }
 
 /* —— 选区操作反馈 toast —— */
 .card-selection-toast {

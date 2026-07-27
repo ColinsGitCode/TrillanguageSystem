@@ -13,7 +13,7 @@
 
 2026-07-16 当前正式运行产品包含两部分：
 
-- **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片、标红与 CONTENT/INTEL 卡片弹窗；
+- **Cards Factory**：卡片生成、OCR、英文/日文 TTS、共享生成队列、文件夹/历史卡片，以及支持四色标记、取消标记、复制、知识点查询和生成卡片的 CONTENT/INTEL 卡片弹窗；
 - **学习辅助 2.0**：学习计划、今日队列、可恢复复习会话、四档评分、FSRS 调度、学习记录与可降级 PlanningSignalProvider。
 
 **教材课程**已完成 TC-D0-TC-D2、TC-P0-TC-P4 和 DS-W2 SaaS workflow 迁移。当前 `/textbooks` 是由服务端 view-model 驱动的桌面校对长流程：Codex Skill 在应用外解析并通过正式 API 导入 draft，页面负责 copy-on-write 修订、逐表达确认、发布 Review Summary、可恢复 operation、局部重试、完成摘要与学习接入。现有 Git 外 Manifest、教材表达搜索、受控官方音频、正式 EN/JA 单句 TTS、持久化标红、派生卡和 `textbook_en/ja` 学习闭环均保留。`TEXTBOOK_FEATURE_ENABLED` 默认开启但仍可关闭。知识图谱 2.0 已确认 KG-D0-D2，完成 KG-P0-P3、KG-R0、KG-R1 与 KG-R2；本地 Graph planning reader 和增量事实 worker 均已通过真实 volume 验收并开启，LLM enrichment 仍关闭，代码、Compose 和示例环境的四项 KG 默认值仍全部为关闭。
@@ -27,8 +27,10 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
-- Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键/键盘接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；本文不授权修改卡片正文；
-- Architecture/Card_Annotation_Layer_ADR.md：**Accepted** 的卡片注解层技术权威。定义稳定实体身份、`card-visible-text-v1`、UTF-16 W3C quote/position selector、表 53–54 和 CA-P3–P8 迁移顺序；CA-P8 后运行时只读写 `card_annotations`，`card_highlights` 仅作冻结迁移/审计快照，是否 DROP 必须另开 ADR；
+- Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；CA-R1 真实数据只读观察已通过；CA-I1 已补齐四色标记、取消标记、复制、显式确认的 KG 查询和键盘选区；本文不授权修改卡片正文；
+- Architecture/Card_Annotation_Layer_ADR.md：**Accepted** 的卡片注解层技术权威。定义稳定实体身份、`card-visible-text-v1`、UTF-16 W3C quote/position selector、表 53–54 和 CA-P3–P8 迁移顺序；CA-P8 后运行时只读写 `card_annotations`，CA-R1 已验证规范 API 与冻结审计边界，CA-I1 在不改 schema 的前提下完成桌面交互层，`card_highlights` 是否 DROP 仍必须另开 ADR；
+- TestReports/Card_Annotation_CA_R1_Observation_20260727.md：CA-R1 规范注解层真实 Compose/SQLite 只读观察报告；记录 27 active、1 orphaned、11 条冻结旧快照、退役 API 404、两次状态哈希一致和全量工程门禁，结论为 PASS 且不授权 DROP 旧表；
+- TestReports/Card_Annotation_CA_I1_Acceptance_20260727.md：CA-I1 桌面交互补齐验收报告；记录四色标记、改色/软删除、复制、显式确认的 KG 查询、键盘选区与真实页面无溢出检查，结论为 PASS，任意选区 TTS 仍未纳入；
 - Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
 - Features/Learning_Assistance_2_0_Product_Definition.md：已确认的 LA-D0 用户任务、产品术语、回忆方向、学习单元、计划/队列/评分策略与成功指标（含 §15.1 LA-D1 原型确认记录）；
 - Features/prototypes/la-d1-prototype.html：已确认的 LA-D1 桌面端 12 页可视化原型（浏览器直接打开）；

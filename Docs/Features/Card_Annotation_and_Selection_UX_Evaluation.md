@@ -1,8 +1,8 @@
 # 学习卡片选区交互与注解层 UX 评估（CA-D0）
 
-> 状态：**Accepted 专题基线 · CA-P1–P8 已完成。运行时只读写规范注解层；旧 HTML 表已冻结**
+> 状态：**Accepted 专题基线 · CA-P1–P8、CA-R1 与 CA-I1 已完成。运行时只读写规范注解层；旧 HTML 表已冻结**
 >
-> 日期：2026-07-23；复审修订：2026-07-26；迁移 POC、菜单库 POC 与 CA-P1 生产接入：2026-07-27
+> 日期：2026-07-23；复审修订：2026-07-26；迁移 POC、菜单库 POC、CA-P1 生产接入与 CA-I1 交互补齐：2026-07-27
 >
 > 上位约束：根 `CLAUDE.md` 的 Markdown-first 卡片契约与不可变内容边界；[DS-W1 Cloudscape 采用表](../TestReports/Cloudscape_Workflow_POC_Assessment_20260723.md) 的「原则复用 + 自研有界包装」口径与三档决策法（直接使用 / 包装使用 / 保持自研）
 >
@@ -35,10 +35,10 @@
 
 | 事实 | 位置 |
 |---|---|
-| CA-P1 后，选区工具条保留标红与生成卡片（三卡型），下拉与右键菜单由 Radix 接管 | `app/features/card-modal/CardModal.tsx` |
+| CA-I1 后，选区工具条支持四色标记、取消标记、复制、知识点查询与生成三类卡片；下拉与右键菜单由 Radix 接管 | `app/features/card-modal/CardModal.tsx` |
 | 阅读区已有 `onContextMenuCapture` 边界：有有效选区才打开应用菜单，无选区放行浏览器原生菜单 | 同上 |
 | CA-P8 前标红把**整份渲染 HTML 连 mark 一起存**；该旧 repository/HTTP 链路现已删除 | 冻结表 `card_highlights` |
-| mark 只有单色 `study-highlight-red` | `app/styles/card-modal.css` |
+| 标记支持 red / yellow / green / blue 四种语义颜色；历史标记可点击改色或软删除 | `app/styles/card-modal.css`、`factory-api.ts` |
 | 净化器已允许 `mark` 标签与 `class` 属性 | `app/features/card-modal/markdown.ts` |
 | 已有 **ruby-aware 选区提取**(剔除 `rt/rp`、音频按钮、外来语标签),但**只作用于当前选中片段,不产出整卡线性文本** | `app/features/card-modal/selection.ts:91` |
 | **不存在任何修改卡片内容的 API**;卡片事实上不可变 | `routes/*.js` |
@@ -46,7 +46,10 @@
 | KG 已启用(`KG_ENABLED=1`),`/api/kg/search`、`/api/kg/lookups`、`points/:id` 就绪 | `routes/kg.js`、`.env` |
 | **无「任意文本按需 TTS」接口**(仅教材域 TTS) | `routes/textbooks.js` |
 
-**键盘可达(精确)**：CA-P1 已实现菜单方向键、Escape 与焦点返回。仍缺的是：①**键盘选区不触发 `mouseup`**，工具条不会自动出现；②选区工具条出现后不主动把焦点转到首个动作；③多色标记、取消标记、KG 查词和复制尚未实施。
+**键盘可达(精确)**：CA-I1 已补齐键盘选区监听。用户使用 Shift +
+方向键、Home/End 或 PageUp/PageDown 扩展选区后，工具条自动出现并把焦点移到
+首个可用动作；工具条内部支持 Left/Right/Home/End 循环导航，Escape 依次关闭
+知识点面板、工具条或弹窗。鼠标选区、点击历史标记与右键菜单继续可用。
 
 **可查询性(精确)**:数据库已具备跨卡标红统计(审计脚本在用);缺的是**高亮文本本身不能被结构化查询或索引**——正文与 mark 一起烤在 HTML 里。
 
@@ -249,8 +252,9 @@ CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与
 - [x] **迁移率**:已完成(§7.1)。真实数据 51 个 `<mark>` → **26 个推断连续标红区间**,**可重锚 96.2%**,1 条因内容漂移降级。统计不等同于人工确认的历史划选数;
 - [x] **三消费者同验**:普通卡、教材 Track、**复习只读答案面**均不破；CA-P1 实跑 Cards Factory 15/15、Textbook Courses 5/5、Learning Assistance 5/5;
 - [x] **锚定鲁棒性**：重复 quote、ruby、跨 DOM 节点、内容修订、文件移动/改期、UTF-16 补充字符及真实内容漂移 orphaned 均通过，合同测试 11/11；
-- [ ] **交互补齐**:键盘选区触发工具条、多色标记、取消标记、KG 查词、复制;
-      **已完成子项**:真实 CardModal 的右键接管(有选区才接管、无选区放行原生菜单)、菜单方向键/Escape、焦点返回及“保留选区 + 焦点返回”联动均已由 CA-P1 覆盖;
+- [x] **交互补齐**：CA-I1 已完成键盘选区触发工具条、四色标记、历史标记改色、
+      取消标记、复制和显式确认后的 KG 查询；CA-P1 的右键边界、菜单方向键、
+      Escape 与焦点返回继续保持；
 - [x] **切换安全设计**：Accepted ADR 已定义并执行旧表保留、shadow read、逐消费者切换和 compatibility write；CA-P8 已停止旧读写。当前开关只负责临时禁用注解，不再回退旧 HTML；
 - [x] **依赖体积 + 视觉保真**:完整双菜单的 Radix **+29.4 KiB gzip**，React Aria 下拉菜单 +45.1 KiB；
       菜单面板因 Portal 需去嵌套 3 处 CSS 规则后恢复样式/布局契约;
@@ -263,7 +267,8 @@ CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与
 - [x] CA-P3 已完成 migration 007、表 53–54、AnnotationService、默认关闭的 feature flag 和只读迁移计划；未切换页面、未 apply 生产数据
 - [x] CA-P4 已完成 Git 外双备份、hash-gated apply、25 active + 1 orphaned、幂等复跑、三消费者 shadow read 与真实 volume 验收；页面仍读旧表
 - [x] 无头库已选 Radix 并在 CA-P1 生产接入；版本、license、按需 import 与体积已记录
-- [ ] A 层交互(右键接管、多色标记、取消标记、KG 查词、复制、键盘可达)实施
+- [x] A 层交互已在 CA-I1 完成：右键边界、四色标记、取消标记、复制、
+      显式确认的 KG 查询与键盘选区/工具条导航均已实施
 - [x] B① 注解层消费者切换 + 存量标红按逻辑区间迁移 + 教材/复习答案面回归；
       CA-P5–P7 已依次切换 Cards Factory、教材课程与 Review，CA-P8 已删除旧读、
       旧写、shadow 和兼容 API，并将删除、改期、统计切到规范注解；
@@ -282,3 +287,25 @@ CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与
 
 CA-P8 终验已覆盖 unit 368/368、integration 62/62、desktop E2E 47/47、
 smoke 7/7、生产构建、架构门禁、真实 Compose 重建和真实 volume 只读检查。
+
+### 9.2 CA-I1 交互补齐说明
+
+CA-I1 只扩展选区与已存在标记的操作面，不修改卡片 Markdown、教材官方原文、
+Study Item、FSRS 或注解 schema：
+
+- 新选区可以选择红、黄、绿、蓝四种颜色；点击已有标记可以改色或取消标记，
+  分别复用规范注解 API 的 PATCH 与软删除语义；
+- 复制直接使用浏览器剪贴板，不创建服务端记录；
+- 知识点查询在提交前必须确认 English / 日本語与单词 / 短语 / 语法类型。
+  纯汉字选区不自动猜语言；确认后才调用 append-only KG lookup，KG 信号不得
+  直接修改 FSRS；
+- 鼠标、键盘和右键三种入口共用同一选区合同。键盘扩展选区后工具条自动出现并
+  聚焦首个动作；工具条会在桌面视口内同时做横向和纵向收口；
+- `readOnly` 卡片仍不能新增、改色或删除标记；移动端和任意文本 TTS 均未纳入
+  本阶段。
+
+验收包括 lint、typecheck、architecture、unit 372/372、integration 62/62、
+desktop E2E 49/49 与 smoke 7/7。真实 Compose 页面在 1440×900 桌面视口完成
+只读视觉检查：新选区工具条、知识点确认面板和历史标记编辑状态均无横向溢出、
+无控制台错误；检查没有写入真实注解或 KG lookup。完整记录见
+[CA-I1 交互补齐验收报告](../TestReports/Card_Annotation_CA_I1_Acceptance_20260727.md)。

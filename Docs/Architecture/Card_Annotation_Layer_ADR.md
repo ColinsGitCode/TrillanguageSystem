@@ -550,3 +550,60 @@ shadow/compat 开关不存在，旧 HTTP API 返回 404。真实 Cards Factory �
 含两条注解的卡片后，两段标记均由独立 `annotation_id` 重放，旧 HTML mark 为
 0，弹窗无横向溢出且控制台无错误。教材 Track 01 的 20 组表达、ruby 与规范正文
 正常加载；验收全程未写真实卡片、教材或学习记录。
+
+## 19. CA-R1 运行观察（2026-07-27）
+
+CA-R1 新增只读观察命令：
+
+```bash
+npm run cards:annotations:r1 -- \
+  --output=/tmp/ca-r1-observation.json \
+  --db=/data/trilingual_records/trilingual_records.db \
+  --repository=/app
+```
+
+观察器强制 SQLite `query_only`，检查目标存在性、revision/source hash 漂移、
+selector 格式、重复 active anchor、append-only 触发器、外键、旧 route/flag/
+repository 引用和 feature flag。传入 `--baseline` 时，还会比较冻结
+`card_highlights` 快照和迁移事实；输出路径必须位于 Git 工作区之外，且不得覆盖
+已有报告。
+
+真实 Compose 环境连续两次观察均为 PASS。第二次以第一次为基线，并在两次之间
+探测规范 API 与三个退役 API。结果为 28 条规范注解（27 active、1 orphaned）、
+11 个 active 目标、26 条迁移事件和 11 条冻结旧快照；没有 active 目标缺失、
+revision 漂移、selector 错误、重复 anchor、外键违规、触发器缺失、旧运行时引用
+或观察导致的数据变化。规范 API 返回 200，三个退役 API 均返回 404。
+
+工程门禁为 lint、typecheck、architecture、unit 371/371、integration 62/62、
+桌面 E2E 47/47 和 smoke 7/7 全部通过。完整证据见
+[CA-R1 规范注解层运行观察报告](../TestReports/Card_Annotation_CA_R1_Observation_20260727.md)。
+
+CA-R1 只证明当前受控观察窗口内运行稳定，不授权 DROP `card_highlights`。旧表继续
+作为冻结审计快照保留；唯一已知 orphaned 注解保持显式状态，不执行猜测性修复。
+
+## 20. CA-I1 交互补齐（2026-07-27）
+
+CA-I1 在不改变本 ADR 数据所有权的前提下补齐桌面选区交互：
+
+- `card_annotations.color` 现有 red / yellow / green / blue 合同全部进入 UI；
+  新标记继续走 POST，改色走带 `expectedVersion` 的 PATCH，取消标记走软删除；
+- 点击已渲染的 annotation fragment 会按 `annotation_id` 聚合片段并打开编辑
+  工具条，不依赖旧 HTML 路径或 DOM 顺序；
+- 复制只写浏览器剪贴板，不创建数据库事件；
+- KG 查询使用现有 `/api/kg/lookups`。提交前必须由用户确认语言和知识类型，
+  纯汉字不自动猜测语言；source context 记录 generation、annotation 与 quote/
+  position 证据。lookup 是 KG append-only 事实，不得直接写 FSRS；
+- 键盘扩展选区会触发与鼠标相同的 ruby-aware selector 合同，并将焦点移到
+  工具条首个动作；工具条支持 Left/Right/Home/End，Escape 按层关闭；
+- 浮动工具条同时限制横向和纵向位置，正式范围仍为桌面端。
+
+本阶段没有新增表、migration 或后端 route，没有修改卡片 Markdown、教材官方
+原文、Study Item、Review Event、FSRS 或 PlanningSignalProvider。朗读任意选区
+仍是独立 TTS 能力，不属于 CA-I1。
+
+工程门禁为 lint、typecheck、architecture、unit 372/372、integration 62/62、
+desktop E2E 49/49 和 smoke 7/7 全部通过。`three_lans_system` 四容器运行，
+health online；真实页面完成新选区工具条、知识点确认面板和历史标记编辑状态的
+只读视觉检查，无横向溢出或控制台错误，且未提交真实 annotation 或 KG lookup。
+完整证据见
+[CA-I1 交互补齐验收报告](../TestReports/Card_Annotation_CA_I1_Acceptance_20260727.md)。
