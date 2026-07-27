@@ -135,10 +135,12 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     const markButton = page.getByRole('button', { name: '标红选区' });
     await expect(markButton).toBeEnabled();
     const highlightResponse = page.waitForResponse((response) => (
-      response.request().method() === 'PUT' && /\/api\/textbooks\/tracks\/\d+\/highlights$/u.test(response.url())
+      response.request().method() === 'POST' && /\/api\/annotations$/u.test(response.url())
     ));
     await markButton.click();
-    expect((await highlightResponse).ok()).toBeTruthy();
+    const saved = await highlightResponse;
+    expect(saved.ok()).toBeTruthy();
+    expect((await saved.json()).annotation.targetKind).toBe('textbook_track');
     await expect(page.locator('mark.study-highlight-red')).toHaveText('Start');
     await page.reload();
     await expect(page.locator('mark.study-highlight-red')).toHaveText('Start');
@@ -148,6 +150,32 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await page.getByRole('button', { name: '生成三语卡' }).click();
     await expect(page.getByText(/已创建生成任务 #\d+/u)).toBeVisible();
     await assertContainedDesktop(page);
+  });
+
+  test('falls back to legacy Track HTML when the annotation feature is disabled', async ({ page }) => {
+    await page.route('**/api/annotations?*', async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'Not found',
+          code: 'ANNOTATION_FEATURE_DISABLED',
+        }),
+      });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
+    await page.locator('.textbook-published-list li button').nth(1).click();
+    await selectText(page, '[data-textbook-language="en"]', 0, 4);
+    const legacyWrite = page.waitForResponse((response) => (
+      response.request().method() === 'PUT'
+      && /\/api\/textbooks\/tracks\/\d+\/highlights$/u.test(response.url())
+    ));
+    await page.getByRole('button', { name: '标红选区' }).click();
+    expect((await legacyWrite).ok()).toBeTruthy();
+    await expect(page.locator('mark.study-highlight-red')).toHaveText('I am');
+    await page.reload();
+    await expect(page.locator('mark.study-highlight-red')).toHaveText('I am');
   });
 
   test('keeps official Track and generated sentence playback mutually exclusive', async ({ page }) => {

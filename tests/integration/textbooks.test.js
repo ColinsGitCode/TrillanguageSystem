@@ -6,12 +6,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { JSDOM } = require('jsdom');
 
 const textbookSourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'textbook-source-'));
 const textbookWorkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'textbook-work-'));
 process.env.TEXTBOOK_FEATURE_ENABLED = '1';
 process.env.TEXTBOOK_SOURCE_ROOT = textbookSourceRoot;
 process.env.TEXTBOOK_WORK_PATH = textbookWorkRoot;
+process.env.CARD_ANNOTATIONS_ENABLED = '1';
+process.env.CARD_ANNOTATIONS_SHADOW_READ_ENABLED = '1';
+process.env.CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED = '1';
 
 const {
   api,
@@ -21,6 +25,13 @@ const {
   closeServer,
 } = require('./_harness');
 const { TextbookTtsService } = require('../../services/textbooks/textbookTtsService');
+const {
+  annotationShadowReadService,
+  textbookAnnotationService,
+} = require('../../services/annotations/annotationRuntime');
+const {
+  loadTextbookSharedModules,
+} = require('../../services/annotations/application/textbookAnnotationService');
 
 test.after(async () => {
   await closeServer();
@@ -257,6 +268,7 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
 });
 
 test('verified textbook track publishes textbook study items and creates derivation jobs', async () => {
+  annotationShadowReadService.resetForTests();
   const fixture = await createManifestFixture();
   const imported = await api('POST', '/api/textbooks/imports', {
     body: {
@@ -373,25 +385,59 @@ test('verified textbook track publishes textbook study items and creates derivat
   assert.equal(audioHead.status, 200);
   assert.equal(audioHead.headers['accept-ranges'], 'bytes');
 
-  const highlightHtml = `<div data-textbook-track-id="${trackId}" data-textbook-highlight-version="1">${published.body.track.expressions.map((current, index) => (
-    `<section data-textbook-expression-id="${current.expression_id}">`
-      + `<div data-textbook-language="en">${index === 0 ? '<mark class="study-highlight-red">Get</mark> up.' : current.official_en_text}</div>`
-      + `<div data-textbook-language="ja">${current.official_ja_text}</div>`
-      + `<div data-textbook-language="zh">${current.zh_cue_text}</div>`
-      + '</section>'
-  )).join('')}</div>`;
-  const savedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
-    body: { html: highlightHtml },
+  const shared = await loadTextbookSharedModules();
+  const canonical = textbookAnnotationService.canonicalDocument(published.body.track, shared);
+  const annotationDom = new JSDOM(`<body>${canonical}</body>`);
+  const annotationRoot = annotationDom.window.document.body.firstElementChild;
+  const annotationMap = shared.anchor.buildCanonicalDomMap(annotationRoot);
+  const annotationStart = annotationMap.text.indexOf('Get');
+  annotationDom.window.close();
+  const annotationId = '018f0f96-5a90-7d75-a2c6-86559b5de961';
+  const savedAnnotation = await api('POST', '/api/annotations', {
+    body: {
+      id: annotationId,
+      targetKind: 'textbook_track',
+      targetId: trackId,
+      expectedTargetRevision: String(published.body.track.current_revision_id),
+      selector: {
+        projectionVersion: shared.anchor.PROJECTION_VERSION,
+        textQuote: {
+          type: 'TextQuoteSelector',
+          exact: 'Get',
+          prefix: annotationMap.text.slice(Math.max(0, annotationStart - 32), annotationStart),
+          suffix: annotationMap.text.slice(annotationStart + 3, annotationStart + 35),
+        },
+        textPosition: {
+          type: 'TextPositionSelector',
+          start: annotationStart,
+          end: annotationStart + 3,
+        },
+      },
+      annotationKind: 'highlight',
+      color: 'red',
+    },
   });
-  assert.equal(savedHighlight.status, 200);
-  assert.equal(savedHighlight.body.highlight.markCount, 1);
+  assert.equal(savedAnnotation.status, 201);
+  assert.equal(savedAnnotation.body.annotation.targetKind, 'textbook_track');
+  assert.equal(savedAnnotation.body.compatibility.written, true);
   const fetchedHighlight = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
-  assert.equal(fetchedHighlight.body.highlight.id, savedHighlight.body.highlight.id);
+  assert.equal(fetchedHighlight.body.highlight.id, savedAnnotation.body.compatibility.highlightId);
+  assert.equal(fetchedHighlight.body.highlight.markCount, 1);
   const highlightedItem = await api('GET', `/api/learning/items/${itemId}`);
-  assert.equal(highlightedItem.body.item.highlightReference.id, savedHighlight.body.highlight.id);
+  assert.equal(highlightedItem.body.item.highlightReference.id, fetchedHighlight.body.highlight.id);
   assert.match(highlightedItem.body.item.answer.markdown, /study-highlight-red/u);
+  await annotationShadowReadService.flush();
+  const shadow = annotationShadowReadService.snapshot();
+  assert.equal(shadow.byConsumer.textbook.observed, 1);
+  assert.equal(shadow.byConsumer.review.observed, 2);
+  assert.equal(shadow.byConsumer.review.noLegacy, 1);
   const rejectedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
-    body: { html: highlightHtml.replace('Get</mark> up.', 'Get</mark> down.') },
+    body: {
+      html: fetchedHighlight.body.highlight.htmlContent.replace(
+        /(<mark[^>]*>Get<\/mark>) up\./u,
+        '$1 down.'
+      ),
+    },
   });
   assert.equal(rejectedHighlight.status, 409);
 
@@ -442,9 +488,13 @@ test('verified textbook track publishes textbook study items and creates derivat
     1
   );
 
-  const deletedHighlight = await api('DELETE', `/api/textbooks/tracks/${trackId}/highlights/${savedHighlight.body.highlight.id}`);
-  assert.equal(deletedHighlight.status, 200);
-  assert.equal(deletedHighlight.body.deleted, 1);
+  const deletedAnnotation = await api('DELETE', `/api/annotations/${annotationId}`, {
+    body: { expectedVersion: 1 },
+  });
+  assert.equal(deletedAnnotation.status, 200);
+  assert.equal(deletedAnnotation.body.annotation.status, 'deleted');
+  const compatibilityAfterDelete = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
+  assert.equal(compatibilityAfterDelete.body.highlight.markCount, 0);
 });
 
 test('official audio endpoint supports HEAD, range, etag, and hash drift protection', async () => {

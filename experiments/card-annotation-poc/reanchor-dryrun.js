@@ -101,9 +101,10 @@ function classify(run, renderedProjection) {
 }
 
 async function main() {
-  const [transforms, projection] = await Promise.all([
+  const [transforms, projection, identity] = await Promise.all([
     import(moduleUrl('app/features/card-modal/card-render-transforms.mjs')),
     import(moduleUrl('app/features/card-modal/text-projection.mjs')),
+    import(moduleUrl('experiments/card-annotation-poc/migration-identity.mjs')),
   ]);
   const db = new Database(DB, { readonly: true });
   const rows = db.prepare(`
@@ -119,11 +120,22 @@ async function main() {
   const perRow = [];
   const failures = [];
   const lengths = [];
+  const annotationIds = [];
 
   for (const row of rows) {
     const markCount = (String(row.html_content || '').match(/<mark\b[^>]*>/gi) || []).length;
     rawMarks += markCount;
-    const runs = extractInferredContinuousRuns(row.html_content, projection);
+    const runs = extractInferredContinuousRuns(row.html_content, projection).map((run, index) => ({
+      ...run,
+      annotationId: identity.createLegacyAnnotationId({
+        highlightId: row.id,
+        runOrdinal: index + 1,
+        quote: run.quote,
+        prefix: run.prefix,
+        suffix: run.suffix,
+      }),
+    }));
+    annotationIds.push(...runs.map((run) => run.annotationId));
     inferredRuns += runs.length;
     runs.forEach((run) => lengths.push([...run.quote].length));
 
@@ -180,6 +192,7 @@ async function main() {
       atMostThree: lengths.filter((length) => length <= 3).length,
     },
     failureCount: failures.length,
+    annotationIdentityDigest: crypto.createHash('sha256').update(annotationIds.join('\n')).digest('hex'),
   };
 
   if (JSON_OUTPUT) {

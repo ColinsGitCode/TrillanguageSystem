@@ -26,6 +26,8 @@
     "cards:migrate-style": "node scripts/migrations/updateLegacyCardStyle.js --apply",
     "cards:import-kindergarden": "node scripts/import/importKindergarden.js --apply",
     "cards:reassign-kindergarden-date": "node scripts/migrations/reassignFolderDate.js --source=kindergarden --target=20260713 --date=2026-07-13",
+    "cards:annotations:migration-plan": "node scripts/maintenance/buildCardAnnotationMigrationPlan.js",
+    "cards:annotations:migrate": "node scripts/maintenance/applyCardAnnotationMigrationPlan.js",
     "kg:p0": "node scripts/poc/kgP0DryRun.js",
     "kg:p1:dry-run": "node scripts/maintenance/kgP1BackfillDryRun.js",
     "kg:r0:apply": "node scripts/maintenance/applyKnowledgeBackfill.js --apply",
@@ -34,6 +36,8 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
+    "@radix-ui/react-context-menu": "^2.3.7",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@react-router/express": "^7.18.1",
     "@react-router/node": "^7.18.1",
     "@tanstack/react-query": "^5.101.2",

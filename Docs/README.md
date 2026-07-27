@@ -27,6 +27,8 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
+- Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键/键盘接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3 已完成底层 schema/service，CA-P4 已完成受控生产迁移与三消费者 shadow read，CA-P5/CA-P6 已依次切换 Cards Factory 与教材课程并保留旧 HTML 双写；本文不授权修改卡片正文；
+- Architecture/Card_Annotation_Layer_ADR.md：**Accepted** 的卡片注解层技术权威。定义稳定实体身份、`card-visible-text-v1`、UTF-16 W3C quote/position selector、表 53–54、双读/compatibility write/回滚和 CA-P3–P8 顺序；CA-P6 已完成，Cards Factory 与教材课程以新表为真源，Review 仍保留旧路径；
 - Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
 - Features/Learning_Assistance_2_0_Product_Definition.md：已确认的 LA-D0 用户任务、产品术语、回忆方向、学习单元、计划/队列/评分策略与成功指标（含 §15.1 LA-D1 原型确认记录）；
 - Features/prototypes/la-d1-prototype.html：已确认的 LA-D1 桌面端 12 页可视化原型（浏览器直接打开）；

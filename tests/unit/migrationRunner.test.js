@@ -13,6 +13,7 @@ const databaseModule = require('../../services/storage/databaseService');
 const { DatabaseService } = databaseModule;
 const {
   BASELINE_VERSION,
+  CARD_ANNOTATION_P3_TABLES,
   KG_P1_TABLES,
   KG_R2_TABLES,
   LEARNING_P3_TABLES,
@@ -35,11 +36,11 @@ function schemaObjects(db) {
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001-006 on a new database and creates LA, textbook, KG, sync, and workflow tables', () => {
+  test.it('registers 001-007 on a new database and creates LA, textbook, KG, workflow, and annotation tables', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001', '002', '003', '004', '005', '006'],
+        applied: ['001', '002', '003', '004', '005', '006', '007'],
         skipped: [],
         baselineRegistered: false,
       });
@@ -53,6 +54,7 @@ test.describe('versioned migration runner', () => {
         { version: '004', is_baseline: 0 },
         { version: '005', is_baseline: 0 },
         { version: '006', is_baseline: 0 },
+        { version: '007', is_baseline: 0 },
       ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -63,6 +65,7 @@ test.describe('versioned migration runner', () => {
       LEARNING_P3_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       KG_R2_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       TEXTBOOK_WORKFLOW_TABLES.forEach((table) => assert.ok(tables.has(table), table));
+      CARD_ANNOTATION_P3_TABLES.forEach((table) => assert.ok(tables.has(table), table));
     } finally {
       service.close();
     }
@@ -94,6 +97,7 @@ test.describe('versioned migration runner', () => {
         { version: '004', is_baseline: 0 },
         { version: '005', is_baseline: 0 },
         { version: '006', is_baseline: 0 },
+        { version: '007', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {

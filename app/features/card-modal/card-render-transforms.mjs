@@ -1,7 +1,8 @@
 export const CARD_RENDER_ALLOWED_TAGS = ['audio', 'source', 'ruby', 'rt', 'rp', 'button', 'mark'];
 export const CARD_RENDER_ALLOWED_ATTR = [
   'class', 'src', 'data-src', 'data-folder', 'data-card-renderer-version',
-  'data-card-type', 'preload', 'controls', 'href', 'title', 'alt', 'aria-label', 'type',
+  'data-card-type', 'data-annotation-id', 'preload', 'controls', 'href', 'title', 'alt',
+  'aria-label', 'type',
 ];
 
 export function normalizeLoanwordAnnotations(markdown) {

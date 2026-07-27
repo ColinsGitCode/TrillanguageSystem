@@ -8,7 +8,11 @@ import {
   type WorkflowStage,
 } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
-import { buildTextbookHighlightDocument, sanitizeTextbookHighlightDocument } from './textbook-highlight';
+import {
+  buildAnnotatedTextbookHighlightDocument,
+  buildTextbookHighlightDocument,
+  sanitizeTextbookHighlightDocument,
+} from './textbook-highlight';
 import { textbookApi } from './textbook-api';
 import { workflowOperation, workflowStages } from './textbook-workflow-adapter';
 import { useTextbookWorkflowRoute } from './useTextbookWorkflowRoute';
@@ -89,7 +93,16 @@ export function TextbookCoursesPage() {
   });
   const highlightQuery = useQuery({
     queryKey: ['textbooks', 'track', route.trackId, 'highlight'],
-    queryFn: () => textbookApi.highlight(Number(route.trackId)),
+    queryFn: async () => {
+      try {
+        const result = await textbookApi.annotations(Number(route.trackId));
+        return { mode: 'annotations' as const, ...result };
+      } catch (error) {
+        if (!(error instanceof ApiError) || ![404, 409].includes(error.status)) throw error;
+        const result = await textbookApi.highlight(Number(route.trackId));
+        return { mode: 'legacy' as const, ...result };
+      }
+    },
     enabled: Boolean(route.trackId && trackQuery.data?.track.status === 'published'),
     retry: false,
   });
@@ -114,9 +127,21 @@ export function TextbookCoursesPage() {
   useEffect(() => {
     const track = trackQuery.data?.track;
     if (!track) return setHighlightHtml('');
-    const persisted = highlightQuery.data?.highlight?.htmlContent;
-    setHighlightHtml(persisted ? sanitizeTextbookHighlightDocument(persisted) : buildTextbookHighlightDocument(track));
-  }, [highlightQuery.data?.highlight?.htmlContent, trackQuery.data?.track]);
+    if (highlightQuery.data?.mode === 'annotations') {
+      setHighlightHtml(
+        buildAnnotatedTextbookHighlightDocument(track, highlightQuery.data.annotations)
+      );
+      return;
+    }
+    const persisted = highlightQuery.data?.mode === 'legacy'
+      ? highlightQuery.data.highlight?.htmlContent
+      : null;
+    setHighlightHtml(
+      persisted
+        ? sanitizeTextbookHighlightDocument(persisted)
+        : buildTextbookHighlightDocument(track)
+    );
+  }, [highlightQuery.data, trackQuery.data?.track]);
   useEffect(() => {
     const operation = operationQuery.data?.operation;
     if (!operation || ['queued', 'running'].includes(operation.status)) return;
@@ -214,8 +239,27 @@ export function TextbookCoursesPage() {
     onError: (error) => setErrors([messageFor(error)]),
   });
   const highlightMutation = useMutation({
-    mutationFn: (html: string) => textbookApi.saveHighlight(Number(route.trackId), html),
-    onSuccess: (data) => setHighlightHtml(sanitizeTextbookHighlightDocument(data.highlight.htmlContent)),
+    mutationFn: async (payload: { selector?: import('../card-modal/annotation-render.mjs').CardAnnotationSelector; html?: string }) => {
+      if (
+        highlightQuery.data?.mode === 'annotations'
+        && payload.selector
+        && highlightQuery.data.target
+      ) {
+        return textbookApi.createAnnotation({
+          id: crypto.randomUUID(),
+          targetId: Number(route.trackId),
+          expectedTargetRevision: highlightQuery.data.target.targetRevision,
+          selector: payload.selector,
+        });
+      }
+      if (!payload.html) throw new Error('Legacy textbook highlight HTML is required');
+      return textbookApi.saveHighlight(Number(route.trackId), payload.html);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['textbooks', 'track', route.trackId, 'highlight'],
+      });
+    },
   });
   const derivationMutation = useMutation({
     mutationFn: (payload: { expressionId: number; selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => textbookApi.createDerivation(payload.expressionId, payload),
@@ -320,14 +364,18 @@ export function TextbookCoursesPage() {
                       />
                       {track && (
                         <TextbookPublishedBrowser
-                          expressions={track.expressions}
+                          track={track}
                           activeExpressionId={activeExpressionId}
                           highlightHtml={highlightHtml}
+                          annotationMode={highlightQuery.isPending
+                            ? 'pending'
+                            : highlightQuery.data?.mode || 'legacy'}
                           audioFiles={track.tts_audio}
                           busy={highlightMutation.isPending || derivationMutation.isPending}
                           message={derivationMessage}
                           onSelect={(id) => route.selectTask(id)}
-                          onSaveHighlight={(html) => highlightMutation.mutate(html)}
+                          onSaveAnnotation={(selector) => highlightMutation.mutate({ selector })}
+                          onSaveLegacyHighlight={(html) => highlightMutation.mutate({ html })}
                           onDerive={(payload) => derivationMutation.mutate(payload)}
                           onPlayAudio={playGenerated}
                         />

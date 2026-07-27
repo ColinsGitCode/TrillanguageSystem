@@ -59,6 +59,11 @@ const TEXTBOOK_WORKFLOW_TABLES = Object.freeze([
   'textbook_operation_events',
 ]);
 
+const CARD_ANNOTATION_P3_TABLES = Object.freeze([
+  'card_annotations',
+  'card_annotation_migration_events',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -139,6 +144,14 @@ function assertTextbookWorkflowPostconditions(db) {
   );
   const missing = TEXTBOOK_WORKFLOW_TABLES.filter((table) => !existing.has(table));
   if (missing.length) throw new Error(`Textbook workflow migration missing tables: ${missing.join(', ')}`);
+}
+
+function assertCardAnnotationP3Postconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = CARD_ANNOTATION_P3_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Card Annotation P3 migration missing tables: ${missing.join(', ')}`);
 }
 
 function parseMigrationDirectives(migration) {
@@ -241,11 +254,13 @@ function runMigrations(db, options = {}) {
   assertLearningP3Postconditions(db);
   assertKnowledgeGraphR2Postconditions(db);
   assertTextbookWorkflowPostconditions(db);
+  assertCardAnnotationP3Postconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
 module.exports = {
   BASELINE_VERSION,
+  CARD_ANNOTATION_P3_TABLES,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
   KG_R2_TABLES,
@@ -253,6 +268,7 @@ module.exports = {
   LEARNING_P0_TABLES,
   TEXTBOOK_P1_TABLES,
   TEXTBOOK_WORKFLOW_TABLES,
+  assertCardAnnotationP3Postconditions,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,
   assertKnowledgeGraphR2Postconditions,

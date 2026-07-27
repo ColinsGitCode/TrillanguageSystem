@@ -1,4 +1,10 @@
 import createDOMPurify from 'dompurify';
+import {
+  buildTextbookTrackDocument,
+  escapeTextbookText,
+} from './textbook-render.mjs';
+import { applyAnnotations } from '../card-modal/annotation-render.mjs';
+import type { RenderableCardAnnotation } from '../card-modal/annotation-render.mjs';
 import type { TextbookTrack } from './types';
 
 const ALLOWED_TAGS = ['div', 'section', 'span', 'ruby', 'rt', 'rp', 'mark'];
@@ -10,14 +16,7 @@ const ALLOWED_ATTR = [
   'data-textbook-language',
 ];
 
-export function escapeTextbookText(value: string) {
-  return value
-    .replace(/&/gu, '&amp;')
-    .replace(/</gu, '&lt;')
-    .replace(/>/gu, '&gt;')
-    .replace(/"/gu, '&quot;')
-    .replace(/'/gu, '&#39;');
-}
+export { escapeTextbookText };
 
 export function sanitizeTextbookHighlightDocument(html: string) {
   if (typeof window === 'undefined') return '';
@@ -31,15 +30,19 @@ export function sanitizeTextbookHighlightDocument(html: string) {
 }
 
 export function buildTextbookHighlightDocument(track: TextbookTrack) {
-  const expressions = track.expressions.filter((expression) => expression.lifecycle === 'active').map((expression) => `
-    <section data-textbook-expression-id="${expression.expression_id}">
-      <div data-textbook-language="en">${escapeTextbookText(expression.official_en_text)}</div>
-      <div data-textbook-language="ja">${expression.ja_ruby_html}</div>
-      <div data-textbook-language="zh">${escapeTextbookText(expression.zh_cue_text)}</div>
-    </section>`).join('');
-  return sanitizeTextbookHighlightDocument(
-    `<div data-textbook-track-id="${track.id}" data-textbook-highlight-version="1">${expressions}</div>`
-  );
+  return sanitizeTextbookHighlightDocument(buildTextbookTrackDocument(track));
+}
+
+export function buildAnnotatedTextbookHighlightDocument(
+  track: TextbookTrack,
+  annotations: RenderableCardAnnotation[]
+) {
+  if (typeof window === 'undefined') return '';
+  const parsed = new DOMParser().parseFromString(buildTextbookHighlightDocument(track), 'text/html');
+  const root = parsed.body.firstElementChild;
+  if (!root) return buildTextbookHighlightDocument(track);
+  applyAnnotations(root as HTMLElement, annotations);
+  return sanitizeTextbookHighlightDocument(root.outerHTML);
 }
 
 export function expressionHighlightFragments(html: string, expressionId: number) {

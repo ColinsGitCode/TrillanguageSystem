@@ -683,6 +683,16 @@ test.describe('databaseService — truncateAllForTests', () => {
         }]
       }));
       db.createGenerationJob(buildJobPayload());
+      db.appendCardAnnotationMigrationEvent({
+        migrationPlanHash: 'a'.repeat(64),
+        legacyHighlightId: 1,
+        legacyRunOrdinal: 1,
+        annotationId: null,
+        outcome: 'skipped',
+        reasonCode: 'fixture',
+        sourceFingerprint: 'b'.repeat(64),
+        createdAtUtc: '2026-07-27T00:00:00.000Z',
+      });
       assert.ok(id > 0);
       assert.ok(db.getGenerationById(id));
 
@@ -695,7 +705,9 @@ test.describe('databaseService — truncateAllForTests', () => {
         'observability_metrics',
         'generation_jobs',
         'generation_job_events',
-        'card_highlights'
+        'card_highlights',
+        'card_annotations',
+        'card_annotation_migration_events'
       ]) {
         assert.equal(count(table), 0, `expected ${table} to be empty after truncate`);
       }

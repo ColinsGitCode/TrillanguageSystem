@@ -21,7 +21,7 @@ async function enqueueAndWait(request, phrase, cardType) {
   }, { timeout: 30_000, intervals: [100, 200, 500] }).toBe('success');
 }
 
-test.describe.serial('React Cards Factory P3 + P4', () => {
+test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test.beforeAll(async ({ request }) => {
     await resetServerState(request);
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
@@ -184,7 +184,7 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', rubyBase);
   });
 
-  test('P4 persists a selected-text highlight and restores it on reopen', async ({ page }) => {
+  test('CA-P5 persists a canonical annotation, writes compatibility HTML and restores it', async ({ page, request }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
@@ -200,8 +200,20 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', '解释');
     const highlight = page.getByRole('button', { name: '标红选区' });
     await expect(highlight).toBeEnabled();
+    const saved = page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/annotations'
+    ));
     await highlight.click();
+    const annotationResponse = await saved;
+    expect(annotationResponse.status()).toBe(201);
+    const annotationBody = await annotationResponse.json();
+    expect(annotationBody.compatibility.written).toBe(true);
     await expect(page.locator('mark.study-highlight-red')).toHaveCount(1);
+    const generationId = annotationBody.annotation.targetId;
+    const annotations = await request.get(`/api/annotations?targetKind=generation&targetId=${generationId}`);
+    expect(annotations.ok()).toBeTruthy();
+    expect((await annotations.json()).annotations).toHaveLength(1);
     await page.getByTestId('react-card-modal-close').click();
     await opener.click();
     await expect(page.locator('mark.study-highlight-red')).toHaveCount(1);
@@ -238,6 +250,59 @@ test.describe.serial('React Cards Factory P3 + P4', () => {
       card_type: 'trilingual',
       source_mode: 'selection',
     });
+  });
+
+  test('CA-P1 keeps selection actions keyboard-accessible and only takes over right click with a selection', async ({ page }) => {
+    let resolveQueuedRequest;
+    const queuedRequest = new Promise((resolve) => { resolveQueuedRequest = resolve; });
+    await page.route('**/api/generation-jobs', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      resolveQueuedRequest(route.request().postDataJSON());
+      return route.fulfill({ json: { success: true, job: { id: 1000, status: 'queued' }, summary: {} } });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const content = page.getByTestId('react-card-content');
+
+    await content.click({ button: 'right', position: { x: 12, y: 12 } });
+    await expect(page.locator('.csa-context-menu')).toHaveCount(0);
+
+    await content.evaluate((container) => {
+      const text = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('E2E'))?.firstChild;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const preview = page.getByTestId('card-selection-preview');
+    const selectedPhrase = await preview.getAttribute('title');
+    const generateTrigger = page.locator('.card-selection-toolbar .csa-generate');
+    await generateTrigger.focus();
+    await page.keyboard.press('Enter');
+    const dropdown = page.getByRole('menu');
+    await expect(dropdown).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator(':focus')).toHaveAttribute('role', 'menuitem');
+    await page.keyboard.press('Escape');
+    await expect(generateTrigger).toBeFocused();
+
+    await content.click({ button: 'right', position: { x: 30, y: 30 } });
+    const contextMenu = page.locator('.csa-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await contextMenu.getByRole('menuitem', { name: '生成卡片' }).hover();
+    const contextMenus = page.locator('[role="menu"]');
+    await expect(contextMenus).toHaveCount(2);
+    await contextMenus.nth(1).getByRole('menuitem', { name: '单词卡' }).click();
+    await expect(queuedRequest).resolves.toMatchObject({
+      phrase: selectedPhrase,
+      card_type: 'trilingual',
+      source_mode: 'selection',
+    });
+    await expect(content).toBeFocused();
   });
 
   test('P4 keeps the selection toolbar inside the desktop viewport', async ({ page }) => {

@@ -6,6 +6,9 @@ const assert = require('node:assert/strict');
 delete process.env.KG_ENABLED;
 delete process.env.KG_PLANNING_ENABLED;
 delete process.env.KG_LLM_ENRICHMENT_ENABLED;
+delete process.env.CARD_ANNOTATIONS_ENABLED;
+delete process.env.CARD_ANNOTATIONS_SHADOW_READ_ENABLED;
+delete process.env.CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED;
 
 const cfg = require('../../lib/serverConfig');
 
@@ -13,6 +16,12 @@ test('KG feature flags are disabled by default', () => {
   assert.equal(cfg.KG_ENABLED, false);
   assert.equal(cfg.KG_PLANNING_ENABLED, false);
   assert.equal(cfg.KG_LLM_ENRICHMENT_ENABLED, false);
+});
+
+test('card annotation flags keep the new path off and legacy writes on by default', () => {
+  assert.equal(cfg.CARD_ANNOTATIONS_ENABLED, false);
+  assert.equal(cfg.CARD_ANNOTATIONS_SHADOW_READ_ENABLED, false);
+  assert.equal(cfg.CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED, true);
 });
 
 test.describe('serverConfig.toNumberOr', () => {

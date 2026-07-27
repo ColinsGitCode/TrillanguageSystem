@@ -7,6 +7,9 @@ const {
   deleteRecordFiles,
   dbService,
 } = require('./_shared');
+const {
+  annotationShadowReadService,
+} = require('../services/annotations/annotationRuntime');
 const log = require('../lib/logger').child({ module: 'routes/files' });
 
 const router = express.Router();
@@ -59,6 +62,17 @@ router.get('/api/highlights/by-file', (req, res) => {
             return res.status(403).json({ error: 'textbook highlights require the textbook API' });
         }
         const highlight = dbService.getCardHighlightByFile(folder, base, sourceHash);
+        const generation = highlight?.generationId
+            ? dbService.getGenerationById(highlight.generationId)
+            : dbService.getGenerationByFile(folder, base);
+        if (generation) {
+            void annotationShadowReadService.observe({
+                consumer: 'cards-factory',
+                legacyHighlight: highlight,
+                targetKind: 'generation',
+                targetId: generation.id,
+            });
+        }
         res.json({ success: true, highlight: highlight || null });
     } catch (err) {
         res.status(500).json({ error: err.message });

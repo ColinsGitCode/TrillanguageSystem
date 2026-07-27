@@ -11,6 +11,10 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // Card annotations (migration facts before current annotation rows)
+  'card_annotation_migration_events',
+  'card_annotations',
+
   // Knowledge Graph 2.0 (read models and append-only facts before parents)
   'kg_source_sync_jobs',
   'kg_planning_signals',
@@ -82,6 +86,8 @@ function truncateAll(db) {
           'textbook_asset_delete_block',
           'textbook_operation_events_update_block',
           'textbook_operation_events_delete_block',
+          'card_annotation_migration_events_update_block',
+          'card_annotation_migration_events_delete_block',
           'kg_resolution_events_update_block',
           'kg_resolution_events_delete_block',
           'kg_point_transitions_update_block',

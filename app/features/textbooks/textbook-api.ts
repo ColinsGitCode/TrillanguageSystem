@@ -1,4 +1,6 @@
 import { requestJson } from '../../lib/api/client';
+import type { CardAnnotationSelector } from '../card-modal/annotation-render.mjs';
+import type { AnnotationTarget, CardAnnotation } from '../factory/factory-api';
 import type {
   TextbookCourse,
   TextbookDerivationPreview,
@@ -111,6 +113,29 @@ export const textbookApi = {
     `/api/textbooks/tracks/${trackId}/highlights/${highlightId}`,
     { method: 'DELETE' }
   ),
+  annotations: (trackId: number) => requestJson<{
+    success: true;
+    target: AnnotationTarget;
+    annotations: CardAnnotation[];
+  }>(`/api/annotations?targetKind=textbook_track&targetId=${encodeURIComponent(String(trackId))}`),
+  createAnnotation: (payload: {
+    id: string;
+    targetId: number;
+    expectedTargetRevision: string;
+    selector: CardAnnotationSelector;
+  }) => requestJson<{
+    success: true;
+    annotation: CardAnnotation;
+    compatibility: { written: boolean; highlightId?: number; version?: number };
+  }>('/api/annotations', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      targetKind: 'textbook_track',
+      annotationKind: 'highlight',
+      color: 'red',
+    }),
+  }),
   previewDerivation: (expressionId: number, payload: {
     selectionText: string;
     selectionLanguage?: 'en' | 'ja';

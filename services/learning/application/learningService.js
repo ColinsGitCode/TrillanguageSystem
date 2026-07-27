@@ -303,6 +303,7 @@ class LearningService {
     db,
     scheduler = new TsFsrsScheduler(),
     planningSignalProvider = createDefaultPlanningSignalProvider(),
+    annotationShadowReadService = null,
     now = () => new Date().toISOString(),
     busyRetry,
   } = {}) {
@@ -310,6 +311,7 @@ class LearningService {
     this.db = db;
     this.scheduler = scheduler;
     this.planningSignalProvider = planningSignalProvider;
+    this.annotationShadowReadService = annotationShadowReadService;
     this.now = now;
     this.busyRetry = busyRetry || ((operation) => operation());
   }
@@ -1873,6 +1875,14 @@ class LearningService {
         WHERE folder_name = ? AND base_filename = ? AND source_hash = ?
         LIMIT 1
       `).get(row.folder_name, row.base_filename, expression.projection_hash) || null;
+      if (this.annotationShadowReadService) {
+        void this.annotationShadowReadService.observe({
+          consumer: 'review',
+          legacyHighlight: highlight,
+          targetKind: 'textbook_track',
+          targetId: expression.track_id,
+        });
+      }
       const highlightFragments = expressionFragmentsFromHighlight(highlight?.html_content, expression.expression_id);
       const markdown = [
         `### ${expression.course_title} · Track ${String(expression.track_number).padStart(2, '0')} · ${expression.expression_key}`,
@@ -1945,9 +1955,17 @@ class LearningService {
     `).all(row.generation_id).filter((audio) => targetLanguages.includes(audio.language))
       .filter((audio) => row.unit_kind !== 'scenario_bilingual' || scenarioAudioMatches(audio, locator));
     const highlight = this.db.prepare(`
-      SELECT id, source_hash, version, updated_at FROM card_highlights
+      SELECT id, source_hash, version, html_content, updated_at FROM card_highlights
       WHERE folder_name = ? AND base_filename = ? ORDER BY version DESC LIMIT 1
     `).get(row.folder_name, row.base_filename) || null;
+    if (this.annotationShadowReadService) {
+      void this.annotationShadowReadService.observe({
+        consumer: 'review',
+        legacyHighlight: highlight,
+        targetKind: 'generation',
+        targetId: row.generation_id,
+      });
+    }
     const scheduleRow = this.db.prepare(`
       SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
         algorithm_id AS schedule_algorithm_id, algorithm_version AS schedule_algorithm_version,

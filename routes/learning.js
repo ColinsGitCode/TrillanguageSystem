@@ -6,6 +6,9 @@ const dbService = require('../services/storage/databaseService');
 const { GraphPlanningSignalReader } = require('../services/kg/storage/graphPlanningSignalReader');
 const { LearningService } = require('../services/learning/application/learningService');
 const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
+const {
+  annotationShadowReadService,
+} = require('../services/annotations/annotationRuntime');
 
 const router = express.Router();
 const graphSignalReader = new GraphPlanningSignalReader({
@@ -16,6 +19,7 @@ const service = new LearningService({
   db: dbService.db,
   busyRetry: (operation) => dbService.withBusyRetry(operation),
   planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader }),
+  annotationShadowReadService,
 });
 
 function send(res, payload) {

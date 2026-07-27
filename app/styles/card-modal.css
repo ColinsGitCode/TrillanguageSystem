@@ -145,7 +145,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.card-selection-toolbar button {
+.card-selection-toolbar button,
+.csa-gen-menu button,
+.csa-menu-subtrigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -159,19 +161,23 @@
 }
 .card-selection-toolbar .csa-highlight { color: var(--color-danger); }
 .card-selection-toolbar .csa-generate { color: var(--color-primary); }
-.card-selection-toolbar button:hover:not(:disabled) { background: var(--color-bg-subtle); }
-.card-selection-toolbar button:disabled { cursor: default; opacity: .6; }
-.card-selection-toolbar button svg { width: 15px; height: 15px; }
+.card-selection-toolbar button:hover:not(:disabled),
+.csa-gen-menu button:hover:not(:disabled),
+.csa-gen-menu button[data-highlighted]:not(:disabled),
+.csa-menu-subtrigger[data-highlighted],
+.csa-menu-subtrigger:hover { background: var(--color-bg-subtle); }
+.card-selection-toolbar button:disabled,
+.csa-gen-menu button:disabled { cursor: default; opacity: .6; }
+.card-selection-toolbar button svg,
+.csa-gen-menu button svg,
+.csa-menu-subtrigger svg { width: 15px; height: 15px; }
 .card-selection-toolbar .csa-sep { width: 1px; margin: 3px 0; background: var(--color-border); }
 .card-selection-toolbar .csa-generate-wrap { position: relative; display: inline-flex; }
 .card-selection-toolbar .csa-caret { width: 13px; height: 13px; margin-left: -2px; opacity: .7; }
 
 /* —— 生成卡片:卡型选择菜单 —— */
-.card-selection-toolbar .csa-gen-menu {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  z-index: 1;
+.csa-gen-menu {
+  z-index: 140;
   min-width: 128px;
   display: flex;
   flex-direction: column;
@@ -181,12 +187,16 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-modal);
 }
-.card-selection-toolbar .csa-gen-menu button {
+.csa-gen-menu button,
+.csa-menu-subtrigger {
   justify-content: flex-start;
   width: 100%;
   padding: 8px 12px;
   color: var(--color-text-primary);
 }
+.csa-menu-subtrigger { border: 0; }
+.csa-menu-subtrigger svg:last-child { margin-left: auto; }
+.csa-menu-separator { height: 1px; margin: 4px 0; background: var(--color-border); }
 
 /* —— 选区操作反馈 toast —— */
 .card-selection-toast {

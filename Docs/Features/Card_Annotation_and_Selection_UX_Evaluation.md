@@ -1,8 +1,8 @@
 # 学习卡片选区交互与注解层 UX 评估（CA-D0）
 
-> 状态：**评估草稿 · 方向已确认，P1/P2 复审已修订；两项 POC 已完成——迁移率（§7.1，真实渲染链路下可重锚 96.2%）与无头库选型/体积（§2.3.1，建议 Radix，含下拉与右键菜单）。仍待「三消费者同验 / CardModal 实接 / 切换回滚」完成后方可进入 ADR**
+> 状态：**Accepted 专题基线 · CA-P1–P4 已完成。真实历史数据已受控迁移，三消费者 shadow read 为 0 差异；页面仍以旧表为真源**
 >
-> 日期：2026-07-23；复审修订：2026-07-26；迁移 POC 与菜单库 POC：2026-07-27
+> 日期：2026-07-23；复审修订：2026-07-26；迁移 POC、菜单库 POC 与 CA-P1 生产接入：2026-07-27
 >
 > 上位约束：根 `CLAUDE.md` 的 Markdown-first 卡片契约与不可变内容边界；[DS-W1 Cloudscape 采用表](../TestReports/Cloudscape_Workflow_POC_Assessment_20260723.md) 的「原则复用 + 自研有界包装」口径与三档决策法（直接使用 / 包装使用 / 保持自研）
 >
@@ -10,7 +10,7 @@
 >
 > **不在范围**：修改卡片正文（B②）。若将来要做，必须独立 ADR，并复用教材域已验证的 copy-on-write 修订机制，不得就地改写。
 >
-> 本文尚未登记进 [Docs/README.md](../README.md) 索引，未作为正式基线。
+> 文档治理：本文已登记进 [Docs/README.md](../README.md) 作为当前专题评估入口；技术权威为已接受的 [Card Annotation Layer ADR](../Architecture/Card_Annotation_Layer_ADR.md)。正文仍不可变；CA-P6 已将 Cards Factory 与教材课程切到新注释真源并保留旧 HTML 双写，Review 尚未切换。
 
 ## 复审修订记录（2026-07-26）
 
@@ -35,8 +35,8 @@
 
 | 事实 | 位置 |
 |---|---|
-| 选区工具条只有两个动作:标红、生成卡片(三卡型) | `app/features/card-modal/CardModal.tsx` |
-| **无 `onContextMenu` 处理**,右键必然落到浏览器原生菜单 | 同上 |
+| CA-P1 后，选区工具条保留标红与生成卡片（三卡型），下拉与右键菜单由 Radix 接管 | `app/features/card-modal/CardModal.tsx` |
+| 阅读区已有 `onContextMenuCapture` 边界：有有效选区才打开应用菜单，无选区放行浏览器原生菜单 | 同上 |
 | 标红把**整份渲染 HTML 连 mark 一起存**,唯一键为 `folder_name+base_filename+source_hash` | `services/storage/db/highlights.js`、`card_highlights` |
 | mark 只有单色 `study-highlight-red` | `app/styles/card-modal.css` |
 | 净化器已允许 `mark` 标签与 `class` 属性 | `app/features/card-modal/markdown.ts` |
@@ -46,7 +46,7 @@
 | KG 已启用(`KG_ENABLED=1`),`/api/kg/search`、`/api/kg/lookups`、`points/:id` 就绪 | `routes/kg.js`、`.env` |
 | **无「任意文本按需 TTS」接口**(仅教材域 TTS) | `routes/textbooks.js` |
 
-**键盘可达(精确)**:工具条按钮本身可 Tab 聚焦、菜单项有 `role="menuitem"`([CardModal.tsx:304](../../app/features/card-modal/CardModal.tsx))。真正缺失的是:①**键盘选区不触发 `mouseup`**,工具条根本不出现;②浮层出现后**不主动转移焦点**;③菜单**无方向键 / Home / End / Escape / 焦点返回**契约。
+**键盘可达(精确)**：CA-P1 已实现菜单方向键、Escape 与焦点返回。仍缺的是：①**键盘选区不触发 `mouseup`**，工具条不会自动出现；②选区工具条出现后不主动把焦点转到首个动作；③多色标记、取消标记、KG 查词和复制尚未实施。
 
 **可查询性(精确)**:数据库已具备跨卡标红统计(审计脚本在用);缺的是**高亮文本本身不能被结构化查询或索引**——正文与 mark 一起烤在 HTML 里。
 
@@ -57,9 +57,11 @@
 - 核心价值是**拥有文档模型**,与「Markdown-first + DOMPurify 渲染 + 内容不可变」正面冲突;
 - 且**答非所问**:已确认不改卡片正文。将来若做 B②,正确路径是结构化字段 copy-on-write(教材域已验证),不需要富文本编辑器。
 
-### 2.2 注解库(Recogito text-annotator)——**待 POC 判定;其数据模型直接吸收**
+### 2.2 注解库(Recogito text-annotator)——**v1 不引包；直接吸收数据模型**
 
-`@recogito/react-text-annotator` 活跃维护,可在任意 DOM 做标注。对本项目**真正值钱的是其 W3C Web Annotation 数据模型**;包是否引入取决于 POC(§7)——重点验证其高亮渲染层与 DOMPurify 管线、ruby 结构能否共存,否则只取模型、锚定自研。
+CA-P2 使用 `@recogito/text-annotator@4.2.5` 完成真实浏览器 POC。DOMPurify 后的 ruby 与音频按钮可保留，但原生 selector 会把 `<rt>` 注音计入 quote；排除 `rt/rp` 与音频节点后又会拆成多个 selector，并产生需包装层过滤的空 selector。其渲染器还会在正文根节点内部追加临时 highlight layer，而当前兼容链路仍会保存该根节点的 `innerHTML`。
+
+因此引包不能替代本项目必须维护的 ruby-aware canonical projection，反而增加一套 DOM 生命周期和 **24,520 B gzip**。v1 不引入生产包，只吸收 W3C Web Annotation 的 `TextQuoteSelector + TextPositionSelector` 模型，锚定与渲染由项目自己控制。未来完全停止旧 HTML compatibility write 后，可另开 POC 重评只读 overlay。
 
 ### 2.3 无头 UI 原语(Radix / Base UI / React Aria / Ark)——**包装使用**
 
@@ -91,6 +93,18 @@ A 层所需的上下文菜单、分组/子菜单、浮层定位、键盘导航�
 **可信交互验证(已完成)**:隔离 POC 的 `npm --prefix experiments/menu-primitives run verify` 使用 Playwright 的真实点击与键盘事件，已验证 Radix / React Aria 的下拉菜单开合、方向键、Escape；Radix 还验证了右键菜单和 Escape 后焦点返回触发按钮。此前失败的是页面内手工派发的合成事件，不能推出“浏览器自动化做不到”。
 
 **生产接入注意**:现有工具条对所有 `mousedown` 调用了 `preventDefault()`，会干扰菜单库的默认焦点恢复。Radix 包装层必须保留其 `onCloseAutoFocus` 适配，显式把焦点还给触发按钮；同时单独验证不丢失阅读文本选区。
+
+### 2.3.2 CA-P1 生产接入记录（2026-07-27）
+
+已在真实 `CardModal` 接入 **Radix Dropdown Menu 2.1.24** 与 **Context Menu 2.3.7**。现有的选区工具条外观、三个生成卡片动作及其请求契约均保持不变；Radix 只接管菜单、焦点、键盘和 ARIA 行为。
+
+- **右键边界已实现**：阅读区只有在存在有效选区时才打开应用菜单；无选区右键不拦截，仍交给浏览器原生菜单；
+- **键盘与焦点已实现**：工具条“生成卡片”可用 Enter 打开，方向键进入菜单，Escape 关闭菜单并返回该触发按钮；右键菜单关闭后焦点返回阅读区；
+- **Portal 样式已修复**：菜单脱离工具条 DOM 后，原有 3 条后代选择器不再命中；生产 CSS 已改为显式菜单 class，继续使用既有 token，未改变阅读区字体或全局样式；
+- **Modal Escape 冲突已修复**：菜单在 Portal 中接收 Escape 时，卡片弹窗不会被提前关闭；
+- **三消费者验证**：Cards Factory E2E 15/15、Textbook Courses E2E 5/5、Learning Assistance E2E 5/5 均通过。
+
+**本阶段未做的事**：键盘选择正文后自动弹出工具条、多色标记/取消标记、KG 查词、复制、注解持久化和存量迁移都不属于 CA-P1，仍按本文后续门禁推进。
 
 ### 2.4 学习产品交互范式——**吸收模式,不引代码**
 
@@ -129,7 +143,7 @@ LingQ「点词 → 词状态 + 查词」几乎是本项目 KG 知识点的现成
 |---|---|---|
 | TipTap / Lexical / BlockNote 等编辑器 | **不采用** | 与不可变 Markdown 契约冲突,且非本次需求 |
 | 无头菜单原语 → **建议 Radix** | **包装使用** | 替换手写选区工具条的菜单/浮层/键盘/焦点;保留现有 pill 视觉与 tokens。已验证下拉 + 右键菜单、MIT、稳定版、生态最大;接入需去嵌套 3 处 CSS 规则及显式焦点返回适配(§2.3.1)，完整双菜单增量 **+29.4 KiB gzip**。React Aria(+45.1 KiB)仅完成下拉菜单对比;Base UI 仍 RC,暂不选 |
-| Recogito text-annotator(包) | **待 POC 判定** | 验证高亮渲染层与 DOMPurify/ruby 共存;否则只取模型 |
+| Recogito text-annotator（包） | **v1 不采用** | POC 证明原生 selector 不符合 ruby-aware 投影，overlay 还可能进入旧 HTML；引包不能减少核心复杂度 |
 | **W3C Web Annotation 数据模型** | **直接吸收原则** | selector 锚定,取代「mark 烤进 HTML」 |
 | LingQ / Readwise 交互范式 | **吸收模式** | 查词入口、多色标记 + 批注汇总 |
 
@@ -138,9 +152,9 @@ LingQ「点词 → 词状态 + 查词」几乎是本项目 KG 知识点的现成
 ## 5. 已确认决策
 
 1. **注解持久化统一改为 selector 锚定,并迁移存量标红**(不采用新旧两套并存)。迁移**尽力而为 + 兜底**,无法重锚的条目按 §7 定义降级保留,不丢数据。**前置条件**:必须先完成 §3.1 消费者矩阵与双读/切换/回滚设计,尤其保住教材复习答案面。
-2. **引入无头菜单原语作为生产依赖**,仅取行为(键盘、焦点、ARIA、浮层),**页面外观不变**。选型(Radix / Base UI / React Aria)由 POC 依「贴合现有 pill 视觉所需覆盖量 + gzip 增量」判定;注意 Base UI 目前仍是 RC。
+2. **引入 Radix 无头菜单原语作为生产依赖**,仅取行为(键盘、焦点、ARIA、浮层),**页面外观不变**。POC 及 CA-P1 已确认 Radix 在现有 pill 视觉下的覆盖量最小，完整双菜单增量为 +29.4 KiB gzip；Base UI 目前仍是 RC，不采用。
 
-## 6. 注解数据模型草案（待 ADR 定稿）
+## 6. 注解数据模型（已进入 Accepted ADR）
 
 ### 6.1 身份:不用可变路径(P1-2)
 
@@ -159,15 +173,15 @@ legacy_locator: 仅对无数据库记录的历史文件,用 folder/base 作 fall
 
 ### 6.2 规范化「可见基文投影」契约(P1-3)
 
-`TextPositionSelector` 的字符偏移必须对应一份**稳定、完整的整卡线性文本**。本轮已把 `selection.ts` 与审计脚本收敛到共享 `text-projection.mjs`；但 DOM Range 与整卡 offset 的双向映射仍未实现，ADR 前必须定义：
+`TextPositionSelector` 的字符偏移必须对应一份**稳定、完整的整卡线性文本**。生产侧已把 `selection.ts` 与审计脚本收敛到共享 `text-projection.mjs`；CA-P2 隔离 POC 已实现并验证 DOM Range 与整卡 offset 的双向映射。Accepted ADR 将该合同命名为 `card-visible-text-v1`，并固定：
 
 - `projection_version`:投影算法版本;
 - **排除规则**:`rt`/`rp` 读音、`.audio-btn`、外来语 `loanword-*` 标签一律不计入可见基文;
 - **空白与 Unicode 规范化**:折叠连续空白 + 固定 **NFKC** 口径，且已由共享 `text-projection.mjs` 同时供 `selection.ts` 与审计脚本使用;
-- **DOM Range ↔ canonical offset 双向映射**:能从 Range 得偏移,也能从偏移复原 Range;
+- **DOM Range ↔ canonical offset 双向映射**：能从 Range 得偏移，也能从偏移复原 Range；POC 已覆盖 ruby 与跨 DOM 节点；
 - **重锚顺序**:renderer 版本升级后,先按 `TextQuoteSelector`(quote+prefix/suffix),失败再按 `TextPositionSelector`,再失败降级 orphaned。
 
-否则 `TextPositionSelector` 只是不可稳定重放的数字。
+CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与根目录单测共同验证；`TextPositionSelector` 的 UTF-16 数字因此可稳定重放，而非另复制一套算法。
 
 ### 6.3 字段与硬边界
 
@@ -224,30 +238,39 @@ legacy_locator: 仅对无数据库记录的历史文件,用 folder/base 作 fall
 - **失败 payload**:重锚失败时保留原始 quote + legacy HTML 片段 + 审计记录;
 - **orphaned 展示**:「保留原样」= 保留 quote 与 legacy HTML 只读展示 + 审计记录,**不静默丢弃**,也不伪装成 active。
 
+稳定 ID、迁移事件、双读阶段和回滚开关已由 Accepted ADR 定义。CA-P3 已完成
+正式 schema、repository、service 和只读 migration plan；页面切换与真实 apply
+仍按 CA-P4–P8 门禁推进。
+
 ## 8. POC 计划与门禁
 
 按 DS-W1 隔离纪律:POC 期间**不修改根 `package.json`**,产物可整体删除。必须用数据回答:
 
 - [x] **迁移率**:已完成(§7.1)。真实数据 51 个 `<mark>` → **26 个推断连续标红区间**,**可重锚 96.2%**,1 条因内容漂移降级。统计不等同于人工确认的历史划选数;
-- [ ] **三消费者同验**:普通卡、教材 Track、**复习只读答案面**均不破;
-- [ ] **锚定鲁棒性**:重复 quote、ruby、跨 DOM 节点、内容修订、文件移动/改期五种场景;
-- [ ] **交互补齐**:键盘选区触发工具条、右键接管(有选区才接管、无选区放行原生菜单)、Escape、焦点返回;
-      **注**:无头库在隔离 POC 的可信 Playwright 事件下已验证开合/方向键/Escape；此项保留是因为尚未接入真实 CardModal，仍须验证“保留选区 + 焦点返回”联动;
-- [ ] **切换安全**:旧表退役前后的双读、逐消费者切换、回滚策略;
+- [x] **三消费者同验**:普通卡、教材 Track、**复习只读答案面**均不破；CA-P1 实跑 Cards Factory 15/15、Textbook Courses 5/5、Learning Assistance 5/5;
+- [x] **锚定鲁棒性**：重复 quote、ruby、跨 DOM 节点、内容修订、文件移动/改期、UTF-16 补充字符及真实内容漂移 orphaned 均通过，合同测试 11/11；
+- [ ] **交互补齐**:键盘选区触发工具条、多色标记、取消标记、KG 查词、复制;
+      **已完成子项**:真实 CardModal 的右键接管(有选区才接管、无选区放行原生菜单)、菜单方向键/Escape、焦点返回及“保留选区 + 焦点返回”联动均已由 CA-P1 覆盖;
+- [x] **切换安全设计**：Accepted ADR 已定义旧表保留、shadow read、逐消费者切换、compatibility write 与开关回滚；CA-P4 已完成真实迁移和三消费者 shadow read，CA-P5 已切换 Cards Factory，CA-P6 已切换教材，CA-P7–P8 继续收口；
 - [x] **依赖体积 + 视觉保真**:完整双菜单的 Radix **+29.4 KiB gzip**，React Aria 下拉菜单 +45.1 KiB；
       菜单面板因 Portal 需去嵌套 3 处 CSS 规则后恢复样式/布局契约;
-- [ ] **Recogito 取舍**:高亮渲染层与 DOMPurify/ruby 是否共存,或只取模型自研锚定。
+- [x] **Recogito 取舍**：v1 不引生产包，只吸收 W3C selector 模型并自研 ruby-aware 锚定与渲染。
 
 ## 9. 门禁与后续
 
-- [ ] POC 八项验证完成并形成评估报告(含真实逐标记迁移率)
-- [ ] 注解数据模型 + 消费者迁移矩阵经 ADR 接受(含双读/切换/回滚、orphaned 语义)
-- [ ] 无头库选型确认,记录版本/license/按需 import;Base UI 若仍为 RC 需显式接受
+- [x] CA-P2 POC 技术项已形成可复现实验与 Accepted ADR；交互功能项仍按后续阶段实施
+- [x] 注解数据模型 + 消费者迁移矩阵经 ADR 接受(含双读/切换/回滚、orphaned 语义)
+- [x] CA-P3 已完成 migration 007、表 53–54、AnnotationService、默认关闭的 feature flag 和只读迁移计划；未切换页面、未 apply 生产数据
+- [x] CA-P4 已完成 Git 外双备份、hash-gated apply、25 active + 1 orphaned、幂等复跑、三消费者 shadow read 与真实 volume 验收；页面仍读旧表
+- [x] 无头库已选 Radix 并在 CA-P1 生产接入；版本、license、按需 import 与体积已记录
 - [ ] A 层交互(右键接管、多色标记、取消标记、KG 查词、复制、键盘可达)实施
-- [ ] B① 注解层实施 + 存量标红逐 mark 迁移 + 教材/复习答案面回归
-- [ ] 桌面 E2E 覆盖,1280/1440 无溢出,`readOnly` 模式禁编辑
+- [ ] B① 注解层消费者切换 + 存量标红按逻辑区间迁移 + 教材/复习答案面回归
+      **已完成子项**：CA-P5 已切换 Cards Factory；CA-P6 已将教材课程切到
+      `card_annotations` 真源，并在同事务继续生成旧 Track HTML；Review 仍按
+      门禁留在旧路径并通过回归；
+- [x] 桌面 E2E 覆盖，1280/1440 无溢出，`readOnly` 模式禁删除、禁标红
 
 **待定项**:
 
 - **朗读选区**当前无「任意文本 TTS」接口,需新增后端表面;本期是否纳入未定。
-- **右键接管边界**:建议「有选区才接管,无选区放行原生菜单」(保留复制/检查);全面接管另行确认。
+- **右键接管边界**已按「有选区才接管，无选区放行原生菜单」在 CA-P1 落地；全面接管不在当前范围。

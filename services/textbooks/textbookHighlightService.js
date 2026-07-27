@@ -118,7 +118,7 @@ function sanitizeHighlightDocument(html, track) {
   }
 }
 
-function getTrackHighlight({ dbService, trackId }) {
+function getTrackHighlight({ dbService, trackId, shadowReadService = null }) {
   const track = dbService.getTextbookTrack(trackId);
   if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
   const identity = trackIdentity(track);
@@ -127,6 +127,14 @@ function getTrackHighlight({ dbService, trackId }) {
     identity.baseFilename,
     identity.sourceHash
   );
+  if (shadowReadService) {
+    void shadowReadService.observe({
+      consumer: 'textbook',
+      legacyHighlight: highlight,
+      targetKind: 'textbook_track',
+      targetId: track.id,
+    });
+  }
   return { track, identity, highlight };
 }
 

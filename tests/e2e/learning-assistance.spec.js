@@ -8,6 +8,10 @@ const FIXTURES = [
   ['〜ていただけませんか', 'grammar_ja'],
   ['配镜验光时描述远处模糊', 'scenario_phrase'],
 ];
+const TOTAL_STUDY_ITEM_COUNT = 23;
+const JAPANESE_ONLY_STUDY_ITEM_COUNT = 1;
+const DAILY_NEW_LIMIT = 3;
+const EXPECTED_LEARNING_DAYS = 8;
 
 async function enqueueAndWait(request, phrase, cardType) {
   const created = await request.post('/api/generation-jobs', {
@@ -27,7 +31,7 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
     const seeded = await request.post('/api/_test/learning-seed');
     expect(seeded.ok()).toBeTruthy();
-    expect((await seeded.json()).studyItemCount).toBe(15);
+    expect((await seeded.json()).studyItemCount).toBe(TOTAL_STUDY_ITEM_COUNT);
   });
 
   test('creates a real plan from the confirmed scope preview', async ({ page }) => {
@@ -36,28 +40,28 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await page.getByRole('button', { name: '建立学习计划' }).click();
     await expect(page).toHaveURL(/\/learn\/plan$/);
     await expect(page.getByTestId('learning-plan-page')).toBeVisible();
-    await expect(page.getByText('15 个', { exact: true })).toBeVisible();
+    await expect(page.getByText(`${TOTAL_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Japanese' }).click();
-    await expect(page.getByText('1 个', { exact: true })).toBeVisible();
+    await expect(page.getByText(`${JAPANESE_ONLY_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
     await expect(page.getByText('场景表达固定为 EN+JA')).toBeVisible();
     await page.getByRole('button', { name: 'Japanese' }).click();
-    await expect(page.getByText('15 个', { exact: true })).toBeVisible();
+    await expect(page.getByText(`${TOTAL_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
 
     const newLimit = page.getByLabel('每日新单元上限 0 = 只清到期项');
-    await newLimit.fill('3');
+    await newLimit.fill(String(DAILY_NEW_LIMIT));
     await page.getByRole('button', { name: '检查并保存计划' }).click();
     const review = page.getByRole('alertdialog', { name: '确认学习计划' });
-    await expect(review).toContainText('15 个');
-    await expect(review).toContainText('约 5 学习日');
+    await expect(review).toContainText(`${TOTAL_STUDY_ITEM_COUNT} 个`);
+    await expect(review).toContainText(`约 ${EXPECTED_LEARNING_DAYS} 学习日`);
     await review.locator('dl > div').filter({ hasText: '学习范围' }).getByRole('button', { name: '修改' }).click();
     await expect(review).toBeHidden();
     await expect(page.getByRole('button', { name: /三语卡片/ })).toBeFocused();
     await page.getByRole('button', { name: '检查并保存计划' }).click();
-    await page.getByRole('button', { name: '保存 15 个单元并生成今日队列' }).click();
+    await page.getByRole('button', { name: `保存 ${TOTAL_STUDY_ITEM_COUNT} 个单元并生成今日队列` }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await expect(page.getByTestId('today-learning-page')).toBeVisible();
-    await expect(page.locator('.learning-queue-row')).toHaveCount(3);
+    await expect(page.locator('.learning-queue-row')).toHaveCount(DAILY_NEW_LIMIT);
   });
 
   test('keeps prompt, reveal, four ratings and idempotent retry in one owner', async ({ page, request }) => {
@@ -72,6 +76,12 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await page.keyboard.press('Space');
     await expect(page.getByTestId('learning-answer')).toBeVisible();
     await expect(page.getByRole('button', { name: /记住/ })).toBeEnabled();
+    await page.getByRole('button', { name: /查看完整卡片/ }).click();
+    const readOnlyCard = page.getByTestId('react-card-modal');
+    await expect(readOnlyCard.getByText('READ ONLY')).toBeVisible();
+    await expect(readOnlyCard.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
+    await expect(readOnlyCard.getByRole('button', { name: '标红选区' })).toHaveCount(0);
+    await readOnlyCard.getByTestId('react-card-modal-close').click();
     const footerBox = await page.locator('.learning-session-footer').boundingBox();
     expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(720);
 

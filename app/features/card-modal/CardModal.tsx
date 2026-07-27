@@ -1,10 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as ContextMenu from '@radix-ui/react-context-menu';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { factoryApi } from '../factory/factory-api';
+import type { AnnotationTarget, CardAnnotation } from '../factory/factory-api';
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
 import { applyMarkerHighlight, applyTextHighlight } from './highlight';
+import { createAnchor } from './annotation-anchor.mjs';
+import { applyAnnotations } from './annotation-render.mjs';
+import type { CardAnnotationSelector } from './annotation-render.mjs';
 import { buildSelectionCandidate } from './selection';
 import {
   computeTextHash,
@@ -33,10 +39,14 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const contentRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedRangeRef = useRef<Range | null>(null);
+  const selectedAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const selectedTextRef = useRef('');
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const generateTriggerRef = useRef<HTMLButtonElement>(null);
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [renderedHtml, setRenderedHtml] = useState('');
+  const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'legacy'>('pending');
+  const [isSavingAnnotation, setIsSavingAnnotation] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toolbar, setToolbar] = useState<{
@@ -49,6 +59,10 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [genMenuOpen, setGenMenuOpen] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
+  const annotationStateRef = useRef<{
+    target: AnnotationTarget;
+    annotations: CardAnnotation[];
+  } | null>(null);
   const cardQuery = useQuery({
     queryKey: ['card', selection.folder, selection.baseName],
     queryFn: () => factoryApi.card(selection),
@@ -62,16 +76,54 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   useEffect(() => {
     const markdown = cardQuery.data?.markdown;
     if (!markdown) return;
+    let cancelled = false;
     const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+    annotationStateRef.current = null;
+    setAnnotationMode('pending');
     setRenderedHtml(freshHtml);
-    factoryApi.highlight(selection.folder, selection.baseName, computeTextHash(markdown))
-      .then(({ highlight }) => {
-        if (highlight?.htmlContent) {
-          setRenderedHtml(sanitizePersistedCardHtml(highlight.htmlContent, selection.cardType));
-        }
-      })
-      .catch(() => {});
-  }, [cardQuery.data?.markdown, selection]);
+
+    const renderAnnotations = (annotations: CardAnnotation[]) => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = freshHtml;
+      applyAnnotations(wrapper, annotations);
+      return wrapper.firstElementChild?.outerHTML || freshHtml;
+    };
+    const loadLegacy = () => factoryApi.highlight(
+      selection.folder,
+      selection.baseName,
+      computeTextHash(markdown)
+    ).then(({ highlight }) => {
+      if (cancelled) return;
+      setAnnotationMode('legacy');
+      if (highlight?.htmlContent) {
+        setRenderedHtml(sanitizePersistedCardHtml(highlight.htmlContent, selection.cardType));
+      }
+    }).catch(() => {
+      if (!cancelled) setAnnotationMode('legacy');
+    });
+
+    const generationId = cardQuery.data?.record?.id;
+    if (readOnly || !generationId) {
+      void loadLegacy();
+    } else {
+      factoryApi.annotations('generation', generationId)
+        .then((result) => {
+          if (cancelled) return;
+          annotationStateRef.current = {
+            target: result.target,
+            annotations: result.annotations,
+          };
+          setRenderedHtml(renderAnnotations(result.annotations));
+          setAnnotationMode('annotations');
+        })
+        .catch(() => {
+          if (!cancelled) void loadLegacy();
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [cardQuery.data?.markdown, cardQuery.data?.record?.id, readOnly, selection]);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -80,6 +132,10 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        const target = event.target instanceof Element ? event.target : null;
+        // Radix menus are portaled outside the dialog. Let their own Escape and
+        // focus-restoration contract run before considering the dialog close.
+        if (target?.closest('.csa-gen-menu')) return;
         event.preventDefault();
         onClose();
         return;
@@ -159,6 +215,9 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     onSuccess: async (_data, vars) => {
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
       window.getSelection()?.removeAllRanges();
+      selectedRangeRef.current = null;
+      selectedAnchorRef.current = null;
+      selectedTextRef.current = '';
       setToolbar(null);
       setGenMenuOpen(false);
       setHasSelection(false);
@@ -174,11 +233,56 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     const container = contentRef.current;
     const range = selectedRangeRef.current;
     if (!container || !range) return;
+
+    if (annotationMode === 'annotations') {
+      const state = annotationStateRef.current;
+      const generationId = cardQuery.data?.record?.id;
+      const selector = selectedAnchorRef.current;
+      if (!state || !generationId || !selector || isSavingAnnotation) return;
+      setIsSavingAnnotation(true);
+      try {
+        const result = await factoryApi.createAnnotation({
+          id: crypto.randomUUID(),
+          targetKind: 'generation',
+          targetId: generationId,
+          expectedTargetRevision: state.target.targetRevision,
+          selector,
+          annotationKind: 'highlight',
+          color: 'red',
+        });
+        const annotations = [...state.annotations, result.annotation];
+        annotationStateRef.current = { ...state, annotations };
+        const markdown = cardQuery.data?.markdown || '';
+        const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = freshHtml;
+        applyAnnotations(wrapper, annotations);
+        setRenderedHtml(wrapper.firstElementChild?.outerHTML || freshHtml);
+        window.getSelection()?.removeAllRanges();
+        selectedRangeRef.current = null;
+        selectedAnchorRef.current = null;
+        selectedTextRef.current = '';
+        setHasSelection(false);
+        setToolbar(null);
+        setGenMenuOpen(false);
+        showToast('标红已保存');
+      } catch (error) {
+        console.error('Cards Factory annotation save failed', error);
+        const conflict = error instanceof ApiError && error.status === 409;
+        showToast(conflict ? '卡片内容或标红已变化，请重新选择' : '标红保存失败，请重试');
+      } finally {
+        setIsSavingAnnotation(false);
+      }
+      return;
+    }
+
+    if (annotationMode === 'pending') return;
     const applied = applyMarkerHighlight(container, range)
       || applyTextHighlight(container, selectedTextRef.current);
     if (!applied) return;
     window.getSelection()?.removeAllRanges();
     selectedRangeRef.current = null;
+    selectedAnchorRef.current = null;
     selectedTextRef.current = '';
     setHasSelection(false);
     setToolbar(null);
@@ -202,6 +306,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     const candidate = buildSelectionCandidate(container);
     if (!candidate) {
       selectedRangeRef.current = null;
+      selectedAnchorRef.current = null;
       selectedTextRef.current = '';
       setHasSelection(false);
       setToolbar(null);
@@ -209,6 +314,11 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       return;
     }
     selectedRangeRef.current = candidate.range.cloneRange();
+    try {
+      selectedAnchorRef.current = createAnchor(container, candidate.range);
+    } catch {
+      selectedAnchorRef.current = null;
+    }
     // Keep highlight recovery aligned with the ruby-free phrase shown in the toolbar.
     selectedTextRef.current = candidate.rawText;
     setHasSelection(true);
@@ -239,6 +349,35 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     audio.play().catch(() => button.classList.remove('is-playing'));
   };
 
+  const preserveSelectionOutsideActions = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) event.preventDefault();
+  };
+
+  const restoreGenerateTriggerFocus = (event: Event) => {
+    event.preventDefault();
+    generateTriggerRef.current?.focus({ preventScroll: true });
+  };
+
+  const restoreReadingFocus = (event: Event) => {
+    event.preventDefault();
+    contentRef.current?.focus({ preventScroll: true });
+  };
+
+  const cardContent = renderedHtml ? (
+    <div
+      ref={contentRef}
+      className="react-card-markdown"
+      data-testid="react-card-content"
+      tabIndex={-1}
+      onMouseUp={captureSelection}
+      onClick={handleContentClick}
+      onContextMenuCapture={(event) => {
+        if (!hasSelection) event.stopPropagation();
+      }}
+      dangerouslySetInnerHTML={{ __html: renderedHtml }}
+    />
+  ) : null;
+
   return (
     <div className="card-modal-backdrop" data-testid="react-card-modal" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -266,11 +405,11 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             <button
               className="highlight-selection-button"
               type="button"
-              disabled={!hasSelection}
+              disabled={!hasSelection || annotationMode === 'pending' || isSavingAnnotation}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void saveHighlight()}
             >
-              <Highlighter aria-hidden="true" /> 标红选区
+              <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红选区'}
             </button>
           )}
         </nav>
@@ -280,14 +419,50 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
             <div className="card-content-layout">
-              <div
-                ref={contentRef}
-                className="react-card-markdown"
-                data-testid="react-card-content"
-                onMouseUp={captureSelection}
-                onClick={handleContentClick}
-                dangerouslySetInnerHTML={{ __html: renderedHtml }}
-              />
+              {readOnly ? cardContent : (
+                <ContextMenu.Root>
+                  <ContextMenu.Trigger asChild>{cardContent}</ContextMenu.Trigger>
+                  <ContextMenu.Portal>
+                    <ContextMenu.Content
+                      className="csa-gen-menu csa-context-menu"
+                      aria-label="选区操作菜单"
+                      onCloseAutoFocus={restoreReadingFocus}
+                    >
+                      <ContextMenu.Item asChild>
+                        <button
+                          type="button"
+                          className="csa-highlight"
+                          disabled={annotationMode === 'pending' || isSavingAnnotation}
+                          onClick={() => void saveHighlight()}
+                        >
+                          <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}
+                        </button>
+                      </ContextMenu.Item>
+                      <ContextMenu.Separator className="csa-menu-separator" />
+                      <ContextMenu.Sub>
+                        <ContextMenu.SubTrigger className="csa-menu-subtrigger">
+                          <Sparkles aria-hidden="true" /> 生成卡片 <ChevronRight aria-hidden="true" />
+                        </ContextMenu.SubTrigger>
+                        <ContextMenu.Portal>
+                          <ContextMenu.SubContent className="csa-gen-menu" aria-label="选择生成卡型">
+                            {SELECTION_CARD_TYPES.map((type) => (
+                              <ContextMenu.Item key={type} asChild disabled={generateMutation.isPending}>
+                                <button
+                                  type="button"
+                                  disabled={generateMutation.isPending}
+                                  onClick={() => generateMutation.mutate({ phrase: toolbar?.phrase || '', cardType: type })}
+                                >
+                                  {CARD_TYPE_LABEL[type]}
+                                </button>
+                              </ContextMenu.Item>
+                            ))}
+                          </ContextMenu.SubContent>
+                        </ContextMenu.Portal>
+                      </ContextMenu.Sub>
+                    </ContextMenu.Content>
+                  </ContextMenu.Portal>
+                </ContextMenu.Root>
+              )}
               <aside className="card-study-meta">
                 <p className="eyebrow">CARD INFO</p>
                 <dl>
@@ -309,7 +484,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             style={{ top: toolbar.top, left: toolbar.left }}
             role="toolbar"
             aria-label="选区操作"
-            onMouseDown={(event) => event.preventDefault()}
+            onMouseDown={preserveSelectionOutsideActions}
           >
             <output
               className="csa-selection-preview"
@@ -320,36 +495,49 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
               <strong>{toolbar.phrase}</strong>
             </output>
             <span className="csa-sep" aria-hidden="true" />
-            <button type="button" className="csa-highlight" onClick={() => void saveHighlight()}>
-              <Highlighter aria-hidden="true" /> 标红
+            <button
+              type="button"
+              className="csa-highlight"
+              disabled={annotationMode === 'pending' || isSavingAnnotation}
+              onClick={() => void saveHighlight()}
+            >
+              <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}
             </button>
             <span className="csa-sep" aria-hidden="true" />
             <div className="csa-generate-wrap">
-              <button
-                type="button"
-                className="csa-generate"
-                disabled={generateMutation.isPending}
-                aria-haspopup="menu"
-                aria-expanded={genMenuOpen}
-                onClick={() => setGenMenuOpen((open) => !open)}
-              >
-                <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
-                <ChevronDown aria-hidden="true" className="csa-caret" />
-              </button>
-              {genMenuOpen && !generateMutation.isPending && (
-                <div className="csa-gen-menu" role="menu">
-                  {SELECTION_CARD_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
-                    >
-                      {CARD_TYPE_LABEL[type]}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <DropdownMenu.Root open={genMenuOpen} onOpenChange={setGenMenuOpen} modal={false}>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    ref={generateTriggerRef}
+                    type="button"
+                    className="csa-generate"
+                    disabled={generateMutation.isPending}
+                  >
+                    <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
+                    <ChevronDown aria-hidden="true" className="csa-caret" />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="csa-gen-menu"
+                    sideOffset={5}
+                    align="end"
+                    onCloseAutoFocus={restoreGenerateTriggerFocus}
+                  >
+                    {SELECTION_CARD_TYPES.map((type) => (
+                      <DropdownMenu.Item key={type} asChild disabled={generateMutation.isPending}>
+                        <button
+                          type="button"
+                          disabled={generateMutation.isPending}
+                          onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
+                        >
+                          {CARD_TYPE_LABEL[type]}
+                        </button>
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </div>
           </div>
         )}

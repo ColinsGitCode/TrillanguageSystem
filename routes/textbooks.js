@@ -15,6 +15,9 @@ const {
   saveTrackHighlight,
 } = require('../services/textbooks/textbookHighlightService');
 const {
+  annotationShadowReadService,
+} = require('../services/annotations/annotationRuntime');
+const {
   TEXTBOOK_FEATURE_ENABLED,
   TEXTBOOK_SOURCE_ROOT,
   TEXTBOOK_WORK_PATH,
@@ -192,7 +195,11 @@ router.post('/api/textbooks/tracks/:id/tts', asyncRoute(async (req, res) => {
 }));
 
 router.get('/api/textbooks/tracks/:id/highlights', route((req, res) => {
-  const { highlight } = getTrackHighlight({ dbService, trackId: req.params.id });
+  const { highlight } = getTrackHighlight({
+    dbService,
+    trackId: req.params.id,
+    shadowReadService: annotationShadowReadService,
+  });
   return send(res, { highlight });
 }));
 

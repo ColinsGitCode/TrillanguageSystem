@@ -10,6 +10,28 @@ import type {
   QueueSummary,
   SourceMode,
 } from './types';
+import type {
+  CardAnnotationSelector,
+  RenderableCardAnnotation,
+} from '../card-modal/annotation-render.mjs';
+
+export type CardAnnotation = RenderableCardAnnotation & {
+  targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
+  targetId: number;
+  targetRevision: string;
+  noteText: string | null;
+  sourceContentHash: string | null;
+  version: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type AnnotationTarget = {
+  targetKind: CardAnnotation['targetKind'];
+  targetId: number;
+  targetRevision: string;
+  sourceContentHash: string | null;
+};
 
 export const factoryApi = {
   health: () => requestJson<HealthResponse>('/api/health'),
@@ -69,6 +91,34 @@ export const factoryApi = {
   }) => requestJson('/api/highlights/by-file', {
     method: 'PUT',
     body: JSON.stringify({ ...payload, version: 2, updatedBy: 'react-ui' }),
+  }),
+  annotations: (targetKind: CardAnnotation['targetKind'], targetId: number) =>
+    requestJson<{ success: true; target: AnnotationTarget; annotations: CardAnnotation[] }>(
+      `/api/annotations?targetKind=${encodeURIComponent(targetKind)}&targetId=${encodeURIComponent(String(targetId))}`
+    ),
+  createAnnotation: (payload: {
+    id: string;
+    targetKind: CardAnnotation['targetKind'];
+    targetId: number;
+    expectedTargetRevision: string;
+    selector: CardAnnotationSelector;
+    annotationKind: 'highlight';
+    color: 'red';
+  }) => requestJson<{
+    success: true;
+    annotation: CardAnnotation;
+    compatibility: { written: boolean; highlightId?: number; version?: number };
+  }>('/api/annotations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  deleteAnnotation: (id: string, expectedVersion: number) => requestJson<{
+    success: true;
+    annotation: { id: string; status: 'deleted'; version: number };
+    compatibility: { written: boolean; highlightId?: number; version?: number };
+  }>(`/api/annotations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ expectedVersion }),
   }),
   deleteRecord: (record: GenerationRecord | null, selection: CardSelection) => {
     if (record?.id) return requestJson(`/api/records/${record.id}`, { method: 'DELETE' });

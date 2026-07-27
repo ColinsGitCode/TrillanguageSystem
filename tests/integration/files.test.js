@@ -29,6 +29,12 @@ test.describe('/api/folders + /api/highlights/by-file + /api/records/by-file', (
     assert.equal(res.body.highlight, null);
   });
 
+  test.it('shadow diagnostics are hidden while the feature flag is disabled', async () => {
+    const res = await api('GET', '/api/annotations/shadow-status');
+    assert.equal(res.status, 404);
+    assert.equal(res.body.code, 'ANNOTATION_SHADOW_READ_DISABLED');
+  });
+
   test.it('generic highlight API rejects textbook logical paths', async () => {
     const get = await api('GET', '/api/highlights/by-file?folder=textbook%3Adaily&base=track-01&sourceHash=h1');
     assert.equal(get.status, 403);

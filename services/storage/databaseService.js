@@ -20,6 +20,7 @@ const cardTagsDomain = require('./db/cardTags');
 const textbooksDomain = require('./db/textbooks');
 const textbookWorkflowDomain = require('./db/textbookWorkflow');
 const textbookOperationsDomain = require('./db/textbookOperations');
+const annotationsDomain = require('./db/annotations');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -518,6 +519,55 @@ class DatabaseService {
 
   getHighlightStats(filters = {}) {
     return highlightsDomain.getStats(this.db, filters);
+  }
+
+  // ========== Card annotations ==========
+
+  resolveCardAnnotationTarget(targetKind, targetId) {
+    return annotationsDomain.resolveTarget(this.db, targetKind, targetId);
+  }
+
+  getCardAnnotation(id) {
+    return annotationsDomain.getById(this.db, id);
+  }
+
+  listCardAnnotations(targetKind, targetId, options = {}) {
+    return annotationsDomain.listByTarget(this.db, targetKind, targetId, options);
+  }
+
+  listCardAnnotationsByLegacyHighlightId(legacyHighlightId) {
+    return annotationsDomain.listByLegacyHighlightId(this.db, legacyHighlightId);
+  }
+
+  createCardAnnotation(annotation) {
+    return this.withBusyRetry(() => annotationsDomain.insert(this.db, annotation));
+  }
+
+  updateCardAnnotation(id, expectedVersion, patch, updatedAtUtc) {
+    return this.withBusyRetry(() => annotationsDomain.update(
+      this.db,
+      id,
+      expectedVersion,
+      patch,
+      updatedAtUtc
+    ));
+  }
+
+  deleteCardAnnotation(id, expectedVersion, updatedAtUtc) {
+    return this.withBusyRetry(() => annotationsDomain.softDelete(
+      this.db,
+      id,
+      expectedVersion,
+      updatedAtUtc
+    ));
+  }
+
+  appendCardAnnotationMigrationEvent(event) {
+    return this.withBusyRetry(() => annotationsDomain.appendMigrationEvent(this.db, event));
+  }
+
+  listCardAnnotationMigrationEvents(migrationPlanHash) {
+    return annotationsDomain.listMigrationEvents(this.db, migrationPlanHash);
   }
 
   /**
