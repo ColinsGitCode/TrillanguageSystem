@@ -1,0 +1,6 @@
+:root{--color-bg-elevated:#fff;--color-bg-subtle:#f1f3f5;--color-border:#dde2e9;--color-border-strong:#c6ced9;
+--color-text-primary:#172033;--color-danger:#c43b4d;--color-primary:#2563eb;--color-focus:#2563eb;
+--radius-sm:4px;--radius-md:8px;--shadow-modal:0 18px 48px rgb(17 24 39/18%);
+--font-sans:Inter,-apple-system,"PingFang SC",sans-serif;--duration-fast:120ms;--ease-standard:cubic-bezier(.2,0,0,1)}
+body{font:14px/1.5 var(--font-sans);padding:40px;color:var(--color-text-primary)}
+.stage{position:relative;height:200px;border:1px dashed var(--color-border);padding:16px;border-radius:8px}

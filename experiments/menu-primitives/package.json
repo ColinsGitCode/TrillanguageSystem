@@ -1,0 +1,21 @@
+{
+  "name": "menu-primitives-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:baseline": "vite build --outDir dist/baseline",
+    "build:radix": "POC_VARIANT=radix vite build --outDir dist/radix",
+    "build:aria": "POC_VARIANT=aria vite build --outDir dist/aria"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "@radix-ui/react-dropdown-menu": "2.1.24",
+    "@radix-ui/react-context-menu": "2.3.7",
+    "react-aria-components": "1.19.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^7.3.6"
+  }
+}
