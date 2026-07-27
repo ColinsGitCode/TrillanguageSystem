@@ -133,6 +133,19 @@ function schedulerState(schedule) {
   };
 }
 
+function annotationReference(target, annotations, count = null) {
+  const activeHighlights = count ?? annotations.filter(
+    (annotation) => annotation.status === 'active' && annotation.annotationKind === 'highlight'
+  ).length;
+  return activeHighlights > 0 ? {
+    targetKind: target.targetKind,
+    targetId: Number(target.targetId),
+    targetRevision: target.targetRevision,
+    count: activeHighlights,
+    source: 'card_annotations',
+  } : null;
+}
+
 function buildQueueCandidates(
   rows,
   tagsByGeneration,
@@ -304,6 +317,9 @@ class LearningService {
     scheduler = new TsFsrsScheduler(),
     planningSignalProvider = createDefaultPlanningSignalProvider(),
     annotationShadowReadService = null,
+    annotationsEnabled = false,
+    annotationService = null,
+    textbookAnnotationService = null,
     now = () => new Date().toISOString(),
     busyRetry,
   } = {}) {
@@ -312,6 +328,9 @@ class LearningService {
     this.scheduler = scheduler;
     this.planningSignalProvider = planningSignalProvider;
     this.annotationShadowReadService = annotationShadowReadService;
+    this.annotationsEnabled = Boolean(annotationsEnabled);
+    this.annotationService = annotationService;
+    this.textbookAnnotationService = textbookAnnotationService;
     this.now = now;
     this.busyRetry = busyRetry || ((operation) => operation());
   }
@@ -1835,7 +1854,7 @@ class LearningService {
     return this._reviewResponse(event, { idempotent: true });
   }
 
-  getItem(itemId) {
+  async getItem(itemId) {
     const id = integer(itemId, 'itemId', { min: 1 });
     const row = this.db.prepare(`
       SELECT si.*, g.phrase, g.card_type, g.folder_name, g.base_filename,
@@ -1869,21 +1888,47 @@ class LearningService {
       const direction = row.unit_kind === 'textbook_en' ? 'en' : 'ja';
       const targetLanguages = [direction];
       const targetText = direction === 'en' ? expression.official_en_text : expression.official_ja_text;
-      const highlight = this.db.prepare(`
-        SELECT id, source_hash, version, html_content, updated_at
-        FROM card_highlights
-        WHERE folder_name = ? AND base_filename = ? AND source_hash = ?
-        LIMIT 1
-      `).get(row.folder_name, row.base_filename, expression.projection_hash) || null;
-      if (this.annotationShadowReadService) {
-        void this.annotationShadowReadService.observe({
-          consumer: 'review',
-          legacyHighlight: highlight,
-          targetKind: 'textbook_track',
-          targetId: expression.track_id,
-        });
+      let highlight = null;
+      let highlightFragments = null;
+      let currentAnnotationReference = null;
+      if (this.annotationsEnabled) {
+        if (!this.textbookAnnotationService) {
+          throw learningError(
+            'LEARNING_ANNOTATION_READER_UNAVAILABLE',
+            'The textbook annotation reader is unavailable',
+            503
+          );
+        }
+        const projection = await this.textbookAnnotationService.expressionProjection(
+          expression.track_id,
+          expression.id
+        );
+        highlightFragments = projection.fragments;
+        currentAnnotationReference = annotationReference(
+          projection.target,
+          [],
+          projection.fragments.annotationCount
+        );
+      } else {
+        highlight = this.db.prepare(`
+          SELECT id, source_hash, version, html_content, updated_at
+          FROM card_highlights
+          WHERE folder_name = ? AND base_filename = ? AND source_hash = ?
+          LIMIT 1
+        `).get(row.folder_name, row.base_filename, expression.projection_hash) || null;
+        if (this.annotationShadowReadService) {
+          void this.annotationShadowReadService.observe({
+            consumer: 'review',
+            legacyHighlight: highlight,
+            targetKind: 'textbook_track',
+            targetId: expression.track_id,
+          });
+        }
+        highlightFragments = expressionFragmentsFromHighlight(
+          highlight?.html_content,
+          expression.expression_id
+        );
       }
-      const highlightFragments = expressionFragmentsFromHighlight(highlight?.html_content, expression.expression_id);
       const markdown = [
         `### ${expression.course_title} · Track ${String(expression.track_number).padStart(2, '0')} · ${expression.expression_key}`,
         '',
@@ -1935,6 +1980,7 @@ class LearningService {
           version: Number(highlight.version),
           updatedAt: highlight.updated_at,
         } : null,
+        annotationReference: currentAnnotationReference,
       };
     }
     const targetLanguages = row.unit_kind === 'scenario_bilingual' ? ['en', 'ja']
@@ -1954,17 +2000,34 @@ class LearningService {
       FROM audio_files WHERE generation_id = ? ORDER BY language, filename_suffix
     `).all(row.generation_id).filter((audio) => targetLanguages.includes(audio.language))
       .filter((audio) => row.unit_kind !== 'scenario_bilingual' || scenarioAudioMatches(audio, locator));
-    const highlight = this.db.prepare(`
-      SELECT id, source_hash, version, html_content, updated_at FROM card_highlights
-      WHERE folder_name = ? AND base_filename = ? ORDER BY version DESC LIMIT 1
-    `).get(row.folder_name, row.base_filename) || null;
-    if (this.annotationShadowReadService) {
-      void this.annotationShadowReadService.observe({
-        consumer: 'review',
-        legacyHighlight: highlight,
-        targetKind: 'generation',
-        targetId: row.generation_id,
-      });
+    let highlight = null;
+    let currentAnnotationReference = null;
+    if (this.annotationsEnabled) {
+      if (!this.annotationService) {
+        throw learningError(
+          'LEARNING_ANNOTATION_READER_UNAVAILABLE',
+          'The card annotation reader is unavailable',
+          503
+        );
+      }
+      const annotationResult = this.annotationService.list('generation', row.generation_id);
+      currentAnnotationReference = annotationReference(
+        annotationResult.target,
+        annotationResult.annotations
+      );
+    } else {
+      highlight = this.db.prepare(`
+        SELECT id, source_hash, version, html_content, updated_at FROM card_highlights
+        WHERE folder_name = ? AND base_filename = ? ORDER BY version DESC LIMIT 1
+      `).get(row.folder_name, row.base_filename) || null;
+      if (this.annotationShadowReadService) {
+        void this.annotationShadowReadService.observe({
+          consumer: 'review',
+          legacyHighlight: highlight,
+          targetKind: 'generation',
+          targetId: row.generation_id,
+        });
+      }
     }
     const scheduleRow = this.db.prepare(`
       SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
@@ -2000,6 +2063,7 @@ class LearningService {
         version: Number(highlight.version),
         updatedAt: highlight.updated_at,
       } : null,
+      annotationReference: currentAnnotationReference,
     };
   }
 }

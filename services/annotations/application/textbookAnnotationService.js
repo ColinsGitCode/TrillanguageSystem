@@ -9,6 +9,7 @@ const {
   loadSharedModules,
 } = require('./buildAnnotationMigrationPlan');
 const {
+  expressionFragmentsFromDocument,
   sanitizeHighlightDocument,
   trackIdentity,
 } = require('../../textbooks/textbookHighlightService');
@@ -128,6 +129,35 @@ class TextbookAnnotationService {
   list(targetKind, targetId) {
     this.requireTrackTarget(targetKind, targetId);
     return this.annotationService.list(targetKind, targetId);
+  }
+
+  async expressionProjection(trackId, expressionRevisionId) {
+    const track = this.requireTrackTarget('textbook_track', trackId);
+    const expression = track.expressions.find(
+      (candidate) => Number(candidate.id) === Number(expressionRevisionId)
+    );
+    if (!expression) {
+      throw annotationError('ANNOTATION_TARGET_REVISION_UNAVAILABLE', 409, {
+        expressionRevisionId: Number(expressionRevisionId),
+      });
+    }
+    const shared = await this.sharedModulesLoader();
+    const { target, annotations } = this.annotationService.list('textbook_track', track.id);
+    const projection = this.buildCompatibilityProjection(track, annotations, shared);
+    const fragments = expressionFragmentsFromDocument(
+      projection.htmlContent,
+      expression.expression_id
+    );
+    if (!fragments) {
+      throw annotationError('ANNOTATION_TARGET_REVISION_UNAVAILABLE', 409, {
+        expressionRevisionId: Number(expressionRevisionId),
+      });
+    }
+    return {
+      target,
+      fragments,
+      diagnostics: projection.diagnostics,
+    };
   }
 
   async create(payload = {}) {

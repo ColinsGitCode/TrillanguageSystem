@@ -27,7 +27,7 @@ function normalizedText(node, { stripRubyReadings = false } = {}) {
   return String(clone.textContent || '').replace(/\s+/gu, ' ').trim();
 }
 
-function expressionFragmentsFromHighlight(html, expressionId) {
+function expressionFragmentsFromDocument(html, expressionId) {
   if (!html) return null;
   const parsed = new JSDOM(`<body>${html}</body>`);
   try {
@@ -37,11 +37,18 @@ function expressionFragmentsFromHighlight(html, expressionId) {
       en: section.querySelector('[data-textbook-language="en"]')?.innerHTML || '',
       ja: section.querySelector('[data-textbook-language="ja"]')?.innerHTML || '',
       zh: section.querySelector('[data-textbook-language="zh"]')?.innerHTML || '',
+      annotationCount: new Set(
+        Array.from(section.querySelectorAll('mark[data-annotation-id]'))
+          .map((mark) => mark.getAttribute('data-annotation-id'))
+          .filter(Boolean)
+      ).size,
     };
   } finally {
     parsed.window.close();
   }
 }
+
+const expressionFragmentsFromHighlight = expressionFragmentsFromDocument;
 
 function sanitizeHighlightDocument(html, track) {
   const input = String(html || '');
@@ -167,6 +174,7 @@ function deleteTrackHighlight({ dbService, trackId, highlightId }) {
 
 module.exports = {
   deleteTrackHighlight,
+  expressionFragmentsFromDocument,
   expressionFragmentsFromHighlight,
   getTrackHighlight,
   sanitizeHighlightDocument,

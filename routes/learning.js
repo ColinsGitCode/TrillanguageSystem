@@ -1,13 +1,19 @@
 'use strict';
 
 const express = require('express');
-const { KG_ENABLED, KG_PLANNING_ENABLED } = require('../lib/serverConfig');
+const {
+  CARD_ANNOTATIONS_ENABLED,
+  KG_ENABLED,
+  KG_PLANNING_ENABLED,
+} = require('../lib/serverConfig');
 const dbService = require('../services/storage/databaseService');
 const { GraphPlanningSignalReader } = require('../services/kg/storage/graphPlanningSignalReader');
 const { LearningService } = require('../services/learning/application/learningService');
 const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
 const {
+  annotationService,
   annotationShadowReadService,
+  textbookAnnotationService,
 } = require('../services/annotations/annotationRuntime');
 
 const router = express.Router();
@@ -20,6 +26,9 @@ const service = new LearningService({
   busyRetry: (operation) => dbService.withBusyRetry(operation),
   planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader }),
   annotationShadowReadService,
+  annotationsEnabled: CARD_ANNOTATIONS_ENABLED,
+  annotationService,
+  textbookAnnotationService,
 });
 
 function send(res, payload) {
@@ -28,11 +37,9 @@ function send(res, payload) {
 
 function route(handler) {
   return (req, res, next) => {
-    try {
-      return handler(req, res);
-    } catch (error) {
-      return next(error);
-    }
+    return Promise.resolve()
+      .then(() => handler(req, res))
+      .catch(next);
   };
 }
 
@@ -60,6 +67,8 @@ router.post('/api/learning/sessions/:id/skip', route((req, res) => send(res, ser
 router.post('/api/learning/sessions/:id/end', route((req, res) => send(res, service.endSession(req.params.id))));
 
 router.get('/api/learning/reviews/by-key/:eventKey', route((req, res) => send(res, service.getReviewByKey(req.params.eventKey))));
-router.get('/api/learning/items/:id', route((req, res) => send(res, { item: service.getItem(req.params.id) })));
+router.get('/api/learning/items/:id', route(async (req, res) => send(res, {
+  item: await service.getItem(req.params.id),
+})));
 
 module.exports = router;

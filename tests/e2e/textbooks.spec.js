@@ -152,6 +152,56 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await assertContainedDesktop(page);
   });
 
+  test('renders the textbook review answer from canonical annotations', async ({ page, request }) => {
+    const scope = {
+      version: 2,
+      languages: ['en', 'ja'],
+      cardTypes: ['textbook_track'],
+      dateRange: null,
+      tags: [],
+      textbookTrackIds: [publishedTrackId],
+    };
+    const savedPlan = await request.put('/api/learning/plan', {
+      data: {
+        expectedRevision: 0,
+        scope,
+        dailyActionGoal: 20,
+        dailyNewLimit: 4,
+        timeZone: 'Asia/Tokyo',
+      },
+    });
+    expect(savedPlan.ok()).toBeTruthy();
+    const queueResponse = await request.post('/api/learning/queues/today');
+    expect(queueResponse.ok()).toBeTruthy();
+    const queue = (await queueResponse.json()).queue;
+    const sessionResponse = await request.post('/api/learning/sessions', {
+      data: { queueId: queue.id },
+    });
+    expect(sessionResponse.ok()).toBeTruthy();
+    const session = (await sessionResponse.json()).session;
+    const itemResponse = await request.get(
+      `/api/learning/items/${session.currentEntry.studyItemId}`
+    );
+    const item = (await itemResponse.json()).item;
+    expect(item.unitKind).toBe('textbook_en');
+    expect(item.highlightReference).toBeNull();
+    expect(item.annotationReference).toMatchObject({
+      targetKind: 'textbook_track',
+      targetId: publishedTrackId,
+      count: 1,
+      source: 'card_annotations',
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/learn/session');
+    await page.getByRole('button', { name: /揭示答案/ }).click();
+    const answer = page.getByTestId('learning-answer');
+    await expect(answer).toContainText('含个人标红');
+    await expect(answer.locator('mark.study-highlight-red')).toHaveText('Start');
+    await expect(answer.getByRole('button', { name: /查看完整卡片/ })).toHaveCount(0);
+    await request.post(`/api/learning/sessions/${session.id}/end`);
+  });
+
   test('falls back to legacy Track HTML when the annotation feature is disabled', async ({ page }) => {
     await page.route('**/api/annotations?*', async (route) => {
       await route.fulfill({

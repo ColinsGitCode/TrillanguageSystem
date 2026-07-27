@@ -184,6 +184,13 @@ export type StudyItem = {
     playback_url?: string;
   }>;
   highlightReference: { id: number; sourceHash: string; version: number } | null;
+  annotationReference?: {
+    targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
+    targetId: number;
+    targetRevision: string;
+    count: number;
+    source: 'card_annotations';
+  } | null;
 };
 
 export type ManualQueueIntent = {

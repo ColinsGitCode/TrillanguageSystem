@@ -1,5 +1,7 @@
 'use strict';
 
+process.env.CARD_ANNOTATIONS_SHADOW_READ_ENABLED = '0';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { api, resetState, closeServer } = require('./_harness');

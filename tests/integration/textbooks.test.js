@@ -379,6 +379,8 @@ test('verified textbook track publishes textbook study items and creates derivat
   assert.match(item.body.item.answer.markdown, /日本語/);
   assert.equal(item.body.item.audioFiles.length, 1);
   assert.match(item.body.item.audioFiles[0].playback_url, /^\/api\/textbooks\/audio\/\d+\/content$/u);
+  assert.equal(item.body.item.annotationReference, null);
+  assert.equal(item.body.item.highlightReference, null);
 
   const audioId = audioGenerated.track.tts_audio[0].id;
   const audioHead = await api('HEAD', `/api/textbooks/audio/${audioId}/content`);
@@ -423,14 +425,21 @@ test('verified textbook track publishes textbook study items and creates derivat
   const fetchedHighlight = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
   assert.equal(fetchedHighlight.body.highlight.id, savedAnnotation.body.compatibility.highlightId);
   assert.equal(fetchedHighlight.body.highlight.markCount, 1);
+  dbService.db.prepare(`
+    UPDATE card_highlights SET html_content = ?, version = version + 1
+    WHERE id = ?
+  `).run(canonical, fetchedHighlight.body.highlight.id);
   const highlightedItem = await api('GET', `/api/learning/items/${itemId}`);
-  assert.equal(highlightedItem.body.item.highlightReference.id, fetchedHighlight.body.highlight.id);
+  assert.equal(highlightedItem.body.item.highlightReference, null);
+  assert.equal(highlightedItem.body.item.annotationReference.targetKind, 'textbook_track');
+  assert.equal(highlightedItem.body.item.annotationReference.targetId, trackId);
+  assert.equal(highlightedItem.body.item.annotationReference.count, 1);
+  assert.equal(highlightedItem.body.item.annotationReference.source, 'card_annotations');
   assert.match(highlightedItem.body.item.answer.markdown, /study-highlight-red/u);
   await annotationShadowReadService.flush();
   const shadow = annotationShadowReadService.snapshot();
   assert.equal(shadow.byConsumer.textbook.observed, 1);
-  assert.equal(shadow.byConsumer.review.observed, 2);
-  assert.equal(shadow.byConsumer.review.noLegacy, 1);
+  assert.equal(shadow.byConsumer.review, undefined);
   const rejectedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
     body: {
       html: fetchedHighlight.body.highlight.htmlContent.replace(

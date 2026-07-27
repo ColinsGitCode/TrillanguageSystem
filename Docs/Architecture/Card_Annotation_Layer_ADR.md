@@ -1,6 +1,6 @@
 # 学习卡片注解层领域与数据 ADR（CA-D2）
 
-> 状态：**Accepted · CA-P6 教材消费者切换已完成**
+> 状态：**Accepted · CA-P7 Review 消费者切换已完成**
 >
 > 日期：2026-07-27
 >
@@ -492,3 +492,31 @@ HTML：
 
 **下一阶段**：CA-P7 只切换 Review 答案面，让其从规范教材内容和注释直接构建
 显示；在 CA-P7 完成前不得停止 Track HTML compatibility write。
+
+## 17. CA-P7 实施记录（2026-07-27）
+
+本阶段只切换 Review 消费者，Cards Factory、Textbook 与 Review 至此均以
+`card_annotations` 为读取真源；旧 HTML compatibility write 继续保留到
+CA-P8：
+
+- 教材复习答案面不再查询或解析存储的 Track `card_highlights`。服务端使用
+  当前教材 revision 的规范 EN/JA/ZH 内容，叠加当前 `textbook_track` 注释后，
+  只提取目标 expression 的答案片段；
+- 普通卡复习接口不再读取旧 highlight 元数据；只读“查看完整卡片”仍禁止删除
+  和标红，但显示内容改读 `/api/annotations`；
+- `CARD_ANNOTATIONS_ENABLED=0` 时保留原有旧 HTML 读取路径；新接口不可用时
+  CardModal 也会自动回退，因此回滚不需要改数据库；
+- API 新增 `annotationReference` 作为“含个人标红”的新来源标识；
+  `highlightReference` 仅在旧开关路径返回。评分、FSRS、Study Item、Review
+  Event、队列和会话所有权均未修改；
+- 教材答案投影按 expression 统计注释，同一 Track 其它表达的标红不会误报到
+  当前答案面；
+- compatibility write 仍保持开启，本阶段不 DROP `card_highlights`，也不修改
+  卡片 Markdown、教材官方原文或移动端范围。
+
+测试特意将旧 Track HTML 中的标红清空，教材复习接口仍从新注释表恢复标红；
+关闭新开关时旧读取也通过。lint、typecheck、architecture、unit 375/375、
+integration 69/69、桌面 E2E 47/47 全部通过。CA-P8 才评估停止双写、删除旧读
+代码与统计切换。`three_lans_system` viewer/ocr 已重建，四容器运行、health
+online、smoke 7/7；真实教材 Study Item 的只读 API 返回
+`highlightReference: null`，未对真实教材或学习记录执行写操作。

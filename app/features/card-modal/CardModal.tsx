@@ -103,7 +103,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     });
 
     const generationId = cardQuery.data?.record?.id;
-    if (readOnly || !generationId) {
+    if (!generationId) {
       void loadLegacy();
     } else {
       factoryApi.annotations('generation', generationId)

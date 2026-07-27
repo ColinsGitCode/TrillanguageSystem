@@ -184,6 +184,36 @@ test('soft-delete removes the textbook mark from legacy Track HTML', async () =>
   }
 });
 
+test('builds a review expression projection from canonical content and card annotations', async () => {
+  const dbService = new DatabaseService(':memory:');
+  try {
+    const trackId = seedPublishedTrack(dbService);
+    const track = dbService.getTextbookTrack(trackId);
+    const service = new TextbookAnnotationService({
+      dbService,
+      compatWriteEnabled: false,
+    });
+    await service.create(await payload(service, track));
+    const expressionRevisionId = track.expressions[0].id;
+    const projection = await service.expressionProjection(trackId, expressionRevisionId);
+
+    assert.equal(projection.target.targetKind, 'textbook_track');
+    assert.equal(projection.fragments.annotationCount, 1);
+    assert.match(projection.fragments.en, /study-highlight-red/u);
+    assert.match(projection.fragments.en, new RegExp(`data-annotation-id="${ID}"`, 'u'));
+    assert.equal(
+      dbService.getCardHighlightByFile(
+        trackIdentity(track).folderName,
+        trackIdentity(track).baseFilename,
+        trackIdentity(track).sourceHash
+      ),
+      null
+    );
+  } finally {
+    dbService.close();
+  }
+});
+
 test('rolls back textbook annotation when compatibility persistence fails', async () => {
   const dbService = new DatabaseService(':memory:');
   try {

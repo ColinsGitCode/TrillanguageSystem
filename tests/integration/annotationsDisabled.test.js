@@ -1,6 +1,6 @@
 'use strict';
 
-delete process.env.CARD_ANNOTATIONS_ENABLED;
+process.env.CARD_ANNOTATIONS_ENABLED = '0';
 
 const assert = require('node:assert/strict');
 const test = require('node:test');

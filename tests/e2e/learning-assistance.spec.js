@@ -76,7 +76,12 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await page.keyboard.press('Space');
     await expect(page.getByTestId('learning-answer')).toBeVisible();
     await expect(page.getByRole('button', { name: /记住/ })).toBeEnabled();
+    const annotationRead = page.waitForResponse((response) => (
+      response.request().method() === 'GET'
+      && new URL(response.url()).pathname === '/api/annotations'
+    ));
     await page.getByRole('button', { name: /查看完整卡片/ }).click();
+    expect((await annotationRead).ok()).toBeTruthy();
     const readOnlyCard = page.getByTestId('react-card-modal');
     await expect(readOnlyCard.getByText('READ ONLY')).toBeVisible();
     await expect(readOnlyCard.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
