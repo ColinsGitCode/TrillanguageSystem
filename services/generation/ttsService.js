@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 const { normalizeAudioExtension } = require('./audioFormat');
+const { getSharedTtsCoordinator } = require('./ttsRequestCoordinator');
 
 const EN_TTS_ENDPOINT = process.env.TTS_EN_ENDPOINT || process.env.TTS_API_ENDPOINT;
 const JA_TTS_ENDPOINT = process.env.TTS_JA_ENDPOINT || process.env.TTS_API_ENDPOINT;
@@ -61,6 +62,7 @@ async function requestPiperAudio(task) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: task.signal,
   });
 
   if (!response.ok) {
@@ -101,6 +103,7 @@ async function requestOpenAiSpeechAudio(task) {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
+    signal: task.signal,
   });
 
   if (!response.ok) {
@@ -130,13 +133,15 @@ async function requestVoicevoxAudio(task) {
   queryUrl.searchParams.set('text', task.text);
   queryUrl.searchParams.set('speaker', String(speaker));
 
-  const queryRes = await fetch(queryUrl, { method: 'POST' });
+  const queryRes = await fetch(queryUrl, { method: 'POST', signal: task.signal });
   if (!queryRes.ok) {
     const errText = await queryRes.text().catch(() => '');
     throw new Error(`VOICEVOX audio_query 失败: ${queryRes.status} ${errText}`.trim());
   }
 
   const queryJson = await queryRes.json();
+  const speed = Number(task.speed);
+  if (Number.isFinite(speed) && speed > 0) queryJson.speedScale = speed;
   const synthUrl = new URL(`${baseUrl}/synthesis`);
   synthUrl.searchParams.set('speaker', String(speaker));
 
@@ -144,6 +149,7 @@ async function requestVoicevoxAudio(task) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(queryJson),
+    signal: task.signal,
   });
 
   if (!synthRes.ok) {
@@ -197,7 +203,7 @@ async function requestStyleBertVits2Audio(task) {
   addOptionalSearchParam(voiceUrl, 'language', task.language || 'JP');
   addOptionalSearchParam(voiceUrl, 'length', task.length);
 
-  const response = await fetch(voiceUrl, { method: 'POST' });
+  const response = await fetch(voiceUrl, { method: 'POST', signal: task.signal });
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
     throw new Error(`Style-Bert-VITS2 请求失败: ${response.status} ${errText}`.trim());
@@ -237,6 +243,68 @@ async function requestJapaneseAudio(task) {
   throw new Error(`未支持的日语 TTS 类型: ${JA_TTS_TYPE}`);
 }
 
+function getSynthesisIdentity(task = {}) {
+  const language = task.language || task.lang;
+  if (language === 'en') {
+    const responseFormat = normalizeAudioExtension(task.response_format || task.extension, 'en');
+    return {
+      language,
+      provider: EN_TTS_TYPE === 'openai' ? 'openai' : EN_TTS_TYPE,
+      model: task.model || EN_TTS_MODEL,
+      voice: task.voice || EN_DEFAULT_VOICE || 'af_bella',
+      format: responseFormat,
+    };
+  }
+  if (language === 'ja') {
+    const speaker = Number(task.speaker || task.voice || JA_DEFAULT_SPEAKER);
+    return {
+      language,
+      provider: JA_TTS_TYPE,
+      model: JA_TTS_TYPE === 'voicevox'
+        ? 'voicevox'
+        : (task.model_name || task.modelName || JA_SBV2_MODEL_NAME || `model:${JA_SBV2_MODEL_ID || '0'}`),
+      voice: JA_TTS_TYPE === 'voicevox'
+        ? `speaker:${speaker}`
+        : resolveStyleBertVits2Voice({
+          speakerId: task.speaker_id || task.speakerId || JA_SBV2_SPEAKER_ID,
+          speakerName: task.speaker_name || task.speakerName || JA_SBV2_SPEAKER_NAME,
+          style: task.style || JA_SBV2_STYLE,
+        }),
+      format: 'wav',
+    };
+  }
+  throw new Error(`未支持的语言: ${language}`);
+}
+
+async function synthesizeSpeech(task, options = {}) {
+  const language = task.language || task.lang;
+  const requestClass = options.requestClass === 'interactive' ? 'interactive' : 'batch';
+  const signal = options.signal || task.signal;
+  const coordinator = options.coordinator || getSharedTtsCoordinator();
+  return coordinator.run(async ({ queueWaitMs, contended }) => {
+    let response;
+    const providerTask = { ...task, lang: language, language, signal };
+    if (language === 'ja') {
+      response = await requestJapaneseAudio(providerTask);
+    } else if (language === 'en') {
+      if (EN_TTS_TYPE === 'piper') {
+        response = await requestPiperAudio(providerTask);
+      } else if (EN_TTS_TYPE === 'kokoro' || EN_TTS_TYPE === 'openai') {
+        response = await requestOpenAiSpeechAudio(providerTask);
+      } else {
+        throw new Error(`未支持的英文 TTS 类型: ${EN_TTS_TYPE}`);
+      }
+    } else {
+      throw new Error(`未支持的语言: ${language}`);
+    }
+    return {
+      ...response,
+      queueWaitMs,
+      contended,
+    };
+  }, { requestClass, signal });
+}
+
 async function generateAudioBatch(tasks, options) {
   const results = [];
   const errors = [];
@@ -253,20 +321,7 @@ async function generateAudioBatch(tasks, options) {
   for (let i = 0; i < tasks.length; i += 1) {
     const task = tasks[i];
     try {
-      let response;
-      if (task.lang === 'ja') {
-        response = await requestJapaneseAudio(task);
-      } else if (task.lang === 'en') {
-        if (EN_TTS_TYPE === 'piper') {
-          response = await requestPiperAudio(task);
-        } else if (EN_TTS_TYPE === 'kokoro' || EN_TTS_TYPE === 'openai') {
-          response = await requestOpenAiSpeechAudio(task);
-        } else {
-          throw new Error(`未支持的英文 TTS 类型: ${EN_TTS_TYPE}`);
-        }
-      } else {
-        throw new Error(`未支持的语言: ${task.lang}`);
-      }
+      const response = await synthesizeSpeech(task, { requestClass: 'batch' });
 
       const { buffer, contentType } = response;
       const resolvedExtension = normalizeAudioExtension(task.extension, task.lang) || extension;
@@ -296,4 +351,8 @@ async function generateAudioBatch(tasks, options) {
   return { results, errors };
 }
 
-module.exports = { generateAudioBatch };
+module.exports = {
+  generateAudioBatch,
+  getSynthesisIdentity,
+  synthesizeSpeech,
+};

@@ -8,6 +8,7 @@ import {
   type WorkflowStage,
 } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
+import { claimExclusiveAudio, releaseExclusiveAudio, useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import {
   buildAnnotatedTextbookHighlightDocument,
   buildTextbookHighlightDocument,
@@ -44,7 +45,8 @@ export function TextbookCoursesPage() {
   const queryClient = useQueryClient();
   const route = useTextbookWorkflowRoute();
   const officialAudioRef = useRef<HTMLAudioElement | null>(null);
-  const generatedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const generatedAudio = useExclusiveAudio();
+  const officialAudioOwnerRef = useRef(Symbol('official-track-audio'));
   const [search, setSearch] = useState('');
   const [intakeMessage, setIntakeMessage] = useState('');
   const [derivationMessage, setDerivationMessage] = useState('');
@@ -135,7 +137,8 @@ export function TextbookCoursesPage() {
   }, [operationQuery.data?.operation, queryClient, route]);
   useEffect(() => () => {
     officialAudioRef.current?.pause();
-    generatedAudioRef.current?.pause();
+    releaseExclusiveAudio(officialAudioOwnerRef.current);
+    generatedAudio.stop();
   }, []);
 
   const dryRunMutation = useMutation({
@@ -261,10 +264,7 @@ export function TextbookCoursesPage() {
   }, [route.taskId, track?.expressions, workflow?.review.tasks]);
   const playGenerated = (url: string) => {
     officialAudioRef.current?.pause();
-    generatedAudioRef.current?.pause();
-    const media = new Audio(url);
-    generatedAudioRef.current = media;
-    void media.play();
+    void generatedAudio.playUrl(url);
   };
   const navigateStage = (stage: WorkflowStage) => {
     const available = stages.find((item) => item.id === stage && item.state !== 'locked');
@@ -278,7 +278,18 @@ export function TextbookCoursesPage() {
           <section className="surface textbook-disabled"><h1>教材功能未开启</h1><p>设置 `TEXTBOOK_FEATURE_ENABLED=true` 后重启服务。</p></section>
         ) : (
           <>
-            <TextbookWorkflowHeader workflow={workflow} officialAudio={audio} audioRef={officialAudioRef} onOfficialAudioPlay={() => generatedAudioRef.current?.pause()} />
+            <TextbookWorkflowHeader
+              workflow={workflow}
+              officialAudio={audio}
+              audioRef={officialAudioRef}
+              onOfficialAudioPlay={() => {
+                generatedAudio.stop();
+                const element = officialAudioRef.current;
+                if (element) {
+                  claimExclusiveAudio(officialAudioOwnerRef.current, () => element.pause());
+                }
+              }}
+            />
             <TextbookIntakeTools
               search={search}
               results={searchQuery.data?.results || []}

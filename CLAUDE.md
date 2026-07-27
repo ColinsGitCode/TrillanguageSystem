@@ -15,6 +15,7 @@ Current runtime capabilities:
 - DB-backed generation queue, retry, recovery, and audit events;
 - folder/card browsing, history, deletion, and highlights;
 - card modal with CONTENT and INTEL;
+- desktop CardModal English/Japanese selection read-aloud with conservative language confirmation, three speeds, retry, exclusive cross-surface playback, and an isolated ephemeral cache;
 - generation observability and infrastructure health;
 - Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics;
 - Textbook Courses TC-P4: Git-external draft Manifest import, textbook search, controlled official Track audio streaming, `/textbooks` desktop review page, persisted selection highlights, human verification, explicit Track publishing to `textbook_track` generation projections, formal English/Japanese per-expression TTS assets, `textbook_en/ja` Study Items, learning plan scope v2, review item view-models, history filters, textbook selection card derivation, full desktop E2E/visual acceptance, and documented backup/recovery.
@@ -76,6 +77,7 @@ Active route modules:
 - routes/history.js: history, statistics, search, recent, record detail;
 - routes/health.js: /api/health;
 - routes/ocr.js: /api/ocr;
+- routes/selectionTts.js: `GET/POST /api/tts/selection` config discovery and immediate English/Japanese binary synthesis;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
 - routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, explicit publish, persisted highlights, selection derivation jobs, official audio content, and generated per-expression TTS content, feature-flagged on by default for TC-P4;
@@ -97,6 +99,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         japaneseFurigana.js
         markdownParser.js
         promptEngine.js
+        ttsRequestCoordinator.js
         ttsService.js
       llm/
         deepseekService.js
@@ -108,6 +111,10 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         statisticsService.js
       ocr/
         tesseractOcrService.js
+      selectionTts/
+        selectionTtsCache.js
+        selectionTtsErrors.js
+        selectionTtsService.js
       learning/
         application/
           learningService.js
@@ -161,6 +168,9 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - English TTS: Kokoro, MP3.
 - Japanese TTS: VOICEVOX, WAV.
 - Style-Bert-VITS2 is archived behind an opt-in Compose profile because resource cost exceeded its practical quality gain.
+- Selection TTS is a desktop-only, on-demand English/Japanese tool. It calls the same Kokoro/VOICEVOX providers through `synthesizeSpeech()` and the shared priority coordinator; interactive work enters before waiting batch work, while a 5-second anti-starvation window preserves batch progress.
+- `GET /api/tts/selection` exposes only controlled client configuration. `POST /api/tts/selection` returns immediate binary audio with provider/cache metadata; it must not create `audio_files`, generations, annotations, KG facts, Study Items, Review Events, or FSRS state.
+- Selection TTS cache is an opaque-hash, TTL-bounded named volume at `three_lans_system_selection_tts_cache`. It is outside SQLite, `RECORDS_PATH`, textbook media, and `express.static`; cache write failure must degrade to `X-TTS-Cache: BYPASS` while still returning successful provider audio.
 
 Provider errors use structured Error.code, Error.status, and Error.payload. Do not classify by matching message text.
 
@@ -203,6 +213,12 @@ Active files:
 The shell has Cards Factory plus the Learning Workbench. User-visible learning routes are `/learn`, `/learn/plan`, `/learn/session`, and `/learn/history`; the review session is entered from today learning rather than treated as a sidebar destination. The card library is part of Cards Factory, not a separate route.
 
 `marked`, `DOMPurify`, React Query and Lucide are production npm dependencies bundled into hashed local assets. Card rendering must preserve the Markdown -> audio/ruby adapter -> DOMPurify pipeline.
+
+`app/lib/audio/exclusive-audio.ts` is the single browser playback owner shared by CardModal,
+Textbook Courses and Review Session. Starting any managed audio stops the previous managed
+audio; selection change, navigation and unmount must abort unfinished selection synthesis,
+stop playback and revoke Blob URLs. Selection TTS keyboard behavior must close its language
+confirmation before closing the surrounding selection toolbar and must restore focus.
 
 ## Persistence
 

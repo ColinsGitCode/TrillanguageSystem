@@ -1,8 +1,8 @@
 # 朗读选区 TTS 产品与技术设计（ST-D0）
 
-> 状态：**Draft · 待评审，不授权实施**
+> 状态：**Accepted · ST-01–ST-37 已实施并验收**
 >
-> 日期：2026-07-27；首次技术复审修订：2026-07-27
+> 日期：2026-07-27；技术复审、用户确认与完整实施：2026-07-27
 >
 > 产品范围：桌面端学习卡片中的英文 / 日文选区按需朗读
 >
@@ -82,7 +82,7 @@ v1 明确不做：
 - 教材课程已经验证官方 Track 与生成 TTS 互斥；
 - 当前运行模型是英语 Kokoro、日语 VOICEVOX；SBV2 仅保留为 archived profile。
 
-### 3.2 缺口
+### 3.2 实施前缺口（现已关闭）
 
 - 没有通用的“文本 → 即时音频”HTTP 接口；
 - `generateAudioBatch()` 强制要求输出目录和文件名，不适合即时二进制响应；
@@ -209,11 +209,12 @@ normalized ruby-free 可见文字。不得使用包含 `<rt>` 注音或 HTML 的
 新增独立 route：
 
 ```text
+GET /api/tts/selection
 POST /api/tts/selection
 ```
 
 挂载到 `lib/httpRuntime.createApp()`。不得挂进 annotations、files、textbooks 或
-learning route。
+learning route。GET 只返回是否启用、支持语言、速度和最大长度；POST 才执行合成。
 
 ### 6.2 Request
 
@@ -300,7 +301,7 @@ synthesizeSpeech({
 新增：
 
 ```text
-services/tts/selectionTtsService.js
+services/selectionTts/selectionTtsService.js
 ```
 
 职责：
@@ -344,6 +345,12 @@ route 只负责 HTTP 映射、headers 和 error envelope，不直接请求 TTS p
 
 ST-P0 必须写明选择哪种策略以及可接受延迟。完成该门禁前，15 秒 timeout 和
 最大并发 2 都只是待验证建议值，不是 Accepted 参数。
+
+ST-P0 实测后采用**进程内共享协调器**：交互请求优先进入下一执行位，已经开始的
+provider 请求不中断，批量任务等待 5 秒后获得一次执行机会。真实 Compose 争用
+测试中，6/6 个交互请求成功，p50 为 1,891 ms、p95/max 为 2,923 ms；40 个批量
+任务 40/40 成功。因此接受 15 秒 timeout、共享最大并发 2 和 600 ms 忙碌提示，
+不增加第二套 TTS 容量。
 
 ## 8. 独立缓存
 
@@ -422,13 +429,13 @@ CardModal 中“预生成例句音频”和“朗读选区”必须共享一个�
   HTTP 请求；
 - 失败不清除用户文字选区。
 
-推荐抽出：
+已抽出：
 
 ```text
-app/lib/useExclusiveAudioPlayback.ts
+app/lib/audio/exclusive-audio.ts
 ```
 
-v1 先由 CardModal 使用。
+CardModal 首先完成验收，随后 Textbook Courses 与 Review Session 迁移复用。
 
 ### 9.2 后续横向接入
 
@@ -453,11 +460,13 @@ SELECTION_TTS_CACHE_MAX_BYTES=268435456
 
 阶段规则：
 
-1. ST-P0 / P1 期间代码和 Compose 默认关闭；
-2. 隔离测试通过后只在本地 Compose 开启；
-3. 真实 Kokoro / VOICEVOX smoke、桌面 E2E 和缓存清理验收通过后，才决定是否把
-   本地默认值改为开启；
+1. 代码和 `.env.example` 的安全默认值保持关闭；
+2. 本地 Compose 在 ST-P4 完整验收后默认开启；
+3. 真实 Kokoro / VOICEVOX smoke、桌面 E2E、缓存清理和零业务写入均已通过；
 4. 关闭 flag 后工具条隐藏朗读按钮，其它 CA-I1 功能保持不变。
+
+实现额外提供只读 `GET /api/tts/selection` 配置发现接口，让前端在 flag 关闭时
+稳定隐藏入口；`POST /api/tts/selection` 仍是二进制合成接口。
 
 ## 11. 安全、隐私与可观测性
 
@@ -555,60 +564,60 @@ SELECTION_TTS_CACHE_MAX_BYTES=268435456
 
 ### Gate 0：基线与防回归（4 项）
 
-- [ ] ST-01 记录当前 CardModal 例句播放、教材音频与 Review 播放测试基线；
-- [ ] ST-02 固化 annotation / KG / learning 表只读哈希检查；
-- [ ] ST-03 为英语 Kokoro、日语 VOICEVOX 建立隔离 provider fixture；
-- [ ] ST-04 记录 Compose volume、健康状态和回滚步骤。
+- [x] ST-01 记录当前 CardModal 例句播放、教材音频与 Review 播放测试基线；
+- [x] ST-02 固化 annotation / KG / learning 表只读哈希检查；
+- [x] ST-03 为英语 Kokoro、日语 VOICEVOX 建立隔离 provider fixture；
+- [x] ST-04 记录 Compose volume、健康状态和回滚步骤。
 
 ### ST-P0：无文件合成与争用 POC（6 项）
 
-- [ ] ST-05 从 `ttsService.js` 抽出 `synthesizeSpeech()`；
-- [ ] ST-06 让 `generateAudioBatch()` 复用新函数并保持原测试全绿；
-- [ ] ST-07 补 Kokoro buffer / metadata 合同测试；
-- [ ] ST-08 补 VOICEVOX buffer / speedScale / metadata 合同测试；
-- [ ] ST-09 真实英日短句 POC，确认空闲状态首包耗时与音频格式；
-- [ ] ST-10 在场景卡最多 40 条批量 TTS 生成期间测量选区朗读，并确认共享争用
+- [x] ST-05 从 `ttsService.js` 抽出 `synthesizeSpeech()`；
+- [x] ST-06 让 `generateAudioBatch()` 复用新函数并保持原测试全绿；
+- [x] ST-07 补 Kokoro buffer / metadata 合同测试；
+- [x] ST-08 补 VOICEVOX buffer / speedScale / metadata 合同测试；
+- [x] ST-09 真实英日短句 POC，确认空闲状态首包耗时与音频格式；
+- [x] ST-10 在场景卡最多 40 条批量 TTS 生成期间测量选区朗读，并确认共享争用
       策略、timeout、并发和用户忙碌提示。
 
 ### ST-P1：独立 API 与缓存（8 项）
 
-- [ ] ST-11 新增 server config 与默认关闭的 feature flag；
-- [ ] ST-12 新增 `SelectionTtsService` 输入校验和 provider 调用；
-- [ ] ST-13 实现 cache key、原子写、TTL、空间清理与写失败 BYPASS；
-- [ ] ST-14 实现最大并发、同 key Promise 合并和 ST-P0 确认的共享争用策略；
-- [ ] ST-15 实现 timeout、abort 与响应大小限制；
-- [ ] ST-16 新增 `routes/selectionTts.js` 与 binary headers；
-- [ ] ST-17 挂载 `httpRuntime` 并补 API-only integration harness；
-- [ ] ST-18 新增 Compose 独立 cache volume 与 `.env.example`。
+- [x] ST-11 新增 server config 与默认关闭的 feature flag；
+- [x] ST-12 新增 `SelectionTtsService` 输入校验和 provider 调用；
+- [x] ST-13 实现 cache key、原子写、TTL、空间清理与写失败 BYPASS；
+- [x] ST-14 实现最大并发、同 key Promise 合并和 ST-P0 确认的共享争用策略；
+- [x] ST-15 实现 timeout、abort 与响应大小限制；
+- [x] ST-16 新增 `routes/selectionTts.js` 与 binary headers；
+- [x] ST-17 挂载 `httpRuntime` 并补 API-only integration harness；
+- [x] ST-18 新增 Compose 独立 cache volume 与 `.env.example`。
 
 ### ST-P2：CardModal UI（8 项）
 
-- [ ] ST-19 增加工具条朗读图标和 tooltip；
-- [ ] ST-20 实现语言推断与纯汉字确认浮层；
-- [ ] ST-21 实现 0.8× / 1.0× / 1.2× 语速控件；
-- [ ] ST-22 实现 loading / playing / ready / error / retry 状态；
-- [ ] ST-23 实现 fetch Blob、abort 与 Blob URL 清理；
-- [ ] ST-24 抽出 CardModal 独占播放 hook；
-- [ ] ST-25 纳入工具条键盘导航、Escape 与焦点恢复；
-- [ ] ST-26 覆盖 editable / readOnly、亮色 / 暗色桌面状态。
+- [x] ST-19 增加工具条朗读图标和 tooltip；
+- [x] ST-20 实现语言推断与纯汉字确认浮层；
+- [x] ST-21 实现 0.8× / 1.0× / 1.2× 语速控件；
+- [x] ST-22 实现 loading / playing / ready / error / retry 状态；
+- [x] ST-23 实现 fetch Blob、abort 与 Blob URL 清理；
+- [x] ST-24 抽出 CardModal 独占播放 hook；
+- [x] ST-25 纳入工具条键盘导航、Escape 与焦点恢复；
+- [x] ST-26 覆盖 editable / readOnly、亮色 / 暗色桌面状态。
 
 ### ST-P3：播放互斥与横向复用（5 项）
 
-- [ ] ST-27 验证选区朗读与卡片例句音频互斥；
-- [ ] ST-28 评估 Textbook Courses 迁移到共享 audio hook；
-- [ ] ST-29 评估 Review Session 迁移到共享 audio hook；
-- [ ] ST-30 保证教材官方 Track 与系统 TTS 来源标识不混淆；
-- [ ] ST-31 补跨页面切换、卸载和后台活动回归。
+- [x] ST-27 验证选区朗读与卡片例句音频互斥；
+- [x] ST-28 评估 Textbook Courses 迁移到共享 audio hook；
+- [x] ST-29 评估 Review Session 迁移到共享 audio hook；
+- [x] ST-30 保证教材官方 Track 与系统 TTS 来源标识不混淆；
+- [x] ST-31 补跨页面切换、卸载和后台活动回归。
 
 ### ST-P4：验收与发布（6 项）
 
-- [ ] ST-32 跑 lint、typecheck、unit、integration、architecture；
-- [ ] ST-33 跑全量 desktop E2E、visual 与 smoke；
-- [ ] ST-34 重建 `three_lans_system` 并做真实英日 TTS smoke；
-- [ ] ST-35 验证批量场景卡生成中的选区延迟、MISS → HIT、BYPASS、缓存清理和
+- [x] ST-32 跑 lint、typecheck、unit、integration、architecture；
+- [x] ST-33 跑全量 desktop E2E、visual 与 smoke；
+- [x] ST-34 重建 `three_lans_system` 并做真实英日 TTS smoke；
+- [x] ST-35 验证批量场景卡生成中的选区延迟、MISS → HIT、BYPASS、缓存清理和
       独立 volume；
-- [ ] ST-36 验证真实 SQLite / records / annotation / KG / learning 零写入；
-- [ ] ST-37 写验收报告、运行手册并更新 Docs 索引。
+- [x] ST-36 验证真实 SQLite / records / annotation / KG / learning 零写入；
+- [x] ST-37 写验收报告、运行手册并更新 Docs 索引。
 
 ## 14. 回滚
 
@@ -634,28 +643,59 @@ SELECTION_TTS_ENABLED=0
 
 进入实施前必须确认：
 
-- [ ] v1 仅支持英文和日文，不支持中文；
-- [ ] 纯汉字不自动判断语言；
-- [ ] 使用 0.8× / 1.0× / 1.2× 三档语速；
-- [ ] v1 使用服务端固定音色，不开放任意音色；
-- [ ] API 返回即时二进制，不创建 `audio_files`；
-- [ ] 缓存使用独立 volume，不使用 SQLite；
-- [ ] 不记录完整选区文本；
-- [ ] annotation、KG、learning 与 FSRS 零写入；
-- [ ] CardModal 是第一个正式消费者；
-- [ ] Textbook / Review 只在 CardModal 验收后迁移播放 hook；
-- [ ] 正式范围仅为桌面端；
-- [ ] ST-P0 已测量场景卡批量生成期间的 TTS 争用，并确认共享争用策略与最终参数；
-- [ ] 本文经用户确认后，状态才可翻为 Accepted。
+- [x] v1 仅支持英文和日文，不支持中文；
+- [x] 纯汉字不自动判断语言；
+- [x] 使用 0.8× / 1.0× / 1.2× 三档语速；
+- [x] v1 使用服务端固定音色，不开放任意音色；
+- [x] API 返回即时二进制，不创建 `audio_files`；
+- [x] 缓存使用独立 volume，不使用 SQLite；
+- [x] 不记录完整选区文本；
+- [x] annotation、KG、learning 与 FSRS 零写入；
+- [x] CardModal 是第一个正式消费者；
+- [x] Textbook / Review 只在 CardModal 验收后迁移播放 hook；
+- [x] 正式范围仅为桌面端；
+- [x] ST-P0 已测量场景卡批量生成期间的 TTS 争用，并确认共享争用策略与最终参数；
+- [x] 本文经用户确认后，状态才可翻为 Accepted。
 
-## 16. 推荐结论
+## 16. 最终结论
 
-建议按本文执行，但先只进入 ST-P0：
+ST-01–ST-37 已按本文全部实施，真实英日 TTS、40 条批量争用、缓存
+MISS/HIT/BYPASS/清理、桌面交互、播放互斥、容器重建和零业务写入均已验收。
 
-1. 先把现有 provider 请求抽成“不写文件的合成函数”；
-2. 用真实 Kokoro / VOICEVOX 测量短词、短句和 200 字符上限的空闲延迟与资源；
-3. 在一张场景卡生成最多 40 条语音时重复同一组测量，确认跨业务争用策略；
-4. POC 通过后再确定缓存 TTL、并发和 timeout 的最终值；
-5. 在 ST-P1 以前不改 CardModal。
+权威运行记录：
 
-这样先验证最关键的技术承重面，不会把未验证的延迟和资源假设提前带进 UI。
+- [ST-P4 验收报告](../TestReports/Selection_TTS_ST_P4_Acceptance_20260727.md)；
+- [朗读选区 TTS 运行手册](../Operations/Selection_TTS_Runbook.md)。
+
+后续中文 TTS、ASR、发音评分或移动端能力不得隐式扩入本基线，必须重新立项。
+
+## 17. 实施记录
+
+### 17.1 Gate 0
+
+- 实施前基线：unit 372/372、integration 62/62、lint/typecheck 通过；
+- 已有 CardModal、Textbook Courses 与 Review Session 播放路径已记录；
+- `selectionTtsDataIntegrity.js` 固化 SQLite 业务表与 records 内容级只读 hash；
+- 回滚不需要数据库 downgrade，仅关闭 feature flag 和重建 viewer。
+
+### 17.2 ST-P0 / P1
+
+- provider 层保留内存 buffer 与元数据，文件写入仍只属于 batch 层；
+- VOICEVOX 三档速度已映射为 `speedScale`；
+- 新增共享优先级协调器、独立 Selection TTS service、route 与缓存；
+- 缓存写失败使用 `BYPASS`，不会把成功音频变成失败；
+- 独立 volume 为 `three_lans_system_selection_tts_cache`。
+
+### 17.3 ST-P2 / P3
+
+- CardModal 完成保守语言推断、纯汉字确认、速度、播放状态与错误重试；
+- 语言确认框支持首焦点、`Escape` 关闭和焦点恢复；
+- CardModal、Textbook Courses 和 Review Session 迁移到共享独占播放 owner；
+- 教材官方 Track 与系统 TTS 的来源标识保持独立。
+
+### 17.4 ST-P4
+
+- 最终 unit 391/391、integration 65/65、desktop E2E/visual 53/53；
+- lint、typecheck、architecture/build、smoke 7/7、npm audit high 全部通过；
+- `three_lans_system` 已用最终源码重建，真实 health 与英日 API smoke 通过；
+- 真实 SQLite 与 records 在全部运行测试前后保持内容 hash 一致。

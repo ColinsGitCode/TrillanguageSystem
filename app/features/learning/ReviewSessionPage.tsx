@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
 import { ErrorSummary, SaveStatus, type WorkflowError } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
+import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { CardModal } from '../card-modal/CardModal';
 import { renderCardMarkdown } from '../card-modal/markdown';
 import type { CardSelection } from '../factory/types';
@@ -48,20 +49,22 @@ function SessionSummary({ session, onBack }: { session: LearningSession; onBack:
 
 function LearningAnswer({ item }: { item: StudyItem }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playback = useExclusiveAudio();
   const renderCardType = item.source.cardType === 'textbook_track' ? 'trilingual' : item.source.cardType;
   const renderedHtml = useMemo(() => renderCardMarkdown(item.answer.markdown, renderCardType, item.source.folder), [item.answer.markdown, item.source.folder, renderCardType]);
 
-  useEffect(() => () => audioRef.current?.pause(), []);
-
   const playSource = (source: string, button?: HTMLElement, playbackUrl?: string) => {
-    audioRef.current?.pause();
+    playback.stop();
     containerRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
-    const audio = new Audio(playbackUrl || `/api/folders/${encodeURIComponent(item.source.folder)}/files/${encodeURIComponent(source)}`);
-    audioRef.current = audio;
     button?.classList.add('is-playing');
-    audio.addEventListener('ended', () => button?.classList.remove('is-playing'), { once: true });
-    audio.play().catch(() => button?.classList.remove('is-playing'));
+    void playback.playUrl(
+      playbackUrl || `/api/folders/${encodeURIComponent(item.source.folder)}/files/${encodeURIComponent(source)}`,
+      {
+        onEnded: () => button?.classList.remove('is-playing'),
+        onError: () => button?.classList.remove('is-playing'),
+        onStop: () => button?.classList.remove('is-playing'),
+      }
+    ).catch(() => button?.classList.remove('is-playing'));
   };
 
   return (

@@ -28,10 +28,12 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；CA-R1 真实数据只读观察已通过；CA-I1 已补齐四色标记、取消标记、复制、显式确认的 KG 查询和键盘选区；本文不授权修改卡片正文；
-- Features/Selection_TTS_Product_and_Technical_Design.md：朗读选区 TTS 的 **Draft** 产品与技术设计。定义 CardModal 英日按需朗读、语言确认、三档语速、即时二进制 API、独立缓存 volume、播放互斥、零 annotation/KG/learning/FSRS 写入边界，以及场景卡批量 TTS 争用门禁和 Gate 0–ST-P4 共 37 项开发任务；当前未授权实施；
+- Features/Selection_TTS_Product_and_Technical_Design.md：**Accepted 且已实施**的朗读选区 TTS 产品与技术基线。ST-01–ST-37 已全部完成：CardModal 支持英日按需朗读、保守语言确认、三档语速、失败重试和键盘焦点恢复；服务端提供即时二进制 API、共享优先级协调器与独立缓存 volume；CardModal、教材和复习音频使用共享独占播放 owner，并已验证 annotation/KG/learning/FSRS 与 records 零写入；
+- Operations/Selection_TTS_Runbook.md：朗读选区 TTS 的启停、配置、Kokoro/VOICEVOX 故障诊断、缓存 MISS/HIT/BYPASS、争用行为、缓存清理和无数据库 downgrade 回滚手册；
+- TestReports/Selection_TTS_ST_P4_Acceptance_20260727.md：ST-P4 最终验收报告，记录真实英日 TTS、40 条批量争用、缓存、零业务写入、391 单元/65 集成/53 桌面 E2E 与最终 Compose 健康状态；
 - Architecture/Card_Annotation_Layer_ADR.md：**Accepted** 的卡片注解层技术权威。定义稳定实体身份、`card-visible-text-v1`、UTF-16 W3C quote/position selector、表 53–54 和 CA-P3–P8 迁移顺序；CA-P8 后运行时只读写 `card_annotations`，CA-R1 已验证规范 API 与冻结审计边界，CA-I1 在不改 schema 的前提下完成桌面交互层，`card_highlights` 是否 DROP 仍必须另开 ADR；
 - TestReports/Card_Annotation_CA_R1_Observation_20260727.md：CA-R1 规范注解层真实 Compose/SQLite 只读观察报告；记录 27 active、1 orphaned、11 条冻结旧快照、退役 API 404、两次状态哈希一致和全量工程门禁，结论为 PASS 且不授权 DROP 旧表；
-- TestReports/Card_Annotation_CA_I1_Acceptance_20260727.md：CA-I1 桌面交互补齐验收报告；记录四色标记、改色/软删除、复制、显式确认的 KG 查询、键盘选区与真实页面无溢出检查，结论为 PASS，任意选区 TTS 仍未纳入；
+- TestReports/Card_Annotation_CA_I1_Acceptance_20260727.md：CA-I1 桌面交互补齐验收报告；记录四色标记、改色/软删除、复制、显式确认的 KG 查询、键盘选区与真实页面无溢出检查，结论为 PASS；其中当时尚未纳入的任意选区 TTS 已由后续 ST-P4 正式补齐；
 - Features/Learning_Assistance_2_0_Design_Baseline.md：学习计划与复习 2.0 当前正式产品设计基线；
 - Features/Learning_Assistance_2_0_Product_Definition.md：已确认的 LA-D0 用户任务、产品术语、回忆方向、学习单元、计划/队列/评分策略与成功指标（含 §15.1 LA-D1 原型确认记录）；
 - Features/prototypes/la-d1-prototype.html：已确认的 LA-D1 桌面端 12 页可视化原型（浏览器直接打开）；

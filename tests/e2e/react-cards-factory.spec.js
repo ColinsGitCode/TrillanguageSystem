@@ -463,6 +463,191 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(box.x + box.width).toBeLessThanOrEqual(1272);
   });
 
+  test('ST-P2 reads an English selection with speed control and exclusive playback', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__selectionAudio = { created: 0, paused: 0, played: 0 };
+      class FakeAudio extends EventTarget {
+        constructor(src) {
+          super();
+          this.src = src;
+          this.paused = true;
+          window.__selectionAudio.created += 1;
+        }
+        play() {
+          this.paused = false;
+          window.__selectionAudio.played += 1;
+          return Promise.resolve();
+        }
+        pause() {
+          if (!this.paused) window.__selectionAudio.paused += 1;
+          this.paused = true;
+        }
+        removeAttribute() {}
+        load() {}
+      }
+      window.Audio = FakeAudio;
+      URL.createObjectURL = () => `blob:selection-${Date.now()}`;
+      URL.revokeObjectURL = () => {};
+    });
+    const requests = [];
+    await page.route('**/api/tts/selection', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
+      }
+      requests.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        body: Buffer.from('fixture-audio'),
+        headers: {
+          'content-type': 'audio/mpeg',
+          'x-tts-cache': requests.length > 1 ? 'HIT' : 'MISS',
+          'x-tts-provider': 'fixture',
+          'x-tts-model': 'fixture-model',
+          'x-tts-voice': 'fixture-voice',
+          'x-tts-contended': '0',
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'E2E');
+    await page.getByRole('button', { name: '朗读选区' }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toMatchObject({ text: 'E2E', language: 'en', speed: 1 });
+    await expect(page.getByRole('button', { name: '停止朗读' })).toBeVisible();
+    await page.getByRole('button', { name: '停止朗读' }).click();
+    await page.getByLabel('朗读速度').selectOption('0.8');
+    await page.getByRole('button', { name: '朗读选区' }).click();
+    await expect.poll(() => requests.length).toBe(2);
+    expect(requests[1]).toMatchObject({ speed: 0.8 });
+    await expect.poll(() => page.evaluate(() => window.__selectionAudio.played)).toBe(2);
+    expect(await page.evaluate(() => window.__selectionAudio)).toMatchObject({
+      created: 2,
+      played: 2,
+      paused: 1,
+    });
+  });
+
+  test('ST-P2 requires explicit language for kanji and aborts stale selection work', async ({ page }) => {
+    let requestCount = 0;
+    await page.route('**/api/tts/selection', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
+      }
+      requestCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, requestCount === 1 ? 500 : 0));
+      return route.fulfill({
+        status: 200,
+        body: Buffer.from('fixture-wav'),
+        headers: {
+          'content-type': 'audio/wav',
+          'x-tts-cache': 'MISS',
+          'x-tts-provider': 'voicevox',
+          'x-tts-model': 'voicevox',
+          'x-tts-voice': 'speaker:2',
+        },
+      }).catch(() => {});
+    });
+    await page.addInitScript(() => {
+      class FakeAudio extends EventTarget {
+        constructor(src) { super(); this.src = src; this.paused = true; }
+        play() { this.paused = false; return Promise.resolve(); }
+        pause() { this.paused = true; }
+        removeAttribute() {}
+        load() {}
+      }
+      window.Audio = FakeAudio;
+      URL.createObjectURL = () => `blob:selection-${Date.now()}`;
+      URL.revokeObjectURL = () => {};
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await selectVisibleText(page, '昨夜', { keyboard: true });
+    await page.getByRole('button', { name: '朗读选区' }).click();
+    const confirmation = page.getByRole('dialog', { name: '选择朗读语言' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: '日本語' }).click();
+    await expect.poll(() => requestCount).toBe(1);
+    await selectVisibleText(page, 'そうです');
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', 'そうです');
+    await page.getByRole('button', { name: '朗读选区' }).click();
+    await expect.poll(() => requestCount).toBe(2);
+  });
+
+  test('ST-P2 hides selection read-aloud when the server flag is disabled', async ({ page }) => {
+    await page.route('**/api/tts/selection', (route) => route.fulfill({
+      json: { success: true, enabled: false, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 },
+    }));
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'E2E');
+    await expect(page.getByRole('button', { name: '朗读选区' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '复制选区' })).toBeVisible();
+  });
+
+  test('ST-P2 reads kana directly, retries a provider failure and restores focus after Escape', async ({ page }) => {
+    let postCount = 0;
+    await page.route('**/api/tts/selection', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
+      }
+      postCount += 1;
+      if (postCount === 1) {
+        return route.fulfill({
+          status: 502,
+          json: { error: 'provider unavailable', code: 'SELECTION_TTS_PROVIDER_FAILED' },
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        body: Buffer.from('fixture-wav'),
+        headers: {
+          'content-type': 'audio/wav',
+          'x-tts-cache': 'MISS',
+          'x-tts-provider': 'voicevox',
+          'x-tts-model': 'voicevox',
+          'x-tts-voice': 'speaker:2',
+        },
+      });
+    });
+    await page.addInitScript(() => {
+      class FakeAudio extends EventTarget {
+        constructor(src) { super(); this.src = src; this.paused = true; }
+        play() { this.paused = false; return Promise.resolve(); }
+        pause() { this.paused = true; }
+        removeAttribute() {}
+        load() {}
+      }
+      window.Audio = FakeAudio;
+      URL.createObjectURL = () => `blob:selection-${Date.now()}`;
+      URL.revokeObjectURL = () => {};
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await selectVisibleText(page, 'そうです');
+    await page.getByRole('button', { name: '朗读选区' }).click();
+    await expect(page.getByRole('dialog', { name: '选择朗读语言' })).toHaveCount(0);
+    await expect(page.locator('.csa-tts-status')).toHaveText('发音生成失败，请重试');
+    const retry = page.getByRole('button', { name: '重试朗读选区' });
+    await expect(retry).toBeFocused();
+    await retry.click();
+    await expect(page.getByRole('button', { name: '停止朗读' })).toBeVisible();
+    expect(postCount).toBe(2);
+
+    await selectVisibleText(page, '昨夜', { keyboard: true });
+    const readButton = page.getByRole('button', { name: '朗读选区' });
+    await readButton.click();
+    const confirmation = page.getByRole('dialog', { name: '选择朗读语言' });
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation.getByRole('button', { name: 'English' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toHaveCount(0);
+    await expect(readButton).toBeFocused();
+  });
+
   test('P4 sanitizer blocks script, style and event attributes while preserving ruby', async ({ page }) => {
     await page.route('**/api/folders', (route) => route.fulfill({ json: { folders: ['mock'] } }));
     await page.route('**/api/folders/mock/files', (route) => route.fulfill({ json: {

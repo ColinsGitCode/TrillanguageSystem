@@ -42,6 +42,6 @@ export function buildSelectionCandidate(container: HTMLElement): SelectionCandid
   }
 
   if (!normalized) return null;
-  if (normalized.length > 200) return null;
+  if (Array.from(normalized).length > 200) return null;
   return { rawText, normalized, range };
 }

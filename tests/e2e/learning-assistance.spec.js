@@ -86,6 +86,24 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await expect(readOnlyCard.getByText('READ ONLY')).toBeVisible();
     await expect(readOnlyCard.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
     await expect(readOnlyCard.getByRole('button', { name: '标红选区' })).toHaveCount(0);
+    await readOnlyCard.getByTestId('react-card-content').evaluate((container) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node && (!node.textContent?.trim() || node.parentElement?.closest('rt, button'))) {
+        node = walker.nextNode();
+      }
+      if (!node?.textContent) throw new Error('No readable text found');
+      const start = node.textContent.search(/\S/u);
+      const range = document.createRange();
+      range.setStart(node, Math.max(0, start));
+      range.setEnd(node, Math.min(node.textContent.length, Math.max(0, start) + 3));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await expect(readOnlyCard.getByRole('button', { name: '朗读选区' })).toBeVisible();
+    await expect(readOnlyCard.getByRole('button', { name: /标记选区|更改标记颜色/ })).toHaveCount(0);
     await readOnlyCard.getByTestId('react-card-modal-close').click();
     const footerBox = await page.locator('.learning-session-footer').boundingBox();
     expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(720);

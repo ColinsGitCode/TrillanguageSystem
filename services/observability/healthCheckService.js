@@ -15,6 +15,8 @@ const {
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_DEEPSEEK_MODEL,
   E2E_TEST_MODE,
+  SELECTION_TTS_CACHE_PATH,
+  SELECTION_TTS_ENABLED,
   resolveDeepSeekModel,
 } = require('../../lib/serverConfig');
 
@@ -75,6 +77,11 @@ class HealthCheckService {
 
     // 5. Storage
     checks.push(this.checkStorage());
+
+    // 6. Selection TTS cache
+    if (SELECTION_TTS_ENABLED) {
+      checks.push(this.checkSelectionTtsCache());
+    }
 
     // 等待所有检查完成
     const results = await Promise.allSettled(checks);
@@ -542,6 +549,52 @@ class HealthCheckService {
     } catch (error) {
       service.status = 'offline';
       service.message = error.message;
+    }
+
+    return service;
+  }
+
+  /**
+   * 检查选区朗读缓存。缓存不可用时合成仍可直接返回，因此不是关键服务。
+   */
+  static async checkSelectionTtsCache() {
+    const service = {
+      name: 'Selection TTS Cache',
+      type: 'cache',
+      critical: false,
+      status: 'unknown',
+      lastCheck: Date.now(),
+      details: {
+        writable: false,
+      }
+    };
+    const probePath = path.join(
+      SELECTION_TTS_CACHE_PATH,
+      `.health-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    try {
+      fs.mkdirSync(SELECTION_TTS_CACHE_PATH, { recursive: true });
+      fs.writeFileSync(probePath, 'ok', { flag: 'wx' });
+      fs.unlinkSync(probePath);
+
+      service.status = 'online';
+      service.message = '选区朗读缓存正常';
+      service.details.writable = true;
+
+      if (typeof fs.statfsSync === 'function') {
+        const stats = fs.statfsSync(SELECTION_TTS_CACHE_PATH);
+        service.details.freeBytes = Number(stats.bavail) * Number(stats.bsize);
+      }
+    } catch (error) {
+      service.status = 'degraded';
+      service.message = '选区朗读缓存不可写，音频将不缓存';
+      service.details.errorCode = error.code || 'CACHE_CHECK_FAILED';
+      try {
+        fs.rmSync(probePath, { force: true });
+      } catch (_cleanupError) {
+        // Best-effort cleanup only.
+      }
     }
 
     return service;

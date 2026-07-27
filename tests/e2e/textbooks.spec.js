@@ -243,15 +243,21 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
       window.Audio = class FakeAudio {
         constructor(src) {
           this.src = src;
+          this.paused = true;
           window.__generatedAudio = this;
         }
         play() {
+          this.paused = false;
           window.__mediaEvents.push(`generated:play:${this.src}`);
           return Promise.resolve();
         }
         pause() {
+          this.paused = true;
           window.__mediaEvents.push(`generated:pause:${this.src}`);
         }
+        addEventListener() {}
+        removeAttribute() {}
+        load() {}
       };
     });
     await page.route(/\/api\/textbooks\/tracks\/\d+$/u, async (route) => {

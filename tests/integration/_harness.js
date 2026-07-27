@@ -25,12 +25,12 @@ const path = require('node:path');
 
 const tmpRecords = fs.mkdtempSync(path.join(os.tmpdir(), 'integration-records-'));
 
-process.env.DB_PATH = ':memory:';
+process.env.DB_PATH = process.env.DB_PATH || ':memory:';
 process.env.E2E_TEST_MODE = '1';
 process.env.PORT = '0';
 process.env.LOG_SILENT = '1';
-process.env.TTS_EN_ENDPOINT = '';
-process.env.TTS_JA_ENDPOINT = '';
+process.env.TTS_EN_ENDPOINT = process.env.TTS_EN_ENDPOINT || '';
+process.env.TTS_JA_ENDPOINT = process.env.TTS_JA_ENDPOINT || '';
 process.env.RECORDS_PATH = tmpRecords;
 
 // Require AFTER env is pinned. server.js calls app.listen(PORT, cb)

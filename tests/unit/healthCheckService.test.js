@@ -53,6 +53,7 @@ test.describe('HealthCheckService DeepSeek health', () => {
       TTS_JA_ENDPOINT: '',
       OCR_PROVIDER: '',
       OCR_TESSERACT_ENDPOINT: '',
+      SELECTION_TTS_ENABLED: 'false',
       RECORDS_PATH: recordsPath,
       LOG_SILENT: '1',
     }, async () => {
@@ -113,6 +114,7 @@ test.describe('HealthCheckService Japanese TTS health', () => {
       TTS_JA_ENDPOINT: 'http://voicevox:50021',
       OCR_PROVIDER: '',
       OCR_TESSERACT_ENDPOINT: '',
+      SELECTION_TTS_ENABLED: 'false',
       RECORDS_PATH: recordsPath,
       LOG_SILENT: '1',
     }, async () => {
@@ -129,6 +131,40 @@ test.describe('HealthCheckService Japanese TTS health', () => {
       assert.equal(fallback.status, 'online');
       assert.equal(fallback.details.endpoint, 'http://voicevox:50021');
       assert.equal(fallback.details.version, '0.21.0');
+    });
+  });
+});
+
+test.describe('HealthCheckService selection TTS cache health', () => {
+  test.it('reports a writable cache without exposing its absolute path', async (t) => {
+    const recordsPath = fs.mkdtempSync(path.join(os.tmpdir(), 'health-records-'));
+    const cachePath = fs.mkdtempSync(path.join(os.tmpdir(), 'selection-tts-cache-'));
+    t.after(() => fs.rmSync(recordsPath, { recursive: true, force: true }));
+    t.after(() => fs.rmSync(cachePath, { recursive: true, force: true }));
+
+    await withEnv({
+      E2E_TEST_MODE: '1',
+      LLM_BASE_URL: '',
+      TTS_EN_ENDPOINT: '',
+      TTS_JA_SBV2_ENDPOINT: '',
+      TTS_JA_ENDPOINT: '',
+      OCR_PROVIDER: '',
+      OCR_TESSERACT_ENDPOINT: '',
+      SELECTION_TTS_ENABLED: 'true',
+      SELECTION_TTS_CACHE_PATH: cachePath,
+      RECORDS_PATH: recordsPath,
+      LOG_SILENT: '1',
+    }, async () => {
+      const HealthCheckService = loadHealthCheckService();
+      const health = await HealthCheckService.checkAll();
+      const cache = health.services.find((service) => service.name === 'Selection TTS Cache');
+
+      assert.ok(cache, 'selection TTS cache service should be present');
+      assert.equal(cache.critical, false);
+      assert.equal(cache.status, 'online');
+      assert.equal(cache.details.writable, true);
+      assert.equal(Number.isFinite(cache.details.freeBytes), true);
+      assert.equal(JSON.stringify(cache).includes(cachePath), false);
     });
   });
 });

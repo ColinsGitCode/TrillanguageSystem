@@ -181,6 +181,104 @@
 .card-selection-toolbar .csa-caret { width: 13px; height: 13px; margin-left: -2px; opacity: .7; }
 .card-selection-toolbar .csa-icon-action { width: 30px; justify-content: center; padding-inline: 6px; color: var(--color-text-secondary); }
 .card-selection-toolbar .csa-remove-highlight { color: var(--color-danger); }
+.card-selection-toolbar .csa-tts {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+}
+.card-selection-toolbar .csa-tts-placeholder {
+  width: 82px;
+  visibility: hidden;
+}
+.card-selection-toolbar .csa-tts-action {
+  border: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  color: var(--color-primary);
+}
+.card-selection-toolbar .csa-tts.is-playing {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+.card-selection-toolbar .csa-tts.is-error {
+  border-color: var(--color-danger);
+}
+.card-selection-toolbar .csa-tts select {
+  width: 50px;
+  height: 28px;
+  padding: 0 3px;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: 700 10px/1 var(--font-sans);
+  cursor: pointer;
+}
+.card-selection-toolbar .csa-tts select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.card-selection-toolbar .csa-tts-status,
+.card-selection-toolbar .csa-tts-language {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 7px);
+  left: 50%;
+  min-width: 190px;
+  transform: translateX(-50%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-secondary);
+  font: 600 11px/1.4 var(--font-sans);
+}
+.card-selection-toolbar[data-placement="above"] .csa-tts-status,
+.card-selection-toolbar[data-placement="above"] .csa-tts-language {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+.card-selection-toolbar .csa-tts-status {
+  padding: 7px 9px;
+  text-align: center;
+}
+.card-selection-toolbar .csa-tts-status.is-error {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+.card-selection-toolbar .csa-tts-language {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 8px;
+}
+.card-selection-toolbar .csa-tts-language strong {
+  grid-column: 1 / -1;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+.card-selection-toolbar .csa-tts-language button {
+  min-width: 0;
+  height: 28px;
+  padding-inline: 8px;
+  border: 1px solid var(--color-border);
+}
+.card-selection-toolbar .csa-tts-language button:last-child {
+  grid-column: 1 / -1;
+}
+.card-selection-toolbar .is-spinning {
+  animation: csa-tts-spin .8s linear infinite;
+}
+@keyframes csa-tts-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-selection-toolbar .is-spinning { animation: none; }
+}
 
 /* —— 生成卡片:卡型选择菜单 —— */
 .csa-gen-menu {

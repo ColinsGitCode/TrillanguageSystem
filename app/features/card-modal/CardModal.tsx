@@ -23,6 +23,7 @@ import type {
 } from '../factory/factory-api';
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
+import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { createAnchor } from './annotation-anchor.mjs';
 import { applyAnnotations } from './annotation-render.mjs';
 import type { CardAnnotationSelector } from './annotation-render.mjs';
@@ -40,6 +41,7 @@ import {
 import {
   SelectionKnowledgePanel,
 } from './SelectionKnowledgePanel';
+import { SelectionTtsControls } from './SelectionTtsControls';
 import type {
   KnowledgeLookupDraft,
 } from './SelectionKnowledgePanel';
@@ -96,7 +98,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const queryClient = useQueryClient();
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cardAudio = useExclusiveAudio();
   const selectedRangeRef = useRef<Range | null>(null);
   const selectedAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const selectedTextRef = useRef('');
@@ -185,6 +187,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           lookupTriggerRef.current?.focus({ preventScroll: true });
           return;
         }
+        if (target?.closest('.csa-tts-language')) return;
         if (target?.closest('.card-selection-toolbar')) {
           event.preventDefault();
           setToolbar(null);
@@ -215,10 +218,10 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
-      audioRef.current?.pause();
+      cardAudio.stop();
       previous?.focus({ preventScroll: true });
     };
-  }, [onClose]);
+  }, [cardAudio.stop, onClose]);
 
   const deleteMutation = useMutation({
     mutationFn: () => factoryApi.deleteRecord(cardQuery.data?.record || null, selection),
@@ -267,15 +270,24 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       });
     };
     clampToViewport();
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(clampToViewport)
+      : null;
+    if (resizeObserver && toolbarRef.current) resizeObserver.observe(toolbarRef.current);
     window.addEventListener('resize', clampToViewport);
-    return () => window.removeEventListener('resize', clampToViewport);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', clampToViewport);
+    };
   }, [toolbar?.anchorLeft, toolbar?.phrase]);
 
   useEffect(() => {
     if (!toolbar || !focusToolbarAfterSelectionRef.current) return;
     focusToolbarAfterSelectionRef.current = false;
     window.requestAnimationFrame(() => {
-      toolbarFirstActionRef.current?.focus({ preventScroll: true });
+      const firstAction = toolbarFirstActionRef.current
+        || toolbarRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])');
+      firstAction?.focus({ preventScroll: true });
     });
   }, [toolbar?.annotationId, toolbar?.phrase]);
 
@@ -582,13 +594,17 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     if (button) {
       const source = button.dataset.src;
       if (!source) return;
-      audioRef.current?.pause();
+      cardAudio.stop();
       contentRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
-      const audio = new Audio(`/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`);
-      audioRef.current = audio;
       button.classList.add('is-playing');
-      audio.addEventListener('ended', () => button.classList.remove('is-playing'), { once: true });
-      audio.play().catch(() => button.classList.remove('is-playing'));
+      void cardAudio.playUrl(
+        `/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`,
+        {
+          onEnded: () => button.classList.remove('is-playing'),
+          onError: () => button.classList.remove('is-playing'),
+          onStop: () => button.classList.remove('is-playing'),
+        }
+      ).catch(() => button.classList.remove('is-playing'));
       return;
     }
     const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
@@ -788,7 +804,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           {tab === 'intel' && <IntelPanel record={cardQuery.data?.record || null} />}
         </div>
 
-        {tab === 'content' && !readOnly && toolbar && (
+        {tab === 'content' && toolbar && (
           <div
             ref={toolbarRef}
             className="card-selection-toolbar"
@@ -808,7 +824,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
               <strong>{toolbar.phrase}</strong>
             </output>
             <span className="csa-sep" aria-hidden="true" />
-            <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
+            {!readOnly && <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
               <DropdownMenu.Trigger asChild>
                 <button
                   ref={toolbarFirstActionRef}
@@ -842,8 +858,8 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
                   ))}
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-            {toolbar.annotationId && (
+            </DropdownMenu.Root>}
+            {!readOnly && toolbar.annotationId && (
               <button
                 type="button"
                 className="csa-icon-action csa-remove-highlight"
@@ -864,6 +880,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             >
               <Copy aria-hidden="true" />
             </button>
+            <SelectionTtsControls phrase={toolbar.phrase} />
             <button
               ref={lookupTriggerRef}
               type="button"

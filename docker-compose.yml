@@ -26,6 +26,16 @@ services:
       - SQLITE_BUSY_RETRY_MAX=${SQLITE_BUSY_RETRY_MAX:-3}
       - SQLITE_BUSY_RETRY_BASE_MS=${SQLITE_BUSY_RETRY_BASE_MS:-25}
       - GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS=${GENERATION_WORKER_SHUTDOWN_TIMEOUT_MS:-30000}
+      - SELECTION_TTS_ENABLED=${SELECTION_TTS_ENABLED:-true}
+      - SELECTION_TTS_CACHE_PATH=/data/selection_tts_cache
+      - SELECTION_TTS_MAX_CHARS=${SELECTION_TTS_MAX_CHARS:-300}
+      - SELECTION_TTS_TIMEOUT_MS=${SELECTION_TTS_TIMEOUT_MS:-15000}
+      - SELECTION_TTS_MAX_CONCURRENCY=${SELECTION_TTS_MAX_CONCURRENCY:-2}
+      - SELECTION_TTS_CACHE_TTL_HOURS=${SELECTION_TTS_CACHE_TTL_HOURS:-168}
+      - SELECTION_TTS_CACHE_MAX_BYTES=${SELECTION_TTS_CACHE_MAX_BYTES:-268435456}
+      - SELECTION_TTS_MAX_RESPONSE_BYTES=${SELECTION_TTS_MAX_RESPONSE_BYTES:-10485760}
+      - TTS_SHARED_MAX_CONCURRENCY=${TTS_SHARED_MAX_CONCURRENCY:-2}
+      - TTS_BATCH_STARVATION_MS=${TTS_BATCH_STARVATION_MS:-5000}
       - OCR_PROVIDER=tesseract
       - OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr
       - OCR_LANGS=eng+jpn+chi_sim
@@ -56,6 +66,7 @@ services:
       - trilingual_records:/data/trilingual_records
       - ${TEXTBOOK_SOURCE_PATH:-./data/textbook_sources}:/media/textbooks:ro
       - textbook_work:/data/textbooks
+      - selection_tts_cache:/data/selection_tts_cache
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -125,3 +136,4 @@ volumes:
   sbv2_models:
   trilingual_records:
   textbook_work:
+  selection_tts_cache:
