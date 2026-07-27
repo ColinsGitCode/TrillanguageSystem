@@ -14,7 +14,6 @@ const path = require('path');
 const log = require('../../lib/logger').child({ module: 'svc/database' });
 const generationJobsDomain = require('./db/generationJobs');
 const generationsDomain = require('./db/generations');
-const highlightsDomain = require('./db/highlights');
 const testResetDomain = require('./db/testReset');
 const cardTagsDomain = require('./db/cardTags');
 const textbooksDomain = require('./db/textbooks');
@@ -325,18 +324,6 @@ class DatabaseService {
     );
   }
 
-  getCardHighlightByFile(folderName, baseFilename, sourceHash) {
-    return highlightsDomain.getByFile(this.db, folderName, baseFilename, sourceHash);
-  }
-
-  upsertCardHighlight(payload = {}) {
-    return highlightsDomain.upsert(this.db, payload);
-  }
-
-  deleteCardHighlightByFile(folderName, baseFilename, sourceHash = '') {
-    return highlightsDomain.deleteByFile(this.db, folderName, baseFilename, sourceHash);
-  }
-
   importTextbookDraft(payload) {
     return textbooksDomain.importDraft(this.db, payload);
   }
@@ -517,10 +504,6 @@ class DatabaseService {
     return textbooksDomain.markAssetAvailability(this.db, id, availability);
   }
 
-  getHighlightStats(filters = {}) {
-    return highlightsDomain.getStats(this.db, filters);
-  }
-
   // ========== Card annotations ==========
 
   resolveCardAnnotationTarget(targetKind, targetId) {
@@ -568,6 +551,10 @@ class DatabaseService {
 
   listCardAnnotationMigrationEvents(migrationPlanHash) {
     return annotationsDomain.listMigrationEvents(this.db, migrationPlanHash);
+  }
+
+  getAnnotationStats(filters = {}) {
+    return annotationsDomain.getStats(this.db, filters);
   }
 
   /**

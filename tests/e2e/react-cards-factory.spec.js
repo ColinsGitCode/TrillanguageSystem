@@ -184,7 +184,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', rubyBase);
   });
 
-  test('CA-P5 persists a canonical annotation, writes compatibility HTML and restores it', async ({ page, request }) => {
+  test('CA-P8 persists and restores a canonical annotation without legacy HTML', async ({ page, request }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
@@ -208,7 +208,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const annotationResponse = await saved;
     expect(annotationResponse.status()).toBe(201);
     const annotationBody = await annotationResponse.json();
-    expect(annotationBody.compatibility.written).toBe(true);
+    expect(annotationBody.compatibility).toBeUndefined();
     await expect(page.locator('mark.study-highlight-red')).toHaveCount(1);
     const generationId = annotationBody.annotation.targetId;
     const annotations = await request.get(`/api/annotations?targetKind=generation&targetId=${generationId}`);

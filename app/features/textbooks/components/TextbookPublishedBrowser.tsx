@@ -1,6 +1,5 @@
 import { BookOpenCheck, Highlighter, Languages, Play, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { applyMarkerHighlight, applyTextHighlight } from '../../card-modal/highlight';
 import { createAnchor, resolveAnchor } from '../../card-modal/annotation-anchor.mjs';
 import type { CardAnnotationSelector } from '../../card-modal/annotation-render.mjs';
 import {
@@ -8,7 +7,6 @@ import {
   escapeTextbookText,
   expressionHighlightFragments,
   highlightedExpressionIds,
-  updateExpressionHighlightDocument,
 } from '../textbook-highlight';
 import type { TextbookAudio, TextbookTrack } from '../types';
 
@@ -38,20 +36,18 @@ export function TextbookPublishedBrowser({
   message,
   onSelect,
   onSaveAnnotation,
-  onSaveLegacyHighlight,
   onDerive,
   onPlayAudio,
 }: {
   track: TextbookTrack;
   activeExpressionId: number | null;
   highlightHtml: string;
-  annotationMode: 'annotations' | 'legacy' | 'pending';
+  annotationMode: 'annotations' | 'pending' | 'unavailable';
   audioFiles: TextbookAudio[];
   busy: boolean;
   message: string;
   onSelect: (id: number) => void;
   onSaveAnnotation: (selector: CardAnnotationSelector) => void;
-  onSaveLegacyHighlight: (html: string) => void;
   onDerive: (payload: { expressionId: number; selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => void;
   onPlayAudio: (url: string) => void;
 }) {
@@ -130,23 +126,8 @@ export function TextbookPublishedBrowser({
   };
   const saveHighlight = () => {
     if (!rangeRef.current || !contentRef.current) return;
-    if (annotationMode === 'annotations') {
-      if (!anchorRef.current) return;
-      onSaveAnnotation(anchorRef.current);
-      window.getSelection()?.removeAllRanges();
-      rangeRef.current = null;
-      anchorRef.current = null;
-      selectionRef.current = '';
-      setSelectedText('');
-      return;
-    }
-    if (annotationMode === 'pending') return;
-    const applied = applyMarkerHighlight(contentRef.current, rangeRef.current)
-      || applyTextHighlight(contentRef.current, selectionRef.current);
-    if (!applied) return;
-    onSaveLegacyHighlight(
-      updateExpressionHighlightDocument(highlightHtml, expression.expression_id, contentRef.current)
-    );
+    if (annotationMode !== 'annotations' || !anchorRef.current) return;
+    onSaveAnnotation(anchorRef.current);
     window.getSelection()?.removeAllRanges();
     rangeRef.current = null;
     anchorRef.current = null;
@@ -187,7 +168,7 @@ export function TextbookPublishedBrowser({
           <p className="textbook-lang-label">Selection to card</p>
           <strong>{selectedText || '选中英文或日文片段后，可标红或生成派生卡。'}</strong>
           <div>
-            <button type="button" disabled={!selectedText || busy || annotationMode === 'pending'} onMouseDown={(event) => event.preventDefault()} onClick={saveHighlight}><Highlighter aria-hidden="true" />标红选区</button>
+            <button type="button" disabled={!selectedText || busy || annotationMode !== 'annotations'} onMouseDown={(event) => event.preventDefault()} onClick={saveHighlight}><Highlighter aria-hidden="true" />标红选区</button>
             <button type="button" disabled={!selectedText || busy} onClick={() => onDerive({ expressionId: expression.expression_id, selectionText: selectedText, selectionLanguage: selectionLanguage(selectedText), targetCardType: 'trilingual' })}>生成三语卡</button>
             <button type="button" disabled={!selectedText || busy || selectionLanguage(selectedText) !== 'ja'} onClick={() => onDerive({ expressionId: expression.expression_id, selectionText: selectedText, selectionLanguage: 'ja', targetCardType: 'grammar_ja' })}>生成语法卡</button>
           </div>

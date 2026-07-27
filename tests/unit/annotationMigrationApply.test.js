@@ -34,13 +34,27 @@ function count(db, table) {
   return Number(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count);
 }
 
+function seedLegacyHighlight(db, {
+  generationId,
+  folderName,
+  baseFilename,
+  sourceHash,
+  htmlContent,
+}) {
+  db.prepare(`
+    INSERT INTO card_highlights(
+      generation_id, folder_name, base_filename, source_hash, html_content
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(generationId, folderName, baseFilename, sourceHash, htmlContent);
+}
+
 test.after(() => databaseModule.close());
 
 test('applies an approved migration plan transactionally and idempotently', async () => {
-  const dbService = new DatabaseService(':memory:');
+    const dbService = new DatabaseService(':memory:');
   try {
     const generationId = seedGeneration(dbService.db);
-    dbService.upsertCardHighlight({
+    seedLegacyHighlight(dbService.db, {
       generationId,
       folderName: '20260727',
       baseFilename: 'hello',

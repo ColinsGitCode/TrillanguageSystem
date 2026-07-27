@@ -11,7 +11,6 @@ import { ApiError } from '../../lib/api/client';
 import {
   buildAnnotatedTextbookHighlightDocument,
   buildTextbookHighlightDocument,
-  sanitizeTextbookHighlightDocument,
 } from './textbook-highlight';
 import { textbookApi } from './textbook-api';
 import { workflowOperation, workflowStages } from './textbook-workflow-adapter';
@@ -93,16 +92,7 @@ export function TextbookCoursesPage() {
   });
   const highlightQuery = useQuery({
     queryKey: ['textbooks', 'track', route.trackId, 'highlight'],
-    queryFn: async () => {
-      try {
-        const result = await textbookApi.annotations(Number(route.trackId));
-        return { mode: 'annotations' as const, ...result };
-      } catch (error) {
-        if (!(error instanceof ApiError) || ![404, 409].includes(error.status)) throw error;
-        const result = await textbookApi.highlight(Number(route.trackId));
-        return { mode: 'legacy' as const, ...result };
-      }
-    },
+    queryFn: () => textbookApi.annotations(Number(route.trackId)),
     enabled: Boolean(route.trackId && trackQuery.data?.track.status === 'published'),
     retry: false,
   });
@@ -127,20 +117,13 @@ export function TextbookCoursesPage() {
   useEffect(() => {
     const track = trackQuery.data?.track;
     if (!track) return setHighlightHtml('');
-    if (highlightQuery.data?.mode === 'annotations') {
+    if (highlightQuery.data) {
       setHighlightHtml(
         buildAnnotatedTextbookHighlightDocument(track, highlightQuery.data.annotations)
       );
       return;
     }
-    const persisted = highlightQuery.data?.mode === 'legacy'
-      ? highlightQuery.data.highlight?.htmlContent
-      : null;
-    setHighlightHtml(
-      persisted
-        ? sanitizeTextbookHighlightDocument(persisted)
-        : buildTextbookHighlightDocument(track)
-    );
+    setHighlightHtml(buildTextbookHighlightDocument(track));
   }, [highlightQuery.data, trackQuery.data?.track]);
   useEffect(() => {
     const operation = operationQuery.data?.operation;
@@ -239,21 +222,14 @@ export function TextbookCoursesPage() {
     onError: (error) => setErrors([messageFor(error)]),
   });
   const highlightMutation = useMutation({
-    mutationFn: async (payload: { selector?: import('../card-modal/annotation-render.mjs').CardAnnotationSelector; html?: string }) => {
-      if (
-        highlightQuery.data?.mode === 'annotations'
-        && payload.selector
-        && highlightQuery.data.target
-      ) {
-        return textbookApi.createAnnotation({
-          id: crypto.randomUUID(),
-          targetId: Number(route.trackId),
-          expectedTargetRevision: highlightQuery.data.target.targetRevision,
-          selector: payload.selector,
-        });
-      }
-      if (!payload.html) throw new Error('Legacy textbook highlight HTML is required');
-      return textbookApi.saveHighlight(Number(route.trackId), payload.html);
+    mutationFn: async (payload: { selector: import('../card-modal/annotation-render.mjs').CardAnnotationSelector }) => {
+      if (!highlightQuery.data?.target) throw new Error('Textbook annotation target is unavailable');
+      return textbookApi.createAnnotation({
+        id: crypto.randomUUID(),
+        targetId: Number(route.trackId),
+        expectedTargetRevision: highlightQuery.data.target.targetRevision,
+        selector: payload.selector,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -369,13 +345,12 @@ export function TextbookCoursesPage() {
                           highlightHtml={highlightHtml}
                           annotationMode={highlightQuery.isPending
                             ? 'pending'
-                            : highlightQuery.data?.mode || 'legacy'}
+                            : highlightQuery.data ? 'annotations' : 'unavailable'}
                           audioFiles={track.tts_audio}
                           busy={highlightMutation.isPending || derivationMutation.isPending}
                           message={derivationMessage}
                           onSelect={(id) => route.selectTask(id)}
                           onSaveAnnotation={(selector) => highlightMutation.mutate({ selector })}
-                          onSaveLegacyHighlight={(html) => highlightMutation.mutate({ html })}
                           onDerive={(payload) => derivationMutation.mutate(payload)}
                           onPlayAudio={playGenerated}
                         />

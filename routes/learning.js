@@ -12,7 +12,6 @@ const { LearningService } = require('../services/learning/application/learningSe
 const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
 const {
   annotationService,
-  annotationShadowReadService,
   textbookAnnotationService,
 } = require('../services/annotations/annotationRuntime');
 
@@ -25,7 +24,6 @@ const service = new LearningService({
   db: dbService.db,
   busyRetry: (operation) => dbService.withBusyRetry(operation),
   planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader }),
-  annotationShadowReadService,
   annotationsEnabled: CARD_ANNOTATIONS_ENABLED,
   annotationService,
   textbookAnnotationService,

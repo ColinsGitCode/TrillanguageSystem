@@ -24,7 +24,7 @@ router.delete('/api/records/:id', async (req, res) => {
             success: true,
             message: 'Record deleted successfully',
             deletedFiles: result.deletedFiles,
-            highlightDeleted: result.highlightDeleted,
+            annotationsDeleted: result.database.deletedAnnotations,
             archivedStudyItems: result.database.archivedStudyItems,
             cleanupErrors: result.cleanupErrors
         });

@@ -69,7 +69,11 @@ function buildAudit({ dbPath, recordsPath }) {
     db.pragma('query_only = ON');
     const generations = db.prepare('SELECT * FROM generations ORDER BY id').all();
     const audioRows = db.prepare('SELECT * FROM audio_files ORDER BY id').all();
-    const highlights = db.prepare('SELECT * FROM card_highlights ORDER BY id').all();
+    const annotations = db.prepare(`
+      SELECT * FROM card_annotations
+      WHERE status = 'active'
+      ORDER BY target_kind, target_id, position_start, id
+    `).all();
     const schemaSql = db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name").all()
       .map((row) => row.sql).join('\n');
     const physicalAudio = walkFiles(recordsPath).filter((filePath) => /\.(wav|mp3|m4a)$/i.test(filePath));
@@ -160,8 +164,10 @@ function buildAudit({ dbPath, recordsPath }) {
         generations: generations.length,
         fts: db.prepare('SELECT count(*) AS count FROM generations_fts').get().count,
         audioRows: audioRows.length,
-        highlights: highlights.length,
-        highlightMarks: highlights.reduce((sum, row) => sum + Number(row.mark_count || 0), 0),
+        highlights: new Set(annotations
+          .filter((row) => row.annotation_kind === 'highlight')
+          .map((row) => `${row.target_kind}:${row.target_id}`)).size,
+        highlightMarks: annotations.filter((row) => row.annotation_kind === 'highlight').length,
       },
       summary: {
         cardTypes: countBy(generations, (row) => row.card_type),

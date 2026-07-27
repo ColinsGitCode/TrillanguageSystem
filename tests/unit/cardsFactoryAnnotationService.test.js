@@ -10,7 +10,6 @@ const databaseModule = require('../../services/storage/databaseService');
 const { DatabaseService } = databaseModule;
 const {
   CardsFactoryAnnotationService,
-  computeTextHash,
 } = require('../../services/annotations/application/cardsFactoryAnnotationService');
 const {
   loadSharedModules,
@@ -77,7 +76,7 @@ async function createPayload(generationId, overrides = {}) {
 
 test.after(() => databaseModule.close());
 
-test('creates the annotation and legacy HTML projection in one transaction', async () => {
+test('creates a canonical annotation without writing legacy HTML', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const generationId = seedGeneration(dbService);
@@ -85,15 +84,8 @@ test('creates the annotation and legacy HTML projection in one transaction', asy
     const result = await service.create(await createPayload(generationId));
 
     assert.equal(result.annotation.selector.textQuote.exact, 'bar');
-    assert.equal(result.compatibility.written, true);
-    const legacy = dbService.getCardHighlightByFile(
-      '20260727',
-      'hello',
-      computeTextHash(MARKDOWN)
-    );
-    assert.equal(legacy.markCount, 1);
-    assert.match(legacy.htmlContent, /data-annotation-id="018f0f96/u);
-    assert.match(legacy.htmlContent, /<mark[^>]*>bar<\/mark>/u);
+    assert.equal(dbService.listCardAnnotations('generation', generationId).length, 1);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }
@@ -113,36 +105,13 @@ test('rejects a selector that cannot be resolved against current Markdown', asyn
       (error) => error.code === 'ANNOTATION_SELECTOR_ORPHANED' && error.status === 409
     );
     assert.equal(dbService.listCardAnnotations('generation', generationId).length, 0);
-    assert.equal(dbService.getCardHighlightByFile(
-      '20260727',
-      'hello',
-      computeTextHash(MARKDOWN)
-    ), null);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }
 });
 
-test('rolls back the new annotation when compatibility projection persistence fails', async () => {
-  const dbService = new DatabaseService(':memory:');
-  try {
-    const generationId = seedGeneration(dbService);
-    const service = new CardsFactoryAnnotationService({ dbService });
-    dbService.upsertCardHighlight = () => {
-      throw new Error('compatibility-write-failed');
-    };
-
-    await assert.rejects(
-      async () => service.create(await createPayload(generationId)),
-      /compatibility-write-failed/u
-    );
-    assert.equal(dbService.listCardAnnotations('generation', generationId).length, 0);
-  } finally {
-    dbService.close();
-  }
-});
-
-test('soft-delete removes the mark from compatibility HTML', async () => {
+test('soft-delete updates only the canonical annotation', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const generationId = seedGeneration(dbService);
@@ -151,35 +120,8 @@ test('soft-delete removes the mark from compatibility HTML', async () => {
     const removed = await service.remove(created.annotation.id, { expectedVersion: 1 });
 
     assert.equal(removed.annotation.status, 'deleted');
-    const legacy = dbService.getCardHighlightByFile(
-      '20260727',
-      'hello',
-      computeTextHash(MARKDOWN)
-    );
-    assert.equal(legacy.markCount, 0);
-    assert.doesNotMatch(legacy.htmlContent, /study-highlight-red/u);
-  } finally {
-    dbService.close();
-  }
-});
-
-test('can disable compatibility writes without changing the canonical mutation', async () => {
-  const dbService = new DatabaseService(':memory:');
-  try {
-    const generationId = seedGeneration(dbService);
-    const service = new CardsFactoryAnnotationService({
-      dbService,
-      compatWriteEnabled: false,
-    });
-    const result = await service.create(await createPayload(generationId));
-
-    assert.equal(result.compatibility.written, false);
-    assert.equal(dbService.listCardAnnotations('generation', generationId).length, 1);
-    assert.equal(dbService.getCardHighlightByFile(
-      '20260727',
-      'hello',
-      computeTextHash(MARKDOWN)
-    ), null);
+    assert.equal(dbService.listCardAnnotations('generation', generationId).length, 0);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }

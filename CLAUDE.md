@@ -180,7 +180,8 @@ Required invariants:
 - English audio uses MP3 and Japanese audio uses WAV;
 - newly generated scenario cards have an AI-generated title within ten Chinese characters and exactly 20 expression blocks; legacy 12-block cards remain readable and reviewable;
 - card modal has CONTENT and INTEL only;
-- highlights persist through card_highlights;
+- highlights and notes persist through `card_annotations`; `card_highlights` is a frozen
+  migration/audit snapshot and must not be used by runtime readers or writers;
 - desktop modal height, focus trap, Escape, and focus restoration remain stable.
 
 ## Frontend
@@ -215,7 +216,9 @@ Current tables:
 - generation_errors;
 - model_statistics;
 - system_health;
-- card_highlights;
+- card_highlights (frozen legacy migration/audit snapshot);
+- card_annotations;
+- card_annotation_migration_events;
 - generation_jobs;
 - generation_job_events;
 - card_tags;

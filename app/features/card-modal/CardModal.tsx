@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Highlighter, Sparkles, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ContextMenu from '@radix-ui/react-context-menu';
@@ -7,16 +7,13 @@ import { factoryApi } from '../factory/factory-api';
 import type { AnnotationTarget, CardAnnotation } from '../factory/factory-api';
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
-import { applyMarkerHighlight, applyTextHighlight } from './highlight';
 import { createAnchor } from './annotation-anchor.mjs';
 import { applyAnnotations } from './annotation-render.mjs';
 import type { CardAnnotationSelector } from './annotation-render.mjs';
 import { buildSelectionCandidate } from './selection';
 import {
-  computeTextHash,
   extractMarkdownTitle,
   renderCardMarkdown,
-  sanitizePersistedCardHtml,
 } from './markdown';
 import { IntelPanel } from './IntelPanel';
 
@@ -45,7 +42,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   const generateTriggerRef = useRef<HTMLButtonElement>(null);
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [renderedHtml, setRenderedHtml] = useState('');
-  const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'legacy'>('pending');
+  const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'unavailable'>('pending');
   const [isSavingAnnotation, setIsSavingAnnotation] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -67,10 +64,6 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     queryKey: ['card', selection.folder, selection.baseName],
     queryFn: () => factoryApi.card(selection),
   });
-  const sourceHash = useMemo(
-    () => computeTextHash(cardQuery.data?.markdown || ''),
-    [cardQuery.data?.markdown]
-  );
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
 
   useEffect(() => {
@@ -88,23 +81,9 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       applyAnnotations(wrapper, annotations);
       return wrapper.firstElementChild?.outerHTML || freshHtml;
     };
-    const loadLegacy = () => factoryApi.highlight(
-      selection.folder,
-      selection.baseName,
-      computeTextHash(markdown)
-    ).then(({ highlight }) => {
-      if (cancelled) return;
-      setAnnotationMode('legacy');
-      if (highlight?.htmlContent) {
-        setRenderedHtml(sanitizePersistedCardHtml(highlight.htmlContent, selection.cardType));
-      }
-    }).catch(() => {
-      if (!cancelled) setAnnotationMode('legacy');
-    });
-
     const generationId = cardQuery.data?.record?.id;
     if (!generationId) {
-      void loadLegacy();
+      setAnnotationMode('unavailable');
     } else {
       factoryApi.annotations('generation', generationId)
         .then((result) => {
@@ -117,7 +96,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           setAnnotationMode('annotations');
         })
         .catch(() => {
-          if (!cancelled) void loadLegacy();
+          if (!cancelled) setAnnotationMode('unavailable');
         });
     }
     return () => {
@@ -234,70 +213,48 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     const range = selectedRangeRef.current;
     if (!container || !range) return;
 
-    if (annotationMode === 'annotations') {
-      const state = annotationStateRef.current;
-      const generationId = cardQuery.data?.record?.id;
-      const selector = selectedAnchorRef.current;
-      if (!state || !generationId || !selector || isSavingAnnotation) return;
-      setIsSavingAnnotation(true);
-      try {
-        const result = await factoryApi.createAnnotation({
-          id: crypto.randomUUID(),
-          targetKind: 'generation',
-          targetId: generationId,
-          expectedTargetRevision: state.target.targetRevision,
-          selector,
-          annotationKind: 'highlight',
-          color: 'red',
-        });
-        const annotations = [...state.annotations, result.annotation];
-        annotationStateRef.current = { ...state, annotations };
-        const markdown = cardQuery.data?.markdown || '';
-        const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = freshHtml;
-        applyAnnotations(wrapper, annotations);
-        setRenderedHtml(wrapper.firstElementChild?.outerHTML || freshHtml);
-        window.getSelection()?.removeAllRanges();
-        selectedRangeRef.current = null;
-        selectedAnchorRef.current = null;
-        selectedTextRef.current = '';
-        setHasSelection(false);
-        setToolbar(null);
-        setGenMenuOpen(false);
-        showToast('标红已保存');
-      } catch (error) {
-        console.error('Cards Factory annotation save failed', error);
-        const conflict = error instanceof ApiError && error.status === 409;
-        showToast(conflict ? '卡片内容或标红已变化，请重新选择' : '标红保存失败，请重试');
-      } finally {
-        setIsSavingAnnotation(false);
-      }
+    if (annotationMode !== 'annotations') {
+      showToast('当前卡片无法保存标红，请刷新后重试');
       return;
     }
-
-    if (annotationMode === 'pending') return;
-    const applied = applyMarkerHighlight(container, range)
-      || applyTextHighlight(container, selectedTextRef.current);
-    if (!applied) return;
-    window.getSelection()?.removeAllRanges();
-    selectedRangeRef.current = null;
-    selectedAnchorRef.current = null;
-    selectedTextRef.current = '';
-    setHasSelection(false);
-    setToolbar(null);
-    setGenMenuOpen(false);
-    const renderer = container.querySelector<HTMLElement>('[data-card-renderer-version="2"]');
-    if (!renderer) return;
-    const html = renderer.outerHTML;
-    setRenderedHtml(html);
-    await factoryApi.saveHighlight({
-      folder: selection.folder,
-      base: selection.baseName,
-      sourceHash,
-      html,
-      generationId: cardQuery.data?.record?.id || null,
-    });
+    const state = annotationStateRef.current;
+    const generationId = cardQuery.data?.record?.id;
+    const selector = selectedAnchorRef.current;
+    if (!state || !generationId || !selector || isSavingAnnotation) return;
+    setIsSavingAnnotation(true);
+    try {
+      const result = await factoryApi.createAnnotation({
+        id: crypto.randomUUID(),
+        targetKind: 'generation',
+        targetId: generationId,
+        expectedTargetRevision: state.target.targetRevision,
+        selector,
+        annotationKind: 'highlight',
+        color: 'red',
+      });
+      const annotations = [...state.annotations, result.annotation];
+      annotationStateRef.current = { ...state, annotations };
+      const markdown = cardQuery.data?.markdown || '';
+      const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = freshHtml;
+      applyAnnotations(wrapper, annotations);
+      setRenderedHtml(wrapper.firstElementChild?.outerHTML || freshHtml);
+      window.getSelection()?.removeAllRanges();
+      selectedRangeRef.current = null;
+      selectedAnchorRef.current = null;
+      selectedTextRef.current = '';
+      setHasSelection(false);
+      setToolbar(null);
+      setGenMenuOpen(false);
+      showToast('标红已保存');
+    } catch (error) {
+      console.error('Cards Factory annotation save failed', error);
+      const conflict = error instanceof ApiError && error.status === 409;
+      showToast(conflict ? '卡片内容或标红已变化，请重新选择' : '标红保存失败，请重试');
+    } finally {
+      setIsSavingAnnotation(false);
+    }
   };
 
   const captureSelection = () => {
@@ -405,7 +362,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             <button
               className="highlight-selection-button"
               type="button"
-              disabled={!hasSelection || annotationMode === 'pending' || isSavingAnnotation}
+              disabled={!hasSelection || annotationMode !== 'annotations' || isSavingAnnotation}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void saveHighlight()}
             >
@@ -432,7 +389,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
                         <button
                           type="button"
                           className="csa-highlight"
-                          disabled={annotationMode === 'pending' || isSavingAnnotation}
+                          disabled={annotationMode !== 'annotations' || isSavingAnnotation}
                           onClick={() => void saveHighlight()}
                         >
                           <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}
@@ -498,7 +455,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             <button
               type="button"
               className="csa-highlight"
-              disabled={annotationMode === 'pending' || isSavingAnnotation}
+              disabled={annotationMode !== 'annotations' || isSavingAnnotation}
               onClick={() => void saveHighlight()}
             >
               <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红'}

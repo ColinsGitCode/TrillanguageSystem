@@ -40,9 +40,10 @@ function createFixture() {
       file_path TEXT NOT NULL,
       FOREIGN KEY (generation_id) REFERENCES generations(id)
     );
-    CREATE TABLE card_highlights (
+    CREATE TABLE card_annotations (
       id INTEGER PRIMARY KEY,
-      folder_name TEXT NOT NULL
+      target_kind TEXT NOT NULL,
+      target_id INTEGER NOT NULL
     );
     CREATE TABLE generation_jobs (
       id INTEGER PRIMARY KEY,
@@ -64,7 +65,7 @@ function createFixture() {
     '2026-06-01 12:00:00'
   );
   db.prepare('INSERT INTO audio_files VALUES (1, 1, ?)').run(path.join(sourceDir, 'card.wav'));
-  db.prepare('INSERT INTO card_highlights VALUES (1, ?)').run('kindergarden');
+  db.prepare("INSERT INTO card_annotations VALUES (1, 'generation', 1)").run();
   db.prepare('INSERT INTO generation_jobs VALUES (1, ?, ?, ?, ?, ?)').run(
     'kindergarden',
     'kindergarden',
@@ -109,7 +110,6 @@ test.describe('reassignFolderDate migration', () => {
       assert.deepEqual(result.updated, {
         generations: 1,
         audioFiles: 1,
-        highlights: 1,
         jobs: 1,
       });
       assert.equal(fs.existsSync(fixture.sourceDir), false);
@@ -123,7 +123,10 @@ test.describe('reassignFolderDate migration', () => {
         assert.match(generation.md_file_path, /20260713\/card\.md$/);
         assert.equal(generation.created_at, '2026-06-01 12:00:00');
         assert.match(db.prepare('SELECT file_path FROM audio_files WHERE id = 1').get().file_path, /20260713\/card\.wav$/);
-        assert.equal(db.prepare('SELECT folder_name FROM card_highlights WHERE id = 1').get().folder_name, '20260713');
+        assert.deepEqual(
+          db.prepare('SELECT target_kind, target_id FROM card_annotations WHERE id = 1').get(),
+          { target_kind: 'generation', target_id: 1 }
+        );
         const job = db.prepare('SELECT * FROM generation_jobs WHERE id = 1').get();
         assert.equal(job.target_folder, '20260713');
         assert.equal(job.result_folder, '20260713');

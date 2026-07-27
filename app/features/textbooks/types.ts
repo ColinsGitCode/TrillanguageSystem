@@ -72,18 +72,6 @@ export type TextbookAudio = {
   playback_url: string;
 };
 
-export type TextbookHighlight = {
-  id: number;
-  generationId: number;
-  folderName: string;
-  baseFilename: string;
-  sourceHash: string;
-  version: number;
-  htmlContent: string;
-  markCount: number;
-  highlightedChars: number;
-};
-
 export type TextbookTrack = TextbookTrackSummary & {
   course_key: string;
   course_title: string;

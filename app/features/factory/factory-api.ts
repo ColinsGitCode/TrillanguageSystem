@@ -78,20 +78,6 @@ export const factoryApi = {
     method: 'POST',
     body: JSON.stringify({ image }),
   }),
-  highlight: (folder: string, baseName: string, sourceHash: string) =>
-    requestJson<{ highlight: { htmlContent: string; version: number } | null }>(
-      `/api/highlights/by-file?folder=${encodeURIComponent(folder)}&base=${encodeURIComponent(baseName)}&sourceHash=${encodeURIComponent(sourceHash)}`
-    ),
-  saveHighlight: (payload: {
-    folder: string;
-    base: string;
-    sourceHash: string;
-    html: string;
-    generationId?: number | null;
-  }) => requestJson('/api/highlights/by-file', {
-    method: 'PUT',
-    body: JSON.stringify({ ...payload, version: 2, updatedBy: 'react-ui' }),
-  }),
   annotations: (targetKind: CardAnnotation['targetKind'], targetId: number) =>
     requestJson<{ success: true; target: AnnotationTarget; annotations: CardAnnotation[] }>(
       `/api/annotations?targetKind=${encodeURIComponent(targetKind)}&targetId=${encodeURIComponent(String(targetId))}`
@@ -107,7 +93,6 @@ export const factoryApi = {
   }) => requestJson<{
     success: true;
     annotation: CardAnnotation;
-    compatibility: { written: boolean; highlightId?: number; version?: number };
   }>('/api/annotations', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -115,7 +100,6 @@ export const factoryApi = {
   deleteAnnotation: (id: string, expectedVersion: number) => requestJson<{
     success: true;
     annotation: { id: string; status: 'deleted'; version: number };
-    compatibility: { written: boolean; highlightId?: number; version?: number };
   }>(`/api/annotations/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     body: JSON.stringify({ expectedVersion }),

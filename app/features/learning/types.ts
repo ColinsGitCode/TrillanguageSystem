@@ -183,7 +183,6 @@ export type StudyItem = {
     status: string;
     playback_url?: string;
   }>;
-  highlightReference: { id: number; sourceHash: string; version: number } | null;
   annotationReference?: {
     targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
     targetId: number;

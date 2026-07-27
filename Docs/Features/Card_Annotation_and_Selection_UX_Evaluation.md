@@ -1,6 +1,6 @@
 # 学习卡片选区交互与注解层 UX 评估（CA-D0）
 
-> 状态：**Accepted 专题基线 · CA-P1–P7 已完成。三消费者均以新注释表为读取真源；旧 HTML 双写保留至 CA-P8**
+> 状态：**Accepted 专题基线 · CA-P1–P8 已完成。运行时只读写规范注解层；旧 HTML 表已冻结**
 >
 > 日期：2026-07-23；复审修订：2026-07-26；迁移 POC、菜单库 POC 与 CA-P1 生产接入：2026-07-27
 >
@@ -10,7 +10,7 @@
 >
 > **不在范围**：修改卡片正文（B②）。若将来要做，必须独立 ADR，并复用教材域已验证的 copy-on-write 修订机制，不得就地改写。
 >
-> 文档治理：本文已登记进 [Docs/README.md](../README.md) 作为当前专题评估入口；技术权威为已接受的 [Card Annotation Layer ADR](../Architecture/Card_Annotation_Layer_ADR.md)。正文仍不可变；CA-P7 已完成 Cards Factory、教材课程与 Review 三个消费者切换，旧 HTML 双写保留至 CA-P8。
+> 文档治理：本文已登记进 [Docs/README.md](../README.md) 作为当前专题评估入口；技术权威为已接受的 [Card Annotation Layer ADR](../Architecture/Card_Annotation_Layer_ADR.md)。正文仍不可变；CA-P8 后 Cards Factory、教材课程与 Review 只使用 `card_annotations`，旧 HTML 表只作冻结迁移/审计快照。
 
 ## 复审修订记录（2026-07-26）
 
@@ -37,7 +37,7 @@
 |---|---|
 | CA-P1 后，选区工具条保留标红与生成卡片（三卡型），下拉与右键菜单由 Radix 接管 | `app/features/card-modal/CardModal.tsx` |
 | 阅读区已有 `onContextMenuCapture` 边界：有有效选区才打开应用菜单，无选区放行浏览器原生菜单 | 同上 |
-| 标红把**整份渲染 HTML 连 mark 一起存**,唯一键为 `folder_name+base_filename+source_hash` | `services/storage/db/highlights.js`、`card_highlights` |
+| CA-P8 前标红把**整份渲染 HTML 连 mark 一起存**；该旧 repository/HTTP 链路现已删除 | 冻结表 `card_highlights` |
 | mark 只有单色 `study-highlight-red` | `app/styles/card-modal.css` |
 | 净化器已允许 `mark` 标签与 `class` 属性 | `app/features/card-modal/markdown.ts` |
 | 已有 **ruby-aware 选区提取**(剔除 `rt/rp`、音频按钮、外来语标签),但**只作用于当前选中片段,不产出整卡线性文本** | `app/features/card-modal/selection.ts:91` |
@@ -251,7 +251,7 @@ CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与
 - [x] **锚定鲁棒性**：重复 quote、ruby、跨 DOM 节点、内容修订、文件移动/改期、UTF-16 补充字符及真实内容漂移 orphaned 均通过，合同测试 11/11；
 - [ ] **交互补齐**:键盘选区触发工具条、多色标记、取消标记、KG 查词、复制;
       **已完成子项**:真实 CardModal 的右键接管(有选区才接管、无选区放行原生菜单)、菜单方向键/Escape、焦点返回及“保留选区 + 焦点返回”联动均已由 CA-P1 覆盖;
-- [x] **切换安全设计**：Accepted ADR 已定义旧表保留、shadow read、逐消费者切换、compatibility write 与开关回滚；CA-P4 已完成真实迁移和三消费者 shadow read，CA-P5 已切换 Cards Factory，CA-P6 已切换教材，CA-P7–P8 继续收口；
+- [x] **切换安全设计**：Accepted ADR 已定义并执行旧表保留、shadow read、逐消费者切换和 compatibility write；CA-P8 已停止旧读写。当前开关只负责临时禁用注解，不再回退旧 HTML；
 - [x] **依赖体积 + 视觉保真**:完整双菜单的 Radix **+29.4 KiB gzip**，React Aria 下拉菜单 +45.1 KiB；
       菜单面板因 Portal 需去嵌套 3 处 CSS 规则后恢复样式/布局契约;
 - [x] **Recogito 取舍**：v1 不引生产包，只吸收 W3C selector 模型并自研 ruby-aware 锚定与渲染。
@@ -265,11 +265,20 @@ CA-P3 已把同一合同下沉为生产 `annotation-anchor.mjs`，并用 POC 与
 - [x] 无头库已选 Radix 并在 CA-P1 生产接入；版本、license、按需 import 与体积已记录
 - [ ] A 层交互(右键接管、多色标记、取消标记、KG 查词、复制、键盘可达)实施
 - [x] B① 注解层消费者切换 + 存量标红按逻辑区间迁移 + 教材/复习答案面回归；
-      CA-P5–P7 已依次切换 Cards Factory、教材课程与 Review，旧 HTML 双写继续
-      保留到 CA-P8；
+      CA-P5–P7 已依次切换 Cards Factory、教材课程与 Review，CA-P8 已删除旧读、
+      旧写、shadow 和兼容 API，并将删除、改期、统计切到规范注解；
 - [x] 桌面 E2E 覆盖，1280/1440 无溢出，`readOnly` 模式禁删除、禁标红
 
 **待定项**:
 
 - **朗读选区**当前无「任意文本 TTS」接口,需新增后端表面;本期是否纳入未定。
 - **右键接管边界**已按「有选区才接管，无选区放行原生菜单」在 CA-P1 落地；全面接管不在当前范围。
+
+### 9.1 CA-P8 收口说明
+
+`card_highlights` 没有在本阶段 DROP。它继续承载离线迁移可重放与历史审计证据，
+但不再是回滚副本，也不再有生产 repository、HTTP API 或 UI 消费者。最终保留
+期限和删除动作必须另开数据保留 ADR。
+
+CA-P8 终验已覆盖 unit 368/368、integration 62/62、desktop E2E 47/47、
+smoke 7/7、生产构建、架构门禁、真实 Compose 重建和真实 volume 只读检查。

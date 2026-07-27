@@ -14,7 +14,7 @@ const { seedStudyItem } = require('../helpers/learningFixtures');
 
 test.after(() => databaseModule.close());
 
-test('keeps the legacy highlight read when canonical annotations are disabled', async () => {
+test('does not read frozen legacy HTML when canonical annotations are disabled', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const seeded = seedStudyItem(dbService.db, {
@@ -22,18 +22,19 @@ test('keeps the legacy highlight read when canonical annotations are disabled', 
       folder: '20260727',
       base: 'legacy-review-annotation',
     });
-    const legacy = dbService.upsertCardHighlight({
-      generationId: seeded.generationId,
-      folderName: '20260727',
-      baseFilename: 'legacy-review-annotation',
-      sourceHash: seeded.contentHash,
-      htmlContent: '<div><mark class="study-highlight-red">legacy</mark></div>',
-      version: 1,
-    });
+    dbService.db.prepare(`
+      INSERT INTO card_highlights(
+        generation_id, folder_name, base_filename, source_hash, html_content
+      ) VALUES (?, '20260727', 'legacy-review-annotation', ?, ?)
+    `).run(
+      seeded.generationId,
+      seeded.contentHash,
+      '<div><mark class="study-highlight-red">legacy</mark></div>'
+    );
     const service = new LearningService({ db: dbService.db });
     const item = await service.getItem(seeded.studyItemId);
 
-    assert.equal(item.highlightReference.id, legacy.id);
+    assert.equal(item.highlightReference, undefined);
     assert.equal(item.annotationReference, null);
   } finally {
     dbService.close();
@@ -47,14 +48,6 @@ test('uses canonical annotation metadata and ignores legacy highlight rows when 
       phrase: 'canonical review annotation',
       folder: '20260727',
       base: 'canonical-review-annotation',
-    });
-    dbService.upsertCardHighlight({
-      generationId: seeded.generationId,
-      folderName: '20260727',
-      baseFilename: 'canonical-review-annotation',
-      sourceHash: seeded.contentHash,
-      htmlContent: '<div><mark class="study-highlight-red">legacy</mark></div>',
-      version: 1,
     });
     const annotationService = new AnnotationService({ dbService });
     const target = annotationService.resolveTarget('generation', seeded.generationId);
@@ -78,7 +71,7 @@ test('uses canonical annotation metadata and ignores legacy highlight rows when 
     });
     const item = await service.getItem(seeded.studyItemId);
 
-    assert.equal(item.highlightReference, null);
+    assert.equal(item.highlightReference, undefined);
     assert.equal(item.annotationReference.targetKind, 'generation');
     assert.equal(item.annotationReference.targetId, seeded.generationId);
     assert.equal(item.annotationReference.count, 1);

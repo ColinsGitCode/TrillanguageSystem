@@ -10,14 +10,6 @@ const { TextbookTtsService } = require('../services/textbooks/textbookTtsService
 const textbookOperationService = require('../services/textbooks/textbookOperationService');
 const { TextbookWorkflowService } = require('../services/textbooks/textbookWorkflowService');
 const {
-  deleteTrackHighlight,
-  getTrackHighlight,
-  saveTrackHighlight,
-} = require('../services/textbooks/textbookHighlightService');
-const {
-  annotationShadowReadService,
-} = require('../services/annotations/annotationRuntime');
-const {
   TEXTBOOK_FEATURE_ENABLED,
   TEXTBOOK_SOURCE_ROOT,
   TEXTBOOK_WORK_PATH,
@@ -192,34 +184,6 @@ router.post('/api/textbooks/tracks/:id/tts', asyncRoute(async (req, res) => {
   return send(res, await textbookTtsService.generateTrack(req.params.id, {
     force: Boolean(req.body?.force),
   }));
-}));
-
-router.get('/api/textbooks/tracks/:id/highlights', route((req, res) => {
-  const { highlight } = getTrackHighlight({
-    dbService,
-    trackId: req.params.id,
-    shadowReadService: annotationShadowReadService,
-  });
-  return send(res, { highlight });
-}));
-
-router.put('/api/textbooks/tracks/:id/highlights', route((req, res) => {
-  const highlight = saveTrackHighlight({
-    dbService,
-    trackId: req.params.id,
-    html: req.body?.html,
-    updatedBy: req.body?.updatedBy || 'textbook-ui',
-  });
-  return send(res, { highlight });
-}));
-
-router.delete('/api/textbooks/tracks/:id/highlights/:highlightId', route((req, res) => {
-  const deleted = deleteTrackHighlight({
-    dbService,
-    trackId: req.params.id,
-    highlightId: req.params.highlightId,
-  });
-  return send(res, { deleted });
 }));
 
 router.post('/api/textbooks/expressions/:id/derivations/preview', route((req, res) => {

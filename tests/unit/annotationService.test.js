@@ -187,4 +187,51 @@ test.describe('AnnotationService', () => {
       dbService.close();
     }
   });
+
+  test.it('reports statistics from active canonical annotations only', () => {
+    const dbService = new DatabaseService(':memory:');
+    try {
+      const firstGenerationId = seedGeneration(dbService.db, {
+        requestId: 'annotation-stats-first',
+      });
+      const secondGenerationId = seedGeneration(dbService.db, {
+        hash: 'b'.repeat(64),
+        requestId: 'annotation-stats-second',
+      });
+      const service = new AnnotationService({ dbService, now: () => NOW });
+      const first = service.create(payload(firstGenerationId, {
+        id: '018f0f96-5a90-7d75-a2c6-86559b5de930',
+      }));
+      service.create(payload(secondGenerationId, {
+        id: '018f0f96-5a90-7d75-a2c6-86559b5de931',
+        expectedTargetRevision: 'b'.repeat(64),
+      }));
+
+      let stats = dbService.getAnnotationStats({
+        provider: 'deepseek',
+        cardType: 'trilingual',
+      });
+      assert.deepEqual(stats.overview, {
+        totalAnnotations: 2,
+        annotatedTargets: 2,
+        highlights: 2,
+        notes: 0,
+        highlightedChars: 6,
+        lastUpdatedAt: NOW,
+      });
+      assert.deepEqual(stats.byCardType, [{
+        cardType: 'trilingual',
+        targets: 2,
+        annotations: 2,
+      }]);
+
+      service.remove(first.id, { expectedVersion: first.version });
+      stats = dbService.getAnnotationStats();
+      assert.equal(stats.overview.totalAnnotations, 1);
+      assert.equal(stats.overview.annotatedTargets, 1);
+      assert.equal(stats.overview.highlights, 1);
+    } finally {
+      dbService.close();
+    }
+  });
 });

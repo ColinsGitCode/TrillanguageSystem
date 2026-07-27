@@ -78,9 +78,6 @@ function inspectMigration(options) {
       FROM generation_jobs
       WHERE lower(target_folder) = lower(?) OR lower(result_folder) = lower(?)
     `).get(sourceFolder, sourceFolder).count || 0);
-    const highlightCount = Number(db.prepare(
-      'SELECT COUNT(*) AS count FROM card_highlights WHERE lower(folder_name) = lower(?)'
-    ).get(sourceFolder).count || 0);
     return {
       sourceFolder,
       targetFolder,
@@ -92,7 +89,6 @@ function inspectMigration(options) {
       sourceEntries,
       generationCount,
       jobCount,
-      highlightCount,
     };
   } finally {
     db.close();
@@ -162,12 +158,6 @@ function migrateDatabase(db, plan) {
         SELECT id FROM generations WHERE lower(folder_name) = lower(@sourceFolder)
       )
     `).run(plan);
-    const highlightResult = db.prepare(`
-      UPDATE card_highlights
-      SET folder_name = @targetFolder
-      WHERE lower(folder_name) = lower(@sourceFolder)
-    `).run(plan);
-
     for (const job of jobs) {
       updateJob.run({
         id: job.id,
@@ -202,7 +192,6 @@ function migrateDatabase(db, plan) {
     return {
       generations: Number(generationResult.changes || 0),
       audioFiles: Number(audioResult.changes || 0),
-      highlights: Number(highlightResult.changes || 0),
       jobs: jobs.length,
     };
   });
@@ -269,7 +258,6 @@ async function main() {
         sourceFiles: result.plan.sourceEntries.length,
         generations: result.plan.generationCount,
         jobs: result.plan.jobCount,
-        highlights: result.plan.highlightCount,
       };
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 }

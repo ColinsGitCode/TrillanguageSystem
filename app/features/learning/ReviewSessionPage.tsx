@@ -216,7 +216,7 @@ export function ReviewSessionPage() {
 
           {!revealed && item && <button className="learning-reveal-button" type="button" data-testid="learning-reveal" disabled={revealMutation.isPending} onClick={() => revealMutation.mutate()}>{revealMutation.isPending ? '正在揭示…' : '揭示答案'}<kbd>Space</kbd></button>}
 
-          {revealed && item && <section className={`surface learning-answer-surface tone-${presentation.tone}`} data-testid="learning-answer"><header><span>答案面</span>{(item.annotationReference || item.highlightReference) && <small>含个人标红</small>}{item.source.cardType !== 'textbook_track' && <button type="button" onClick={() => openFullCard(item)}>查看完整卡片 <ExternalLink aria-hidden="true" /></button>}</header><LearningAnswer item={item} /></section>}
+          {revealed && item && <section className={`surface learning-answer-surface tone-${presentation.tone}`} data-testid="learning-answer"><header><span>答案面</span>{item.annotationReference && <small>含个人标红</small>}{item.source.cardType !== 'textbook_track' && <button type="button" onClick={() => openFullCard(item)}>查看完整卡片 <ExternalLink aria-hidden="true" /></button>}</header><LearningAnswer item={item} /></section>}
         </div>
 
         <footer className="learning-session-footer">

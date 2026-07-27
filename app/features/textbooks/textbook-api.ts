@@ -5,7 +5,6 @@ import type {
   TextbookCourse,
   TextbookDerivationPreview,
   TextbookImportSummary,
-  TextbookHighlight,
   TextbookOperation,
   TextbookOperationEvent,
   TextbookPublishPreview,
@@ -102,17 +101,6 @@ export const textbookApi = {
     method: 'POST',
     body: JSON.stringify({ force }),
   }),
-  highlight: (trackId: number) => requestJson<{ success: true; highlight: TextbookHighlight | null }>(
-    `/api/textbooks/tracks/${trackId}/highlights`
-  ),
-  saveHighlight: (trackId: number, html: string) => requestJson<{ success: true; highlight: TextbookHighlight }>(
-    `/api/textbooks/tracks/${trackId}/highlights`,
-    { method: 'PUT', body: JSON.stringify({ html, updatedBy: 'textbook-ui' }) }
-  ),
-  deleteHighlight: (trackId: number, highlightId: number) => requestJson<{ success: true; deleted: number }>(
-    `/api/textbooks/tracks/${trackId}/highlights/${highlightId}`,
-    { method: 'DELETE' }
-  ),
   annotations: (trackId: number) => requestJson<{
     success: true;
     target: AnnotationTarget;
@@ -126,7 +114,6 @@ export const textbookApi = {
   }) => requestJson<{
     success: true;
     annotation: CardAnnotation;
-    compatibility: { written: boolean; highlightId?: number; version?: number };
   }>('/api/annotations', {
     method: 'POST',
     body: JSON.stringify({

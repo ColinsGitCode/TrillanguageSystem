@@ -184,7 +184,7 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     );
     const item = (await itemResponse.json()).item;
     expect(item.unitKind).toBe('textbook_en');
-    expect(item.highlightReference).toBeNull();
+    expect(item.highlightReference).toBeUndefined();
     expect(item.annotationReference).toMatchObject({
       targetKind: 'textbook_track',
       targetId: publishedTrackId,
@@ -202,7 +202,13 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await request.post(`/api/learning/sessions/${session.id}/end`);
   });
 
-  test('falls back to legacy Track HTML when the annotation feature is disabled', async ({ page }) => {
+  test('does not fall back to legacy Track HTML when the annotation feature is disabled', async ({ page }) => {
+    const legacyRequests = [];
+    page.on('request', (request) => {
+      if (/\/api\/textbooks\/tracks\/\d+\/highlights$/u.test(request.url())) {
+        legacyRequests.push(request.url());
+      }
+    });
     await page.route('**/api/annotations?*', async (route) => {
       await route.fulfill({
         status: 404,
@@ -217,15 +223,10 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
     await page.locator('.textbook-published-list li button').nth(1).click();
     await selectText(page, '[data-textbook-language="en"]', 0, 4);
-    const legacyWrite = page.waitForResponse((response) => (
-      response.request().method() === 'PUT'
-      && /\/api\/textbooks\/tracks\/\d+\/highlights$/u.test(response.url())
-    ));
-    await page.getByRole('button', { name: '标红选区' }).click();
-    expect((await legacyWrite).ok()).toBeTruthy();
-    await expect(page.locator('mark.study-highlight-red')).toHaveText('I am');
+    await expect(page.getByRole('button', { name: '标红选区' })).toBeDisabled();
+    expect(legacyRequests).toEqual([]);
     await page.reload();
-    await expect(page.locator('mark.study-highlight-red')).toHaveText('I am');
+    expect(legacyRequests).toEqual([]);
   });
 
   test('keeps official Track and generated sentence playback mutually exclusive', async ({ page }) => {

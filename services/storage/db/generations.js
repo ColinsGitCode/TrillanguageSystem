@@ -319,6 +319,11 @@ function removeWithLearningState(db, id) {
       SET lifecycle = 'archived', lifecycle_reason = 'source-deleted', updated_at_utc = ?
       WHERE generation_id = ? AND lifecycle <> 'archived'
     `).run(timestamp, id).changes;
+    const deletedAnnotations = db.prepare(`
+      UPDATE card_annotations
+      SET status = 'deleted', version = version + 1, updated_at_utc = ?
+      WHERE target_kind = 'generation' AND target_id = ? AND status <> 'deleted'
+    `).run(timestamp, id).changes;
     for (const item of sourceItems) {
       enqueueKgSourceSyncJob(db, {
         operation: 'absent',
@@ -329,7 +334,7 @@ function removeWithLearningState(db, id) {
       }, { now: timestamp });
     }
     const deleted = db.prepare('DELETE FROM generations WHERE id = ?').run(id).changes;
-    return { deleted, archivedStudyItems: archived };
+    return { deleted, archivedStudyItems: archived, deletedAnnotations };
   });
   const result = transaction();
   log.info({ id, ...result }, 'deleted generation with learning state preserved');

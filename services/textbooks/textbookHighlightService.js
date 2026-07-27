@@ -13,14 +13,6 @@ const ALLOWED_ATTR = [
   'data-textbook-language',
 ];
 
-function trackIdentity(track) {
-  return {
-    folderName: `textbook:${track.course_key}`,
-    baseFilename: `track-${String(track.track_number).padStart(2, '0')}`,
-    sourceHash: track.projection_hash || track.content_hash,
-  };
-}
-
 function normalizedText(node, { stripRubyReadings = false } = {}) {
   const clone = node.cloneNode(true);
   if (stripRubyReadings) clone.querySelectorAll('rt, rp').forEach((child) => child.remove());
@@ -47,8 +39,6 @@ function expressionFragmentsFromDocument(html, expressionId) {
     parsed.window.close();
   }
 }
-
-const expressionFragmentsFromHighlight = expressionFragmentsFromDocument;
 
 function sanitizeHighlightDocument(html, track) {
   const input = String(html || '');
@@ -125,59 +115,7 @@ function sanitizeHighlightDocument(html, track) {
   }
 }
 
-function getTrackHighlight({ dbService, trackId, shadowReadService = null }) {
-  const track = dbService.getTextbookTrack(trackId);
-  if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
-  const identity = trackIdentity(track);
-  const highlight = dbService.getCardHighlightByFile(
-    identity.folderName,
-    identity.baseFilename,
-    identity.sourceHash
-  );
-  if (shadowReadService) {
-    void shadowReadService.observe({
-      consumer: 'textbook',
-      legacyHighlight: highlight,
-      targetKind: 'textbook_track',
-      targetId: track.id,
-    });
-  }
-  return { track, identity, highlight };
-}
-
-function saveTrackHighlight({ dbService, trackId, html, updatedBy = 'textbook-ui' }) {
-  const { track, identity, highlight } = getTrackHighlight({ dbService, trackId });
-  if (track.status !== 'published' || !track.generation_id) {
-    throw textbookError('TEXTBOOK_TRACK_NOT_PUBLISHED', 409);
-  }
-  const htmlContent = sanitizeHighlightDocument(html, track);
-  return dbService.upsertCardHighlight({
-    ...identity,
-    generationId: Number(track.generation_id),
-    htmlContent,
-    version: Number(highlight?.version || 0) + 1,
-    updatedBy,
-  });
-}
-
-function deleteTrackHighlight({ dbService, trackId, highlightId }) {
-  const { identity, highlight } = getTrackHighlight({ dbService, trackId });
-  if (!highlight || Number(highlight.id) !== Number(highlightId)) {
-    throw textbookError('TEXTBOOK_HIGHLIGHT_NOT_FOUND', 404);
-  }
-  return dbService.deleteCardHighlightByFile(
-    identity.folderName,
-    identity.baseFilename,
-    identity.sourceHash
-  );
-}
-
 module.exports = {
-  deleteTrackHighlight,
   expressionFragmentsFromDocument,
-  expressionFragmentsFromHighlight,
-  getTrackHighlight,
   sanitizeHighlightDocument,
-  saveTrackHighlight,
-  trackIdentity,
 };

@@ -123,7 +123,7 @@ test.describe('React page smoke', () => {
           scheduleState: { fsrsState: 'review', dueAtUtc: '2026-07-20T00:00:00.000Z', lastReviewedAtUtc: '2026-07-15T00:00:00.000Z', reps: 1, lapses: 0, version: 1 },
           expectedScheduleVersion: 1,
           audioFiles: [],
-          highlightReference: null,
+          annotationReference: null,
         },
       }),
     }));

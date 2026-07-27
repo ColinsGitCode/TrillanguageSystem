@@ -5,11 +5,8 @@ const path = require('path');
 const {
   deleteCard,
   deleteRecordFiles,
-  dbService,
 } = require('./_shared');
-const {
-  annotationShadowReadService,
-} = require('../services/annotations/annotationRuntime');
+const { dbService } = require('./_shared');
 const log = require('../lib/logger').child({ module: 'routes/files' });
 
 const router = express.Router();
@@ -47,101 +44,6 @@ router.get('/api/folders/:folder/files/:file', (req, res) => {
         }
         res.send(content);
     } catch (e) { res.status(404).send('Not Found'); }
-});
-
-// 卡片标红：读取（按 folder/base/sourceHash）
-router.get('/api/highlights/by-file', (req, res) => {
-    try {
-        const folder = String(req.query.folder || '').trim();
-        const base = String(req.query.base || '').trim();
-        const sourceHash = String(req.query.sourceHash || '').trim();
-        if (!folder || !base || !sourceHash) {
-            return res.status(400).json({ error: 'folder, base and sourceHash are required' });
-        }
-        if (folder.startsWith('textbook:')) {
-            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
-        }
-        const highlight = dbService.getCardHighlightByFile(folder, base, sourceHash);
-        const generation = highlight?.generationId
-            ? dbService.getGenerationById(highlight.generationId)
-            : dbService.getGenerationByFile(folder, base);
-        if (generation) {
-            void annotationShadowReadService.observe({
-                consumer: 'cards-factory',
-                legacyHighlight: highlight,
-                targetKind: 'generation',
-                targetId: generation.id,
-            });
-        }
-        res.json({ success: true, highlight: highlight || null });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 卡片标红：保存（upsert）
-router.put('/api/highlights/by-file', (req, res) => {
-    try {
-        const {
-            folder,
-            base,
-            sourceHash,
-            html,
-            generationId = null,
-            version = 1,
-            updatedBy = 'ui'
-        } = req.body || {};
-
-        const folderName = String(folder || '').trim();
-        const baseFilename = String(base || '').trim();
-        const hash = String(sourceHash || '').trim();
-        const htmlContent = String(html || '');
-        if (!folderName || !baseFilename || !hash) {
-            return res.status(400).json({ error: 'folder, base and sourceHash are required' });
-        }
-        if (folderName.startsWith('textbook:')) {
-            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
-        }
-        if (!htmlContent.trim()) {
-            return res.status(400).json({ error: 'html is required' });
-        }
-        if (htmlContent.length > 2_000_000) {
-            return res.status(400).json({ error: 'html too large' });
-        }
-
-        const saved = dbService.upsertCardHighlight({
-            folderName,
-            baseFilename,
-            sourceHash: hash,
-            htmlContent,
-            generationId: generationId ? Number(generationId) : null,
-            version: Number(version || 1),
-            updatedBy
-        });
-
-        res.json({ success: true, highlight: saved });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-});
-
-// 卡片标红：删除（可选 sourceHash，默认删该卡片全部版本）
-router.delete('/api/highlights/by-file', (req, res) => {
-    try {
-        const folder = String(req.query.folder || '').trim();
-        const base = String(req.query.base || '').trim();
-        const sourceHash = String(req.query.sourceHash || '').trim();
-        if (!folder || !base) {
-            return res.status(400).json({ error: 'folder and base are required' });
-        }
-        if (folder.startsWith('textbook:')) {
-            return res.status(403).json({ error: 'textbook highlights require the textbook API' });
-        }
-        const deleted = dbService.deleteCardHighlightByFile(folder, base, sourceHash);
-        res.json({ success: true, deleted });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
 });
 
 // 根据文件夹+文件名定位记录
@@ -187,7 +89,7 @@ router.delete('/api/records/by-file', (req, res) => {
         let record = null;
         let archivedStudyItems = 0;
         let cleanupErrors = [];
-        let highlightDeleted = 0;
+        let annotationsDeleted = 0;
         for (const candidate of baseCandidates) {
             record = dbService.getGenerationByFile(folder, candidate);
             if (record) break;
@@ -197,23 +99,18 @@ router.delete('/api/records/by-file', (req, res) => {
             for (const filePath of result?.deletedPaths || []) deletedPaths.add(filePath);
             archivedStudyItems = result?.database?.archivedStudyItems || 0;
             cleanupErrors = result?.cleanupErrors || [];
-            highlightDeleted += result?.highlightDeleted || 0;
+            annotationsDeleted += result?.database?.deletedAnnotations || 0;
         }
 
         // 2) 兜底：按文件名扫描删除
         const fallbackDeleted = deleteRecordFiles(folder, baseRaw);
         fallbackDeleted.forEach((p) => deletedPaths.add(p));
 
-        // 3) 清理卡片标红（兼容 generation_id 缺失场景）
-        baseCandidates.forEach((candidate) => {
-            highlightDeleted += dbService.deleteCardHighlightByFile(folder, candidate);
-        });
-
         res.json({
             success: true,
             deletedFiles: deletedPaths.size,
             recordDeleted: Boolean(record),
-            highlightDeleted,
+            annotationsDeleted,
             archivedStudyItems,
             cleanupErrors
         });

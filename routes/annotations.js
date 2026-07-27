@@ -6,7 +6,6 @@ const {
 } = require('../lib/serverConfig');
 const {
   annotationConsumerService,
-  annotationShadowReadService,
 } = require('../services/annotations/annotationRuntime');
 
 const router = express.Router();
@@ -20,17 +19,6 @@ function annotationsEnabled(req, res, next) {
   }
   return next();
 }
-
-router.get('/api/annotations/shadow-status', (req, res) => {
-  const snapshot = annotationShadowReadService.snapshot();
-  if (!snapshot.enabled) {
-    return res.status(404).json({
-      error: 'Not found',
-      code: 'ANNOTATION_SHADOW_READ_DISABLED',
-    });
-  }
-  return res.json({ success: true, shadow: snapshot });
-});
 
 router.get('/api/annotations', annotationsEnabled, (req, res, next) => {
   try {

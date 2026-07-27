@@ -14,8 +14,6 @@ process.env.TEXTBOOK_FEATURE_ENABLED = '1';
 process.env.TEXTBOOK_SOURCE_ROOT = textbookSourceRoot;
 process.env.TEXTBOOK_WORK_PATH = textbookWorkRoot;
 process.env.CARD_ANNOTATIONS_ENABLED = '1';
-process.env.CARD_ANNOTATIONS_SHADOW_READ_ENABLED = '1';
-process.env.CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED = '1';
 
 const {
   api,
@@ -26,7 +24,6 @@ const {
 } = require('./_harness');
 const { TextbookTtsService } = require('../../services/textbooks/textbookTtsService');
 const {
-  annotationShadowReadService,
   textbookAnnotationService,
 } = require('../../services/annotations/annotationRuntime');
 const {
@@ -268,7 +265,6 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
 });
 
 test('verified textbook track publishes textbook study items and creates derivation jobs', async () => {
-  annotationShadowReadService.resetForTests();
   const fixture = await createManifestFixture();
   const imported = await api('POST', '/api/textbooks/imports', {
     body: {
@@ -380,7 +376,7 @@ test('verified textbook track publishes textbook study items and creates derivat
   assert.equal(item.body.item.audioFiles.length, 1);
   assert.match(item.body.item.audioFiles[0].playback_url, /^\/api\/textbooks\/audio\/\d+\/content$/u);
   assert.equal(item.body.item.annotationReference, null);
-  assert.equal(item.body.item.highlightReference, null);
+  assert.equal(item.body.item.highlightReference, undefined);
 
   const audioId = audioGenerated.track.tts_audio[0].id;
   const audioHead = await api('HEAD', `/api/textbooks/audio/${audioId}/content`);
@@ -421,34 +417,17 @@ test('verified textbook track publishes textbook study items and creates derivat
   });
   assert.equal(savedAnnotation.status, 201);
   assert.equal(savedAnnotation.body.annotation.targetKind, 'textbook_track');
-  assert.equal(savedAnnotation.body.compatibility.written, true);
-  const fetchedHighlight = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
-  assert.equal(fetchedHighlight.body.highlight.id, savedAnnotation.body.compatibility.highlightId);
-  assert.equal(fetchedHighlight.body.highlight.markCount, 1);
-  dbService.db.prepare(`
-    UPDATE card_highlights SET html_content = ?, version = version + 1
-    WHERE id = ?
-  `).run(canonical, fetchedHighlight.body.highlight.id);
+  assert.equal(savedAnnotation.body.compatibility, undefined);
+  assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   const highlightedItem = await api('GET', `/api/learning/items/${itemId}`);
-  assert.equal(highlightedItem.body.item.highlightReference, null);
+  assert.equal(highlightedItem.body.item.highlightReference, undefined);
   assert.equal(highlightedItem.body.item.annotationReference.targetKind, 'textbook_track');
   assert.equal(highlightedItem.body.item.annotationReference.targetId, trackId);
   assert.equal(highlightedItem.body.item.annotationReference.count, 1);
   assert.equal(highlightedItem.body.item.annotationReference.source, 'card_annotations');
   assert.match(highlightedItem.body.item.answer.markdown, /study-highlight-red/u);
-  await annotationShadowReadService.flush();
-  const shadow = annotationShadowReadService.snapshot();
-  assert.equal(shadow.byConsumer.textbook.observed, 1);
-  assert.equal(shadow.byConsumer.review, undefined);
-  const rejectedHighlight = await api('PUT', `/api/textbooks/tracks/${trackId}/highlights`, {
-    body: {
-      html: fetchedHighlight.body.highlight.htmlContent.replace(
-        /(<mark[^>]*>Get<\/mark>) up\./u,
-        '$1 down.'
-      ),
-    },
-  });
-  assert.equal(rejectedHighlight.status, 409);
+  const retiredHighlight = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
+  assert.equal(retiredHighlight.status, 404);
 
   const expressionId = dbService.db.prepare(`
     SELECT expression_id FROM textbook_expression_revisions ORDER BY display_ordinal LIMIT 1
@@ -502,8 +481,7 @@ test('verified textbook track publishes textbook study items and creates derivat
   });
   assert.equal(deletedAnnotation.status, 200);
   assert.equal(deletedAnnotation.body.annotation.status, 'deleted');
-  const compatibilityAfterDelete = await api('GET', `/api/textbooks/tracks/${trackId}/highlights`);
-  assert.equal(compatibilityAfterDelete.body.highlight.markCount, 0);
+  assert.equal(dbService.listCardAnnotations('textbook_track', trackId).length, 0);
 });
 
 test('official audio endpoint supports HEAD, range, etag, and hash drift protection', async () => {

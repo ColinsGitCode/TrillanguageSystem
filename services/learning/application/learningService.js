@@ -9,7 +9,6 @@ const { learningError } = require('../domain/learningErrors');
 const { DEFAULT_SCOPE, itemMatchesScope, normalizeScope } = require('../domain/planScope');
 const { createDefaultPlanningSignalProvider } = require('../planning/defaultPlanningSignalProvider');
 const { CONTRACT_VERSION, mergePlanningDiagnostics } = require('../planning/planningSignalProvider');
-const { expressionFragmentsFromHighlight } = require('../../textbooks/textbookHighlightService');
 const {
   extractStudyUnitMarkdown,
   labeledValue,
@@ -316,7 +315,6 @@ class LearningService {
     db,
     scheduler = new TsFsrsScheduler(),
     planningSignalProvider = createDefaultPlanningSignalProvider(),
-    annotationShadowReadService = null,
     annotationsEnabled = false,
     annotationService = null,
     textbookAnnotationService = null,
@@ -327,7 +325,6 @@ class LearningService {
     this.db = db;
     this.scheduler = scheduler;
     this.planningSignalProvider = planningSignalProvider;
-    this.annotationShadowReadService = annotationShadowReadService;
     this.annotationsEnabled = Boolean(annotationsEnabled);
     this.annotationService = annotationService;
     this.textbookAnnotationService = textbookAnnotationService;
@@ -1888,7 +1885,6 @@ class LearningService {
       const direction = row.unit_kind === 'textbook_en' ? 'en' : 'ja';
       const targetLanguages = [direction];
       const targetText = direction === 'en' ? expression.official_en_text : expression.official_ja_text;
-      let highlight = null;
       let highlightFragments = null;
       let currentAnnotationReference = null;
       if (this.annotationsEnabled) {
@@ -1908,25 +1904,6 @@ class LearningService {
           projection.target,
           [],
           projection.fragments.annotationCount
-        );
-      } else {
-        highlight = this.db.prepare(`
-          SELECT id, source_hash, version, html_content, updated_at
-          FROM card_highlights
-          WHERE folder_name = ? AND base_filename = ? AND source_hash = ?
-          LIMIT 1
-        `).get(row.folder_name, row.base_filename, expression.projection_hash) || null;
-        if (this.annotationShadowReadService) {
-          void this.annotationShadowReadService.observe({
-            consumer: 'review',
-            legacyHighlight: highlight,
-            targetKind: 'textbook_track',
-            targetId: expression.track_id,
-          });
-        }
-        highlightFragments = expressionFragmentsFromHighlight(
-          highlight?.html_content,
-          expression.expression_id
         );
       }
       const markdown = [
@@ -1974,12 +1951,6 @@ class LearningService {
         scheduleState,
         expectedScheduleVersion: scheduleState?.version || 0,
         audioFiles,
-        highlightReference: highlight ? {
-          id: Number(highlight.id),
-          sourceHash: highlight.source_hash,
-          version: Number(highlight.version),
-          updatedAt: highlight.updated_at,
-        } : null,
         annotationReference: currentAnnotationReference,
       };
     }
@@ -2000,7 +1971,6 @@ class LearningService {
       FROM audio_files WHERE generation_id = ? ORDER BY language, filename_suffix
     `).all(row.generation_id).filter((audio) => targetLanguages.includes(audio.language))
       .filter((audio) => row.unit_kind !== 'scenario_bilingual' || scenarioAudioMatches(audio, locator));
-    let highlight = null;
     let currentAnnotationReference = null;
     if (this.annotationsEnabled) {
       if (!this.annotationService) {
@@ -2015,19 +1985,6 @@ class LearningService {
         annotationResult.target,
         annotationResult.annotations
       );
-    } else {
-      highlight = this.db.prepare(`
-        SELECT id, source_hash, version, html_content, updated_at FROM card_highlights
-        WHERE folder_name = ? AND base_filename = ? ORDER BY version DESC LIMIT 1
-      `).get(row.folder_name, row.base_filename) || null;
-      if (this.annotationShadowReadService) {
-        void this.annotationShadowReadService.observe({
-          consumer: 'review',
-          legacyHighlight: highlight,
-          targetKind: 'generation',
-          targetId: row.generation_id,
-        });
-      }
     }
     const scheduleRow = this.db.prepare(`
       SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
@@ -2057,12 +2014,6 @@ class LearningService {
       scheduleState,
       expectedScheduleVersion: scheduleState?.version || 0,
       audioFiles,
-      highlightReference: highlight ? {
-        id: Number(highlight.id),
-        sourceHash: highlight.source_hash,
-        version: Number(highlight.version),
-        updatedAt: highlight.updated_at,
-      } : null,
       annotationReference: currentAnnotationReference,
     };
   }

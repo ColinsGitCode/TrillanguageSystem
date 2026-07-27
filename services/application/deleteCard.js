@@ -6,7 +6,6 @@ function createDeleteCardUseCase(ports) {
   const required = [
     'getGenerationById',
     'deleteGenerationWithLearningState',
-    'deleteCardHighlightByFile',
     'deleteRecordFiles',
   ];
   for (const name of required) {
@@ -24,7 +23,6 @@ function createDeleteCardUseCase(ports) {
     // Database state is authoritative. Preserve learning history before any
     // best-effort filesystem cleanup can fail.
     const database = ports.deleteGenerationWithLearningState(recordId);
-    const highlightDeleted = ports.deleteCardHighlightByFile(record.folder_name, record.base_filename);
     const deletedPaths = new Set();
     const cleanupErrors = [];
     for (const filePath of exactPaths) {
@@ -52,7 +50,6 @@ function createDeleteCardUseCase(ports) {
       database,
       deletedFiles: deletedPaths.size,
       deletedPaths: Array.from(deletedPaths),
-      highlightDeleted,
       cleanupErrors,
     };
   };

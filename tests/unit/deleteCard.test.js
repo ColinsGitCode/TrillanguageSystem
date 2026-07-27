@@ -28,9 +28,8 @@ test.describe('deleteCard application use case', () => {
         }),
         deleteGenerationWithLearningState: () => {
           databaseCommitted = true;
-          return { deleted: 1, archivedStudyItems: 2 };
+          return { deleted: 1, archivedStudyItems: 2, deletedAnnotations: 1 };
         },
-        deleteCardHighlightByFile: () => 1,
         deleteRecordFiles: () => {
           assert.equal(databaseCommitted, true);
           return [];
@@ -42,7 +41,7 @@ test.describe('deleteCard application use case', () => {
       assert.equal(fs.existsSync(audio), false);
       assert.equal(result.deletedFiles, 2);
       assert.equal(result.database.archivedStudyItems, 2);
-      assert.equal(result.highlightDeleted, 1);
+      assert.equal(result.database.deletedAnnotations, 1);
       assert.deepEqual(result.cleanupErrors, []);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -56,7 +55,6 @@ test.describe('deleteCard application use case', () => {
       deleteGenerationWithLearningState: () => {
         deleted = true;
       },
-      deleteCardHighlightByFile: () => 0,
       deleteRecordFiles: () => [],
     });
     assert.equal(execute(999), null);

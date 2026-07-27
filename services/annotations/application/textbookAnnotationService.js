@@ -11,7 +11,6 @@ const {
 const {
   expressionFragmentsFromDocument,
   sanitizeHighlightDocument,
-  trackIdentity,
 } = require('../../textbooks/textbookHighlightService');
 const { selectorPayload } = require('./cardsFactoryAnnotationService');
 
@@ -35,13 +34,11 @@ class TextbookAnnotationService {
   constructor({
     dbService,
     annotationService = null,
-    compatWriteEnabled = true,
     sharedModulesLoader = loadTextbookSharedModules,
   } = {}) {
     if (!dbService) throw new TypeError('TextbookAnnotationService requires dbService');
     this.dbService = dbService;
     this.annotationService = annotationService || new AnnotationService({ dbService });
-    this.compatWriteEnabled = Boolean(compatWriteEnabled);
     this.sharedModulesLoader = sharedModulesLoader;
   }
 
@@ -82,7 +79,7 @@ class TextbookAnnotationService {
     }
   }
 
-  buildCompatibilityProjection(track, annotations, shared) {
+  buildAnnotationProjection(track, annotations, shared) {
     const dom = new JSDOM(`<body>${this.canonicalDocument(track, shared)}</body>`);
     try {
       const root = dom.window.document.body.firstElementChild;
@@ -94,36 +91,6 @@ class TextbookAnnotationService {
     } finally {
       dom.window.close();
     }
-  }
-
-  writeCompatibilityProjection(track, shared) {
-    if (!this.compatWriteEnabled) return { written: false };
-    const annotations = this.dbService.listCardAnnotations(
-      'textbook_track',
-      track.id,
-      { statuses: ['active', 'orphaned'] }
-    );
-    const projection = this.buildCompatibilityProjection(track, annotations, shared);
-    const identity = trackIdentity(track);
-    const previous = this.dbService.getCardHighlightByFile(
-      identity.folderName,
-      identity.baseFilename,
-      identity.sourceHash
-    );
-    const highlight = this.dbService.upsertCardHighlight({
-      ...identity,
-      generationId: Number(track.generation_id),
-      htmlContent: projection.htmlContent,
-      version: Math.max(2, Number(previous?.version || 1) + 1),
-      updatedBy: 'annotation-compat:textbook',
-    });
-    return {
-      written: true,
-      highlightId: highlight.id,
-      version: highlight.version,
-      rendered: projection.diagnostics.filter((item) => item.status === 'rendered').length,
-      orphaned: projection.diagnostics.filter((item) => item.status === 'orphaned').length,
-    };
   }
 
   list(targetKind, targetId) {
@@ -143,7 +110,7 @@ class TextbookAnnotationService {
     }
     const shared = await this.sharedModulesLoader();
     const { target, annotations } = this.annotationService.list('textbook_track', track.id);
-    const projection = this.buildCompatibilityProjection(track, annotations, shared);
+    const projection = this.buildAnnotationProjection(track, annotations, shared);
     const fragments = expressionFragmentsFromDocument(
       projection.htmlContent,
       expression.expression_id
@@ -164,39 +131,23 @@ class TextbookAnnotationService {
     const track = this.requireTrackTarget(payload.targetKind, payload.targetId);
     const shared = await this.sharedModulesLoader();
     const normalizedSelector = await this.normalizeSelector(track, payload.selector, shared);
-    const execute = this.dbService.db.transaction(() => {
-      const annotation = this.annotationService.create({
-        ...payload,
-        selector: selectorPayload(normalizedSelector),
-      });
-      const compatibility = this.writeCompatibilityProjection(track, shared);
-      return { annotation, compatibility };
+    const annotation = this.annotationService.create({
+      ...payload,
+      selector: selectorPayload(normalizedSelector),
     });
-    return this.dbService.withBusyRetry(() => execute());
+    return { annotation };
   }
 
   async update(id, payload = {}) {
     const current = this.annotationService.get(id);
-    const track = this.requireTrackTarget(current.targetKind, current.targetId);
-    const shared = await this.sharedModulesLoader();
-    const execute = this.dbService.db.transaction(() => {
-      const annotation = this.annotationService.update(id, payload);
-      const compatibility = this.writeCompatibilityProjection(track, shared);
-      return { annotation, compatibility };
-    });
-    return this.dbService.withBusyRetry(() => execute());
+    this.requireTrackTarget(current.targetKind, current.targetId);
+    return { annotation: this.annotationService.update(id, payload) };
   }
 
   async remove(id, payload = {}) {
     const current = this.annotationService.get(id);
-    const track = this.requireTrackTarget(current.targetKind, current.targetId);
-    const shared = await this.sharedModulesLoader();
-    const execute = this.dbService.db.transaction(() => {
-      const annotation = this.annotationService.remove(id, payload);
-      const compatibility = this.writeCompatibilityProjection(track, shared);
-      return { annotation, compatibility };
-    });
-    return this.dbService.withBusyRetry(() => execute());
+    this.requireTrackTarget(current.targetKind, current.targetId);
+    return { annotation: this.annotationService.remove(id, payload) };
   }
 }
 

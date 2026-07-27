@@ -12,9 +12,6 @@ const {
   TextbookAnnotationService,
   loadTextbookSharedModules,
 } = require('../../services/annotations/application/textbookAnnotationService');
-const {
-  trackIdentity,
-} = require('../../services/textbooks/textbookHighlightService');
 
 const NOW = '2026-07-27T02:03:04.000Z';
 const CONTENT_HASH = 'a'.repeat(64);
@@ -133,7 +130,7 @@ async function payload(service, track, overrides = {}) {
 
 test.after(() => databaseModule.close());
 
-test('creates a textbook annotation and legacy Track projection atomically', async () => {
+test('creates a textbook annotation without writing a legacy Track projection', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const trackId = seedPublishedTrack(dbService);
@@ -143,25 +140,14 @@ test('creates a textbook annotation and legacy Track projection atomically', asy
 
     assert.equal(result.annotation.targetKind, 'textbook_track');
     assert.equal(result.annotation.selector.textQuote.exact, 'Get');
-    assert.equal(result.compatibility.written, true);
-    const identity = trackIdentity(track);
-    const legacy = dbService.getCardHighlightByFile(
-      identity.folderName,
-      identity.baseFilename,
-      identity.sourceHash
-    );
-    assert.equal(legacy.markCount, 1);
-    assert.match(
-      legacy.htmlContent,
-      /<mark class="study-highlight-red"[^>]*>Get<\/mark>/u
-    );
-    assert.match(legacy.htmlContent, new RegExp(`data-annotation-id="${ID}"`, 'u'));
+    assert.equal(dbService.listCardAnnotations('textbook_track', trackId).length, 1);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }
 });
 
-test('soft-delete removes the textbook mark from legacy Track HTML', async () => {
+test('soft-delete updates only the canonical textbook annotation', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const trackId = seedPublishedTrack(dbService);
@@ -171,14 +157,8 @@ test('soft-delete removes the textbook mark from legacy Track HTML', async () =>
     const removed = await service.remove(created.annotation.id, { expectedVersion: 1 });
 
     assert.equal(removed.annotation.status, 'deleted');
-    const identity = trackIdentity(track);
-    const legacy = dbService.getCardHighlightByFile(
-      identity.folderName,
-      identity.baseFilename,
-      identity.sourceHash
-    );
-    assert.equal(legacy.markCount, 0);
-    assert.doesNotMatch(legacy.htmlContent, /study-highlight-red/u);
+    assert.equal(dbService.listCardAnnotations('textbook_track', trackId).length, 0);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }
@@ -189,10 +169,7 @@ test('builds a review expression projection from canonical content and card anno
   try {
     const trackId = seedPublishedTrack(dbService);
     const track = dbService.getTextbookTrack(trackId);
-    const service = new TextbookAnnotationService({
-      dbService,
-      compatWriteEnabled: false,
-    });
+    const service = new TextbookAnnotationService({ dbService });
     await service.create(await payload(service, track));
     const expressionRevisionId = track.expressions[0].id;
     const projection = await service.expressionProjection(trackId, expressionRevisionId);
@@ -201,34 +178,7 @@ test('builds a review expression projection from canonical content and card anno
     assert.equal(projection.fragments.annotationCount, 1);
     assert.match(projection.fragments.en, /study-highlight-red/u);
     assert.match(projection.fragments.en, new RegExp(`data-annotation-id="${ID}"`, 'u'));
-    assert.equal(
-      dbService.getCardHighlightByFile(
-        trackIdentity(track).folderName,
-        trackIdentity(track).baseFilename,
-        trackIdentity(track).sourceHash
-      ),
-      null
-    );
-  } finally {
-    dbService.close();
-  }
-});
-
-test('rolls back textbook annotation when compatibility persistence fails', async () => {
-  const dbService = new DatabaseService(':memory:');
-  try {
-    const trackId = seedPublishedTrack(dbService);
-    const track = dbService.getTextbookTrack(trackId);
-    const service = new TextbookAnnotationService({ dbService });
-    dbService.upsertCardHighlight = () => {
-      throw new Error('textbook-compatibility-write-failed');
-    };
-
-    await assert.rejects(
-      async () => service.create(await payload(service, track)),
-      /textbook-compatibility-write-failed/u
-    );
-    assert.equal(dbService.listCardAnnotations('textbook_track', trackId).length, 0);
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count, 0);
   } finally {
     dbService.close();
   }

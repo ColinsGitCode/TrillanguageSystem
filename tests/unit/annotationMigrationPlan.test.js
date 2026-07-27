@@ -35,13 +35,27 @@ function count(db, table) {
   return Number(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count);
 }
 
+function seedLegacyHighlight(db, {
+  generationId,
+  folderName,
+  baseFilename,
+  sourceHash,
+  htmlContent,
+}) {
+  db.prepare(`
+    INSERT INTO card_highlights(
+      generation_id, folder_name, base_filename, source_hash, html_content
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(generationId, folderName, baseFilename, sourceHash, htmlContent);
+}
+
 test.after(() => databaseModule.close());
 
 test('builds a stable, content-safe, read-only migration plan', async () => {
   const dbService = new DatabaseService(':memory:');
   try {
     const generationId = seedGeneration(dbService.db);
-    dbService.upsertCardHighlight({
+    seedLegacyHighlight(dbService.db, {
       generationId,
       folderName: '20260727',
       baseFilename: 'hello',
@@ -52,7 +66,7 @@ test('builds a stable, content-safe, read-only migration plan', async () => {
         '</div>',
       ].join(''),
     });
-    dbService.upsertCardHighlight({
+    seedLegacyHighlight(dbService.db, {
       generationId,
       folderName: '20260727',
       baseFilename: 'hello',
@@ -70,7 +84,7 @@ test('builds a stable, content-safe, read-only migration plan', async () => {
       ].join('\n'),
       requestId: 'annotation-migration-repeated',
     });
-    dbService.upsertCardHighlight({
+    seedLegacyHighlight(dbService.db, {
       generationId: repeatedGenerationId,
       folderName: '20260727',
       baseFilename: 'repeated',

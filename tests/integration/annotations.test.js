@@ -1,7 +1,6 @@
 'use strict';
 
 process.env.CARD_ANNOTATIONS_ENABLED = '1';
-process.env.CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED = '1';
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -11,9 +10,6 @@ const {
   dbService,
   closeServer,
 } = require('./_harness');
-const {
-  computeTextHash,
-} = require('../../services/annotations/application/cardsFactoryAnnotationService');
 
 const HASH = '6'.repeat(64);
 const MARKDOWN = '# hello\n\nfoo bar baz';
@@ -62,7 +58,7 @@ function payload(generationId, overrides = {}) {
 test.beforeEach(resetState);
 test.after(async () => { await closeServer(); });
 
-test('Cards Factory annotation API writes canonical and compatibility projections', async () => {
+test('Cards Factory annotation API writes only canonical annotations', async () => {
   const generationId = seedGeneration();
 
   const empty = await api(
@@ -78,7 +74,7 @@ test('Cards Factory annotation API writes canonical and compatibility projection
   });
   assert.equal(created.status, 201);
   assert.equal(created.body.annotation.selector.textQuote.exact, 'bar');
-  assert.equal(created.body.compatibility.written, true);
+  assert.equal(created.body.compatibility, undefined);
 
   const listed = await api(
     'GET',
@@ -87,13 +83,10 @@ test('Cards Factory annotation API writes canonical and compatibility projection
   assert.equal(listed.status, 200);
   assert.equal(listed.body.annotations.length, 1);
 
-  const legacy = await api(
-    'GET',
-    `/api/highlights/by-file?folder=20260727&base=hello&sourceHash=${computeTextHash(MARKDOWN)}`
+  assert.equal(
+    dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count,
+    0
   );
-  assert.equal(legacy.status, 200);
-  assert.equal(legacy.body.highlight.markCount, 1);
-  assert.match(legacy.body.highlight.htmlContent, /data-annotation-id/u);
 
   const removed = await api('DELETE', `/api/annotations/${ID}`, {
     body: { expectedVersion: 1 },
@@ -101,11 +94,10 @@ test('Cards Factory annotation API writes canonical and compatibility projection
   assert.equal(removed.status, 200);
   assert.equal(removed.body.annotation.status, 'deleted');
 
-  const legacyAfterDelete = await api(
-    'GET',
-    `/api/highlights/by-file?folder=20260727&base=hello&sourceHash=${computeTextHash(MARKDOWN)}`
+  assert.equal(
+    dbService.db.prepare('SELECT COUNT(*) AS count FROM card_highlights').get().count,
+    0
   );
-  assert.equal(legacyAfterDelete.body.highlight.markCount, 0);
 });
 
 test('rejects stale target revisions before any write', async () => {

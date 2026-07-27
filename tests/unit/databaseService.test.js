@@ -268,15 +268,30 @@ test.describe('databaseService — generations CRUD', () => {
           content_hash, lifecycle, created_at_utc, updated_at_utc
         ) VALUES (?, ?, 'en', 'trilingual_en', '{}', ?, 'active', ?, ?)
       `).run(id, id, db.getGenerationById(id).content_hash, now, now).lastInsertRowid);
+      db.db.prepare(`
+        INSERT INTO card_annotations(
+          id, target_kind, target_id, target_revision, projection_version,
+          quote_exact, quote_prefix, quote_suffix, position_start, position_end,
+          annotation_kind, color, status, source_content_hash, created_at_utc, updated_at_utc
+        ) VALUES (
+          '018f0f96-5a90-7d75-a2c6-86559b5de911', 'generation', ?, ?,
+          'card-visible-text-v1', 'word', '', '', 0, 4,
+          'highlight', 'red', 'active', ?, ?, ?
+        )
+      `).run(id, db.getGenerationById(id).content_hash, db.getGenerationById(id).content_hash, now, now);
 
       const result = db.deleteGenerationWithLearningState(id);
-      assert.deepEqual(result, { deleted: 1, archivedStudyItems: 1 });
+      assert.deepEqual(result, { deleted: 1, archivedStudyItems: 1, deletedAnnotations: 1 });
       assert.equal(db.getGenerationById(id), null);
       const item = db.db.prepare('SELECT * FROM study_items WHERE id = ?').get(itemId);
       assert.equal(item.generation_id, null);
       assert.equal(item.source_generation_id, id);
       assert.equal(item.lifecycle, 'archived');
       assert.equal(item.lifecycle_reason, 'source-deleted');
+      assert.equal(
+        db.db.prepare('SELECT status FROM card_annotations WHERE target_id = ?').get(id).status,
+        'deleted'
+      );
       assert.equal(
         db.db.prepare("SELECT COUNT(*) AS count FROM kg_source_sync_jobs WHERE operation='absent' AND source_ref_id=?").get(itemId).count,
         1
@@ -372,52 +387,6 @@ test.describe('databaseService — errors table', () => {
       assert.ok(row);
       assert.equal(row.error_type, 'timeout');
       assert.equal(row.error_message, 'boom');
-    } finally { db.close(); }
-  });
-});
-
-test.describe('databaseService — card highlights CRUD', () => {
-  test.it('upsertCardHighlight inserts then updates a row keyed on (folder, base, sourceHash)', () => {
-    const db = freshDb();
-    try {
-      const first = db.upsertCardHighlight({
-        folderName: '20260101', baseFilename: 'hello', sourceHash: 'h1',
-        htmlContent: '<mark class="study-highlight-red">word</mark> extra',
-      });
-      assert.equal(first.markCount, 1);
-      const second = db.upsertCardHighlight({
-        folderName: '20260101', baseFilename: 'hello', sourceHash: 'h1',
-        htmlContent: '<mark class="study-highlight-red">word</mark> <mark class="study-highlight-red">two</mark>',
-      });
-      assert.equal(second.markCount, 2);
-      assert.ok(second.highlightedChars >= second.markCount);
-    } finally { db.close(); }
-  });
-
-  test.it('getCardHighlightByFile returns the saved row, or null if absent', () => {
-    const db = freshDb();
-    try {
-      assert.equal(db.getCardHighlightByFile('20260101', 'absent', 'h0'), null);
-      db.upsertCardHighlight({
-        folderName: '20260101', baseFilename: 'hello', sourceHash: 'h2',
-        htmlContent: '<mark class="study-highlight-red">hi</mark>',
-      });
-      const got = db.getCardHighlightByFile('20260101', 'hello', 'h2');
-      assert.ok(got);
-      assert.equal(got.folderName, '20260101');
-      assert.equal(got.baseFilename, 'hello');
-    } finally { db.close(); }
-  });
-
-  test.it('deleteCardHighlightByFile removes one or all versions', () => {
-    const db = freshDb();
-    try {
-      db.upsertCardHighlight({ folderName: 'f', baseFilename: 'b', sourceHash: 'a', htmlContent: '<mark class="study-highlight-red">x</mark>' });
-      db.upsertCardHighlight({ folderName: 'f', baseFilename: 'b', sourceHash: 'b', htmlContent: '<mark class="study-highlight-red">y</mark>' });
-      const dropOne = db.deleteCardHighlightByFile('f', 'b', 'a');
-      assert.equal(dropOne, 1);
-      const dropRest = db.deleteCardHighlightByFile('f', 'b');
-      assert.equal(dropRest, 1);
     } finally { db.close(); }
   });
 });

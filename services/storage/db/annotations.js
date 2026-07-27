@@ -220,11 +220,90 @@ function listMigrationEvents(db, migrationPlanHash) {
   `).all(String(migrationPlanHash)).map(mapMigrationEvent);
 }
 
+function getStats(db, { dateFrom, dateTo, provider, cardType } = {}) {
+  const conditions = ["annotation.status = 'active'"];
+  const params = {};
+  if (dateFrom) {
+    conditions.push('COALESCE(generation.generation_date, date(annotation.updated_at_utc)) >= @dateFrom');
+    params.dateFrom = dateFrom;
+  }
+  if (dateTo) {
+    conditions.push('COALESCE(generation.generation_date, date(annotation.updated_at_utc)) <= @dateTo');
+    params.dateTo = dateTo;
+  }
+  if (provider) {
+    conditions.push('generation.llm_provider = @provider');
+    params.provider = provider;
+  }
+  if (cardType) {
+    conditions.push('generation.card_type = @cardType');
+    params.cardType = cardType;
+  }
+  const joins = `
+    LEFT JOIN textbook_tracks track
+      ON annotation.target_kind = 'textbook_track' AND track.id = annotation.target_id
+    LEFT JOIN generations generation
+      ON generation.id = CASE
+        WHEN annotation.target_kind = 'generation' THEN annotation.target_id
+        WHEN annotation.target_kind = 'textbook_track' THEN track.generation_id
+        ELSE NULL
+      END
+  `;
+  const where = conditions.join(' AND ');
+  const overview = db.prepare(`
+    SELECT
+      COUNT(*) AS totalAnnotations,
+      COUNT(DISTINCT annotation.target_kind || ':' || annotation.target_id) AS annotatedTargets,
+      SUM(CASE WHEN annotation.annotation_kind = 'highlight' THEN 1 ELSE 0 END) AS highlights,
+      SUM(CASE WHEN annotation.annotation_kind = 'note' THEN 1 ELSE 0 END) AS notes,
+      SUM(CASE WHEN annotation.annotation_kind = 'highlight' THEN length(annotation.quote_exact) ELSE 0 END)
+        AS highlightedChars,
+      MAX(annotation.updated_at_utc) AS lastUpdatedAt
+    FROM card_annotations annotation
+    ${joins}
+    WHERE ${where}
+  `).get(params);
+  const byCardType = db.prepare(`
+    SELECT COALESCE(generation.card_type, annotation.target_kind) AS cardType,
+      COUNT(DISTINCT annotation.target_kind || ':' || annotation.target_id) AS targets,
+      COUNT(*) AS annotations
+    FROM card_annotations annotation
+    ${joins}
+    WHERE ${where}
+    GROUP BY COALESCE(generation.card_type, annotation.target_kind)
+    ORDER BY annotations DESC
+  `).all(params);
+  const trend = db.prepare(`
+    SELECT date(annotation.updated_at_utc) AS day,
+      COUNT(DISTINCT annotation.target_kind || ':' || annotation.target_id) AS targets,
+      COUNT(*) AS annotations
+    FROM card_annotations annotation
+    ${joins}
+    WHERE ${where}
+    GROUP BY date(annotation.updated_at_utc)
+    ORDER BY day DESC
+    LIMIT 90
+  `).all(params);
+  return {
+    overview: {
+      totalAnnotations: Number(overview?.totalAnnotations || 0),
+      annotatedTargets: Number(overview?.annotatedTargets || 0),
+      highlights: Number(overview?.highlights || 0),
+      notes: Number(overview?.notes || 0),
+      highlightedChars: Number(overview?.highlightedChars || 0),
+      lastUpdatedAt: overview?.lastUpdatedAt || null,
+    },
+    byCardType,
+    trend,
+  };
+}
+
 module.exports = {
   TARGET_KINDS,
   STATUSES,
   appendMigrationEvent,
   getById,
+  getStats,
   insert,
   listByLegacyHighlightId,
   listByTarget,

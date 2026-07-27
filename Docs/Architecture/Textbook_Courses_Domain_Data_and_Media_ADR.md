@@ -6,6 +6,11 @@
 > 学习领域基线：[学习辅助 2.0 领域与数据 ADR（LA-D2）](Learning_Assistance_2_0_Domain_and_Data_ADR.md)
 > Manifest contract：[textbook-track-manifest.v1.schema.json](schemas/textbook-track-manifest.v1.schema.json)
 > 当前边界：本文锁定 TC-D2 的领域与技术 contract；TC-P4 已完成运行时、桌面 UI、学习集成、备份恢复、完整自动化验收与真实 Track 01 本地 smoke；官方音频自动句级切分与知识图谱仍后置
+>
+> 注解层增补：本文 §8 与早期实施记录中的 `card_highlights` 是历史合同；自
+> 2026-07-27 CA-P8 起，教材标红由
+> [Card Annotation Layer ADR](Card_Annotation_Layer_ADR.md) 接管，运行时只使用
+> `card_annotations`。
 
 ## 0. 决策状态与权威边界
 

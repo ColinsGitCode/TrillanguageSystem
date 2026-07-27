@@ -1,6 +1,6 @@
 # 学习卡片注解层领域与数据 ADR（CA-D2）
 
-> 状态：**Accepted · CA-P7 Review 消费者切换已完成**
+> 状态：**Accepted · CA-P8 规范注解层切换已完成**
 >
 > 日期：2026-07-27
 >
@@ -25,13 +25,13 @@
 | Recogito | **不引入生产 v1**；吸收 W3C 模型，使用自有投影和渲染 |
 | 新表 | 表 53 `card_annotations`；表 54 `card_annotation_migration_events` |
 | migration | `007_card_annotations.sql`，同时进入 `database/schema.sql` |
-| 旧表 | `card_highlights` 在双读和回滚窗口内保留，不立即 DROP |
-| 上线方式 | 默认关闭，按 Cards Factory → 教材 → Review 顺序切换 |
+| 旧表 | `card_highlights` 已冻结为迁移/审计快照；运行时不读写；是否 DROP 另开 ADR |
+| 上线方式 | CA-P8 后默认启用；关闭只禁用注解能力，不回退到旧 HTML |
 | 学习边界 | 不写 FSRS、Study Item、Review Event、Schedule State 或队列 |
 
 ## 1. 当前事实与问题
 
-当前 `card_highlights` 保存整份带 `<mark>` 的渲染 HTML，身份键是：
+CA-P8 前，`card_highlights` 保存整份带 `<mark>` 的渲染 HTML，身份键是：
 
 ```text
 folder_name + base_filename + source_hash
@@ -304,11 +304,12 @@ v1 继续使用本项目自己的 Range 包装渲染，不引 Recogito overlay�
 ### 8.1 开关
 
 ```env
-CARD_ANNOTATIONS_ENABLED=0
-CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED=1
+CARD_ANNOTATIONS_ENABLED=1
 ```
 
-代码、Compose 和示例环境默认关闭新注解读路径。兼容写在迁移期间保持开启。
+CA-P8 后代码、Compose 和示例环境默认启用规范注解路径。shadow read 与
+compatibility write 开关及实现均已删除。设为 `0` 只会让页面以规范正文的
+无注解状态显示，并禁用注解写入；不会查询或写入旧 HTML。
 
 ### 8.2 阶段
 
@@ -322,13 +323,14 @@ CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED=1
 
 ### 8.3 回滚
 
-任何阶段发现问题：
+CA-P3–P7 的迁移窗口曾允许通过开关回退到已同步的旧 HTML。CA-P8 停止旧写入
+并删除旧读路径后，该回滚方式正式失效。当前恢复策略是：
 
-1. 设 `CARD_ANNOTATIONS_ENABLED=0`；
-2. 保持 `CARD_ANNOTATIONS_COMPAT_WRITE_ENABLED=1`；
-3. 重建 viewer；
-4. 页面继续从已同步的 `card_highlights` 读取；
-5. 不 DROP 新表、不删除 migration event、不把 orphaned 伪装成 active。
+1. 紧急时设 `CARD_ANNOTATIONS_ENABLED=0`，保留规范正文并临时停用注解；
+2. 若必须恢复旧版本代码，先恢复与该版本匹配的数据库备份，不把冻结旧表当作
+   最新数据真源；
+3. 不 DROP 新表、不删除 migration event、不把 orphaned 伪装成 active；
+4. `card_highlights` 的保留期限与最终 DROP 由独立 ADR 决定。
 
 ## 9. 历史迁移
 
@@ -520,3 +522,31 @@ integration 69/69、桌面 E2E 47/47 全部通过。CA-P8 才评估停止双写�
 代码与统计切换。`three_lans_system` viewer/ocr 已重建，四容器运行、health
 online、smoke 7/7；真实教材 Study Item 的只读 API 返回
 `highlightReference: null`，未对真实教材或学习记录执行写操作。
+
+## 18. CA-P8 实施记录（2026-07-27）
+
+CA-P8 完成规范注解层的最终运行时切换：
+
+- Cards Factory、教材课程和 Review 只读取、创建、更新和软删除
+  `card_annotations`；旧 highlights API、教材旧标红 API、shadow-status API、
+  shadow reader 与 compatibility writer 已删除；
+- `CARD_ANNOTATIONS_ENABLED` 默认开启，shadow/compat 环境变量已从代码、
+  Compose、E2E harness 和示例环境中移除；
+- 删除卡片时按稳定 `generation_id` 软删除对应注解；文件夹改期不再迁移路径型
+  标红身份；统计与学习数据审计只计算 active 规范注解；
+- Review API 只返回 `annotationReference`，不再返回 `highlightReference`；
+- `card_highlights` 仍保留在 schema 中，只供离线存量迁移与审计测试使用。生产
+  服务不再暴露它的 repository 或 HTTP 写入口，本阶段没有 DROP 数据。
+
+旧表从“可回滚运行时副本”变成“冻结历史快照”，这是不可逆的运行契约变化。
+如需回退旧代码，必须使用匹配的数据库备份；不得把冻结表误认为 CA-P8 之后的
+最新用户注解。
+
+最终验收：lint、typecheck、architecture、unit 368/368、integration 62/62、
+桌面 E2E 47/47 和 smoke 7/7 全部通过。`three_lans_system` viewer/ocr 已重建，
+四容器运行且 health online。真实 volume 只读核对为 27 active、1 orphaned
+规范注解和 11 条冻结旧快照；运行容器只含 `CARD_ANNOTATIONS_ENABLED=1`，
+shadow/compat 开关不存在，旧 HTTP API 返回 404。真实 Cards Factory 打开一张
+含两条注解的卡片后，两段标记均由独立 `annotation_id` 重放，旧 HTML mark 为
+0，弹窗无横向溢出且控制台无错误。教材 Track 01 的 20 组表达、ruby 与规范正文
+正常加载；验收全程未写真实卡片、教材或学习记录。

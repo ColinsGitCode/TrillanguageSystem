@@ -17,7 +17,6 @@ const log = require('../lib/logger').child({ module: 'app/delete-card' });
 const deleteCard = createDeleteCardUseCase({
   getGenerationById: (id) => dbService.getGenerationById(id),
   deleteGenerationWithLearningState: (id) => dbService.deleteGenerationWithLearningState(id),
-  deleteCardHighlightByFile: (folder, base) => dbService.deleteCardHighlightByFile(folder, base),
   deleteRecordFiles,
   log,
 });
