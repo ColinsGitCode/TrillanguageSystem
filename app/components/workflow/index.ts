@@ -8,6 +8,7 @@ export * from './ContextTools';
 export * from './SaveStatus';
 export * from './ErrorSummary';
 export * from './useLeaveGuard';
+export * from './LeaveGuardDialog';
 export * from './ReviewSummary';
 export * from './AsyncOperationPanel';
 export * from './ActivityLog';

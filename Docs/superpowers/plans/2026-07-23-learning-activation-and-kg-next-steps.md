@@ -121,11 +121,11 @@ LA-R1 真实学习启用与运行验收
 
 ### 5.3 LA-R1-1 首日验收
 
-- [ ] 保存计划并生成第一份 Daily Queue；
-- [ ] 确认首次队列最多包含 5 个 fresh 单元，且没有伪造 due/overdue；
+- [x] 保存计划并生成第一份 Daily Queue；
+- [x] 确认首次队列最多包含 5 个 fresh 单元，且没有伪造 due/overdue；
 - [ ] 确认教材 EN/JA 与日语语法的提示面、答案面、ruby、音频和中文提示正确；
 - [ ] 验证 reveal 前不能评分，提交中锁定，失败可重试且不会产生重复 Review Event；
-- [ ] 中途退出并恢复一次会话，确认 current/revealed entry 不漂移；
+- [x] 中途退出并恢复一次会话，确认 current/revealed entry 不漂移；
 - [ ] 完成一次完整会话，检查 queue/session 状态闭合；
 - [ ] 检查 Review Event 与 Schedule State 成对增长，FSRS metadata 与参数 hash 可追溯；
 - [ ] 检查 KG worker 和 generation worker 无异常日志。
@@ -284,11 +284,11 @@ POC 未通过时保持确定性 KG v1，不影响 LA-R1/LA-R2 继续运行。
 
 ## 12. 当前立即行动清单
 
-- [ ] 用户确认本文顺序和 LA-R1 推荐范围；
+- [x] 用户确认本文顺序和 LA-R1 推荐范围；
 - [x] 用户已确认第一份队列使用 `Asia/Tokyo`；
 - [x] 创建 LA-R1 运行前备份与基线快照；
-- [ ] 用户在 `/learn/plan` 创建 Track 01 + 日语语法计划（20/5）；
-- [ ] 生成第一份真实 Daily Queue；
+- [x] 用户在 `/learn/plan` 创建 Track 01 + 日语语法计划（20/5）；
+- [x] 生成第一份真实 Daily Queue；
 - [ ] 完成首日功能验收；
 - [ ] 开始 7 个真实学习日观察；
 - [ ] LA-R1 通过后再启动 KG-R3，不提前开启 LLM enrichment。

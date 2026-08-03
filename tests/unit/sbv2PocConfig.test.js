@@ -22,7 +22,10 @@ test.describe('Archived Style-Bert-VITS2 POC container scaffold', () => {
     assert.match(compose, /SBV2_MODEL_REPO=\$\{SBV2_MODEL_REPO:-litagin\/style_bert_vits2_jvnv\}/);
     assert.match(compose, /SBV2_MODEL_FILE=\$\{SBV2_MODEL_FILE:-jvnv-F1-jp\/jvnv-F1-jp_e160_s14000\.safetensors\}/);
     assert.match(compose, /sbv2_models:\/models/);
-    assert.match(compose, /"\$\{SBV2_HOST_PORT:-15000\}:5000"/);
+    assert.match(
+      compose,
+      /"\$\{SERVICE_BIND_ADDRESS:-127\.0\.0\.1\}:\$\{SBV2_HOST_PORT:-15000\}:5000"/
+    );
     assert.match(compose, /^\s{2}sbv2_models:/m);
   });
 

@@ -123,6 +123,13 @@ router.put('/api/textbooks/revisions/:id/expressions/:expressionId/review', rout
   return send(res, { review, workflow });
 }));
 
+router.put('/api/textbooks/revisions/:id/reviews', route((req, res) => {
+  const reviews = dbService.updateTextbookReviewStates(req.params.id, req.body || {});
+  const revision = dbService.getTextbookRevision(req.params.id);
+  const workflow = textbookWorkflowService.getWorkflow(revision.track_id);
+  return send(res, { reviews, workflow });
+}));
+
 router.post('/api/textbooks/tracks/:id/operations', route((req, res) => {
   const operation = textbookOperationService.enqueue(req.params.id, req.body || {});
   return res.status(202).json({ success: true, operation });
@@ -142,6 +149,11 @@ router.get('/api/textbooks/operations/:id/events', route((req, res) => {
 
 router.post('/api/textbooks/operations/:id/retry', route((req, res) => {
   const operation = textbookOperationService.retry(req.params.id);
+  return res.status(202).json({ success: true, operation });
+}));
+
+router.post('/api/textbooks/operations/:id/cancel', route((req, res) => {
+  const operation = textbookOperationService.cancel(req.params.id);
   return res.status(202).json({ success: true, operation });
 }));
 

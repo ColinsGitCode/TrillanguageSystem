@@ -33,14 +33,54 @@ function schemaObjects(db) {
   `).all();
 }
 
+function textbookManifestForMigration() {
+  const hash = (value) => value.repeat(64).slice(0, 64);
+  return {
+    schemaVersion: 'textbook-track-manifest/v1',
+    course: { key: 'migration-course', title: 'Migration Course', sourceNotice: 'Synthetic' },
+    track: { number: 1, displayOrder: 1, title: 'Migration Track' },
+    revision: { number: 1 },
+    assets: [{
+      assetKey: 'source:01',
+      kind: 'source_image',
+      ordinal: 1,
+      relativePath: 'synthetic/source.png',
+      sha256: hash('a'),
+      byteSize: 1,
+      mimeType: 'image/png',
+    }],
+    expressions: [{
+      key: 'expr:01',
+      ordinal: 1,
+      official: {
+        en: { text: 'Migration English', sourceSpan: { assetKey: 'source:01' } },
+        ja: { text: '移行日本語', sourceSpan: { assetKey: 'source:01' } },
+      },
+      derived: {
+        zhCue: '迁移中文',
+        rubySegments: [{ text: '移行日本語' }],
+        analysis: { phrases: [], grammar: [] },
+      },
+      confidence: { pairing: 1, en: 1, ja: 1, zhCue: 1, ruby: 1 },
+      unitHashes: { en: hash('b'), ja: hash('c') },
+    }],
+    import: {
+      skillName: 'import-textbook-track',
+      skillVersion: '1.0.0',
+      inputSummary: {},
+    },
+    integrity: { sourceFingerprint: hash('d'), contentHash: hash('e') },
+  };
+}
+
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001-007 on a new database and creates LA, textbook, KG, workflow, and annotation tables', () => {
+  test.it('registers 001-008 on a new database and creates LA, textbook, KG, workflow, and annotation tables', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001', '002', '003', '004', '005', '006', '007'],
+        applied: ['001', '002', '003', '004', '005', '006', '007', '008'],
         skipped: [],
         baselineRegistered: false,
       });
@@ -55,6 +95,7 @@ test.describe('versioned migration runner', () => {
         { version: '005', is_baseline: 0 },
         { version: '006', is_baseline: 0 },
         { version: '007', is_baseline: 0 },
+        { version: '008', is_baseline: 0 },
       ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -98,6 +139,7 @@ test.describe('versioned migration runner', () => {
         { version: '005', is_baseline: 0 },
         { version: '006', is_baseline: 0 },
         { version: '007', is_baseline: 0 },
+        { version: '008', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {
@@ -121,6 +163,43 @@ test.describe('versioned migration runner', () => {
     } finally {
       service.close();
       fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test.it('backfills review facts only for a published revision with no workflow projection', () => {
+    const service = new DatabaseService(':memory:');
+    try {
+      const imported = service.importTextbookDraft({
+        manifest: textbookManifestForMigration(),
+        manifestRelativePath: 'synthetic/manifest.json',
+        manifestHash: 'f'.repeat(64),
+      });
+      const timestamp = '2026-07-23T00:00:00.000Z';
+      service.db.prepare(`
+        UPDATE textbook_track_revisions
+        SET status = 'published', verified_at_utc = ?
+        WHERE id = ?
+      `).run(timestamp, imported.revision_id);
+      service.db.prepare(`
+        UPDATE textbook_tracks
+        SET status = 'published', current_revision_id = ?, pending_revision_id = NULL,
+          published_at_utc = ?, updated_at_utc = ?
+        WHERE id = ?
+      `).run(imported.revision_id, timestamp, timestamp, imported.id);
+      service.db.prepare(
+        'DELETE FROM textbook_expression_review_states WHERE track_revision_id = ?'
+      ).run(imported.revision_id);
+      service.db.prepare("DELETE FROM schema_migrations WHERE version = '008'").run();
+
+      const result = runMigrations(service.db);
+      assert.deepEqual(result.applied, ['008']);
+      const review = service.getTextbookReviewSummary(imported.revision_id);
+      assert.equal(review.total, 1);
+      assert.equal(review.confirmed, 1);
+      assert.equal(review.rows[0].reviewer, 'workflow-migration-008');
+      assert.equal(review.rows[0].confirmed_at_utc, timestamp);
+    } finally {
+      service.close();
     }
   });
 

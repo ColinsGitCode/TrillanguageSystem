@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "rootCssRawBytes": 32000,
+  "routes": {
+    "routes/_index": {
+      "label": "Cards Factory",
+      "maxInitialRawBytes": 520000,
+      "maxInitialGzipBytes": 165000
+    },
+    "routes/learn": {
+      "label": "今日学习",
+      "maxInitialRawBytes": 500000,
+      "maxInitialGzipBytes": 158000
+    },
+    "routes/learn-plan": {
+      "label": "学习计划",
+      "maxInitialRawBytes": 525000,
+      "maxInitialGzipBytes": 168000
+    },
+    "routes/learn-history": {
+      "label": "学习记录",
+      "maxInitialRawBytes": 495000,
+      "maxInitialGzipBytes": 157000
+    },
+    "routes/learn-session": {
+      "label": "复习会话",
+      "maxInitialRawBytes": 580000,
+      "maxInitialGzipBytes": 190000
+    },
+    "routes/textbooks": {
+      "label": "教材课程",
+      "maxInitialRawBytes": 600000,
+      "maxInitialGzipBytes": 196000
+    },
+    "routes/knowledge": {
+      "label": "知识点查找",
+      "maxInitialRawBytes": 520000,
+      "maxInitialGzipBytes": 170000
+    }
+  },
+  "deferredModules": {
+    "routes/_index": "CardModal",
+    "routes/learn-session": "CardModal"
+  },
+  "chunkBudgets": {
+    "CardModal": {
+      "maxRawBytes": 116000,
+      "maxGzipBytes": 39000
+    },
+    "IntelPanel": {
+      "maxRawBytes": 3000,
+      "maxGzipBytes": 1300
+    },
+    "SelectionKnowledgePanel": {
+      "maxRawBytes": 3600,
+      "maxGzipBytes": 1800
+    },
+    "SelectionTtsControls": {
+      "maxRawBytes": 6000,
+      "maxGzipBytes": 2800
+    }
+  }
+}

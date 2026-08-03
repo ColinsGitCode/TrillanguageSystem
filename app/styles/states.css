@@ -1,0 +1,211 @@
+.page-state {
+  width: min(760px, 100%);
+  min-height: 260px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-content: center;
+  gap: 16px;
+  margin: 28px auto 0;
+  padding: 32px;
+}
+
+.page-state-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  color: var(--color-primary);
+  background: var(--color-primary-subtle);
+}
+
+.page-state-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.page-state.is-loading .page-state-icon svg,
+.data-refresh-status.is-refreshing > svg {
+  animation: page-state-spin 900ms linear infinite;
+}
+
+.page-state.is-error .page-state-icon {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+}
+
+.page-state.is-empty .page-state-icon,
+.page-state.is-unavailable .page-state-icon {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-muted);
+}
+
+.page-state-copy {
+  min-width: 0;
+}
+
+.page-state-copy h1,
+.page-state-copy p {
+  margin: 0;
+}
+
+.page-state-copy h1 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.page-state-copy > p:not(.eyebrow) {
+  max-width: 620px;
+  margin-top: 7px;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.page-state-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.page-state-actions > button,
+.page-state-actions > a {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.page-state-actions > .primary {
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.page-state-skeleton {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.page-state-skeleton i {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.page-state-skeleton i:last-child {
+  width: 68%;
+}
+
+.page-state-skeleton i::after {
+  content: '';
+  width: 34%;
+  height: 100%;
+  display: block;
+  background: var(--color-border-strong);
+  animation: page-state-shimmer 1.2s ease-in-out infinite alternate;
+}
+
+.page-state.is-compact {
+  min-height: 150px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding: 20px;
+  border: 0;
+  box-shadow: none;
+}
+
+.page-state.is-compact .page-state-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.page-state.is-compact .page-state-copy h1 {
+  font-size: 16px;
+}
+
+.page-state.is-compact .page-state-actions {
+  grid-column: 2;
+}
+
+.data-refresh-status {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.data-refresh-status > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.data-refresh-status.is-failed {
+  border-color: var(--color-warning);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.data-refresh-status button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.data-refresh-status button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.data-refresh-status.is-compact {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+@keyframes page-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes page-state-shimmer {
+  from { transform: translateX(-20%); }
+  to { transform: translateX(230%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-state.is-loading .page-state-icon svg,
+  .data-refresh-status.is-refreshing > svg,
+  .page-state-skeleton i::after {
+    animation: none;
+  }
+}

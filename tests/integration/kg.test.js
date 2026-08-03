@@ -53,6 +53,35 @@ test('KG API separates read-only search from idempotent explicit lookup facts', 
   assert.equal(forms.body.forms[0].linkKind, 'canonical');
 });
 
+test('recent KG lookups collapse repeated inputs and preserve their recovery target', async () => {
+  const lookup = (eventKey, inputText) => api('POST', '/api/kg/lookups', {
+    body: {
+      eventKey,
+      inputText,
+      language: 'en',
+      kindHint: 'lexeme',
+      timeZone: 'Asia/Tokyo',
+    },
+  });
+
+  const first = await lookup('api:recent:handoff:0001', 'handoff');
+  const repeated = await lookup('api:recent:handoff:0002', 'handoff');
+  const latest = await lookup('api:recent:transfer:0001', 'transfer');
+  assert.equal(first.status, 200);
+  assert.equal(repeated.status, 200);
+  assert.equal(latest.status, 200);
+
+  const recent = await api('GET', '/api/kg/recent-lookups?limit=2');
+  assert.equal(recent.status, 200);
+  assert.equal(recent.body.lookups.length, 2);
+  assert.equal(recent.body.lookups[0].inputText, 'transfer');
+  assert.equal(recent.body.lookups[0].resolution, 'resolved');
+  assert.equal(recent.body.lookups[0].point.canonicalForm, 'transfer');
+  assert.equal(recent.body.lookups[1].inputText, 'handoff');
+  assert.equal(recent.body.lookups[1].id, repeated.body.lookup.id);
+  assert.notEqual(recent.body.lookups[1].id, first.body.lookup.id);
+});
+
 test('unresolved Japanese lookup stays reversible until a revision-checked user decision', async () => {
   const lookup = await api('POST', '/api/kg/lookups', {
     body: {

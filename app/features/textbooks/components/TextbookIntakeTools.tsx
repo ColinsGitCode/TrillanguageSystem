@@ -29,7 +29,7 @@ export function TextbookIntakeTools({
       <label>
         <Search aria-hidden="true" />
         <span>搜索教材表达</span>
-        <input value={search} placeholder="Search English / Japanese / Chinese" onChange={(event) => onSearch(event.target.value)} />
+        <input value={search} placeholder="搜索英文、日文或中文提示" onChange={(event) => onSearch(event.target.value)} />
       </label>
       {search.trim().length >= 2 && (
         <div className="textbook-search-results">
@@ -42,7 +42,7 @@ export function TextbookIntakeTools({
         </div>
       )}
       <details>
-        <summary><FileJson2 aria-hidden="true" />高级 Manifest intake</summary>
+        <summary><FileJson2 aria-hidden="true" />高级导入工具</summary>
         <p>仅供受控恢复使用。正常流程由 Codex Skill 在用户批准 dry-run 后调用正式 import API。</p>
         <label>Manifest relative path<input value={manifestRelativePath} onChange={(event) => setManifestRelativePath(event.target.value)} /></label>
         <label>Expected SHA-256<input value={expectedManifestHash} onChange={(event) => setExpectedManifestHash(event.target.value.toLowerCase())} /></label>

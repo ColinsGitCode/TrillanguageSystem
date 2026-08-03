@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react';
-import { RotateCcw, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, RotateCcw, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DialogSurface } from '../../components/overlays';
 import { publishShellFeedback } from '../../components/shell';
 import { factoryApi } from './factory-api';
 import type { GenerationJob, QueueSummary } from './types';
 
 const STATUS_LABEL: Record<string, string> = {
-  queued: 'QUEUED', running: 'RUNNING', success: 'DONE', failed: 'FAILED', cancelled: 'CANCELLED',
+  queued: '等待中', running: '生成中', success: '已完成', failed: '失败', cancelled: '已取消',
+};
+
+const EVENT_LABEL: Record<string, string> = {
+  created: '已创建',
+  picked: '开始处理',
+  retry_scheduled: '等待重试',
+  succeeded: '生成成功',
+  success: '生成成功',
+  failed: '生成失败',
+  cancelled: '已取消',
+  queued: '已排队',
+  running: '处理中',
 };
 
 function formatEventTime(value?: string) {
@@ -22,6 +35,7 @@ export function QueuePanel({
   summary,
   selectedJobId,
   onSelectJob,
+  onOpenResult,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +43,7 @@ export function QueuePanel({
   summary: QueueSummary;
   selectedJobId?: number | null;
   onSelectJob?: (jobId: number) => void;
+  onOpenResult?: (job: GenerationJob) => void;
 }) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -74,15 +89,6 @@ export function QueuePanel({
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open) return;
     if (selectedJobId && jobs.some((job) => job.id === selectedJobId)) {
       setSelectedId(selectedJobId);
       return;
@@ -93,70 +99,93 @@ export function QueuePanel({
 
   if (!open) return null;
   return (
-    <div className="queue-dialog-backdrop" data-testid="react-queue-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="queue-dialog" role="dialog" aria-modal="true" aria-labelledby="queue-dialog-title">
-        <header>
-          <div>
-            <p className="eyebrow">TASK QUEUE</p>
-            <h2 id="queue-dialog-title">队列管理</h2>
-          </div>
-          <div className="queue-dialog-actions">
-            <button type="button" disabled={!jobs.some((job) => job.status === 'failed') || retryMutation.isPending} onClick={() => retryMutation.mutate()}>
-              <RotateCcw aria-hidden="true" /> 重试失败
-            </button>
-            <button type="button" disabled={clearMutation.isPending} onClick={() => clearMutation.mutate()}>
-              <Trash2 aria-hidden="true" /> 清理完成
-            </button>
-            <button className="icon-button" type="button" aria-label="关闭队列" data-testid="react-queue-close" onClick={onClose}>
-              <X aria-hidden="true" />
-            </button>
-          </div>
-        </header>
-        <div className="queue-summary-line">
-          <span>待执行 <b>{summary.queued || 0}</b></span>
-          <span>运行 <b>{summary.running || 0}</b></span>
-          <span>完成 <b>{summary.success || 0}</b></span>
-          <span>失败 <b>{summary.failed || 0}</b></span>
+    <DialogSurface
+      className="queue-dialog"
+      ariaLabelledBy="queue-dialog-title"
+      size="large"
+      closeOnBackdrop
+      backdropTestId="react-queue-backdrop"
+      onClose={onClose}
+    >
+      <header>
+        <div>
+          <p className="eyebrow">任务队列</p>
+          <h2 id="queue-dialog-title">队列管理</h2>
         </div>
-        <div className="queue-dialog-body">
-          <div className="queue-job-list" role="listbox" aria-label="生成任务">
-            {jobs.length ? jobs.map((job) => (
-              <button
-                type="button"
-                key={job.id}
-                role="option"
-                aria-selected={selected?.id === job.id}
-                className={`queue-job queue-${job.status}${selected?.id === job.id ? ' active' : ''}`}
-                onClick={() => {
-                  setSelectedId(job.id);
-                  onSelectJob?.(job.id);
-                }}
-              >
-                <span className="queue-job-top"><b>#{job.id}</b><i>{STATUS_LABEL[job.status] || job.status}</i></span>
-                <strong>{job.phraseNormalized}</strong>
-                <small>{job.jobType}</small>
-              </button>
-            )) : <div className="empty-copy">暂无队列任务</div>}
-          </div>
-          <div className="queue-timeline" data-testid="react-queue-timeline">
-            <div className="queue-timeline-head">
-              <div><p className="eyebrow">AUDIT TRAIL</p><h3>{selected ? `#${selected.id}` : '未选择任务'}</h3></div>
+        <div className="queue-dialog-actions">
+          <button type="button" disabled={!jobs.some((job) => job.status === 'failed') || retryMutation.isPending} onClick={() => retryMutation.mutate()}>
+            <RotateCcw aria-hidden="true" /> 重试失败
+          </button>
+          <button type="button" disabled={clearMutation.isPending} onClick={() => clearMutation.mutate()}>
+            <Trash2 aria-hidden="true" /> 清理完成
+          </button>
+          <button className="icon-button" type="button" aria-label="关闭队列" data-testid="react-queue-close" data-dialog-initial-focus onClick={onClose}>
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+      <div className="queue-summary-line">
+        <span>待执行 <b>{summary.queued || 0}</b></span>
+        <span>运行 <b>{summary.running || 0}</b></span>
+        <span>完成 <b>{summary.success || 0}</b></span>
+        <span>失败 <b>{summary.failed || 0}</b></span>
+      </div>
+      <div className="queue-dialog-body">
+        <div className="queue-job-list" role="listbox" aria-label="生成任务">
+          {jobs.length ? jobs.map((job) => (
+            <button
+              type="button"
+              key={job.id}
+              role="option"
+              aria-selected={selected?.id === job.id}
+              className={`queue-job queue-${job.status}${selected?.id === job.id ? ' active' : ''}`}
+              onClick={() => {
+                setSelectedId(job.id);
+                onSelectJob?.(job.id);
+              }}
+            >
+              <span className="queue-job-top"><b>#{job.id}</b><i>{STATUS_LABEL[job.status] || job.status}</i></span>
+              <strong>{job.phraseNormalized}</strong>
+              <small>{job.jobType}</small>
+            </button>
+          )) : <div className="empty-copy">暂无队列任务</div>}
+        </div>
+        <div className="queue-timeline" data-testid="react-queue-timeline">
+          <div className="queue-timeline-head">
+            <div><p className="eyebrow">处理记录</p><h3>{selected ? `#${selected.id}` : '未选择任务'}</h3></div>
+            <div className="queue-timeline-actions">
               {selected?.status === 'queued' && (
                 <button type="button" onClick={() => cancelMutation.mutate(selected.id)}>取消任务</button>
               )}
+              {selected?.status === 'success' && selected.resultFolder && selected.resultBaseFilename && onOpenResult && (
+                <button type="button" onClick={() => onOpenResult(selected)}>
+                  <ArrowUpRight aria-hidden="true" />查看学习卡
+                </button>
+              )}
             </div>
-            {eventsQuery.data?.events?.length ? eventsQuery.data.events.map((event) => (
-              <article className="queue-event" key={event.id}>
-                <span>{event.eventType.replaceAll('_', ' ').toUpperCase()}</span>
-                <time>{formatEventTime(event.createdAt)}</time>
-                <p>{typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || {})}</p>
-              </article>
-            )) : <div className="empty-copy">暂无审计事件</div>}
           </div>
+          {selected?.status === 'running' && (
+            <p className="queue-operation-note">
+              当前模型调用正在完成，不能安全强制中断。完成后结果会保留在卡片库。
+            </p>
+          )}
+          {selected?.status === 'cancelled' && (
+            <p className="queue-operation-note">
+              任务在开始前已取消，没有创建学习卡。
+            </p>
+          )}
+          {selected?.status === 'failed' && selected.errorMessage && (
+            <p className="queue-operation-note is-error">{selected.errorMessage}</p>
+          )}
+          {eventsQuery.data?.events?.length ? eventsQuery.data.events.map((event) => (
+            <article className="queue-event" key={event.id}>
+              <span>{EVENT_LABEL[event.eventType] || '状态更新'}</span>
+              <time>{formatEventTime(event.createdAt)}</time>
+              <p>{typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || {})}</p>
+            </article>
+          )) : <div className="empty-copy">暂无审计事件</div>}
         </div>
-      </section>
-    </div>
+      </div>
+    </DialogSurface>
   );
 }

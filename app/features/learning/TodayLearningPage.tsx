@@ -1,11 +1,14 @@
-import { ArrowRight, CalendarClock, CheckCircle2, Factory, Play, Settings2 } from 'lucide-react';
+import { ArrowRight, CalendarClock, CheckCircle2, Factory, History, Play, Settings2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { PageHeader } from '../../components/PageHeader';
 import { ProductShell } from '../../components/ProductShell';
+import { PageState } from '../../components/states';
 import { ErrorSummary, type WorkflowError } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { learningApi } from './learning-api';
 import { entryPresentation, reasonLabel } from './learning-format';
+import { OnboardingChecklist } from './OnboardingChecklist';
 import type { DailyQueue, QueueEntry } from './types';
 
 function queueMetrics(queue: DailyQueue | null) {
@@ -35,6 +38,20 @@ function learningWorkflowError(error: unknown, fallbackCode: string): WorkflowEr
   };
 }
 
+function sessionStartLabel(startedAtUtc: string, timeZone: string) {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone,
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(startedAtUtc));
+  } catch {
+    return '此前';
+  }
+}
+
 function QueueRow({ entry }: { entry: QueueEntry }) {
   const presentation = entryPresentation(entry);
   const planningReason = entry.explanation.provider?.sources
@@ -50,6 +67,15 @@ function QueueRow({ entry }: { entry: QueueEntry }) {
       </span>
       <span className={`learning-reason reason-${entry.reason}`}>{reasonLabel(entry)}</span>
     </li>
+  );
+}
+
+function TodayLearningShell({ children }: { children: React.ReactNode }) {
+  return (
+    <ProductShell active="today" title="今日学习">
+      <OnboardingChecklist />
+      {children}
+    </ProductShell>
   );
 }
 
@@ -70,43 +96,109 @@ export function TodayLearningPage() {
       if (data.session) navigate('/learn/session');
     },
   });
+  const closeStaleSessionMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeSession) throw new Error('没有可结束的活动会话');
+      await learningApi.endSession(activeSession.id);
+      return learningApi.ensureTodayQueue();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['learning', 'session', 'active'], { success: true, session: null });
+      queryClient.setQueryData(['learning', 'queue', 'today'], data);
+    },
+  });
 
   const plan = planQuery.data?.plan || null;
   const queue = queueQuery.data?.queue || null;
   const activeSession = sessionQuery.data?.session || null;
+  const staleActiveSession = Boolean(activeSession && activeSession.queueId !== queue?.id);
   const metrics = queueMetrics(queue);
   const unresolved = Number(planQuery.data?.admissionSummary.unresolved || 0);
   const quarantined = Number(planQuery.data?.admissionSummary.quarantined || 0);
   const loading = planQuery.isLoading || queueQuery.isLoading || sessionQuery.isLoading;
 
   if (loading) {
-    return <ProductShell active="today" title="今日学习"><div className="learning-loading">正在准备今日学习…</div></ProductShell>;
+    return (
+      <TodayLearningShell>
+        <PageState
+          variant="loading"
+          eyebrow="今日学习"
+          title="正在准备今日学习"
+          description="正在读取计划、今日队列和未结束会话。"
+          testId="learning-today-loading"
+        />
+      </TodayLearningShell>
+    );
   }
 
   if (planQuery.isError || queueQuery.isError || sessionQuery.isError) {
     const error = planQuery.error || queueQuery.error || sessionQuery.error;
     return (
-      <ProductShell active="today" title="今日学习">
-        <section className="surface learning-empty">
-          <CalendarClock aria-hidden="true" />
-          <h1>今日学习暂时无法读取</h1>
-          <p>Cards Factory 仍可正常使用。请稍后重试学习服务。</p>
-          <ErrorSummary
-            errors={[learningWorkflowError(error, 'LEARNING_TODAY_LOAD_FAILED')]}
-            onRetry={() => void Promise.all([planQuery.refetch(), queueQuery.refetch(), sessionQuery.refetch()])}
-          />
+      <TodayLearningShell>
+        <PageState
+          variant="error"
+          eyebrow="今日学习"
+          title="今日学习暂时无法读取"
+          description="学习计划、队列和评分记录没有被修改。Cards Factory 仍可正常使用。"
+          actions={(
+            <button
+              className="primary"
+              type="button"
+              onClick={() => void Promise.all([planQuery.refetch(), queueQuery.refetch(), sessionQuery.refetch()])}
+            >
+              重新读取
+            </button>
+          )}
+          testId="learning-today-load-error"
+        />
+      </TodayLearningShell>
+    );
+  }
+
+  if (activeSession && staleActiveSession) {
+    const sessionTotal = activeSession.queueProgress.total;
+    const reviewed = activeSession.reviewSummary.total;
+    const timeZone = planQuery.data?.profile.timeZone || 'Asia/Tokyo';
+    return (
+      <TodayLearningShell>
+        <section className="surface learning-recovery" data-testid="learning-stale-session">
+          <History aria-hidden="true" />
+          <div>
+            <p className="eyebrow">未结束会话 · {sessionStartLabel(activeSession.startedAtUtc, timeZone)}</p>
+            <h1>上次学习还没有结束</h1>
+            <p>已提交 {reviewed} / {sessionTotal} 项评分。未评分内容仍保留，没有产生失败记录。</p>
+          </div>
+          <div className="learning-recovery-actions">
+            <button className="learning-primary-button" type="button" onClick={() => navigate('/learn/session')}>
+              <Play aria-hidden="true" /> 继续上次学习
+            </button>
+            <button
+              className="learning-secondary-button"
+              type="button"
+              disabled={closeStaleSessionMutation.isPending}
+              onClick={() => closeStaleSessionMutation.mutate()}
+            >
+              {closeStaleSessionMutation.isPending ? '正在结束并准备今日队列…' : '结束上次会话并生成今日队列'}
+            </button>
+          </div>
+          {closeStaleSessionMutation.isError && (
+            <ErrorSummary
+              errors={[learningWorkflowError(closeStaleSessionMutation.error, 'LEARNING_STALE_SESSION_CLOSE_FAILED')]}
+              onRetry={() => closeStaleSessionMutation.mutate()}
+            />
+          )}
         </section>
-      </ProductShell>
+      </TodayLearningShell>
     );
   }
 
   if (!plan) {
     const onlyPending = planQuery.data?.scopePreview.studyItemCount === 0 && (unresolved + quarantined) > 0;
     return (
-      <ProductShell active="today" title="今日学习">
+      <TodayLearningShell>
         <section className="surface learning-empty" data-testid="learning-no-plan">
           <CalendarClock aria-hidden="true" />
-          <p className="eyebrow">FIRST STUDY DAY</p>
+          <p className="eyebrow">第一个学习日</p>
           <h1>{onlyPending ? '卡片仍在等待数据确认' : '开始你的第一天'}</h1>
           <p>{onlyPending ? `当前有 ${unresolved + quarantined} 张未决或隔离卡片，不会进入复习。先处理数据或生成合格卡片。` : '先选择学习语言、卡型与每日负担。系统会据此生成可解释的今日队列。'}</p>
           <div className="learning-empty-actions">
@@ -114,20 +206,20 @@ export function TodayLearningPage() {
             {onlyPending && <a className="learning-secondary-button" href="/"><Factory aria-hidden="true" /> 打开 Cards Factory</a>}
           </div>
         </section>
-      </ProductShell>
+      </TodayLearningShell>
     );
   }
 
   if (plan.status === 'paused') {
-    return <ProductShell active="today" title="今日学习"><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><p className="eyebrow">PLAN PAUSED</p><h1>学习计划已暂停</h1><p>历史记录和调度状态都已保留。恢复后再生成新的今日队列。</p><button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 查看学习计划</button></section></ProductShell>;
+    return <TodayLearningShell><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><p className="eyebrow">计划已暂停</p><h1>学习计划已暂停</h1><p>历史记录和调度状态都已保留。恢复后再生成新的今日队列。</p><button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 查看学习计划</button></section></TodayLearningShell>;
   }
 
   if (!queue) {
     return (
-      <ProductShell active="today" title="今日学习">
+      <TodayLearningShell>
         <section className="surface learning-empty">
           <CalendarClock aria-hidden="true" />
-          <p className="eyebrow">DAILY QUEUE</p>
+          <p className="eyebrow">今日队列</p>
           <h1>{planQuery.data?.scopePreview.studyItemCount ? '今日队列尚未生成' : '当前范围没有合格学习单元'}</h1>
           <p>{planQuery.data?.scopePreview.studyItemCount ? '队列只在你确认后生成，不会在后台静默改变。' : '调整学习范围，或先在 Cards Factory 创建合格卡片。'}</p>
           {ensureMutation.isError && (
@@ -140,31 +232,35 @@ export function TodayLearningPage() {
             ? <button className="learning-primary-button" type="button" disabled={ensureMutation.isPending} onClick={() => ensureMutation.mutate()}><Play aria-hidden="true" /> {ensureMutation.isPending ? '生成中…' : '生成今日队列'}</button>
             : <button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 调整学习范围</button>}
         </section>
-      </ProductShell>
+      </TodayLearningShell>
     );
   }
 
   if (queue.status === 'completed' || (!metrics.unfinished.length && queue.progress.actionCount > 0)) {
     return (
-      <ProductShell active="today" title="今日学习">
+      <TodayLearningShell>
         <section className="learning-page learning-complete" data-testid="learning-complete">
           <CheckCircle2 aria-hidden="true" />
-          <p className="eyebrow">TODAY COMPLETE · {queue.learningDay}</p>
+          <p className="eyebrow">今日完成 · {queue.learningDay}</p>
           <h1>今日队列已完成</h1>
           <p>完成 {queue.progress.actionCount} 个学习行动。下一批内容会按到期时间继续安排。</p>
           <div className="learning-complete-actions"><button className="learning-secondary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 查看计划</button><a className="learning-secondary-button" href="/"><Factory aria-hidden="true" /> Cards Factory</a></div>
         </section>
-      </ProductShell>
+      </TodayLearningShell>
     );
   }
 
   return (
-    <ProductShell active="today" title="今日学习">
+    <TodayLearningShell>
       <div className="learning-page" data-testid="today-learning-page">
-        <header className="learning-page-head learning-today-head">
-          <div><p className="eyebrow">今日学习 · {queue.learningDay} · {queue.timeZone.toUpperCase()}</p><h1>{activeSession ? '继续上次的会话' : `今天还有 ${metrics.unfinished.length} 个学习行动`}</h1><p>{activeSession ? `已提交 ${activeSession.reviewSummary.total} 项，未评分内容不会产生记录。` : '到期内容优先，新单元按计划上限加入。'}</p></div>
-          <button className="learning-primary-button" type="button" disabled={startMutation.isPending} onClick={() => activeSession ? navigate('/learn/session') : startMutation.mutate(queue.id)}><Play aria-hidden="true" /> {activeSession ? '继续学习' : startMutation.isPending ? '正在开始…' : '开始学习'}</button>
-        </header>
+        <PageHeader
+          className="learning-today-head"
+          testId="today-page-header"
+          eyebrow={`今日安排 · ${queue.learningDay} · ${queue.timeZone}`}
+          title={activeSession ? '继续上次的会话' : `今天还有 ${metrics.unfinished.length} 个学习行动`}
+          description={activeSession ? `已提交 ${activeSession.reviewSummary.total} 项，未评分内容不会产生记录。` : '到期内容优先，新单元按计划上限加入。'}
+          actions={<button className="learning-primary-button" type="button" disabled={startMutation.isPending} onClick={() => activeSession ? navigate('/learn/session') : startMutation.mutate(queue.id)}><Play aria-hidden="true" /> {activeSession ? '继续学习' : startMutation.isPending ? '正在开始…' : '开始学习'}</button>}
+        />
 
         {startMutation.isError && (
           <ErrorSummary
@@ -183,13 +279,13 @@ export function TodayLearningPage() {
         {metrics.overdue >= 20 && <div className="learning-banner warning"><span>当前逾期较多。可以先把每日新单元上限设为 0，专注清理到期内容。</span><button type="button" onClick={() => navigate('/learn/plan')}>调整计划</button></div>}
 
         <section className="surface learning-queue">
-          <header><div><p className="eyebrow">DAILY QUEUE · PRIORITY ORDER</p><h2>今日队列</h2></div><span>逾期 → 到期 → 困难重现 → 新内容</span></header>
+          <header><div><p className="eyebrow">今日队列 · 优先顺序</p><h2>今日队列</h2></div><span>逾期 → 到期 → 困难重现 → 新内容</span></header>
           <ol>{metrics.unfinished.slice(0, 30).map((entry) => <QueueRow key={entry.id} entry={entry} />)}</ol>
           {metrics.unfinished.length > 30 && <p className="learning-list-more">另有 {metrics.unfinished.length - 30} 项，将按相同优先级继续排队。</p>}
         </section>
 
         <footer className="learning-page-footer"><button className="learning-secondary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 调整计划</button><button className="learning-primary-button" type="button" onClick={() => activeSession ? navigate('/learn/session') : startMutation.mutate(queue.id)}>进入第一项 <ArrowRight aria-hidden="true" /></button></footer>
       </div>
-    </ProductShell>
+    </TodayLearningShell>
   );
 }

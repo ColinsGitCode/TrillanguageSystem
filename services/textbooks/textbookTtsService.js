@@ -29,7 +29,7 @@ class TextbookTtsService {
     this.workPath = options.workPath || TEXTBOOK_WORK_PATH;
   }
 
-  async generateTrack(trackId, { force = false } = {}) {
+  async generateTrack(trackId, { force = false, signal } = {}) {
     const track = this.dbService.getTextbookTrack(trackId);
     if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
     if (track.status !== 'published' || !track.generation_id) {
@@ -73,6 +73,7 @@ class TextbookTtsService {
     const generated = await this.generateAudioBatch(tasks, {
       outputDir,
       baseName: `track-${String(track.track_number).padStart(2, '0')}`,
+      signal,
     });
     const resultByIndex = new Map(generated.results.map((result) => [result.index, result]));
     const errorByIndex = new Map(generated.errors.map((error) => [error.index, error]));

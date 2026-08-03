@@ -4,7 +4,7 @@ const { textbookError } = require('./textbookErrors');
 
 function stageFor({ track, review, operation }) {
   if (!track) return 'intake';
-  if (operation && ['queued', 'running', 'partially_failed', 'failed'].includes(operation.status)) {
+  if (operation && ['queued', 'running', 'partially_failed', 'failed', 'cancelled'].includes(operation.status)) {
     return 'processing';
   }
   if (operation?.status === 'succeeded' || track.status === 'published') return 'complete';
@@ -61,6 +61,14 @@ class TextbookWorkflowService {
     const track = this.dbService.getTextbookTrack(trackId);
     if (!track) throw textbookError('TEXTBOOK_TRACK_NOT_FOUND', 404);
     const review = this.dbService.getTextbookReviewSummary(track.revision_id);
+    if (review.total !== track.expressions.length) {
+      throw textbookError('TEXTBOOK_WORKFLOW_STATE_INCONSISTENT', 409, {
+        trackId: Number(track.id),
+        revisionId: Number(track.revision_id),
+        expressionCount: track.expressions.length,
+        reviewStateCount: review.total,
+      });
+    }
     const stateByExpression = new Map(review.rows.map((row) => [Number(row.expression_id), row]));
     const operation = operationId
       ? this.dbService.getTextbookOperation(operationId)
@@ -119,7 +127,12 @@ class TextbookWorkflowService {
         updateReview: track.revision_status === 'draft',
         verify: review.total > 0 && review.confirmed === review.total && track.revision_status === 'draft',
         release: review.total > 0 && review.confirmed === review.total && track.status === 'verified',
-        retry: Boolean(operation && ['failed', 'partially_failed'].includes(operation.status)),
+        retry: Boolean(operation && ['failed', 'partially_failed', 'cancelled'].includes(operation.status)),
+        cancel: Boolean(
+          operation
+          && !operation.result?.cancelRequested
+          && ['queued', 'running'].includes(operation.status)
+        ),
       },
     };
   }

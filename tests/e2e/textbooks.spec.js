@@ -34,12 +34,27 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     fixture = await createTextbookManifestFixture(repoRoot);
   });
 
+  test('keeps a course service failure distinct from the first-use empty state', async ({ page }) => {
+    await page.route('**/api/textbooks/courses', (route) => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'fixture unavailable' }),
+    }));
+    await page.goto('/textbooks');
+    await expect(page.getByTestId('textbook-courses-load-error')).toContainText('教材课程暂时无法读取');
+    await expect(page.getByTestId('textbook-empty-start')).toHaveCount(0);
+  });
+
   test('renders the Skill-owned empty state without OCR controls', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/textbooks');
     await expect(page.getByTestId('textbook-courses-page')).toBeVisible();
+    await expect(page.getByTestId('textbook-page-header')).toContainText('教材课程');
     await expect(page.getByText('还没有教材草稿')).toBeVisible();
-    await expect(page.getByText(/import-textbook-track/u)).toBeVisible();
+    await expect(page.getByText(/受控解析流程/u)).toBeVisible();
+    await expect(page.getByTestId('textbook-empty-start')).toContainText('从教材解析 Skill 开始');
+    await expect(page.getByTestId('textbook-empty-start')).toContainText('解析结果未经人工确认，不会自动写入教材课程或学习队列');
+    await expect(page.getByRole('list', { name: '教材导入流程' }).getByRole('listitem')).toHaveCount(3);
     await expect(page.locator('input[type="file"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /OCR|自动配对/iu })).toHaveCount(0);
     await assertContainedDesktop(page);
@@ -59,7 +74,7 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
       await route.continue({ postData: JSON.stringify(payload) });
     });
     await page.goto('/textbooks');
-    await page.getByText('高级 Manifest intake').click();
+    await page.getByText('高级导入工具').click();
     await page.getByLabel('Manifest relative path').fill(fixture.manifestRelative);
     await page.getByLabel('Expected SHA-256').fill(fixture.manifestHash);
     await page.getByRole('button', { name: 'Dry-run' }).click();
@@ -69,9 +84,34 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     publishedTrackId = Number(new URL(page.url()).searchParams.get('track'));
     await expect(page.getByRole('heading', { name: 'Compact Morning Practice' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /需注意\s*1/u })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: /待确认\s*1/u }).click();
+    await page.getByLabel('搜索英日表达').fill('Start here');
+    await expect(page.locator('.workflow-task-rail ol > li')).toHaveCount(1);
+    await page.getByTestId('textbook-bulk-triage').getByRole('button', { name: '选择当前结果' }).click();
+    await page.getByTestId('textbook-bulk-triage').getByRole('button', { name: /标记需注意 1/u }).click();
+    const bulkDialog = page.getByRole('alertdialog', { name: '批量标记需注意' });
+    await expect(bulkDialog).toContainText('不修改英日原文');
+    await expect(bulkDialog).toContainText('任一冲突会整批取消');
+    await bulkDialog.getByRole('button', { name: '标记 1 条' }).click();
+    await expect(bulkDialog).toBeHidden();
+    await expect(page.getByRole('button', { name: /需注意\s*2/u })).toBeVisible();
+    await expect(page.getByText('0/2 已确认')).toBeVisible();
+    await page.getByLabel('搜索英日表达').fill('');
+    await page.getByRole('button', { name: /需注意\s*2/u }).click();
+    await page.locator('.workflow-task-rail').getByRole('button', { name: /I am ready now\./u }).click();
+    await expect(page.getByLabel('中文提示')).toHaveValue('我已经准备好了。');
 
     const taskBeforeSave = new URL(page.url()).searchParams.get('task');
     await page.getByLabel('中文提示').fill('我已准备好。');
+    await expect(page.getByText('有未保存修改')).toBeVisible();
+    const reviewUrl = page.url();
+    await page.getByRole('link', { name: '学习计划' }).click();
+    const leaveGuard = page.getByRole('alertdialog', { name: '放弃未保存修改' });
+    await expect(leaveGuard).toContainText('当前表达还有未保存修改');
+    await expect(page).toHaveURL(reviewUrl);
+    await leaveGuard.getByRole('button', { name: '继续编辑' }).click();
+    await expect(leaveGuard).toBeHidden();
+    await expect(page.getByLabel('中文提示')).toHaveValue('我已准备好。');
     await page.getByRole('button', { name: '保存新修订' }).click();
     await expect(page.getByText('已保存')).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get('task')).not.toBe(taskBeforeSave);
@@ -80,12 +120,12 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
 
     await page.getByRole('button', { name: '确认此表达' }).click();
     await expect(page.getByText('1/2 已确认')).toBeVisible();
-    await page.getByRole('button', { name: /待确认\s*1/u }).click();
+    await page.getByRole('button', { name: /需注意\s*1/u }).click();
     await page.getByRole('button', { name: '确认此表达' }).click();
     await expect(page).toHaveURL(/stage=release/u);
     await expect(page.getByRole('heading', { name: '发布前复核' })).toBeVisible();
     await expect(page.getByText('2 / 2')).toBeVisible();
-    await expect(page.locator('.workflow-review-summary dl > div').filter({ hasText: 'Study Items' })).toContainText('4');
+    await expect(page.locator('.workflow-review-summary dl > div').filter({ hasText: '可复习内容' })).toContainText('4');
     let operationReads = 0;
     await page.route(/\/api\/textbooks\/operations\/\d+$/u, async (route) => {
       const response = await route.fetch();
@@ -107,7 +147,7 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await expect(page.getByRole('heading', { name: '教材 Track 已可学习' })).toBeVisible();
     await expect(page.getByRole('link', { name: '加入学习计划' })).toHaveAttribute('href', `/learn/plan?textbookTrack=${publishedTrackId}`);
 
-    await page.getByPlaceholder('Search English / Japanese / Chinese').fill('ready');
+    await page.getByPlaceholder('搜索英文、日文或中文提示').fill('ready');
     await expect(page.locator('.textbook-search-results').getByText('I am ready now.')).toBeVisible();
     await assertContainedDesktop(page);
     await expect(page).toHaveScreenshot('textbook-courses-published-desktop.png', { animations: 'disabled' });
@@ -125,6 +165,72 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await page.goBack();
     await expect(page).toHaveURL(secondUrl);
     await expect(expressionButtons.nth(1)).toHaveClass(/active/u);
+  });
+
+  test('cancels a queued textbook operation and resumes its retained steps', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    let status = 'queued';
+    const operation = () => ({
+      id: 999,
+      track_id: publishedTrackId,
+      track_revision_id: 1,
+      kind: 'tts',
+      status,
+      idempotency_key: 'e2e-cancel-operation',
+      preview_revision: null,
+      current_step: status === 'cancelled' ? 'tts' : null,
+      attempts: status === 'queued' ? 0 : 1,
+      public_summary: status === 'cancelled'
+        ? '任务已取消，已完成步骤仍然保留'
+        : '已加入后台队列',
+      error_code: status === 'cancelled' ? 'TEXTBOOK_OPERATION_CANCELLED' : null,
+      created_at_utc: '2026-07-30T00:00:00.000Z',
+      updated_at_utc: '2026-07-30T00:01:00.000Z',
+      finished_at_utc: status === 'cancelled' ? '2026-07-30T00:01:00.000Z' : null,
+      result: {
+        command: { force: false },
+        cancelRequested: status === 'cancelled',
+        steps: status === 'cancelled'
+          ? { tts: { status: 'cancelled', retryable: true, errorCode: 'TEXTBOOK_OPERATION_CANCELLED' } }
+          : {},
+      },
+    });
+    await page.route('**/api/textbooks/operations/999', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, operation: operation() }),
+    }));
+    await page.route('**/api/textbooks/operations/999/events', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, events: [] }),
+    }));
+    await page.route('**/api/textbooks/operations/999/cancel', (route) => {
+      status = 'cancelled';
+      return route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, operation: operation() }),
+      });
+    });
+    await page.route('**/api/textbooks/operations/999/retry', (route) => {
+      status = 'queued';
+      return route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, operation: operation() }),
+      });
+    });
+
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=processing&operation=999`);
+    await expect(page.getByRole('button', { name: '取消任务' })).toBeVisible();
+    await page.getByRole('button', { name: '取消任务' }).click();
+    await expect(page.getByText('已完成步骤仍然保留，可从未完成步骤继续。')).toBeVisible();
+    const resume = page.getByRole('button', { name: '继续未完成步骤' });
+    await expect(resume).toBeVisible();
+    await resume.click();
+    await expect(page.getByRole('button', { name: '取消任务' })).toBeVisible();
+    await assertContainedDesktop(page);
   });
 
   test('persists highlights and creates a normalized derivation job', async ({ page }) => {
@@ -288,5 +394,43 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     expect(events.some((event) => event.startsWith('generated:play:'))).toBeTruthy();
     expect(events.some((event) => event.startsWith('generated:pause:'))).toBeTruthy();
     expect(events.some((event) => event.startsWith('official:play:'))).toBeTruthy();
+  });
+
+  test('windows hundreds of published expressions without changing the active expression', async ({ page }) => {
+    await page.route(/\/api\/textbooks\/tracks\/\d+$/u, async (route) => {
+      const response = await route.fetch();
+      if (!response.ok()) return route.fulfill({ response });
+      const payload = await response.json();
+      const template = payload.track.expressions[0];
+      payload.track.expressions = Array.from({ length: 240 }, (_, index) => ({
+        ...template,
+        id: 10_000 + index,
+        expression_id: 20_000 + index,
+        expression_key: `expr:${String(index + 1).padStart(3, '0')}`,
+        display_ordinal: index + 1,
+        official_en_text: `Published expression ${String(index + 1).padStart(3, '0')}.`,
+        official_ja_text: `公開表現${String(index + 1).padStart(3, '0')}。`,
+        zh_cue_text: `已发布表达 ${String(index + 1).padStart(3, '0')}。`,
+        ja_ruby_html: `公開表現${String(index + 1).padStart(3, '0')}。`,
+        en_unit_hash: `en-${index + 1}`,
+        ja_unit_hash: `ja-${index + 1}`,
+      }));
+      await route.fulfill({ response, json: payload });
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
+    const list = page.getByTestId('textbook-published-virtual-list');
+    await expect(list).toHaveAttribute('data-total-count', '240');
+    await expect(list.getByText('Published expression 001.')).toBeVisible();
+    expect(await list.locator('ol > li').count()).toBeLessThan(30);
+
+    await list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event('scroll'));
+    });
+    await expect(list.getByText('Published expression 240.')).toBeVisible();
+    expect(await list.locator('ol > li').count()).toBeLessThan(30);
+    await expect(page.getByRole('heading', { name: 'Published expression 001.' })).toBeVisible();
   });
 });

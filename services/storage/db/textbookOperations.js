@@ -230,38 +230,105 @@ function retryOperation(db, operationId) {
   return db.transaction(() => {
     const operation = getOperation(db, operationId);
     if (!operation) throw textbookError('TEXTBOOK_OPERATION_NOT_FOUND', 404);
-    if (!['failed', 'partially_failed'].includes(operation.status)) {
+    if (!['failed', 'partially_failed', 'cancelled'].includes(operation.status)) {
       throw textbookError('TEXTBOOK_OPERATION_NOT_RETRYABLE', 409);
     }
+    const result = { ...(operation.result || {}) };
+    delete result.cancelRequested;
+    delete result.cancelRequestedAtUtc;
+    result.steps = Object.fromEntries(
+      Object.entries(result.steps || {}).map(([step, value]) => [
+        step,
+        value?.status === 'succeeded'
+          ? value
+          : {
+              ...value,
+              status: 'queued',
+              errorCode: null,
+              retryable: false,
+              summary: '等待继续',
+            },
+      ])
+    );
     db.prepare(`
       UPDATE textbook_operations
       SET status = 'queued', error_code = NULL, finished_at_utc = NULL,
-        public_summary = '失败步骤已重新加入队列', updated_at_utc = ?
+        current_step = NULL, result_json = ?,
+        public_summary = '未完成步骤已重新加入队列', updated_at_utc = ?
       WHERE id = ?
-    `).run(timestamp, Number(operationId));
+    `).run(JSON.stringify(result), timestamp, Number(operationId));
     appendEvent(db, operationId, {
       eventType: 'retry',
       status: 'queued',
-      publicSummary: '仅失败步骤重新加入队列',
+      publicSummary: '仅未完成步骤重新加入队列',
     }, timestamp);
     return getOperation(db, operationId);
   })();
 }
 
+function requestCancellation(db, operationId) {
+  const timestamp = nowIso();
+  return db.transaction(() => {
+    const operation = getOperation(db, operationId);
+    if (!operation) throw textbookError('TEXTBOOK_OPERATION_NOT_FOUND', 404);
+    if (!['queued', 'running'].includes(operation.status)) {
+      throw textbookError('TEXTBOOK_OPERATION_NOT_CANCELLABLE', 409);
+    }
+    const result = {
+      ...(operation.result || {}),
+      cancelRequested: true,
+      cancelRequestedAtUtc: timestamp,
+    };
+    const queued = operation.status === 'queued';
+    db.prepare(`
+      UPDATE textbook_operations
+      SET status = ?, result_json = ?, public_summary = ?,
+        finished_at_utc = ?, updated_at_utc = ?
+      WHERE id = ?
+    `).run(
+      queued ? 'cancelled' : 'running',
+      JSON.stringify(result),
+      queued ? '任务已取消，尚未开始处理' : '正在停止当前步骤',
+      queued ? timestamp : null,
+      timestamp,
+      Number(operationId)
+    );
+    appendEvent(db, operationId, {
+      eventType: queued ? 'cancelled' : 'cancel_requested',
+      status: queued ? 'cancelled' : 'running',
+      publicSummary: queued ? '任务已取消，尚未开始处理' : '已请求停止当前步骤',
+      retryable: true,
+    }, timestamp);
+    return getOperation(db, operationId);
+  })();
+}
+
+function isCancellationRequested(db, operationId) {
+  return Boolean(getOperation(db, operationId)?.result?.cancelRequested);
+}
+
 function recoverStale(db) {
   const timestamp = nowIso();
   return db.transaction(() => {
-    const stale = db.prepare("SELECT id FROM textbook_operations WHERE status = 'running'").all();
+    const stale = db.prepare("SELECT * FROM textbook_operations WHERE status = 'running'").all().map(mapOperation);
     for (const row of stale) {
+      const cancelled = Boolean(row.result?.cancelRequested);
       db.prepare(`
         UPDATE textbook_operations
-        SET status = 'queued', public_summary = '服务重启后恢复', updated_at_utc = ?
+        SET status = ?, public_summary = ?, finished_at_utc = ?, updated_at_utc = ?
         WHERE id = ?
-      `).run(timestamp, row.id);
+      `).run(
+        cancelled ? 'cancelled' : 'queued',
+        cancelled ? '停止请求已在服务重启后完成' : '服务重启后恢复',
+        cancelled ? timestamp : null,
+        timestamp,
+        row.id
+      );
       appendEvent(db, row.id, {
-        eventType: 'restart-recovery',
-        status: 'queued',
-        publicSummary: '服务重启后恢复',
+        eventType: cancelled ? 'cancelled' : 'restart-recovery',
+        status: cancelled ? 'cancelled' : 'queued',
+        publicSummary: cancelled ? '停止请求已在服务重启后完成' : '服务重启后恢复',
+        retryable: cancelled,
       }, timestamp);
     }
     return stale.length;
@@ -274,6 +341,19 @@ function listQueued(db) {
   `).all().map((row) => Number(row.id));
 }
 
+function listRecent(db, limit = 30) {
+  const safeLimit = Math.min(Math.max(Number(limit || 30), 1), 100);
+  return db.prepare(`
+    SELECT operation.*, track.title AS track_title, track.track_number,
+      course.title AS course_title
+    FROM textbook_operations operation
+    JOIN textbook_tracks track ON track.id = operation.track_id
+    JOIN textbook_courses course ON course.id = track.course_id
+    ORDER BY operation.id DESC
+    LIMIT ?
+  `).all(safeLimit).map(mapOperation);
+}
+
 module.exports = {
   appendEvent,
   claimOperation,
@@ -281,10 +361,13 @@ module.exports = {
   finishOperation,
   getOperation,
   getOperationByIdempotencyKey,
+  isCancellationRequested,
   listEvents,
   listQueued,
+  listRecent,
   payloadHash,
   recoverStale,
+  requestCancellation,
   retryOperation,
   updateStep,
 };

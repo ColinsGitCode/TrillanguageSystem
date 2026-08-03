@@ -133,7 +133,7 @@ export function SelectionKnowledgePanel({
           <span>已解析 · {languageLabels[result.point.language as CardLookupLanguage] || result.point.language}</span>
           <strong>{result.point.canonicalForm}</strong>
           {result.point.canonicalReading && <p>{result.point.canonicalReading}</p>}
-          <small>这次主动查询已记录为学习信号，不会直接修改 FSRS 调度。</small>
+          <small>这次查找会帮助系统理解你觉得哪里难，但不会直接改变复习日期。</small>
         </section>
       )}
 

@@ -199,6 +199,8 @@ export type TextbookOperation = {
     command?: Record<string, unknown>;
     steps?: Record<string, TextbookOperationStepResult>;
     published?: boolean;
+    cancelRequested?: boolean;
+    cancelRequestedAtUtc?: string;
   };
 };
 
@@ -250,5 +252,6 @@ export type TextbookWorkflow = {
     verify: boolean;
     release: boolean;
     retry: boolean;
+    cancel: boolean;
   };
 };

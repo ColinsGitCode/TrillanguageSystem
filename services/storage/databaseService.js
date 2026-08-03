@@ -348,6 +348,10 @@ class DatabaseService {
     return textbookWorkflowDomain.reviewSummary(this.db, revisionId);
   }
 
+  listPendingTextbookReviews(limit = 10) {
+    return textbookWorkflowDomain.listPendingTrackReviews(this.db, limit);
+  }
+
   getTextbookRevision(revisionId) {
     return textbookWorkflowDomain.getRevision(this.db, revisionId);
   }
@@ -357,6 +361,14 @@ class DatabaseService {
       this.db,
       revisionId,
       expressionId,
+      payload
+    ));
+  }
+
+  updateTextbookReviewStates(revisionId, payload = {}) {
+    return this.withBusyRetry(() => textbookWorkflowDomain.updateReviewStates(
+      this.db,
+      revisionId,
       payload
     ));
   }
@@ -412,12 +424,24 @@ class DatabaseService {
     return this.withBusyRetry(() => textbookOperationsDomain.retryOperation(this.db, operationId));
   }
 
+  requestTextbookOperationCancellation(operationId) {
+    return this.withBusyRetry(() => textbookOperationsDomain.requestCancellation(this.db, operationId));
+  }
+
+  isTextbookOperationCancellationRequested(operationId) {
+    return textbookOperationsDomain.isCancellationRequested(this.db, operationId);
+  }
+
   recoverTextbookOperations() {
     return this.withBusyRetry(() => textbookOperationsDomain.recoverStale(this.db));
   }
 
   listQueuedTextbookOperationIds() {
     return textbookOperationsDomain.listQueued(this.db);
+  }
+
+  listRecentTextbookOperations(limit = 30) {
+    return textbookOperationsDomain.listRecent(this.db, limit);
   }
 
   previewTextbookPublish(id) {

@@ -1,0 +1,114 @@
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--color-overlay);
+}
+
+.dialog-surface {
+  position: relative;
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-modal);
+  box-shadow: var(--shadow-modal);
+}
+
+.dialog-size-small { width: min(480px, 100%); }
+.dialog-size-medium { width: min(620px, 100%); }
+.dialog-size-large { width: min(760px, 100%); }
+
+.dialog-close {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+}
+
+.confirm-dialog {
+  padding: 24px;
+}
+
+.confirm-dialog > header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.confirm-dialog-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  border-radius: var(--radius-md);
+}
+
+.confirm-dialog.tone-warning .confirm-dialog-icon {
+  color: var(--color-warning);
+  background: var(--color-warning-subtle);
+}
+
+.confirm-dialog.tone-danger .confirm-dialog-icon {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+}
+
+.confirm-dialog h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+
+.confirm-dialog-description {
+  margin-top: 8px;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.confirm-dialog-description p {
+  margin: 0;
+}
+
+.confirm-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.confirm-dialog > footer button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.confirm-dialog > footer button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.confirm-dialog > footer .confirm-dialog-action {
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.confirm-dialog > footer .confirm-dialog-action.tone-warning {
+  border-color: var(--color-warning);
+  background: var(--color-warning);
+}
+
+.confirm-dialog > footer .confirm-dialog-action.tone-danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}

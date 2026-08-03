@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags, X } from 'lucide-react';
+import { BookOpen, CalendarRange, Check, Pause, Play, Save, Tags } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router';
+import { PageHeader } from '../../components/PageHeader';
 import { ProductShell } from '../../components/ProductShell';
-import { ReviewSummary } from '../../components/workflow';
+import { ConfirmDialog, DialogSurface } from '../../components/overlays';
+import { DataRefreshStatus, PageState } from '../../components/states';
+import {
+  LeaveGuardDialog,
+  ReviewSummary,
+  SaveStatus,
+  StageNavigation,
+  useLeaveGuard,
+  type WorkflowSaveState,
+  type WorkflowStageItem,
+} from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { learningApi } from './learning-api';
 import type { LearningScope } from './types';
@@ -16,6 +27,38 @@ const CARD_TYPES = [
   { value: 'whole_card', label: '完整卡片', detail: '人工确认的整卡单元' },
 ] as const;
 
+const TAG_LABELS: Record<string, string> = {
+  'fn:aspect': '时态与体',
+  'fn:sequence': '顺序与流程',
+  'fn:judgment': '判断与评价',
+  'fn:compare': '比较',
+  'fn:cause': '原因与结果',
+  'fn:intent': '意图与计划',
+  'fn:condition': '条件',
+  'fn:colloquial': '口语表达',
+  'fn:question': '提问',
+  'fn:prohibit': '禁止',
+  'fn:request': '请求',
+  'fn:advice': '建议',
+  'fn:report': '转述与报告',
+  'fn:give-receive': '授受表达',
+  'topic:software-eng': '软件工程',
+  'topic:ai-data': '人工智能与数据',
+  'topic:finance-biz': '商务与金融',
+  'topic:childcare': '育儿与家庭',
+};
+
+const TAG_GROUP_LABELS: Record<string, string> = {
+  fn: '表达功能',
+  topic: '学习主题',
+  tag: '自定义标签',
+};
+
+function learningTagLabel(namespace: string, value: string) {
+  return TAG_LABELS[`${namespace}:${value}`]
+    || value.replace(/[-_]+/gu, ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
 function apiMessage(error: Error) {
   if (error instanceof ApiError && error.payload && typeof error.payload === 'object' && 'code' in error.payload) {
     const code = String((error.payload as { code?: string }).code || '');
@@ -24,6 +67,30 @@ function apiMessage(error: Error) {
   }
   return error.message;
 }
+
+function planDraftSignature(
+  scope: LearningScope,
+  dailyActionGoal: number,
+  dailyNewLimit: number,
+  timeZone: string
+) {
+  return JSON.stringify({
+    scope: {
+      ...scope,
+      languages: [...scope.languages].sort(),
+      cardTypes: [...scope.cardTypes].sort(),
+      tags: [...scope.tags]
+        .map((tag) => ({ namespace: tag.namespace, value: tag.value }))
+        .sort((left, right) => `${left.namespace}:${left.value}`.localeCompare(`${right.namespace}:${right.value}`)),
+      textbookTrackIds: [...(scope.textbookTrackIds || [])].sort((left, right) => left - right),
+    },
+    dailyActionGoal,
+    dailyNewLimit,
+    timeZone,
+  });
+}
+
+type LearningPlanStage = 'scope' | 'review' | 'apply';
 
 export function LearningPlanPage() {
   const navigate = useNavigate();
@@ -41,6 +108,8 @@ export function LearningPlanPage() {
   const [reviewPlanRevision, setReviewPlanRevision] = useState<number | null>(null);
   const [confirmPause, setConfirmPause] = useState(false);
   const [notice, setNotice] = useState('');
+  const [tagSearch, setTagSearch] = useState('');
+  const [showAllTags, setShowAllTags] = useState(false);
 
   useEffect(() => {
     if (!planQuery.data || scope) return;
@@ -163,7 +232,90 @@ export function LearningPlanPage() {
   const textbookScopeMissingTracks = Boolean(scope?.cardTypes.includes('textbook_track') && !scope.textbookTrackIds?.length);
   const currentPreviewPlanRevision = previewQuery.data?.planRevision ?? planQuery.data?.plan?.revision ?? 0;
   const reviewRevisionStale = reviewPlanRevision !== null && currentPreviewPlanRevision !== reviewPlanRevision;
-  const visibleTags = useMemo(() => (optionsQuery.data?.tags || []).filter((tag) => ['topic', 'fn', 'tag'].includes(tag.namespace)).slice(0, 18), [optionsQuery.data]);
+  const savedPlanSource = planQuery.data?.plan || (planQuery.data ? {
+    scope: planQuery.data.defaults.scope,
+    dailyActionGoal: planQuery.data.defaults.dailyActionGoal,
+    dailyNewLimit: planQuery.data.defaults.dailyNewLimit,
+  } : null);
+  const savedPlanSignature = savedPlanSource
+    ? planDraftSignature(
+        savedPlanSource.scope,
+        savedPlanSource.dailyActionGoal,
+        savedPlanSource.dailyNewLimit,
+        planQuery.data?.profile.timeZone || 'Asia/Tokyo'
+      )
+    : null;
+  const currentPlanSignature = scope
+    ? planDraftSignature(scope, dailyGoal, dailyNew, timeZone)
+    : null;
+  const planDirty = Boolean(savedPlanSignature && currentPlanSignature && savedPlanSignature !== currentPlanSignature);
+  const planSaveState: WorkflowSaveState = saveMutation.isPending
+    ? 'saving'
+    : saveMutation.isError
+      ? saveMutation.error instanceof ApiError && saveMutation.error.status === 409 ? 'conflict' : 'failed'
+      : planDirty ? 'dirty' : 'clean';
+  const leaveGuard = useLeaveGuard(planDirty && !saveMutation.isPending);
+  const planStages = useMemo<WorkflowStageItem<LearningPlanStage>[]>(() => {
+    if (saveMutation.isError) {
+      return [
+        { id: 'scope', label: '选择范围', state: 'complete' },
+        { id: 'review', label: '检查影响', state: 'complete' },
+        { id: 'apply', label: '保存计划', state: 'failed', reason: '保存失败，可在确认窗口重试。' },
+      ];
+    }
+    if (saveMutation.isPending) {
+      return [
+        { id: 'scope', label: '选择范围', state: 'complete' },
+        { id: 'review', label: '检查影响', state: 'complete' },
+        { id: 'apply', label: '保存计划', state: 'current' },
+      ];
+    }
+    if (confirmSave) {
+      return [
+        { id: 'scope', label: '选择范围', state: 'complete' },
+        { id: 'review', label: '检查影响', state: 'current' },
+        { id: 'apply', label: '保存计划', state: 'locked', reason: '确认影响后才能保存。' },
+      ];
+    }
+    const reviewAvailable = Boolean(preview?.studyItemCount && !textbookScopeMissingTracks);
+    return [
+      { id: 'scope', label: '选择范围', state: 'current' },
+      {
+        id: 'review',
+        label: '检查影响',
+        state: reviewAvailable ? 'available' : 'locked',
+        reason: reviewAvailable ? undefined : '先选择一个包含合格学习单元的范围。',
+      },
+      { id: 'apply', label: '保存计划', state: 'locked', reason: '检查影响后才能保存。' },
+    ];
+  }, [
+    confirmSave,
+    preview?.studyItemCount,
+    saveMutation.isError,
+    saveMutation.isPending,
+    textbookScopeMissingTracks,
+  ]);
+  const availableTags = useMemo(
+    () => (optionsQuery.data?.tags || []).filter((tag) => ['topic', 'fn', 'tag'].includes(tag.namespace)),
+    [optionsQuery.data]
+  );
+  const matchingTags = useMemo(() => {
+    const query = tagSearch.trim().toLocaleLowerCase();
+    if (!query) return availableTags;
+    return availableTags.filter((tag) => (
+      `${tag.namespace}:${tag.value}`.toLocaleLowerCase().includes(query)
+      || learningTagLabel(tag.namespace, tag.value).toLocaleLowerCase().includes(query)
+    ));
+  }, [availableTags, tagSearch]);
+  const displayedTags = tagSearch.trim() || showAllTags ? matchingTags : matchingTags.slice(0, 8);
+  const tagGroups = useMemo(() => (
+    ['fn', 'topic', 'tag']
+      .map((namespace) => ({
+        namespace,
+        tags: displayedTags.filter((tag) => tag.namespace === namespace),
+      }))
+      .filter((group) => group.tags.length > 0)
+  ), [displayedTags]);
   const openSaveReview = () => {
     setReviewPlanRevision(currentPreviewPlanRevision);
     setConfirmSave(true);
@@ -177,21 +329,84 @@ export function LearningPlanPage() {
     });
   };
 
-  if (planQuery.isLoading || !scope) {
-    return <ProductShell active="plan" title="学习计划"><div className="learning-loading">正在读取学习计划…</div></ProductShell>;
+  const initialPlanError = planQuery.isError && !planQuery.data;
+  const initialOptionsError = optionsQuery.isError && !optionsQuery.data;
+  if (initialPlanError || initialOptionsError) {
+    return (
+      <ProductShell active="plan" title="学习计划">
+        <PageState
+          variant="error"
+          eyebrow="学习计划"
+          title="学习计划暂时无法读取"
+          description="现有计划没有被修改。重新读取成功后才能安全调整范围与每日负担。"
+          actions={(
+            <button
+              className="primary"
+              type="button"
+              onClick={() => void Promise.all([planQuery.refetch(), optionsQuery.refetch()])}
+            >
+              重新读取
+            </button>
+          )}
+          testId="learning-plan-load-error"
+        />
+      </ProductShell>
+    );
+  }
+
+  if (planQuery.isLoading || optionsQuery.isLoading || !scope) {
+    return (
+      <ProductShell active="plan" title="学习计划">
+        <PageState
+          variant="loading"
+          eyebrow="学习计划"
+          title="正在读取学习计划"
+          description="正在准备当前范围、每日目标和可选学习内容。"
+          testId="learning-plan-loading"
+        />
+      </ProductShell>
+    );
   }
 
   return (
     <ProductShell active="plan" title="学习计划">
       <div className="learning-page" data-testid="learning-plan-page">
-        <header className="learning-page-head">
-          <div><p className="eyebrow">STUDY PLAN · REV {planQuery.data?.plan?.revision || 0}</p><h1>{planQuery.data?.plan ? '调整学习计划' : '建立你的学习计划'}</h1><p>一个活动计划控制范围与每日负担，历史状态不会因范围变化而丢失。</p></div>
-          {planQuery.data?.plan && (
-            <button className="learning-secondary-button" type="button" onClick={() => planQuery.data?.plan?.status === 'paused' ? statusMutation.mutate('active') : setConfirmPause(true)}>
-              {planQuery.data.plan.status === 'paused' ? <><Play aria-hidden="true" /> 恢复计划</> : <><Pause aria-hidden="true" /> 暂停计划</>}
-            </button>
+        <PageHeader
+          testId="plan-page-header"
+          eyebrow={`学习计划 · 版本 ${planQuery.data?.plan?.revision || 0}`}
+          title={planQuery.data?.plan ? '调整学习计划' : '建立你的学习计划'}
+          description="一个活动计划控制范围与每日负担，历史状态不会因范围变化而丢失。"
+          actions={(
+            <>
+              <SaveStatus state={planSaveState} />
+              {planQuery.data?.plan ? (
+                <button className="learning-secondary-button" type="button" onClick={() => planQuery.data?.plan?.status === 'paused' ? statusMutation.mutate('active') : setConfirmPause(true)}>
+                  {planQuery.data.plan.status === 'paused' ? <><Play aria-hidden="true" /> 恢复计划</> : <><Pause aria-hidden="true" /> 暂停计划</>}
+                </button>
+              ) : null}
+            </>
           )}
-        </header>
+        />
+        <DataRefreshStatus
+          refreshing={(planQuery.isFetching || optionsQuery.isFetching) && !planQuery.isLoading && !optionsQuery.isLoading}
+          failed={Boolean((planQuery.isError && planQuery.data) || (optionsQuery.isError && optionsQuery.data))}
+          label="学习计划"
+          onRetry={() => void Promise.all([planQuery.refetch(), optionsQuery.refetch()])}
+          testId="learning-plan-refresh-status"
+        />
+        <div className="learning-plan-stage-nav">
+          <StageNavigation
+            items={planStages}
+            onNavigate={(stage) => {
+              if (stage === 'scope') {
+                setConfirmSave(false);
+                requestAnimationFrame(() => document.getElementById('learning-scope-card-types')?.scrollIntoView({ block: 'center' }));
+              } else if (stage === 'review') {
+                openSaveReview();
+              }
+            }}
+          />
+        </div>
 
         {notice && <div className="learning-banner danger" role="status">{notice}</div>}
         <div className="learning-plan-grid">
@@ -252,14 +467,57 @@ export function LearningPlanPage() {
             </fieldset>
 
             <fieldset id="learning-scope-tags">
-              <legend><Tags aria-hidden="true" /> Active 标签</legend>
-              <div className="learning-tag-list">
-                {visibleTags.map((tag) => {
-                  const selected = scope.tags.some((item) => item.namespace === tag.namespace && item.value === tag.value);
-                  return <button key={`${tag.namespace}:${tag.value}`} type="button" aria-pressed={selected} className={selected ? 'selected' : ''} onClick={() => toggleTag(tag.namespace, tag.value)}>{tag.namespace}:{tag.value}<small>{tag.generationCount}</small></button>;
-                })}
-                {!visibleTags.length && <span className="field-note">当前没有可用于范围筛选的 Active 标签。</span>}
+              <legend><Tags aria-hidden="true" /> 学习主题与功能</legend>
+              <div className="learning-tag-toolbar">
+                <input
+                  type="search"
+                  aria-label="搜索学习主题或功能"
+                  placeholder="搜索主题或表达功能"
+                  value={tagSearch}
+                  onChange={(event) => setTagSearch(event.target.value)}
+                />
+                <span>{availableTags.length} 个可选</span>
               </div>
+              <div className="learning-tag-groups">
+                {tagGroups.map((group) => (
+                  <section key={group.namespace} className="learning-tag-group">
+                    <h3>{TAG_GROUP_LABELS[group.namespace]}</h3>
+                    <div className="learning-tag-list">
+                      {group.tags.map((tag) => {
+                        const selected = scope.tags.some((item) => item.namespace === tag.namespace && item.value === tag.value);
+                        return (
+                          <button
+                            key={`${tag.namespace}:${tag.value}`}
+                            type="button"
+                            title={`${tag.namespace}:${tag.value}`}
+                            aria-pressed={selected}
+                            className={selected ? 'selected' : ''}
+                            onClick={() => toggleTag(tag.namespace, tag.value)}
+                          >
+                            {learningTagLabel(tag.namespace, tag.value)}
+                            <small>{tag.generationCount}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+                {!matchingTags.length && (
+                  <span className="field-note">
+                    {availableTags.length ? '没有匹配的学习主题或功能。' : '当前没有可用于范围筛选的标签。'}
+                  </span>
+                )}
+              </div>
+              {!tagSearch.trim() && matchingTags.length > 8 && (
+                <button
+                  className="learning-tag-more"
+                  type="button"
+                  aria-expanded={showAllTags}
+                  onClick={() => setShowAllTags((value) => !value)}
+                >
+                  {showAllTags ? '收起标签' : `显示全部 ${matchingTags.length} 个标签`}
+                </button>
+              )}
             </fieldset>
 
             <div className="learning-number-grid" id="learning-daily-limits">
@@ -269,7 +527,7 @@ export function LearningPlanPage() {
           </section>
 
           <aside className="surface learning-plan-preview">
-            <p className="eyebrow">REAL-TIME SCOPE</p>
+            <p className="eyebrow">计划影响</p>
             <h2>当前范围预览</h2>
             <dl>
               <div><dt>合格卡片</dt><dd>{preview?.generationCount ?? '—'} 张</dd></div>
@@ -290,10 +548,16 @@ export function LearningPlanPage() {
       </div>
 
       {confirmSave && (
-        <div className="learning-dialog-backdrop">
-          <section className="learning-plan-review-dialog" role="alertdialog" aria-modal="true" aria-label="确认学习计划">
-            <button className="icon-button learning-plan-review-close" type="button" aria-label="返回修改计划" onClick={() => setConfirmSave(false)}><X aria-hidden="true" /></button>
-            <ReviewSummary
+        <DialogSurface
+          className="learning-plan-review-dialog"
+          role="alertdialog"
+          size="large"
+          ariaLabel="确认学习计划"
+          closeLabel="返回修改计划"
+          busy={saveMutation.isPending}
+          onClose={() => setConfirmSave(false)}
+        >
+          <ReviewSummary
               title={planQuery.data?.plan ? '确认学习计划调整' : '确认建立学习计划'}
               description="范围预览由服务端生成；保存后才会重建今日队列。"
               items={[
@@ -337,17 +601,35 @@ export function LearningPlanPage() {
               ]}
               warnings={[
                 ...(isReduction ? [`${removedItemCount} 个单元将移出当前范围；历史与调度状态不会删除。`] : []),
-                ...(reviewRevisionStale ? ['计划 revision 已变化。请返回刷新并重新检查范围。'] : []),
+                ...(reviewRevisionStale ? ['学习计划已经更新。请返回刷新并重新检查范围。'] : []),
               ]}
               actionLabel={`保存 ${preview?.studyItemCount || 0} 个单元并生成今日队列`}
+              actionPendingLabel="正在保存计划并生成队列…"
               actionDisabled={saveMutation.isPending || reviewRevisionStale}
+              actionPending={saveMutation.isPending}
               onAction={() => saveMutation.mutate()}
               onChange={changeReviewField}
             />
-          </section>
-        </div>
+        </DialogSurface>
       )}
-      {confirmPause && <div className="learning-dialog-backdrop"><section className="surface learning-dialog" role="alertdialog" aria-modal="true" aria-label="确认暂停学习计划"><h2>暂停学习计划？</h2><p>暂停后不再自动生成今日队列。所有复习状态和历史都会保留，恢复后继续安排。</p><div><button type="button" onClick={() => setConfirmPause(false)}>取消</button><button className="learning-primary-button" type="button" onClick={() => statusMutation.mutate('paused')}>确认暂停</button></div></section></div>}
+      {confirmPause && (
+        <ConfirmDialog
+          ariaLabel="确认暂停学习计划"
+          title="暂停学习计划？"
+          description="暂停后不再自动生成今日队列。所有复习状态和历史都会保留，恢复后继续安排。"
+          cancelLabel="继续使用计划"
+          confirmLabel="确认暂停"
+          pendingLabel="正在暂停…"
+          tone="warning"
+          busy={statusMutation.isPending}
+          onCancel={() => setConfirmPause(false)}
+          onConfirm={() => statusMutation.mutate('paused')}
+        />
+      )}
+      <LeaveGuardDialog
+        guard={leaveGuard}
+        description="学习范围或每日负担还有未保存修改。离开后将恢复到上次保存的计划；学习记录和调度状态不会被删除。"
+      />
     </ProductShell>
   );
 }

@@ -89,6 +89,7 @@ test.describe.serial('UI visual regression', () => {
       await page.setViewportSize(viewport);
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+      await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
       await expectPageScreenshot(page, `react-factory-${viewport.name}.png`);
     }
   });
@@ -104,6 +105,7 @@ test.describe.serial('UI visual regression', () => {
       await page.setViewportSize(viewport);
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+      await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
       await expectPageScreenshot(page, `react-factory-${viewport.name}-dark.png`);
     }
   });
@@ -117,6 +119,8 @@ test.describe.serial('UI visual regression', () => {
       const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();
       await card.click();
       await expect(page.getByTestId('react-card-modal')).toBeVisible();
+      await expect(page.getByRole('tab', { name: '学习内容' })).toBeVisible();
+      await expect(page.getByRole('tab', { name: '生成信息' })).toBeVisible();
       await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop.png`);
       await page.getByTestId('react-card-modal-close').click();
     }
@@ -133,6 +137,8 @@ test.describe.serial('UI visual regression', () => {
       const card = page.getByTestId('react-file-list').locator('button').filter({ hasText: fixture.title }).first();
       await card.click();
       await expect(page.getByTestId('react-card-modal')).toBeVisible();
+      await expect(page.getByRole('tab', { name: '学习内容' })).toBeVisible();
+      await expect(page.getByRole('tab', { name: '生成信息' })).toBeVisible();
       await expectPageScreenshot(page, `react-card-${fixture.cardType}-desktop-dark.png`);
       await page.getByTestId('react-card-modal-close').click();
     }

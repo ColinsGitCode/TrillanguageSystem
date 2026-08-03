@@ -53,6 +53,8 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Features/Modern_Card_UI_Design.md：仍适用于 Cards Factory 的卡片视觉；
 - Features/UI_Modernization_Design_System.md：全栈迁移前的 UI 现代化历史实施基线；其 token、领域色、视觉克制与安静学习工作台原则继续有效，旧静态页面和 Shell 路径已失效；
 - Features/SaaS_App_Shell_and_Complex_Workflow_Design_Guidelines.md：已实施并验收的 React Router SaaS App Shell 与复杂长流程横向规范。定义 Cloudscape 参考采用边界、四类流程模型、Stage/Task/Step、保存恢复、Review、异步 Job、AI proposal 与共享 Workflow 原语；教材始终由 Codex Skill 在应用外解析，页面只接收草稿并负责人工确认、发布和学习；
+- Features/Public_SaaS_UI_UX_Evolution_Baseline.md：公开 SaaS UI/UX 演进与实施基线。定义不增加用户管理前提下的“单工作区 + 公开体验沙箱”边界，记录跨域 Activity Center、页面状态、离开保护、高成本任务恢复、复习专注模式、真实首次学习闭环、AI 与教材内容来源、匿名沙箱、长列表窗口化、路由资源预算、真实性能采集和公开恢复界面；
+- Operations/Public_SaaS_Workspace_Runbook.md：公开 SaaS 工作区运行手册。说明 owner / sandbox 进程级边界、匿名 cookie 会话网关、一会话一 viewer 与独立存储、合成示例种子、期限/额度/重置、公开 Compose、双浏览器隔离验收、隐私安全性能采集、容量/启动失败恢复和回滚方式，以及正式互联网发布仍需的 TLS、持久监控和滥用控制；
 - Features/prototypes/saas-textbook-workflow-prototype.html：SaaS 复杂长流程桌面可视化原型，使用合成内容覆盖 Skill 草稿接收、人工确认、发布检查、后台处理、局部失败重试和学习入口；
 - Architecture/SaaS_Workflow_State_URL_and_View_Model_Contract.md：已接受的复杂流程 Stage、深链接、服务端 view-model、保存/冲突与命令所有权 contract；
 - superpowers/plans/2026-07-23-saas-workflow-modernization.md：已完成的 SaaS App Shell 与复杂长流程现代化详细开发任务表，共 35 个任务；Gate 0、DS-W1、DS-W2、DS-W3 和 Final 均已验收；

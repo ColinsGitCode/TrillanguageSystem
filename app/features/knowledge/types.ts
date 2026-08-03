@@ -86,8 +86,15 @@ export type ResolutionCase = {
 export type LookupResult = {
   id: number;
   eventKey: string;
+  inputText: string;
+  normalizedInput: string;
+  language: KnowledgeLanguage;
+  kindHint: KnowledgeKind;
+  occurredAtUtc: string;
   resolution: 'resolved' | 'unresolved';
   point: KnowledgePointSummary | null;
   resolutionCase: ResolutionCase | null;
   reused: boolean;
 };
+
+export type RecentKnowledgeLookup = LookupResult;

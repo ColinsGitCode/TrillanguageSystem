@@ -2,7 +2,9 @@ import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Activity, ArrowRight, CalendarDays, Clock3, History, Layers3, Target } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '../../components/PageHeader';
 import { ProductShell } from '../../components/ProductShell';
+import { DataRefreshStatus, PageState } from '../../components/states';
 import { learningApi } from './learning-api';
 import type { LearningHistoryRange, LearningUnitKind } from './types';
 
@@ -57,18 +59,30 @@ export function LearningHistoryPage() {
   });
 
   if (historyQuery.isLoading) {
-    return <ProductShell active="history" title="学习记录"><div className="learning-loading">正在汇总真实学习记录…</div></ProductShell>;
-  }
-
-  if (historyQuery.isError || !historyQuery.data) {
     return (
       <ProductShell active="history" title="学习记录">
-        <section className="surface learning-empty">
-          <History aria-hidden="true" />
-          <h1>学习记录暂时无法读取</h1>
-          <p>评分事实没有被修改。请重新加载后再查看聚合结果。</p>
-          <button className="learning-primary-button" type="button" onClick={() => window.location.reload()}>重新加载</button>
-        </section>
+        <PageState
+          variant="loading"
+          eyebrow="学习记录"
+          title="正在汇总学习记录"
+          description="这里只读取已保存的评分和每日负荷，不会改变复习安排。"
+          testId="learning-history-loading"
+        />
+      </ProductShell>
+    );
+  }
+
+  if (!historyQuery.data) {
+    return (
+      <ProductShell active="history" title="学习记录">
+        <PageState
+          variant="error"
+          eyebrow="学习记录"
+          title="学习记录暂时无法读取"
+          description="评分事实没有被修改。重新读取成功后再显示聚合结果。"
+          actions={<button className="primary" type="button" onClick={() => void historyQuery.refetch()}>重新读取</button>}
+          testId="learning-history-load-error"
+        />
       </ProductShell>
     );
   }
@@ -76,17 +90,40 @@ export function LearningHistoryPage() {
   const data = historyQuery.data;
   const maxLoad = Math.max(1, ...data.daily.flatMap((day) => [day.actions, day.backlog, day.actionGoal]));
   const chartStyle = { minWidth: `${Math.max(620, data.daily.length * 22)}px` } as CSSProperties;
+  const attentionGroups = [...data.breakdown]
+    .filter((group) => group.failureRate > 0 || group.averageRating < 3)
+    .sort((a, b) => b.failureRate - a.failureRate || a.averageRating - b.averageRating || b.reviews - a.reviews)
+    .slice(0, 3);
+  const nextStep = data.overview.repeatedFailureCount > 0
+    ? {
+        title: `${data.overview.repeatedFailureCount} 次连续选择“重来”`,
+        description: '这些内容更值得优先复习。先处理到期内容，再观察是否仍会连续忘记。',
+      }
+    : data.overview.currentOverdue > 0
+      ? {
+          title: `先完成 ${data.overview.currentOverdue} 个逾期内容`,
+          description: '清理已经到期的内容，可以避免今天的学习负担继续累积。',
+        }
+      : !data.overview.baselineEstablished
+        ? {
+            title: `再完成 ${data.overview.baselineRemainingDays} 个学习日`,
+            description: '前 14 个实际学习日只用于建立你的个人基线，不做达标或落后判断。',
+          }
+        : {
+            title: '按当前计划继续学习',
+            description: '暂时没有连续遗忘或逾期内容，继续保持当前节奏即可。',
+          };
 
   return (
     <ProductShell active="history" title="学习记录">
       <div className="learning-page learning-history-page" data-testid="learning-history-page">
-        <header className="learning-page-head learning-history-head">
-          <div>
-            <p className="eyebrow">LEARNING HISTORY · {data.range.timeZone.toUpperCase()}</p>
-            <h1>学习记录</h1>
-            <p>只读取已提交评分、每日队列与会话事实，不改变调度状态。</p>
-          </div>
-          <div className="learning-history-filters" aria-label="学习记录筛选">
+        <PageHeader
+          className="learning-history-head"
+          testId="history-page-header"
+          eyebrow={`学习记录 · ${data.range.timeZone}`}
+          title="学习记录"
+          description="这里展示已保存的评分和每日负荷，不会改变复习安排。"
+          actions={<div className="learning-history-filters" aria-label="学习记录筛选">
             <div className="learning-range-control" aria-label="时间范围">
               {RANGE_OPTIONS.map((option) => (
                 <button
@@ -106,13 +143,20 @@ export function LearningHistoryPage() {
                 {UNIT_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
               </select>
             </label>
-          </div>
-        </header>
+          </div>}
+        />
+        <DataRefreshStatus
+          refreshing={historyQuery.isFetching && !historyQuery.isLoading}
+          failed={historyQuery.isError && Boolean(historyQuery.data)}
+          label="学习记录"
+          onRetry={() => void historyQuery.refetch()}
+          testId="learning-history-refresh-status"
+        />
 
         {!data.overview.totalReviews ? (
           <section className="surface learning-empty learning-history-empty" data-testid="learning-history-empty">
             <Activity aria-hidden="true" />
-            <p className="eyebrow">NO REVIEW FACTS YET</p>
+            <p className="eyebrow">还没有学习记录</p>
             <h1>完成首次复习后，这里会显示真实学习记录</h1>
             <p>系统不会用卡片创建数量代替学习进度。只有成功提交的四档评分才进入统计。</p>
             <a className="learning-primary-button" href="/learn">进入今日学习 <ArrowRight aria-hidden="true" /></a>
@@ -134,10 +178,41 @@ export function LearningHistoryPage() {
               <div><Clock3 aria-hidden="true" /><span>响应中位数</span><strong>{responseTime(data.overview.medianResponseMs)}</strong></div>
             </section>
 
+            <section className="surface learning-history-guidance" data-testid="learning-history-guidance">
+              <header>
+                <div>
+                  <p className="eyebrow">下一步建议</p>
+                  <h2>{nextStep.title}</h2>
+                  <p>{nextStep.description}</p>
+                </div>
+                <a className="learning-primary-button" href="/learn">进入今日学习 <ArrowRight aria-hidden="true" /></a>
+              </header>
+              <div className="learning-history-attention">
+                <strong>{attentionGroups.length ? '需要多练的内容类型' : '当前没有明显薄弱类型'}</strong>
+                {attentionGroups.length ? (
+                  <div>
+                    {attentionGroups.map((group) => (
+                      <button
+                        key={`${group.unitKind}:${group.cardType}`}
+                        type="button"
+                        onClick={() => setUnitKind(group.unitKind)}
+                        aria-label={`只看${unitLabel(group.unitKind)}的学习记录`}
+                      >
+                        <span>{unitLabel(group.unitKind)}</span>
+                        <small>{group.reviews} 次评分 · 重来率 {percent(group.failureRate)}</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p>随着真实评分增加，这里会列出重来率较高或平均评分偏低的内容类型。</p>
+                )}
+              </div>
+            </section>
+
             <div className="learning-history-grid">
               <section className="surface learning-history-panel learning-load-panel">
                 <header>
-                  <div><p className="eyebrow">DAILY LOAD TRACE</p><h2>每日学习负荷</h2></div>
+                  <div><p className="eyebrow">每日负荷</p><h2>每日学习负荷</h2></div>
                   <div className="learning-chart-legend"><span className="actions">完成行动</span><span className="backlog">剩余到期</span></div>
                 </header>
                 <div className="learning-load-scroll">
@@ -164,7 +239,7 @@ export function LearningHistoryPage() {
               </section>
 
               <section className="surface learning-history-panel learning-rating-panel">
-                <header><div><p className="eyebrow">RECALL QUALITY</p><h2>评分分布</h2></div><strong>{data.overview.averageResponseMs ? responseTime(data.overview.averageResponseMs) : '--'}<small> 平均响应</small></strong></header>
+                <header><div><p className="eyebrow">回忆质量</p><h2>评分分布</h2></div><strong>{data.overview.averageResponseMs ? responseTime(data.overview.averageResponseMs) : '--'}<small> 平均响应</small></strong></header>
                 <div className="learning-rating-bars">
                   {data.ratings.map((rating) => (
                     <div className={`rating-${rating.rating}`} key={rating.rating}>
@@ -184,7 +259,7 @@ export function LearningHistoryPage() {
             </div>
 
             <section className="surface learning-history-table-panel">
-              <header><div><p className="eyebrow">UNIT BREAKDOWN</p><h2>学习单元表现</h2></div><span>评分越低，失败率越值得优先关注</span></header>
+              <header><div><p className="eyebrow">单元表现</p><h2>学习单元表现</h2></div><span>评分越低，失败率越值得优先关注</span></header>
               <div className="learning-history-table-wrap">
                 <table>
                   <thead><tr><th>学习单元</th><th>卡型</th><th>评分次数</th><th>平均评分</th><th>重来率</th><th>平均响应</th></tr></thead>
@@ -198,7 +273,7 @@ export function LearningHistoryPage() {
             </section>
 
             <section className="surface learning-history-table-panel learning-recent-panel">
-              <header><div><p className="eyebrow">RECENT REVIEW FACTS</p><h2>最近评分</h2></div><span>最近 {Math.min(50, data.recent.length)} 条</span></header>
+              <header><div><p className="eyebrow">最近评分</p><h2>最近评分</h2></div><span>最近 {Math.min(50, data.recent.length)} 条</span></header>
               <div className="learning-history-table-wrap">
                 <table>
                   <thead><tr><th>学习日</th><th>内容</th><th>学习单元</th><th>评分</th><th>响应</th></tr></thead>

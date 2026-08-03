@@ -1,9 +1,9 @@
 import { Check, CircleAlert, LockKeyhole } from 'lucide-react';
-import type { WorkflowStage, WorkflowStageItem } from './workflow-types';
+import type { WorkflowStageItem } from './workflow-types';
 
-export function StageNavigation({ items, onNavigate }: {
-  items: WorkflowStageItem[];
-  onNavigate?: (stage: WorkflowStage) => void;
+export function StageNavigation<TStage extends string>({ items, onNavigate }: {
+  items: WorkflowStageItem<TStage>[];
+  onNavigate?: (stage: TStage) => void;
 }) {
   return (
     <nav className="workflow-stage-nav" aria-label="流程阶段">

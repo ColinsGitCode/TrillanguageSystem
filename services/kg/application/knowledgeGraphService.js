@@ -102,6 +102,17 @@ class KnowledgeGraphService {
     return this.repo.listResolutionCases({ status, limit });
   }
 
+  countResolutionCases({ status = 'open' } = {}) {
+    if (!['open', 'resolved', 'dismissed', 'superseded'].includes(status)) {
+      throw invalidInput(`Unsupported resolution status: ${status}`);
+    }
+    return this.repo.countResolutionCases(status);
+  }
+
+  listRecentLookups({ limit = 8 } = {}) {
+    return this.repo.listRecentLookups(limit).map((row) => this.hydrateLookup(row, false));
+  }
+
   async lookup(command = {}) {
     const eventKey = requireEventKey(command.eventKey);
     const language = String(command.language || '').trim().toLowerCase();

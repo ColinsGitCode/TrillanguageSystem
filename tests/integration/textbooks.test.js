@@ -264,6 +264,93 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM generations').get().count, 0);
 });
 
+test('textbook review batch triage is atomic and never confirms expressions', async () => {
+  const fixture = await createManifestFixture();
+  const imported = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: fixture.manifestRelative,
+      expectedManifestHash: fixture.manifestHash,
+    },
+  });
+  assert.equal(imported.status, 200);
+  const trackId = imported.body.track.id;
+  const workflowResponse = await api('GET', `/api/textbooks/tracks/${trackId}/workflow`);
+  const workflow = workflowResponse.body.workflow;
+  const [first, second] = workflow.review.tasks;
+
+  const conflict = await api('PUT', `/api/textbooks/revisions/${workflow.track.revisionId}/reviews`, {
+    body: {
+      updates: [{
+        expressionId: first.expressionId,
+        expressionRevisionId: first.expressionRevisionId,
+        status: 'needs_attention',
+        reasonCode: 'manual-bulk-triage',
+      }, {
+        expressionId: second.expressionId,
+        expressionRevisionId: second.expressionRevisionId + 99,
+        status: 'needs_attention',
+        reasonCode: 'manual-bulk-triage',
+      }],
+    },
+  });
+  assert.equal(conflict.status, 409);
+  const unchanged = await api('GET', `/api/textbooks/tracks/${trackId}/workflow`);
+  assert.equal(unchanged.body.workflow.review.needsAttention, 0);
+  assert.equal(unchanged.body.workflow.review.confirmed, 0);
+
+  const triaged = await api('PUT', `/api/textbooks/revisions/${workflow.track.revisionId}/reviews`, {
+    body: {
+      updates: [first, second].map((task) => ({
+        expressionId: task.expressionId,
+        expressionRevisionId: task.expressionRevisionId,
+        status: 'needs_attention',
+        reasonCode: 'manual-bulk-triage',
+      })),
+    },
+  });
+  assert.equal(triaged.status, 200);
+  assert.equal(triaged.body.reviews.length, 2);
+  assert.equal(triaged.body.workflow.review.needsAttention, 2);
+  assert.equal(triaged.body.workflow.review.confirmed, 0);
+  assert.equal(
+    dbService.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM textbook_expression_review_states
+      WHERE track_revision_id = ? AND status = 'confirmed'
+    `).get(workflow.track.revisionId).count,
+    0
+  );
+});
+
+test('textbook workflow rejects an incomplete review projection instead of showing contradictory counts', async () => {
+  const fixture = await createManifestFixture();
+  const imported = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: fixture.manifestRelative,
+      expectedManifestHash: fixture.manifestHash,
+    },
+  });
+  assert.equal(imported.status, 200);
+  const trackId = imported.body.track.id;
+  const revisionId = imported.body.track.revision_id;
+  dbService.db.prepare(`
+    DELETE FROM textbook_expression_review_states
+    WHERE track_revision_id = ?
+      AND expression_id = (
+        SELECT expression_id FROM textbook_expression_review_states
+        WHERE track_revision_id = ?
+        ORDER BY expression_id
+        LIMIT 1
+      )
+  `).run(revisionId, revisionId);
+
+  const workflow = await api('GET', `/api/textbooks/tracks/${trackId}/workflow`);
+  assert.equal(workflow.status, 409);
+  assert.equal(workflow.body.code, 'TEXTBOOK_WORKFLOW_STATE_INCONSISTENT');
+  assert.equal(workflow.body.details.expressionCount, 2);
+  assert.equal(workflow.body.details.reviewStateCount, 1);
+});
+
 test('verified textbook track publishes textbook study items and creates derivation jobs', async () => {
   const fixture = await createManifestFixture();
   const imported = await api('POST', '/api/textbooks/imports', {
@@ -644,4 +731,39 @@ test('textbook release operation is idempotent, observable, and resumable by id'
 
   const noOcr = await api('POST', `/api/textbooks/tracks/${trackId}/ocr`, { body: {} });
   assert.equal(noOcr.status, 404);
+});
+
+test('textbook queued operations can be cancelled and resumed through the public API', async () => {
+  const fixture = await createManifestFixture();
+  const imported = await api('POST', '/api/textbooks/imports', {
+    body: {
+      manifestRelativePath: fixture.manifestRelative,
+      expectedManifestHash: fixture.manifestHash,
+    },
+  });
+  const operation = dbService.createTextbookOperation(imported.body.track.id, {
+    kind: 'sync',
+    idempotencyKey: `integration-cancel-${imported.body.track.id}`,
+    payload: {},
+  });
+
+  const cancelled = await api('POST', `/api/textbooks/operations/${operation.id}/cancel`);
+  assert.equal(cancelled.status, 202);
+  assert.equal(cancelled.body.operation.status, 'cancelled');
+  assert.equal(cancelled.body.operation.result.cancelRequested, true);
+
+  const events = await api('GET', `/api/textbooks/operations/${operation.id}/events`);
+  assert.ok(events.body.events.some((event) => event.event_type === 'cancelled'));
+
+  const resumed = await api('POST', `/api/textbooks/operations/${operation.id}/retry`);
+  assert.equal(resumed.status, 202);
+  assert.equal(resumed.body.operation.status, 'queued');
+  assert.equal(resumed.body.operation.result.cancelRequested, undefined);
+
+  let current = resumed.body.operation;
+  for (let attempt = 0; attempt < 30 && ['queued', 'running'].includes(current.status); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    current = (await api('GET', `/api/textbooks/operations/${operation.id}`)).body.operation;
+  }
+  assert.equal(current.status, 'succeeded');
 });

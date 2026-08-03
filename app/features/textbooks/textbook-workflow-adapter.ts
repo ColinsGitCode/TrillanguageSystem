@@ -21,7 +21,7 @@ export function workflowStages(workflow: TextbookWorkflow): WorkflowStageItem[] 
   return stageOrder.map((id, index) => {
     if (index < currentIndex) return { id, label: stageLabels[id], state: 'complete' };
     if (index === currentIndex) {
-      const failed = id === 'processing' && ['failed', 'partially_failed'].includes(workflow.operation?.status || '');
+      const failed = id === 'processing' && ['failed', 'partially_failed', 'cancelled'].includes(workflow.operation?.status || '');
       return { id, label: stageLabels[id], state: failed ? 'failed' : 'current' };
     }
     if (id === 'release' && workflow.release.available) return { id, label: stageLabels[id], state: 'available' };
@@ -78,5 +78,14 @@ export function workflowOperation(operation: TextbookOperation | null): Workflow
     steps: stepsFor(operation),
     updatedAt: operation.updated_at_utc,
     publicSummary: operation.public_summary,
+    canCancel: !operation.result?.cancelRequested && ['queued', 'running'].includes(operation.status),
+    canRetry: ['failed', 'partially_failed', 'cancelled'].includes(operation.status),
+    retainedSummary: operation.status === 'cancelled'
+      ? '已完成步骤仍然保留，可从未完成步骤继续。'
+      : operation.status === 'partially_failed'
+        ? '教材发布结果已保留，只需重试失败步骤。'
+        : operation.status === 'succeeded'
+          ? '处理结果已保存，可以离开页面后再回来查看。'
+          : null,
   };
 }

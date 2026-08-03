@@ -75,7 +75,7 @@ export type GenerationRecord = {
   };
 };
 
-export type HealthService = { name?: string; status?: string; message?: string };
+export type HealthService = { name?: string; status?: string; message?: string; critical?: boolean };
 export type HealthResponse = {
   status?: string;
   healthy?: boolean;

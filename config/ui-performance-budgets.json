@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "metrics": {
+    "ttfb": { "unit": "ms", "good": 800, "needsAttention": 1800 },
+    "fcp": { "unit": "ms", "good": 1800, "needsAttention": 3000 },
+    "lcp": { "unit": "ms", "good": 2500, "needsAttention": 4000 },
+    "cls": { "unit": "score", "good": 0.1, "needsAttention": 0.25 },
+    "inp": { "unit": "ms", "good": 200, "needsAttention": 500 },
+    "route-transition": { "unit": "ms", "good": 300, "needsAttention": 900 },
+    "card-modal-open": { "unit": "ms", "good": 500, "needsAttention": 1200 }
+  }
+}

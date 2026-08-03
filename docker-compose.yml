@@ -10,6 +10,15 @@ services:
       - tts-ja
     environment:
       - PORT=3010
+      - WORKSPACE_MODE=${WORKSPACE_MODE:-owner}
+      - PUBLIC_FEEDBACK_URL=${PUBLIC_FEEDBACK_URL:-}
+      - DEPLOYMENT_EXPOSURE=${DEPLOYMENT_EXPOSURE:-local}
+      - OWNER_GATEWAY_PROTECTED=${OWNER_GATEWAY_PROTECTED:-false}
+      - SANDBOX_INSTANCE_ID=${SANDBOX_INSTANCE_ID:-}
+      - SANDBOX_STORAGE_ROOT=${SANDBOX_STORAGE_ROOT:-/data/sandboxes}
+      - SANDBOX_WRITE_ENABLED=${SANDBOX_WRITE_ENABLED:-false}
+      - SANDBOX_HIGH_COST_ENABLED=${SANDBOX_HIGH_COST_ENABLED:-false}
+      - SANDBOX_RETENTION_HOURS=${SANDBOX_RETENTION_HOURS:-24}
       - RECORDS_PATH=/data/trilingual_records
       - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Shanghai}
       - LEARNING_TIMEZONE=${LEARNING_TIMEZONE:-Asia/Tokyo}
@@ -61,7 +70,7 @@ services:
       - TTS_JA_SBV2_STYLE=${TTS_JA_SBV2_STYLE:-Neutral}
       - VOICEVOX_SPEAKER=${VOICEVOX_SPEAKER:-2}
     ports:
-      - "3010:3010"
+      - "${VIEWER_BIND_ADDRESS:-127.0.0.1}:3010:3010"
     volumes:
       - trilingual_records:/data/trilingual_records
       - ${TEXTBOOK_SOURCE_PATH:-./data/textbook_sources}:/media/textbooks:ro
@@ -92,7 +101,7 @@ services:
       - TTS_LANG_CODE=a
       - HF_HOME=/data/huggingface
     ports:
-      - "8000:8000"
+      - "${SERVICE_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     volumes:
       - kokoro_cache:/data/huggingface
     restart: unless-stopped
@@ -102,7 +111,7 @@ services:
     container_name: trilingual-tts-ja
     # Apple Silicon 如拉取失败，可尝试指定 platform: linux/arm64
     ports:
-      - "50021:50021"
+      - "${SERVICE_BIND_ADDRESS:-127.0.0.1}:50021:50021"
     restart: unless-stopped
 
   tts-ja-sbv2:
@@ -128,7 +137,7 @@ services:
     volumes:
       - sbv2_models:/models
     ports:
-      - "${SBV2_HOST_PORT:-15000}:5000"
+      - "${SERVICE_BIND_ADDRESS:-127.0.0.1}:${SBV2_HOST_PORT:-15000}:5000"
     restart: unless-stopped
 
 volumes:

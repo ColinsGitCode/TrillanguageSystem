@@ -1,5 +1,6 @@
 import { BookOpenCheck, Highlighter, Languages, Play, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { DesktopVirtualList } from '../../../components/virtual';
 import { createAnchor, resolveAnchor } from '../../card-modal/annotation-anchor.mjs';
 import type { CardAnnotationSelector } from '../../card-modal/annotation-render.mjs';
 import {
@@ -24,6 +25,10 @@ function selectionLanguage(text: string): 'en' | 'ja' {
 
 function canPlay(audio?: TextbookAudio) {
   return Boolean(audio && ['generated', 'fallback_generated'].includes(audio.status));
+}
+
+function getExpressionItemKey(expression: TextbookTrack['expressions'][number]) {
+  return expression.id;
 }
 
 export function TextbookPublishedBrowser({
@@ -67,8 +72,8 @@ export function TextbookPublishedBrowser({
   }, [expression?.id]);
   if (!expression) return <section className="surface textbook-empty-workbench"><h2>没有可浏览表达</h2></section>;
   const fragments = expressionHighlightFragments(highlightHtml, expression.expression_id);
-  const expressionKey = expression.expression_key.replace(/^expr:/u, '').replace(/[^a-z0-9]+/giu, '_');
-  const matchingAudio = audioFiles.filter((audio) => audio.filename_suffix.endsWith(`_expr_${expressionKey}`));
+  const expressionAudioKey = expression.expression_key.replace(/^expr:/u, '').replace(/[^a-z0-9]+/giu, '_');
+  const matchingAudio = audioFiles.filter((audio) => audio.filename_suffix.endsWith(`_expr_${expressionAudioKey}`));
   const enAudio = matchingAudio.find((audio) => audio.language === 'en');
   const jaAudio = matchingAudio.find((audio) => audio.language === 'ja');
   const phrases = parseJson<Array<{ label: string; explanation: string }>>(expression.phrase_analysis_json, []);
@@ -138,16 +143,23 @@ export function TextbookPublishedBrowser({
     <div className="textbook-published-browser">
       <aside className="surface textbook-published-list">
         <header><p className="eyebrow">EXPRESSIONS</p><h2>教材浏览</h2></header>
-        <ol>{expressions.map((row) => (
-          <li key={row.id}>
+        <DesktopVirtualList
+          items={expressions}
+          getItemKey={getExpressionItemKey}
+          estimateSize={59}
+          activeKey={expression.id}
+          ariaLabel="教材表达列表"
+          className="textbook-published-list-viewport"
+          testId="textbook-published-virtual-list"
+          renderItem={(row) => (
             <button type="button" className={row.id === expression.id ? 'active' : ''} onClick={() => onSelect(row.id)}>
               <span>{String(row.display_ordinal).padStart(2, '0')}</span>
               <strong>{row.official_en_text}</strong>
               <small>{row.official_ja_text}</small>
               {marked.has(row.expression_id) && <i>含标红</i>}
             </button>
-          </li>
-        ))}</ol>
+          )}
+        />
       </aside>
       <article className="surface textbook-study-detail">
         <header><p className="eyebrow">EXPR {String(expression.display_ordinal).padStart(2, '0')}</p><h2>英日表达</h2></header>

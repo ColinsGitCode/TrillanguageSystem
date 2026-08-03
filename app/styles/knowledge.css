@@ -177,7 +177,7 @@
 .knowledge-resolution-workflow .workflow-context-tools li span,
 .knowledge-resolution-workflow .workflow-context-tools li small {
   color: var(--color-text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .knowledge-resolution-workflow .workflow-context-tools p {
@@ -260,7 +260,7 @@
 .knowledge-candidate-grid span,
 .knowledge-candidate-grid small {
   color: var(--color-text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .knowledge-resolution-editor fieldset {
@@ -337,13 +337,6 @@
   box-shadow: var(--shadow-modal);
 }
 
-.knowledge-resolution-review > .icon-button {
-  position: absolute;
-  z-index: 1;
-  top: 12px;
-  right: 12px;
-}
-
 .knowledge-results,
 .knowledge-point-panel,
 .knowledge-learning-panel {
@@ -392,7 +385,7 @@
   background: var(--color-bg-subtle);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  font: 700 11px/1 var(--font-mono);
+  font: 700 var(--font-size-caption)/1 var(--font-mono);
 }
 
 .knowledge-result-list,
@@ -430,7 +423,7 @@
   color: var(--color-text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 600 10px/1.3 var(--font-mono);
+  font: 600 var(--font-size-badge)/1.3 var(--font-mono);
 }
 
 .knowledge-result-list strong {
@@ -438,6 +431,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+}
+
+.knowledge-recent-empty {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.knowledge-recent-empty svg {
+  width: 24px;
+  color: var(--color-data-purple);
+}
+
+.knowledge-recent-empty p {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  line-height: 1.5;
 }
 
 .knowledge-placeholder,
@@ -483,6 +498,61 @@
   height: 100%;
 }
 
+.knowledge-start-state {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 36px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.knowledge-start-state > svg {
+  width: 34px;
+  height: 34px;
+  color: var(--color-data-purple);
+}
+
+.knowledge-start-state h2,
+.knowledge-start-state p {
+  max-width: 520px;
+  margin: 0;
+}
+
+.knowledge-start-state h2 {
+  color: var(--color-text-primary);
+  font-size: 24px;
+}
+
+.knowledge-start-state > p:not(.eyebrow) {
+  line-height: 1.6;
+}
+
+.knowledge-start-state > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.knowledge-start-state button {
+  min-height: 38px;
+  padding: 0 14px;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.knowledge-start-state button.primary {
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
 .knowledge-point-head {
   min-height: 116px;
   display: grid;
@@ -518,7 +588,7 @@
   color: var(--color-text-tertiary);
   background: var(--color-bg-subtle);
   border-radius: var(--radius-md);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 
 .knowledge-stat-row b {
@@ -597,7 +667,7 @@
   color: var(--color-success);
   background: var(--color-success-subtle);
   border-radius: var(--radius-md);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .knowledge-action-message svg {
@@ -639,7 +709,7 @@
   border: 0;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 
@@ -673,54 +743,4 @@
 
 .knowledge-open-learning svg:last-child {
   margin-left: auto;
-}
-
-.knowledge-confirm-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  background: var(--color-overlay);
-}
-
-.knowledge-confirm {
-  width: min(440px, calc(100vw - 48px));
-  position: relative;
-  padding: 22px;
-  box-shadow: var(--shadow-modal);
-}
-
-.knowledge-confirm > .icon-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
-
-.knowledge-confirm > p:not(.eyebrow) {
-  margin: 12px 0 18px;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
-}
-
-.knowledge-confirm > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.knowledge-confirm > div button {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.knowledge-confirm > div button:last-child {
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
-  border-color: var(--color-primary);
 }

@@ -313,15 +313,20 @@ async function generateAudioBatch(tasks, options) {
     return { results, errors };
   }
 
-  const { outputDir, baseName, extension = 'wav' } = options || {};
+  const { outputDir, baseName, extension = 'wav', signal } = options || {};
   if (!outputDir || !baseName) {
     throw new Error('generateAudioBatch 缺少 outputDir 或 baseName');
   }
 
   for (let i = 0; i < tasks.length; i += 1) {
+    if (signal?.aborted) {
+      const error = new Error('TTS batch cancelled');
+      error.name = 'AbortError';
+      throw error;
+    }
     const task = tasks[i];
     try {
-      const response = await synthesizeSpeech(task, { requestClass: 'batch' });
+      const response = await synthesizeSpeech(task, { requestClass: 'batch', signal });
 
       const { buffer, contentType } = response;
       const resolvedExtension = normalizeAudioExtension(task.extension, task.lang) || extension;
@@ -340,6 +345,7 @@ async function generateAudioBatch(tasks, options) {
         status: response.status || 'generated',
       });
     } catch (error) {
+      if (signal?.aborted || error?.name === 'AbortError') throw error;
       errors.push({
         index: i,
         task,

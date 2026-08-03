@@ -119,6 +119,43 @@ test('copy-on-write preserves immutable rows and only invalidates the edited exp
   }
 });
 
+test('pending textbook reviews remain recoverable until a release operation owns the work', () => {
+  const service = new DatabaseService(':memory:');
+  try {
+    const track = service.importTextbookDraft({
+      manifest: manifest(),
+      manifestRelativePath: 'synthetic/manifest.json',
+      manifestHash: 'd'.repeat(64),
+    });
+    const pending = service.listPendingTextbookReviews();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].track_id, track.id);
+    assert.equal(pending[0].pending, 1);
+    assert.equal(pending[0].needs_attention, 1);
+
+    for (const expression of track.expressions) {
+      service.updateTextbookReviewState(track.revision_id, expression.expression_id, {
+        expressionRevisionId: expression.id,
+        status: 'confirmed',
+        reviewer: 'unit',
+      });
+    }
+    service.verifyTextbookRevision(track.revision_id, { expectedTrackStatus: 'draft' });
+    const ready = service.listPendingTextbookReviews();
+    assert.equal(ready.length, 1);
+    assert.equal(ready[0].track_status, 'verified');
+
+    service.createTextbookOperation(track.id, {
+      kind: 'release',
+      idempotencyKey: 'release-owns-pending-work',
+      payload: {},
+    });
+    assert.equal(service.listPendingTextbookReviews().length, 0);
+  } finally {
+    service.close();
+  }
+});
+
 test('operation storage is idempotent, append-only, retryable, and restart-recoverable', () => {
   const service = new DatabaseService(':memory:');
   try {
@@ -136,6 +173,11 @@ test('operation storage is idempotent, append-only, retryable, and restart-recov
     const reused = service.createTextbookOperation(track.id, command);
     assert.equal(reused.id, created.id);
     assert.equal(service.getTextbookOperationByIdempotencyKey(command.idempotencyKey).id, created.id);
+    const recent = service.listRecentTextbookOperations(5);
+    assert.equal(recent.length, 1);
+    assert.equal(recent[0].id, created.id);
+    assert.equal(recent[0].track_title, 'Workflow Track');
+    assert.equal(recent[0].course_title, 'Workflow Unit');
     assert.throws(
       () => service.createTextbookOperation(track.id, {
         ...command,
@@ -174,6 +216,58 @@ test('operation storage is idempotent, append-only, retryable, and restart-recov
       () => service.db.prepare('UPDATE textbook_operation_events SET event_type = ? WHERE id = ?').run('changed', events[0].id),
       /immutable/u
     );
+  } finally {
+    service.close();
+  }
+});
+
+test('operation cancellation preserves completed steps and can resume unfinished work', () => {
+  const service = new DatabaseService(':memory:');
+  try {
+    const track = service.importTextbookDraft({
+      manifest: manifest(),
+      manifestRelativePath: 'synthetic/manifest.json',
+      manifestHash: 'd'.repeat(64),
+    });
+    const operation = service.createTextbookOperation(track.id, {
+      kind: 'tts',
+      idempotencyKey: 'unit-operation-cancel',
+      payload: { force: false },
+    });
+
+    const cancelledBeforeStart = service.requestTextbookOperationCancellation(operation.id);
+    assert.equal(cancelledBeforeStart.status, 'cancelled');
+    assert.equal(cancelledBeforeStart.result.cancelRequested, true);
+    assert.match(cancelledBeforeStart.public_summary, /尚未开始/u);
+
+    const resumed = service.retryTextbookOperation(operation.id);
+    assert.equal(resumed.status, 'queued');
+    assert.equal(resumed.result.cancelRequested, undefined);
+
+    service.claimTextbookOperation(operation.id);
+    service.updateTextbookOperationStep(operation.id, 'tts', 'running', {
+      publicSummary: 'tts 正在执行',
+    });
+    const cancellationRequested = service.requestTextbookOperationCancellation(operation.id);
+    assert.equal(cancellationRequested.status, 'running');
+    assert.equal(cancellationRequested.result.cancelRequested, true);
+    assert.equal(service.isTextbookOperationCancellationRequested(operation.id), true);
+
+    assert.equal(service.recoverTextbookOperations(), 1);
+    const recovered = service.getTextbookOperation(operation.id);
+    assert.equal(recovered.status, 'cancelled');
+    assert.match(recovered.public_summary, /停止请求/u);
+
+    const continued = service.retryTextbookOperation(operation.id);
+    assert.equal(continued.status, 'queued');
+    assert.equal(continued.result.steps.tts.status, 'queued');
+    assert.equal(continued.result.cancelRequested, undefined);
+
+    const eventTypes = service.listTextbookOperationEvents(operation.id)
+      .map((event) => event.event_type);
+    assert.ok(eventTypes.includes('cancel_requested'));
+    assert.ok(eventTypes.includes('cancelled'));
+    assert.ok(eventTypes.includes('retry'));
   } finally {
     service.close();
   }

@@ -57,6 +57,10 @@ router.post('/api/kg/lookups', asyncRoute(async (req, res) => send(res, {
   lookup: await service.lookup(req.body || {}),
 })));
 
+router.get('/api/kg/recent-lookups', route((req, res) => send(res, {
+  lookups: service.listRecentLookups({ limit: req.query.limit }),
+})));
+
 router.get('/api/kg/points/:id', route((req, res) => send(res, {
   point: service.getPoint(req.params.id),
 })));

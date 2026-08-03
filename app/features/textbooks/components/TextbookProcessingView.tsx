@@ -5,10 +5,14 @@ export function TextbookProcessingView({
   operation,
   events,
   onRetry,
+  onCancel,
+  busy = false,
 }: {
   operation: WorkflowOperation;
   events: TextbookOperationEvent[];
   onRetry: () => void;
+  onCancel: () => void;
+  busy?: boolean;
 }) {
   const activities: WorkflowActivity[] = events.map((event) => ({
     id: String(event.id),
@@ -19,7 +23,12 @@ export function TextbookProcessingView({
   }));
   return (
     <div className="textbook-processing-layout">
-      <AsyncOperationPanel operation={operation} onRetry={onRetry ? () => onRetry() : undefined} />
+      <AsyncOperationPanel
+        operation={operation}
+        onRetry={onRetry ? () => onRetry() : undefined}
+        onCancel={onCancel ? () => onCancel() : undefined}
+        busy={busy}
+      />
       <section className="surface textbook-operation-activity">
         <header><p className="eyebrow">PUBLIC ACTIVITY</p><h2>处理记录</h2></header>
         <ActivityLog items={activities} />

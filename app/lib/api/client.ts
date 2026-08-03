@@ -1,3 +1,5 @@
+import { publishSandboxLimit } from '../runtime/sandbox-events';
+
 export class ApiError extends Error {
   status: number;
   payload: unknown;
@@ -31,6 +33,21 @@ export async function requestJson<T>(url: string, init: RequestInit = {}): Promi
     const message = typeof payload === 'object' && payload && 'error' in payload
       ? String((payload as { error: unknown }).error)
       : `Request failed (${response.status})`;
+    if (response.status === 429 && payload && typeof payload === 'object' && 'code' in payload) {
+      const details = 'details' in payload && payload.details && typeof payload.details === 'object'
+        ? payload.details as { category?: unknown }
+        : {};
+      const code = String(payload.code || '');
+      if (code === 'SANDBOX_QUOTA_EXCEEDED' || code === 'SANDBOX_STORAGE_LIMIT') {
+        publishSandboxLimit({
+          code,
+          category: ['generation', 'ocr', 'tts', 'storage'].includes(String(details.category || ''))
+            ? String(details.category) as 'generation' | 'ocr' | 'tts' | 'storage'
+            : null,
+          message,
+        });
+      }
+    }
     throw new ApiError(message, response.status, payload);
   }
   return payload as T;

@@ -53,10 +53,11 @@ class TextbookOperationService {
 
   schedule(operationId) {
     if (!this.accepting || this.active.has(Number(operationId))) return;
+    const controller = new AbortController();
     const promise = Promise.resolve()
-      .then(() => this.executor.execute(Number(operationId)))
+      .then(() => this.executor.execute(Number(operationId), { signal: controller.signal }))
       .finally(() => this.active.delete(Number(operationId)));
-    this.active.set(Number(operationId), promise);
+    this.active.set(Number(operationId), { promise, controller });
   }
 
   bootstrap() {
@@ -73,9 +74,26 @@ class TextbookOperationService {
     return operation;
   }
 
+  cancel(operationId) {
+    const numericId = Number(operationId);
+    const operation = this.dbService.requestTextbookOperationCancellation(numericId);
+    if (operation.status === 'running') {
+      const active = this.active.get(numericId);
+      if (active) {
+        active.controller.abort();
+      } else {
+        return this.dbService.finishTextbookOperation(numericId, 'cancelled', {
+          publicSummary: '任务已取消，已完成步骤仍然保留',
+          result: { cancelRequested: true },
+        });
+      }
+    }
+    return operation;
+  }
+
   async shutdown({ timeoutMs = 30_000 } = {}) {
     this.accepting = false;
-    const pending = Promise.allSettled([...this.active.values()]);
+    const pending = Promise.allSettled([...this.active.values()].map((entry) => entry.promise));
     let timer;
     const completed = await Promise.race([
       pending.then(() => true),

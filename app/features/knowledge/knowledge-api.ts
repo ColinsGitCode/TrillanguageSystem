@@ -5,6 +5,7 @@ import type {
   KnowledgePoint,
   KnowledgePointSummary,
   LookupResult,
+  RecentKnowledgeLookup,
   ResolutionCase,
 } from './types';
 
@@ -30,6 +31,10 @@ export const knowledgeApi = {
       sourceContext: payload.sourceContext || { surface: 'knowledge-page' },
     }),
   }),
+  recentLookups: (limit = 8) => requestJson<{
+    success: true;
+    lookups: RecentKnowledgeLookup[];
+  }>(`/api/kg/recent-lookups?limit=${encodeURIComponent(String(limit))}`),
   point: (id: number) => requestJson<{ success: true; point: KnowledgePoint }>(`/api/kg/points/${id}`),
   resolutionCases: (status: ResolutionCase['status'] = 'open') => requestJson<{
     success: true;

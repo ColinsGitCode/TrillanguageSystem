@@ -33,8 +33,20 @@ export function stageItems(current: WorkflowStage, availableThrough: WorkflowSta
   }));
 }
 
-export function filterWorkflowTasks(tasks: WorkflowTask[], filter: 'all' | WorkflowTaskState) {
-  const filtered = filter === 'all' ? tasks : tasks.filter((task) => task.state === filter);
+export function filterWorkflowTasks(
+  tasks: WorkflowTask[],
+  filter: 'all' | WorkflowTaskState,
+  query = ''
+) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtered = tasks.filter((task) => (
+    (filter === 'all' || task.state === filter)
+    && (!normalizedQuery || [
+      task.title,
+      task.summary,
+      ...(task.reasons || []),
+    ].some((value) => String(value || '').toLocaleLowerCase().includes(normalizedQuery)))
+  ));
   return [...filtered].sort((left, right) => {
     const priority = { needs_attention: 0, pending: 1, confirmed: 2 };
     return priority[left.state] - priority[right.state] || left.ordinal - right.ordinal;

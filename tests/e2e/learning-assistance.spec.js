@@ -36,10 +36,18 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
 
   test('creates a real plan from the confirmed scope preview', async ({ page }) => {
     await page.goto('/learn');
+    const onboarding = page.getByTestId('learning-onboarding');
+    await expect(onboarding).toContainText('完成第一次真实学习');
+    await expect(onboarding.locator('li.is-complete')).toContainText('准备学习内容');
+    await expect(onboarding.locator('li.is-next')).toContainText('建立学习计划');
+    await onboarding.getByRole('button', { name: '暂不显示首次学习清单' }).click();
+    await expect(onboarding).toBeHidden();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('three-lans-onboarding-dismissed-v1'))).toBe('true');
     await expect(page.getByTestId('learning-no-plan')).toContainText('开始你的第一天');
     await page.getByRole('button', { name: '建立学习计划' }).click();
     await expect(page).toHaveURL(/\/learn\/plan$/);
     await expect(page.getByTestId('learning-plan-page')).toBeVisible();
+    await expect(page.getByTestId('plan-page-header')).toContainText('学习计划 · 版本');
     await expect(page.getByText(`${TOTAL_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Japanese' }).click();
@@ -50,26 +58,78 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
 
     const newLimit = page.getByLabel('每日新单元上限 0 = 只清到期项');
     await newLimit.fill(String(DAILY_NEW_LIMIT));
-    await page.getByRole('button', { name: '检查并保存计划' }).click();
+    const savePlanButton = page.getByRole('button', { name: '检查并保存计划' });
+    await savePlanButton.click();
     const review = page.getByRole('alertdialog', { name: '确认学习计划' });
     await expect(review).toContainText(`${TOTAL_STUDY_ITEM_COUNT} 个`);
     await expect(review).toContainText(`约 ${EXPECTED_LEARNING_DAYS} 学习日`);
+    await expect(review.getByRole('button', { name: '返回修改计划' })).toBeFocused();
+    await page.getByTestId('dialog-backdrop').click({ position: { x: 2, y: 2 } });
+    await expect(review).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(review).toBeHidden();
+    await expect(savePlanButton).toBeFocused();
+    await savePlanButton.click();
     await review.locator('dl > div').filter({ hasText: '学习范围' }).getByRole('button', { name: '修改' }).click();
     await expect(review).toBeHidden();
     await expect(page.getByRole('button', { name: /三语卡片/ })).toBeFocused();
-    await page.getByRole('button', { name: '检查并保存计划' }).click();
+    await savePlanButton.click();
     await page.getByRole('button', { name: `保存 ${TOTAL_STUDY_ITEM_COUNT} 个单元并生成今日队列` }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await expect(page.getByTestId('today-learning-page')).toBeVisible();
+    await expect(page.getByTestId('today-page-header')).toContainText('今日安排');
     await expect(page.locator('.learning-queue-row')).toHaveCount(DAILY_NEW_LIMIT);
   });
 
   test('keeps prompt, reveal, four ratings and idempotent retry in one owner', async ({ page, request }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
+    await page.route('**/api/activity?limit=30', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        items: [{
+          id: 'open',
+          kind: 'knowledge-resolution',
+          status: 'needs_attention',
+          title: '3 个知识点待确认',
+          summary: '最近待确认：はし。未经人工确认的候选不会进入正式知识点',
+          href: '/knowledge?mode=resolution&case=31',
+          updatedAt: '2026-07-30T12:03:00.000Z',
+          source: 'knowledge',
+          actionLabel: '开始确认',
+        }],
+        summary: { active: 0, needsAttention: 1, total: 1 },
+        sources: [
+          { id: 'generation', status: 'available' },
+          { id: 'textbooks', status: 'available' },
+          { id: 'learning', status: 'available' },
+          { id: 'knowledge', status: 'available' },
+        ],
+        generatedAtUtc: '2026-07-30T12:05:00.000Z',
+      }),
+    }));
     await page.goto('/learn');
+    await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '后台活动' }).locator('span')).toHaveText('1');
     await page.getByRole('button', { name: '开始学习' }).click();
     await expect(page).toHaveURL(/\/learn\/session$/);
     await expect(page.getByTestId('learning-review-session')).toBeVisible();
+    await expect(page.locator('.react-app-shell')).toHaveClass(/is-focus-mode/);
+    await expect(page.locator('.react-sidebar')).toBeHidden();
+    await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
+    await page.getByTestId('learning-focus-toggle').click();
+    await expect(page.locator('.react-sidebar')).toBeVisible();
+    await expect(page.getByTestId('learning-focus-toggle')).toHaveText(/专注模式/);
+    await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
+    await page.getByRole('button', { name: '后台活动' }).click();
+    await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('3 个知识点待确认');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('learning-focus-toggle').click();
+    await expect(page.locator('.react-sidebar')).toBeHidden();
+    await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
+    await expect(page.getByTestId('learning-session-progress')).toHaveText(`本次1 / ${DAILY_NEW_LIMIT}`);
+    await expect(page.getByTestId('learning-daily-goal')).toHaveText('今日目标0 / 20');
     await expect(page.getByRole('button', { name: /重来/ })).toBeDisabled();
     await expect(page.getByTestId('learning-answer')).toHaveCount(0);
 
@@ -129,14 +189,51 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     }).toBe(1);
     await page.unroute('**/api/learning/sessions/*/reviews');
 
-    await page.getByRole('button', { name: '结束' }).click();
-    await expect(page.getByRole('alertdialog', { name: '结束本次会话' })).toBeVisible();
-    await page.getByRole('button', { name: '结束并查看摘要' }).click();
+    const endSessionButton = page.getByRole('button', { name: '结束' });
+    await endSessionButton.click();
+    const endDialog = page.getByRole('alertdialog', { name: '结束本次会话' });
+    const continueButton = endDialog.getByRole('button', { name: '继续学习' });
+    const confirmEndButton = endDialog.getByRole('button', { name: '结束并查看摘要' });
+    await expect(endDialog).toBeVisible();
+    await expect(continueButton).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(confirmEndButton).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(continueButton).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(endDialog).toBeHidden();
+    await expect(endSessionButton).toBeFocused();
+    await endSessionButton.click();
+    await confirmEndButton.click();
     await expect(page.getByTestId('learning-session-summary')).toContainText('已提交 1 个评分');
+  });
+
+  test('removes the first-use checklist after a real review fact exists', async ({ page }) => {
+    await page.goto('/learn');
+    await expect(page.getByTestId('learning-onboarding')).toHaveCount(0);
+    const onboarding = await (await page.request.get('/api/onboarding')).json();
+    expect(onboarding.completed).toBe(true);
+    expect(onboarding.completedCount).toBe(4);
+    expect(onboarding.nextStep).toBeNull();
   });
 
   test('blocks saving when the reviewed plan revision changes', async ({ page, request }) => {
     await page.goto('/learn/plan');
+    const dailyGoal = page.getByLabel('每日行动目标 已提交评分数');
+    await dailyGoal.fill('21');
+    await expect(page.getByText('有未保存修改')).toBeVisible();
+    await page.getByRole('link', { name: 'Cards Factory' }).click();
+    const leaveGuard = page.getByRole('alertdialog', { name: '放弃未保存修改' });
+    await expect(leaveGuard).toContainText('学习范围或每日负担还有未保存修改');
+    await leaveGuard.getByRole('button', { name: '继续编辑' }).click();
+    await expect(page).toHaveURL(/\/learn\/plan$/u);
+    await expect(dailyGoal).toHaveValue('21');
+    await page.getByRole('link', { name: 'Cards Factory' }).click();
+    await leaveGuard.getByRole('button', { name: '放弃修改并离开' }).click();
+    await expect(page).toHaveURL(/\/$/u);
+    await page.goto('/learn/plan');
+    await expect(page.getByLabel('每日行动目标 已提交评分数')).toHaveValue('20');
+    await page.getByLabel('每日行动目标 已提交评分数').fill('21');
     await page.getByRole('button', { name: '检查并保存计划' }).click();
     const review = page.getByRole('alertdialog', { name: '确认学习计划' });
     await expect(review).toBeVisible();
@@ -153,7 +250,7 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     });
     expect(changed.ok()).toBeTruthy();
 
-    await expect(review).toContainText('计划 revision 已变化', { timeout: 5_000 });
+    await expect(review).toContainText('学习计划已经更新', { timeout: 5_000 });
     await expect(review.getByRole('button', { name: /保存 \d+ 个单元并生成今日队列/ })).toBeDisabled();
     await request.post('/api/learning/queues/today');
   });
@@ -173,9 +270,12 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await page.goto('/learn/history');
     await expect(page.getByRole('link', { name: '学习记录' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('learning-history-page')).toBeVisible();
+    await expect(page.getByTestId('history-page-header')).toContainText('学习记录 · Asia/Tokyo');
     await expect(page.getByText('前 14 个实际学习日用于建立个人基线')).toBeVisible();
     await expect(page.getByText('〜ていただけませんか', { exact: true })).toBeVisible();
     await expect(page.locator('.learning-history-stat-strip')).toContainText('1');
+    await expect(page.getByTestId('learning-history-guidance')).toContainText('再完成 13 个学习日');
+    await expect(page.getByTestId('learning-history-guidance')).toContainText('当前没有明显薄弱类型');
     await expect(page.locator('.learning-load-chart')).toBeVisible();
     await expect(page.locator('.learning-rating-bars .rating-3 strong')).toHaveText('1');
 
@@ -184,5 +284,26 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await page.getByLabel('学习单元类型').selectOption('grammar_ja');
     await expect(page.getByText('〜ていただけませんか', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  });
+
+  test('keeps learning API failures distinct from loading and empty states', async ({ page }) => {
+    await page.route('**/api/learning/plan', (route) => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'fixture unavailable', code: 'LEARNING_FIXTURE_UNAVAILABLE' }),
+    }));
+    await page.goto('/learn/plan');
+    await expect(page.getByTestId('learning-plan-load-error')).toContainText('学习计划暂时无法读取');
+    await expect(page.getByTestId('learning-plan-loading')).toHaveCount(0);
+    await page.unroute('**/api/learning/plan');
+
+    await page.route('**/api/learning/sessions/active', (route) => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'fixture unavailable', code: 'LEARNING_FIXTURE_UNAVAILABLE' }),
+    }));
+    await page.goto('/learn/session');
+    await expect(page.getByTestId('learning-session-load-error')).toContainText('学习会话暂时无法读取');
+    await expect(page.getByTestId('learning-session-empty')).toHaveCount(0);
   });
 });

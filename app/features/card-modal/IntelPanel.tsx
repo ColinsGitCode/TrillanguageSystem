@@ -25,37 +25,37 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
   return (
     <div className="intel-grid" data-testid="react-card-intel">
       <section className="intel-score-panel">
-        <p className="eyebrow">QUALITY</p>
+        <p className="eyebrow">内容质量</p>
         <strong>{score}</strong>
-        <span>{score >= 80 ? 'READY' : score >= 60 ? 'REVIEW' : 'CHECK'}</span>
+        <span>{score >= 80 ? '可使用' : score >= 60 ? '建议检查' : '需要检查'}</span>
       </section>
       <section className="intel-panel">
-        <p className="eyebrow">GENERATION</p>
+        <p className="eyebrow">生成信息</p>
         <dl className="intel-facts">
-          <div><dt>Provider</dt><dd>{provider}</dd></div>
-          <div><dt>Model</dt><dd>{model}</dd></div>
-          <div><dt>Latency</dt><dd>{Number(obs?.performance_total_ms || 0)} ms</dd></div>
-          <div><dt>Tokens</dt><dd>{Number(obs?.tokens_total || 0)}</dd></div>
-          <div><dt>Cost</dt><dd>${Number(obs?.cost_total || 0).toFixed(6)}</dd></div>
+          <div><dt>生成服务</dt><dd>{provider}</dd></div>
+          <div><dt>模型</dt><dd>{model}</dd></div>
+          <div><dt>耗时</dt><dd>{Number(obs?.performance_total_ms || 0)} ms</dd></div>
+          <div><dt>Token 用量</dt><dd>{Number(obs?.tokens_total || 0)}</dd></div>
+          <div><dt>估算成本</dt><dd>${Number(obs?.cost_total || 0).toFixed(6)}</dd></div>
         </dl>
       </section>
       <section className="intel-panel intel-wide">
-        <p className="eyebrow">QUALITY DIMENSIONS</p>
+        <p className="eyebrow">质量维度</p>
         <div className="intel-bars">
           {Object.entries(dimensions).length ? Object.entries(dimensions).map(([label, value]) => (
             <div className="intel-bar" key={label}>
               <span>{label}</span><strong>{value}</strong>
               <div><i style={{ width: `${Math.max(0, Math.min(100, Number(value)))}%` }} /></div>
             </div>
-          )) : <p className="empty-copy">No dimension data</p>}
+          )) : <p className="empty-copy">暂无分项质量数据</p>}
         </div>
       </section>
       <section className="intel-panel intel-wide">
-        <p className="eyebrow">PROMPT</p>
+        <p className="eyebrow">生成要求</p>
         <pre>{textValue(obs?.prompt_full || obs?.prompt_parsed)}</pre>
       </section>
       <section className="intel-panel intel-wide">
-        <p className="eyebrow">MODEL OUTPUT</p>
+        <p className="eyebrow">模型原始输出</p>
         <pre>{textValue(obs?.llm_output)}</pre>
       </section>
     </div>

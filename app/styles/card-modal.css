@@ -138,7 +138,7 @@
 .card-selection-toolbar .csa-selection-preview span {
   flex: none;
   color: var(--color-text-tertiary);
-  font: 700 10px/1 var(--font-mono);
+  font: 700 var(--font-size-badge)/1 var(--font-mono);
   text-transform: uppercase;
 }
 .card-selection-toolbar .csa-selection-preview strong {
@@ -215,7 +215,7 @@
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font: 700 10px/1 var(--font-sans);
+  font: 700 var(--font-size-badge)/1 var(--font-sans);
   cursor: pointer;
 }
 .card-selection-toolbar .csa-tts select:focus-visible {
@@ -235,7 +235,7 @@
   background: var(--color-bg-elevated);
   box-shadow: var(--shadow-md);
   color: var(--color-text-secondary);
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 var(--font-size-caption)/1.4 var(--font-sans);
 }
 .card-selection-toolbar[data-placement="above"] .csa-tts-status,
 .card-selection-toolbar[data-placement="above"] .csa-tts-language {
@@ -345,7 +345,7 @@
 .card-knowledge-inspector > header span {
   display: block;
   color: var(--color-text-tertiary);
-  font: 700 10px/1 var(--font-mono);
+  font: 700 var(--font-size-badge)/1 var(--font-mono);
 }
 .card-knowledge-inspector > header strong { display: block; margin-top: 4px; font-size: 15px; }
 .card-knowledge-inspector blockquote {
@@ -362,7 +362,7 @@
 .card-knowledge-inspector legend {
   margin-bottom: 6px;
   color: var(--color-text-tertiary);
-  font: 700 10px/1 var(--font-mono);
+  font: 700 var(--font-size-badge)/1 var(--font-mono);
   text-transform: uppercase;
 }
 .card-knowledge-segments {
@@ -390,7 +390,7 @@
   box-shadow: var(--shadow-sm);
 }
 .card-knowledge-segments button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
-.card-knowledge-hint { margin: 6px 0 0; color: var(--color-warning); font-size: 11px; line-height: 1.45; }
+.card-knowledge-hint { margin: 6px 0 0; color: var(--color-warning); font-size: var(--font-size-caption); line-height: 1.45; }
 .card-knowledge-submit {
   width: 100%;
   min-height: 34px;
@@ -423,9 +423,37 @@
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
 }
-.card-knowledge-result span { color: var(--color-success); font: 700 10px/1 var(--font-mono); }
+.card-knowledge-result span { color: var(--color-success); font: 700 var(--font-size-badge)/1 var(--font-mono); }
 .card-knowledge-result strong { display: block; margin-top: 7px; font-size: 18px; overflow-wrap: anywhere; }
 .card-knowledge-result p { margin: 5px 0 0; color: var(--color-text-secondary); }
+.modal-panel-loading,
+.card-knowledge-loading {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  font-size: var(--font-size-caption);
+}
+.card-knowledge-loading {
+  position: fixed;
+  z-index: 91;
+  top: 50%;
+  left: 50%;
+  width: 320px;
+  min-height: 120px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  transform: translate(-50%, -50%);
+}
+.csa-tool-loading {
+  width: 30px;
+  height: 28px;
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
 .card-knowledge-result small { display: block; margin-top: 8px; color: var(--color-text-tertiary); line-height: 1.45; }
 .card-knowledge-result.unresolved span { color: var(--color-warning); }
 .card-knowledge-result a { display: inline-block; margin-top: 8px; color: var(--color-primary); font-weight: 650; }

@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ExternalLink, Play, SkipForward, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, PanelLeftClose, PanelLeftOpen, Play, SkipForward, Volume2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ProductShell } from '../../components/ProductShell';
+import { ConfirmDialog } from '../../components/overlays';
+import { DataRefreshStatus, PageState } from '../../components/states';
 import { ErrorSummary, SaveStatus, type WorkflowError } from '../../components/workflow';
 import { ApiError } from '../../lib/api/client';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
-import { CardModal } from '../card-modal/CardModal';
+import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { renderCardMarkdown } from '../card-modal/markdown';
 import type { CardSelection } from '../factory/types';
 import { learningApi } from './learning-api';
 import { itemPresentation, RATING_OPTIONS, reasonLabel, relativeDue } from './learning-format';
+import { splitReviewAnswerMarkdown } from './review-answer-layering.mjs';
 import type { LearningSession, ReviewResponse, StudyItem } from './types';
 
 type PendingReview = {
@@ -36,7 +39,7 @@ function reviewWorkflowError(error: Error): WorkflowError {
 function SessionSummary({ session, onBack }: { session: LearningSession; onBack: () => void }) {
   return (
     <section className="learning-session-summary" data-testid="learning-session-summary">
-      <p className="eyebrow">SESSION SUMMARY</p>
+      <p className="eyebrow">本次学习摘要</p>
       <h1>{session.status === 'completed' ? '本次队列已完成' : '本次会话已结束'}</h1>
       <p>已提交 {session.reviewSummary.total} 个评分。未完成项目已回到今日队列，不计为失败。</p>
       <div className="learning-rating-summary">
@@ -51,7 +54,17 @@ function LearningAnswer({ item }: { item: StudyItem }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playback = useExclusiveAudio();
   const renderCardType = item.source.cardType === 'textbook_track' ? 'trilingual' : item.source.cardType;
-  const renderedHtml = useMemo(() => renderCardMarkdown(item.answer.markdown, renderCardType, item.source.folder), [item.answer.markdown, item.source.folder, renderCardType]);
+  const answerLayers = useMemo(() => splitReviewAnswerMarkdown(item.answer.markdown), [item.answer.markdown]);
+  const coreHtml = useMemo(
+    () => renderCardMarkdown(answerLayers.coreMarkdown, renderCardType, item.source.folder),
+    [answerLayers.coreMarkdown, item.source.folder, renderCardType]
+  );
+  const supplementaryHtml = useMemo(
+    () => answerLayers.supplementaryMarkdown
+      ? renderCardMarkdown(answerLayers.supplementaryMarkdown, renderCardType, item.source.folder)
+      : '',
+    [answerLayers.supplementaryMarkdown, item.source.folder, renderCardType]
+  );
 
   const playSource = (source: string, button?: HTMLElement, playbackUrl?: string) => {
     playback.stop();
@@ -73,7 +86,20 @@ function LearningAnswer({ item }: { item: StudyItem }) {
         const button = (event.target as HTMLElement).closest<HTMLElement>('.audio-btn');
         const source = button?.dataset.src;
         if (source) playSource(source, button);
-      }} dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+      }} dangerouslySetInnerHTML={{ __html: coreHtml }} />
+      {supplementaryHtml && (
+        <details className="learning-answer-supplementary">
+          <summary>
+            <span>补充说明与常见误用</span>
+            <small>{answerLayers.supplementarySectionCount} 个补充部分</small>
+          </summary>
+          <div className="learning-answer-markdown" onClick={(event) => {
+            const button = (event.target as HTMLElement).closest<HTMLElement>('.audio-btn');
+            const source = button?.dataset.src;
+            if (source) playSource(source, button);
+          }} dangerouslySetInnerHTML={{ __html: supplementaryHtml }} />
+        </details>
+      )}
       {item.audioFiles.length > 0 && <div className="learning-audio-strip"><span><Volume2 aria-hidden="true" /> 发音核对</span>{item.audioFiles.map((audio) => <button key={audio.id} type="button" disabled={!['success', 'generated', 'fallback_generated'].includes(audio.status)} onClick={() => playSource(audio.filename_suffix, undefined, audio.playback_url)}><Play aria-hidden="true" /> {audio.language.toUpperCase()} 发音</button>)}</div>}
       {!item.audioFiles.length && <p className="learning-audio-unavailable">当前单元没有可用音频；文字复习和评分仍可继续。</p>}
     </div>
@@ -89,6 +115,7 @@ export function ReviewSessionPage() {
   const [lastExplanation, setLastExplanation] = useState<ReviewResponse['publicExplanation'] | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [fullCard, setFullCard] = useState<CardSelection | null>(null);
+  const [focusMode, setFocusMode] = useState(true);
 
   const sessionQuery = useQuery({ queryKey: ['learning', 'session', 'active'], queryFn: learningApi.activeSession });
   const session = sessionQuery.data?.session || null;
@@ -171,11 +198,47 @@ export function ReviewSessionPage() {
   });
 
   if (sessionQuery.isLoading) {
-    return <ProductShell active="today" title="复习会话"><div className="learning-loading">正在恢复学习会话…</div></ProductShell>;
+    return (
+      <ProductShell active="today" title="复习会话">
+        <PageState
+          variant="loading"
+          eyebrow="复习会话"
+          title="正在恢复学习会话"
+          description="正在读取当前进度，尚未提交新的评分。"
+          testId="learning-session-loading"
+        />
+      </ProductShell>
+    );
+  }
+
+  if (sessionQuery.isError && !sessionQuery.data) {
+    return (
+      <ProductShell active="today" title="复习会话">
+        <PageState
+          variant="error"
+          eyebrow="复习会话"
+          title="学习会话暂时无法读取"
+          description="会话与评分记录没有被修改。重新读取后可以从原进度继续。"
+          actions={<button className="primary" type="button" onClick={() => void sessionQuery.refetch()}>重新读取</button>}
+          testId="learning-session-load-error"
+        />
+      </ProductShell>
+    );
   }
 
   if (!session) {
-    return <ProductShell active="today" title="复习会话"><section className="surface learning-empty"><p className="eyebrow">NO ACTIVE SESSION</p><h1>当前没有进行中的会话</h1><p>从今日学习页生成队列并开始学习。</p><button className="learning-primary-button" type="button" onClick={() => navigate('/learn')}><ArrowLeft aria-hidden="true" /> 回到今日学习</button></section></ProductShell>;
+    return (
+      <ProductShell active="today" title="复习会话">
+        <PageState
+          variant="empty"
+          eyebrow="复习会话"
+          title="当前没有进行中的会话"
+          description="从今日学习页生成队列并开始学习。"
+          actions={<button className="primary" type="button" onClick={() => navigate('/learn')}><ArrowLeft aria-hidden="true" /> 回到今日学习</button>}
+          testId="learning-session-empty"
+        />
+      </ProductShell>
+    );
   }
 
   if (session.status !== 'active' || !entry) {
@@ -183,9 +246,13 @@ export function ReviewSessionPage() {
   }
 
   const presentation = itemPresentation(item);
-  const completed = session.queueProgress.actionCount;
-  const goal = session.queueProgress.actionGoal;
-  const progress = goal ? Math.min(100, (completed / goal) * 100) : 0;
+  const dailyCompleted = session.queueProgress.actionCount;
+  const dailyGoal = session.queueProgress.actionGoal;
+  const sessionTotal = session.queueProgress.total;
+  const sessionCompleted = Number(session.queueProgress.byStatus.completed || 0);
+  const sessionSkipped = Number(session.queueProgress.byStatus.skipped || 0);
+  const sessionPosition = Math.min(sessionTotal, sessionCompleted + sessionSkipped + 1);
+  const sessionProgress = sessionTotal ? Math.min(100, ((sessionPosition - 1) / sessionTotal) * 100) : 0;
   const openFullCard = (studyItem: StudyItem) => {
     if (studyItem.source.cardType === 'textbook_track') return;
     setFullCard({
@@ -197,13 +264,32 @@ export function ReviewSessionPage() {
   };
 
   return (
-    <ProductShell active="today" title="复习会话">
+    <ProductShell active="today" title="复习会话" focusMode={focusMode}>
       <div className="learning-session" data-testid="learning-review-session">
+        <DataRefreshStatus
+          refreshing={sessionQuery.isFetching && !sessionQuery.isLoading}
+          failed={sessionQuery.isError && Boolean(sessionQuery.data)}
+          label="学习会话"
+          onRetry={() => void sessionQuery.refetch()}
+          compact
+          testId="learning-session-refresh-status"
+        />
         <header className="learning-session-top">
-          <span className="learning-session-count">{Math.min(completed + 1, goal)} / {goal}</span>
-          <div className="learning-session-progress"><i style={{ width: `${progress}%` }} /></div>
+          <span className="learning-session-count" data-testid="learning-session-progress"><small>本次</small><strong>{sessionPosition} / {sessionTotal}</strong></span>
+          <div className="learning-session-progress" aria-label={`本次进度 ${sessionPosition} / ${sessionTotal}`}><i style={{ width: `${sessionProgress}%` }} /></div>
+          <span className="learning-daily-goal" data-testid="learning-daily-goal"><small>今日目标</small><strong>{dailyCompleted} / {dailyGoal}</strong></span>
           <span className={`learning-reason reason-${entry.reason}`}>{reasonLabel(entry)}</span>
           <span className={`learning-session-type tone-${presentation.tone}`}>{presentation.type} · {presentation.language}</span>
+          <button
+            className="learning-focus-toggle"
+            type="button"
+            data-testid="learning-focus-toggle"
+            aria-pressed={focusMode}
+            onClick={() => setFocusMode((current) => !current)}
+          >
+            {focusMode ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            {focusMode ? '显示导航' : '专注模式'}
+          </button>
           <button type="button" onClick={() => setConfirmEnd(true)}><X aria-hidden="true" /> 结束</button>
         </header>
 
@@ -251,8 +337,21 @@ export function ReviewSessionPage() {
         </footer>
       </div>
 
-      {confirmEnd && <div className="learning-dialog-backdrop"><section className="surface learning-dialog" role="alertdialog" aria-modal="true" aria-label="结束本次会话"><h2>结束本次会话？</h2><p>已提交的 <strong>{session.reviewSummary.total}</strong> 项会保留；其余内容回到今日队列，不计失败。</p><div><button type="button" onClick={() => setConfirmEnd(false)}>继续学习</button><button className="learning-primary-button" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>{endMutation.isPending ? '结束中…' : '结束并查看摘要'}</button></div></section></div>}
-      {fullCard && <CardModal selection={fullCard} readOnly onClose={() => setFullCard(null)} />}
+      {confirmEnd && (
+        <ConfirmDialog
+          ariaLabel="结束本次会话"
+          title="结束本次会话？"
+          description={<p>已提交的 <strong>{session.reviewSummary.total}</strong> 项会保留；其余内容回到今日队列，不计失败。</p>}
+          cancelLabel="继续学习"
+          confirmLabel="结束并查看摘要"
+          pendingLabel="正在结束会话…"
+          tone="danger"
+          busy={endMutation.isPending}
+          onCancel={() => setConfirmEnd(false)}
+          onConfirm={() => endMutation.mutate()}
+        />
+      )}
+      {fullCard && <DeferredCardModal selection={fullCard} readOnly onClose={() => setFullCard(null)} />}
     </ProductShell>
   );
 }

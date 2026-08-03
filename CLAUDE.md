@@ -67,6 +67,14 @@ The active Cards Factory frontend is React Router v8 + TypeScript at `/`; `/api/
 
 `server.js` is not a second production entry. It is the CommonJS API-only bootstrap used by `tests/integration/_harness.js`; both entrypoints delegate Express construction and startup to `lib/httpRuntime`, while only `server.mjs` mounts React Router and runs in Compose.
 
+Frontend feature styles belong to their React Router route modules, not `app/root.tsx`; the root may load only shared tokens, page-header, dialog, and page-state styles. The full CardModal is a deferred interaction module reached through `DeferredCardModal`, so Cards Factory and the review session must not eagerly import its JS or CSS. CardModal's generation info, selection knowledge, and selection read-aloud panels are separate deferred chunks and must not be folded back into the main modal bundle. `npm run test:architecture` includes `check:frontend-budget`, which enforces global CSS, per-route initial assets, and deferred chunk budgets in `config/frontend-asset-budgets.json`.
+
+Public SaaS readiness does not add account, tenant, role, or billing UI. `lib/workspaceAccess.js` owns the process-level `owner` / `sandbox` boundary and `routes/runtime.js` exposes the sanitized public descriptor. A public owner workspace must be protected by a real gateway, VPN, or reverse proxy. A sandbox process must use a dedicated instance id and keep SQLite, records, textbook source/work files, and selection-TTS cache inside that instance root. Sandbox writes are fail-closed and high-cost operations use a second gate. Never bypass these checks or mount the owner's persistent volumes into an anonymous sandbox; see `Docs/Operations/Public_SaaS_Workspace_Runbook.md`.
+
+UI performance telemetry is a privacy-safe operational signal, not an analytics or content pipeline. `routes/uiPerformance.js` and `services/observability/uiPerformanceService.js` may record only the fixed metrics and route buckets in `config/ui-performance-budgets.json`; they must never record query strings, card or textbook content, selected text, user input, workspace ids, cookies, or identity. An unauthenticated telemetry request at the public gateway must not allocate a sandbox. Public capacity/startup errors must use the recoverable gateway error contract and must never fall back to the owner workspace.
+
+The global Activity Center is a read-only projection, not a new domain store. `routes/activity.js` and `services/activity/activityService.js` aggregate persisted generation jobs, textbook operations, the active learning session, and KG source-sync jobs. The browser's typed shell event and `sessionStorage` copy are optimistic UI hints only; they must never replace or mutate the server-authoritative state. One degraded source must not hide the remaining activity sources, and public summaries must not expose raw payloads, internal paths, or provider errors.
+
 ## Routes
 
 Active route modules:
@@ -76,6 +84,9 @@ Active route modules:
 - routes/files.js: folders, files, highlights, delete by file;
 - routes/history.js: history, statistics, search, recent, record detail;
 - routes/health.js: /api/health;
+- routes/runtime.js: sanitized workspace and build descriptor at `/api/runtime`;
+- routes/activity.js: read-only server-authoritative Activity Center at `/api/activity`;
+- routes/uiPerformance.js: bounded, content-free UI performance samples at `POST /api/ui-performance`;
 - routes/ocr.js: /api/ocr;
 - routes/selectionTts.js: `GET/POST /api/tts/selection` config discovery and immediate English/Japanese binary synthesis;
 - routes/misc.js: delete record by id;
@@ -213,6 +224,15 @@ Active files:
 The shell has Cards Factory plus the Learning Workbench. User-visible learning routes are `/learn`, `/learn/plan`, `/learn/session`, and `/learn/history`; the review session is entered from today learning rather than treated as a sidebar destination. The card library is part of Cards Factory, not a separate route.
 
 `marked`, `DOMPurify`, React Query and Lucide are production npm dependencies bundled into hashed local assets. Card rendering must preserve the Markdown -> audio/ruby adapter -> DOMPurify pipeline.
+
+## Public sandbox runtime
+
+- `sandbox-gateway.mjs` is the only anonymous public entrypoint. It maps one signed HttpOnly cookie to one dedicated viewer child process and one isolated storage root.
+- `docker-compose.public.yml` must never mount owner SQLite, records, textbook media, or caches. The regular `docker-compose.yml` remains the owner workspace deployment.
+- Public sandbox instances are seeded only with synthetic cards. They expire, reset, and shut down by deleting their child process and storage directory.
+- High-cost generation, OCR, and TTS are safe-default off. When enabled, `SandboxQuotaService` enforces per-session request and storage quotas before domain routes.
+- Capacity exhaustion and child startup failure must fail closed. Never route an anonymous request to the owner viewer or another sandbox.
+- `npm run test:public-sandbox` is the repeatable two-session isolation, quota, reset, and cleanup gate.
 
 `app/lib/audio/exclusive-audio.ts` is the single browser playback owner shared by CardModal,
 Textbook Courses and Review Session. Starting any managed audio stops the previous managed

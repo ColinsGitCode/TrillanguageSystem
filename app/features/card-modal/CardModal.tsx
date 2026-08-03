@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -24,6 +31,7 @@ import type {
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
+import { markUiInteractionEnd } from '../../lib/performance';
 import { createAnchor } from './annotation-anchor.mjs';
 import { applyAnnotations } from './annotation-render.mjs';
 import type { CardAnnotationSelector } from './annotation-render.mjs';
@@ -32,24 +40,34 @@ import {
   extractMarkdownTitle,
   renderCardMarkdown,
 } from './markdown';
-import { IntelPanel } from './IntelPanel';
 import {
   inferLookupKind,
   inferLookupLanguage,
   isKeyboardSelectionKey,
 } from './selection-actions';
-import {
-  SelectionKnowledgePanel,
-} from './SelectionKnowledgePanel';
-import { SelectionTtsControls } from './SelectionTtsControls';
 import type {
   KnowledgeLookupDraft,
 } from './SelectionKnowledgePanel';
+import '../../styles/card-modal.css';
+
+const DeferredIntelPanel = lazy(async () => {
+  const module = await import('./IntelPanel');
+  return { default: module.IntelPanel };
+});
+const DeferredSelectionKnowledgePanel = lazy(async () => {
+  const module = await import('./SelectionKnowledgePanel');
+  return { default: module.SelectionKnowledgePanel };
+});
+const DeferredSelectionTtsControls = lazy(async () => {
+  const module = await import('./SelectionTtsControls');
+  return { default: module.SelectionTtsControls };
+});
 
 type Props = {
   selection: CardSelection;
   readOnly?: boolean;
   onClose: () => void;
+  restoreFocusTo?: HTMLElement | null;
 };
 
 const CARD_TYPE_LABEL: Record<CardType, string> = {
@@ -94,8 +112,14 @@ function lookupErrorMessage(error: unknown): string {
   return '知识点查询失败，请重试。';
 }
 
-export function CardModal({ selection, readOnly = false, onClose }: Props) {
+export function CardModal({
+  selection,
+  readOnly = false,
+  onClose,
+  restoreFocusTo = null,
+}: Props) {
   const queryClient = useQueryClient();
+  const onCloseRef = useRef(onClose);
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardAudio = useExclusiveAudio();
@@ -131,6 +155,14 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
     queryFn: () => factoryApi.card(selection),
   });
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
+
+  useEffect(() => {
+    markUiInteractionEnd('card-modal-open');
+  }, []);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const markdown = cardQuery.data?.markdown;
@@ -171,7 +203,8 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
   }, [cardQuery.data?.markdown, cardQuery.data?.record?.id, readOnly, selection]);
 
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previous = restoreFocusTo
+      || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
@@ -195,7 +228,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
           return;
         }
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -221,7 +254,7 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
       cardAudio.stop();
       previous?.focus({ preventScroll: true });
     };
-  }, [cardAudio.stop, onClose]);
+  }, [cardAudio.stop, restoreFocusTo]);
 
   const deleteMutation = useMutation({
     mutationFn: () => factoryApi.deleteRecord(cardQuery.data?.record || null, selection),
@@ -692,8 +725,8 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
         </header>
 
         <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>CONTENT</button>
-          <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>INTEL</button>
+          <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
+          <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
           {tab === 'content' && !readOnly && (
             <button
               className="highlight-selection-button"
@@ -801,7 +834,11 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
               </aside>
             </div>
           )}
-          {tab === 'intel' && <IntelPanel record={cardQuery.data?.record || null} />}
+          {tab === 'intel' && (
+            <Suspense fallback={<div className="modal-panel-loading" role="status">正在载入生成信息…</div>}>
+              <DeferredIntelPanel record={cardQuery.data?.record || null} />
+            </Suspense>
+          )}
         </div>
 
         {tab === 'content' && toolbar && (
@@ -880,7 +917,9 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
             >
               <Copy aria-hidden="true" />
             </button>
-            <SelectionTtsControls phrase={toolbar.phrase} />
+            <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
+              <DeferredSelectionTtsControls phrase={toolbar.phrase} />
+            </Suspense>
             <button
               ref={lookupTriggerRef}
               type="button"
@@ -929,26 +968,28 @@ export function CardModal({ selection, readOnly = false, onClose }: Props) {
         )}
 
         {knowledgeDraft && (
-          <SelectionKnowledgePanel
-            draft={knowledgeDraft}
-            result={knowledgeMutation.data?.lookup || null}
-            error={knowledgeMutation.isError ? lookupErrorMessage(knowledgeMutation.error) : ''}
-            pending={knowledgeMutation.isPending}
-            onChange={(next) => {
-              knowledgeMutation.reset();
-              setKnowledgeDraft(next);
-            }}
-            onSubmit={() => {
-              if (knowledgeDraft.language && !knowledgeMutation.isPending) {
-                knowledgeMutation.mutate(knowledgeDraft);
-              }
-            }}
-            onClose={() => {
-              setKnowledgeDraft(null);
-              knowledgeMutation.reset();
-              (lookupTriggerRef.current || contentRef.current)?.focus({ preventScroll: true });
-            }}
-          />
+          <Suspense fallback={<div className="card-knowledge-loading" role="status">正在载入知识查询…</div>}>
+            <DeferredSelectionKnowledgePanel
+              draft={knowledgeDraft}
+              result={knowledgeMutation.data?.lookup || null}
+              error={knowledgeMutation.isError ? lookupErrorMessage(knowledgeMutation.error) : ''}
+              pending={knowledgeMutation.isPending}
+              onChange={(next) => {
+                knowledgeMutation.reset();
+                setKnowledgeDraft(next);
+              }}
+              onSubmit={() => {
+                if (knowledgeDraft.language && !knowledgeMutation.isPending) {
+                  knowledgeMutation.mutate(knowledgeDraft);
+                }
+              }}
+              onClose={() => {
+                setKnowledgeDraft(null);
+                knowledgeMutation.reset();
+                (lookupTriggerRef.current || contentRef.current)?.focus({ preventScroll: true });
+              }}
+            />
+          </Suspense>
         )}
 
         {toast && <div className="card-selection-toast" role="status">{toast}</div>}

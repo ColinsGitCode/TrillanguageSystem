@@ -144,9 +144,57 @@ function reviewSummary(db, revisionId) {
   };
 }
 
-function updateReviewState(db, revisionId, expressionId, payload = {}) {
-  const status = String(payload.status || '');
-  if (!REVIEW_STATES.has(status)) throw textbookError('TEXTBOOK_REVIEW_STATUS_INVALID', 400);
+function listPendingTrackReviews(db, limit = 10) {
+  const normalizedLimit = Math.min(Math.max(Number(limit) || 10, 1), 30);
+  return db.prepare(`
+    SELECT
+      t.id AS track_id,
+      t.title AS track_title,
+      t.track_number,
+      t.status AS track_status,
+      r.id AS revision_id,
+      r.expression_count,
+      COUNT(rs.id) AS review_total,
+      SUM(CASE WHEN rs.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+      SUM(CASE WHEN rs.status = 'pending' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN rs.status = 'needs_attention' THEN 1 ELSE 0 END) AS needs_attention,
+      MAX(COALESCE(rs.updated_at_utc, t.updated_at_utc)) AS updated_at_utc
+    FROM textbook_tracks t
+    JOIN textbook_track_revisions r
+      ON r.id = COALESCE(t.pending_revision_id, t.current_revision_id)
+    LEFT JOIN textbook_expression_review_states rs
+      ON rs.track_revision_id = r.id
+    WHERE t.status IN ('draft', 'verified')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM textbook_operations op
+        WHERE op.track_id = t.id
+          AND op.kind = 'release'
+          AND op.status IN ('queued', 'running', 'partially_failed', 'failed')
+      )
+    GROUP BY t.id, r.id
+    HAVING t.status = 'verified'
+      OR SUM(CASE WHEN rs.status IN ('pending', 'needs_attention') THEN 1 ELSE 0 END) > 0
+      OR (COUNT(rs.id) = 0 AND r.expression_count > 0)
+    ORDER BY updated_at_utc DESC, t.id DESC
+    LIMIT ?
+  `).all(normalizedLimit);
+}
+
+function updateReviewStates(db, revisionId, payload = {}) {
+  const updates = Array.isArray(payload.updates) ? payload.updates : [];
+  if (!updates.length || updates.length > 100) {
+    throw textbookError('TEXTBOOK_REVIEW_BATCH_INVALID', 400);
+  }
+  const expressionIds = updates.map((update) => Number(update.expressionId || 0));
+  if (expressionIds.some((id) => !id) || new Set(expressionIds).size !== expressionIds.length) {
+    throw textbookError('TEXTBOOK_REVIEW_BATCH_INVALID', 400);
+  }
+  for (const update of updates) {
+    if (!REVIEW_STATES.has(String(update.status || ''))) {
+      throw textbookError('TEXTBOOK_REVIEW_STATUS_INVALID', 400);
+    }
+  }
   const timestamp = nowIso();
   return db.transaction(() => {
     const revision = db.prepare(`
@@ -155,25 +203,48 @@ function updateReviewState(db, revisionId, expressionId, payload = {}) {
     if (!revision) throw textbookError('TEXTBOOK_REVISION_NOT_FOUND', 404);
     if (revision.status !== 'draft') throw textbookError('TEXTBOOK_REVIEW_REVISION_LOCKED', 409);
     ensureReviewStates(db, revision.track_id, revision.id, timestamp);
-    const current = db.prepare(`
+    const readCurrent = db.prepare(`
       SELECT * FROM textbook_expression_review_states
       WHERE track_revision_id = ? AND expression_id = ?
-    `).get(Number(revisionId), Number(expressionId));
-    if (!current) throw textbookError('TEXTBOOK_EXPRESSION_NOT_FOUND', 404);
-    if (payload.expressionRevisionId !== undefined
-      && Number(payload.expressionRevisionId) !== Number(current.expression_revision_id)) {
-      throw textbookError('TEXTBOOK_REVISION_CONFLICT', 409);
-    }
-    const reviewer = status === 'confirmed' ? String(payload.reviewer || 'local-user') : null;
-    const confirmedAt = status === 'confirmed' ? timestamp : null;
-    db.prepare(`
+    `);
+    const currentRows = updates.map((update) => {
+      const current = readCurrent.get(Number(revisionId), Number(update.expressionId));
+      if (!current) throw textbookError('TEXTBOOK_EXPRESSION_NOT_FOUND', 404);
+      if (update.expressionRevisionId !== undefined
+        && Number(update.expressionRevisionId) !== Number(current.expression_revision_id)) {
+        throw textbookError('TEXTBOOK_REVISION_CONFLICT', 409);
+      }
+      return current;
+    });
+    const updateRow = db.prepare(`
       UPDATE textbook_expression_review_states
       SET status = ?, reason_code = ?, reviewer = ?, confirmed_at_utc = ?,
         revision = revision + 1, updated_at_utc = ?
       WHERE id = ?
-    `).run(status, payload.reasonCode || null, reviewer, confirmedAt, timestamp, current.id);
-    return db.prepare('SELECT * FROM textbook_expression_review_states WHERE id = ?').get(current.id);
+    `);
+    const readUpdated = db.prepare('SELECT * FROM textbook_expression_review_states WHERE id = ?');
+    return updates.map((update, index) => {
+      const current = currentRows[index];
+      const status = String(update.status);
+      const reviewer = status === 'confirmed' ? String(update.reviewer || 'local-user') : null;
+      const confirmedAt = status === 'confirmed' ? timestamp : null;
+      updateRow.run(
+        status,
+        update.reasonCode || null,
+        reviewer,
+        confirmedAt,
+        timestamp,
+        current.id
+      );
+      return readUpdated.get(current.id);
+    });
   })();
+}
+
+function updateReviewState(db, revisionId, expressionId, payload = {}) {
+  return updateReviewStates(db, revisionId, {
+    updates: [{ ...payload, expressionId }],
+  })[0];
 }
 
 function normalizePatch(changes = {}) {
@@ -339,7 +410,9 @@ module.exports = {
   ensureReviewStates,
   expressionHashes,
   getRevision,
+  listPendingTrackReviews,
   listReviewStates,
   reviewSummary,
   updateReviewState,
+  updateReviewStates,
 };

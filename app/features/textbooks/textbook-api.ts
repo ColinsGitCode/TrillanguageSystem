@@ -48,6 +48,18 @@ export const textbookApi = {
     `/api/textbooks/revisions/${revisionId}/expressions/${expressionId}/review`,
     { method: 'PUT', body: JSON.stringify(payload) }
   ),
+  bulkUpdateReview: (revisionId: number, payload: {
+    updates: Array<{
+      expressionId: number;
+      expressionRevisionId: number;
+      status: 'pending' | 'needs_attention' | 'confirmed';
+      reasonCode?: string | null;
+      reviewer?: string;
+    }>;
+  }) => requestJson<{ success: true; reviews: Array<Record<string, unknown>>; workflow: TextbookWorkflow }>(
+    `/api/textbooks/revisions/${revisionId}/reviews`,
+    { method: 'PUT', body: JSON.stringify(payload) }
+  ),
   createOperation: (trackId: number, payload: {
     kind: 'release' | 'tts' | 'sync';
     idempotencyKey: string;
@@ -65,6 +77,10 @@ export const textbookApi = {
   ),
   retryOperation: (id: number) => requestJson<{ success: true; operation: TextbookOperation }>(
     `/api/textbooks/operations/${id}/retry`,
+    { method: 'POST' }
+  ),
+  cancelOperation: (id: number) => requestJson<{ success: true; operation: TextbookOperation }>(
+    `/api/textbooks/operations/${id}/cancel`,
     { method: 'POST' }
   ),
   dryRunImport: (payload: { manifestRelativePath: string; expectedManifestHash: string }) => requestJson<{

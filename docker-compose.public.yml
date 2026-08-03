@@ -1,0 +1,85 @@
+name: three_lans_public
+
+services:
+  sandbox-gateway:
+    build: .
+    command: ["node", "sandbox-gateway.mjs"]
+    depends_on:
+      - ocr
+      - tts-en
+      - tts-ja
+    environment:
+      - PORT=3010
+      - PUBLIC_SANDBOX_COOKIE_SECRET=${PUBLIC_SANDBOX_COOKIE_SECRET:?PUBLIC_SANDBOX_COOKIE_SECRET must be set}
+      - PUBLIC_SANDBOX_COOKIE_SECURE=${PUBLIC_SANDBOX_COOKIE_SECURE:-true}
+      - PUBLIC_SANDBOX_MAX_SESSIONS=${PUBLIC_SANDBOX_MAX_SESSIONS:-8}
+      - PUBLIC_SANDBOX_PORT_START=${PUBLIC_SANDBOX_PORT_START:-4100}
+      - PUBLIC_SANDBOX_PORT_END=${PUBLIC_SANDBOX_PORT_END:-4199}
+      - PUBLIC_SANDBOX_RETENTION_MINUTES=${PUBLIC_SANDBOX_RETENTION_MINUTES:-60}
+      - PUBLIC_SANDBOX_WRITE_ENABLED=${PUBLIC_SANDBOX_WRITE_ENABLED:-true}
+      - PUBLIC_SANDBOX_HIGH_COST_ENABLED=${PUBLIC_SANDBOX_HIGH_COST_ENABLED:-false}
+      - PUBLIC_SANDBOX_QUOTA_GENERATIONS=${PUBLIC_SANDBOX_QUOTA_GENERATIONS:-2}
+      - PUBLIC_SANDBOX_QUOTA_OCR=${PUBLIC_SANDBOX_QUOTA_OCR:-5}
+      - PUBLIC_SANDBOX_QUOTA_TTS=${PUBLIC_SANDBOX_QUOTA_TTS:-20}
+      - PUBLIC_SANDBOX_QUOTA_STORAGE_BYTES=${PUBLIC_SANDBOX_QUOTA_STORAGE_BYTES:-67108864}
+      - PUBLIC_SANDBOX_UI_PERFORMANCE_ENABLED=${PUBLIC_SANDBOX_UI_PERFORMANCE_ENABLED:-true}
+      - PUBLIC_SANDBOX_UI_PERFORMANCE_SAMPLE_RATE=${PUBLIC_SANDBOX_UI_PERFORMANCE_SAMPLE_RATE:-0.1}
+      - SANDBOX_STORAGE_ROOT=/data/sandboxes
+      - PUBLIC_FEEDBACK_URL=${PUBLIC_FEEDBACK_URL:-}
+      - LEARNING_TIMEZONE=${LEARNING_TIMEZONE:-Asia/Tokyo}
+      - RECORDS_TIMEZONE=${RECORDS_TIMEZONE:-Asia/Tokyo}
+      - TEXTBOOK_FEATURE_ENABLED=true
+      - CARD_ANNOTATIONS_ENABLED=1
+      - SELECTION_TTS_ENABLED=${SELECTION_TTS_ENABLED:-true}
+      - OCR_PROVIDER=tesseract
+      - OCR_TESSERACT_ENDPOINT=http://ocr:8080/ocr
+      - OCR_LANGS=eng+jpn+chi_sim
+      - OCR_TIMEOUT_MS=20000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-pro}
+      - DEEPSEEK_TIMEOUT_MS=${DEEPSEEK_TIMEOUT_MS:-120000}
+      - DEEPSEEK_THINKING=${DEEPSEEK_THINKING:-disabled}
+      - TTS_EN_ENDPOINT=http://tts-en:8000/v1/audio/speech
+      - TTS_EN_TYPE=kokoro
+      - TTS_EN_SPEED=1.0
+      - TTS_EN_VOICE=af_bella
+      - TTS_EN_MODEL=hexgrad/Kokoro-82M
+      - TTS_JA_ENDPOINT=http://tts-ja:50021
+      - TTS_JA_TYPE=voicevox
+      - VOICEVOX_SPEAKER=${VOICEVOX_SPEAKER:-2}
+    ports:
+      - "${PUBLIC_GATEWAY_BIND_ADDRESS:-127.0.0.1}:${PUBLIC_SANDBOX_GATEWAY_PORT:-3020}:3010"
+    volumes:
+      - public_sandboxes:/data/sandboxes
+    restart: unless-stopped
+
+  ocr:
+    build:
+      context: ./ocr_service
+    environment:
+      - OCR_LANGS=eng+jpn+chi_sim
+      - OCR_TIMEOUT_SEC=20
+      - OCR_PSM=6
+      - OCR_OEM=1
+    restart: unless-stopped
+
+  tts-en:
+    image: dlaszlo/speech-service:cpu-latest
+    environment:
+      - STT_MODEL_NAME=Systran/faster-distil-whisper-small.en
+      - STT_COMPUTE_TYPE=int8
+      - TTS_MODEL_NAME=hexgrad/Kokoro-82M
+      - TTS_LANG_CODE=a
+      - HF_HOME=/data/huggingface
+    volumes:
+      - kokoro_cache:/data/huggingface
+    restart: unless-stopped
+
+  tts-ja:
+    image: voicevox/voicevox_engine:cpu-latest
+    restart: unless-stopped
+
+volumes:
+  public_sandboxes:
+  kokoro_cache:

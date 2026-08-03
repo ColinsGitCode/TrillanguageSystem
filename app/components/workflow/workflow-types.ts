@@ -4,8 +4,8 @@ export type WorkflowSaveState = 'clean' | 'dirty' | 'saving' | 'saved' | 'failed
 export type WorkflowTaskState = 'pending' | 'needs_attention' | 'confirmed';
 export type WorkflowOperationStatus = 'queued' | 'running' | 'succeeded' | 'partially_failed' | 'failed' | 'cancelled';
 
-export type WorkflowStageItem = {
-  id: WorkflowStage;
+export type WorkflowStageItem<TStage extends string = WorkflowStage> = {
+  id: TStage;
   label: string;
   state: WorkflowStageState;
   reason?: string;
@@ -58,6 +58,9 @@ export type WorkflowOperation = {
   steps: WorkflowOperationStep[];
   updatedAt?: string | null;
   publicSummary?: string | null;
+  canCancel?: boolean;
+  canRetry?: boolean;
+  retainedSummary?: string | null;
 };
 
 export type WorkflowActivity = {

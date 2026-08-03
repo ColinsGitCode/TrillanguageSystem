@@ -291,6 +291,14 @@ class KgRepository {
     `).all(status, normalizedLimit).map(caseDto);
   }
 
+  countResolutionCases(status = 'open') {
+    return Number(this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM kg_resolution_cases
+      WHERE status = ?
+    `).get(status).count || 0);
+  }
+
   insertCase(data) {
     this.db.prepare(`
       INSERT OR IGNORE INTO kg_resolution_cases(
@@ -314,6 +322,24 @@ class KgRepository {
 
   getLookupByKey(eventKey) {
     return this.db.prepare('SELECT * FROM kg_lookup_events WHERE event_key = ?').get(eventKey) || null;
+  }
+
+  listRecentLookups(limit = 8) {
+    const normalizedLimit = Math.min(Math.max(Number(limit) || 8, 1), 20);
+    return this.db.prepare(`
+      WITH recent_ids AS (
+        SELECT MAX(id) AS id
+        FROM kg_lookup_events
+        WHERE interaction_kind = 'explicit_lookup'
+        GROUP BY normalized_input, language, kp_kind_hint
+        ORDER BY id DESC
+        LIMIT ?
+      )
+      SELECT events.*
+      FROM recent_ids
+      JOIN kg_lookup_events events ON events.id = recent_ids.id
+      ORDER BY events.occurred_at_utc DESC, events.id DESC
+    `).all(normalizedLimit);
   }
 
   insertLookup(event) {

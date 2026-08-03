@@ -1,5 +1,16 @@
 'use strict';
 
+function cancellationError() {
+  const error = new Error('textbook operation cancelled');
+  error.name = 'AbortError';
+  error.code = 'TEXTBOOK_OPERATION_CANCELLED';
+  return error;
+}
+
+function throwIfCancelled(signal) {
+  if (signal?.aborted) throw cancellationError();
+}
+
 class TextbookOperationExecutor {
   constructor({ dbService, ttsService, logger }) {
     this.dbService = dbService;
@@ -7,7 +18,8 @@ class TextbookOperationExecutor {
     this.logger = logger;
   }
 
-  async runStep(operationId, step, handler) {
+  async runStep(operationId, step, handler, signal) {
+    throwIfCancelled(signal);
     const operation = this.dbService.getTextbookOperation(operationId);
     if (operation?.result?.steps?.[step]?.status === 'succeeded') {
       return operation.result.steps[step].result || null;
@@ -17,12 +29,21 @@ class TextbookOperationExecutor {
     });
     try {
       const result = await handler();
+      throwIfCancelled(signal);
       this.dbService.updateTextbookOperationStep(operationId, step, 'succeeded', {
         publicSummary: `${step} 已完成`,
         result,
       });
       return result;
     } catch (error) {
+      if (signal?.aborted || error?.name === 'AbortError') {
+        this.dbService.updateTextbookOperationStep(operationId, step, 'cancelled', {
+          publicSummary: `${step} 已停止`,
+          errorCode: 'TEXTBOOK_OPERATION_CANCELLED',
+          retryable: true,
+        });
+        throw cancellationError();
+      }
       this.dbService.updateTextbookOperationStep(operationId, step, 'failed', {
         publicSummary: `${step} 失败`,
         errorCode: error.code || 'TEXTBOOK_OPERATION_STEP_FAILED',
@@ -42,9 +63,16 @@ class TextbookOperationExecutor {
     return result;
   }
 
-  async execute(operationId) {
+  async execute(operationId, options = {}) {
+    const { signal } = options;
     const operation = this.dbService.claimTextbookOperation(operationId);
     if (!operation) return this.dbService.getTextbookOperation(operationId);
+    if (operation.result?.cancelRequested || signal?.aborted) {
+      return this.dbService.finishTextbookOperation(operationId, 'cancelled', {
+        publicSummary: '任务已取消，已完成步骤仍然保留',
+        result: { cancelRequested: true },
+      });
+    }
     const command = operation.result?.command || {};
     let published = null;
     try {
@@ -55,17 +83,19 @@ class TextbookOperationExecutor {
             confirmUnitCount: command.confirmUnitCount,
             expectedPlanRevision: command.expectedPlanRevision,
           })
-        ));
+        ), signal);
         await this.runStep(operationId, 'materialize', () => ({
           unitCount: published?.unitCount || command.confirmUnitCount,
           itemActions: published?.itemActions || null,
-        }));
+        }), signal);
         if (command.includeTts !== false) {
           try {
             await this.runStep(operationId, 'tts', () => this.generateTrackAudio(operation.track_id, {
               force: Boolean(command.forceTts),
-            }));
+              signal,
+            }), signal);
           } catch (error) {
+            if (signal?.aborted || error?.name === 'AbortError') throw error;
             return this.dbService.finishTextbookOperation(operationId, 'partially_failed', {
               publicSummary: '教材已发布，单句语音部分失败',
               errorCode: error.code || 'TEXTBOOK_TTS_FAILED',
@@ -73,19 +103,31 @@ class TextbookOperationExecutor {
             });
           }
         }
-        await this.runStep(operationId, 'sync', () => ({ queuedByPublish: true }));
+        await this.runStep(operationId, 'sync', () => ({ queuedByPublish: true }), signal);
       } else if (operation.kind === 'tts') {
         await this.runStep(operationId, 'tts', () => this.generateTrackAudio(operation.track_id, {
           force: Boolean(command.force),
-        }));
+          signal,
+        }), signal);
       } else {
-        await this.runStep(operationId, 'sync', () => ({ accepted: true }));
+        await this.runStep(operationId, 'sync', () => ({ accepted: true }), signal);
       }
       return this.dbService.finishTextbookOperation(operationId, 'succeeded', {
         publicSummary: operation.kind === 'release' ? '教材已发布并完成后台处理' : '后台处理完成',
         result: { published: Boolean(published) },
       });
     } catch (error) {
+      if (
+        signal?.aborted
+        || error?.name === 'AbortError'
+        || this.dbService.isTextbookOperationCancellationRequested?.(operationId)
+      ) {
+        return this.dbService.finishTextbookOperation(operationId, 'cancelled', {
+          publicSummary: '任务已取消，已完成步骤仍然保留',
+          errorCode: 'TEXTBOOK_OPERATION_CANCELLED',
+          result: { cancelRequested: true },
+        });
+      }
       this.logger?.error?.({ err: error, operationId }, 'textbook operation failed');
       return this.dbService.finishTextbookOperation(operationId, 'failed', {
         publicSummary: error.message || '后台处理失败',
@@ -97,4 +139,5 @@ class TextbookOperationExecutor {
 
 module.exports = {
   TextbookOperationExecutor,
+  cancellationError,
 };

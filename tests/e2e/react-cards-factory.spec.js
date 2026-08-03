@@ -63,6 +63,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('P3 desktop composition keeps 2:1 and 1:3 working ratios', async ({ page }) => {
     await page.goto('/');
+    await expect(page.getByTestId('factory-composer-header')).toContainText('创建学习卡');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     const topGrid = await page.locator('.factory-top-grid').boundingBox();
     const composer = await page.locator('.factory-composer').boundingBox();
@@ -77,16 +78,142 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByRole('button', { name: /场景表达/ }).last()).toHaveCSS('background-color', 'rgb(255, 244, 220)');
   });
 
+  test('background queue polling does not move the factory workspace', async ({ page }) => {
+    let jobsCalls = 0;
+    let releaseSecondRequest = () => {};
+    await page.route('**/api/generation-jobs*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== '/api/generation-jobs' || url.searchParams.get('limit') !== '30') {
+        await route.continue();
+        return;
+      }
+      jobsCalls += 1;
+      if (jobsCalls === 3) {
+        await new Promise((resolve) => { releaseSecondRequest = resolve; });
+      }
+      await route.fulfill({
+        json: {
+          jobs: [{
+            id: 41,
+            status: 'running',
+            phraseNormalized: 'stable queue fixture',
+            jobType: 'trilingual',
+          }],
+        },
+      });
+    });
+    await page.goto('/');
+
+    const queue = page.getByTestId('react-queue-status');
+    const topGrid = page.locator('.factory-top-grid');
+    const workspace = page.locator('.factory-library-grid');
+    await expect(queue).toContainText('stable queue fixture');
+    await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
+    const beforeQueue = await queue.boundingBox();
+    const beforeTopGrid = await topGrid.boundingBox();
+    const beforeWorkspace = await workspace.boundingBox();
+
+    await expect.poll(() => jobsCalls, { timeout: 6_000 }).toBeGreaterThan(2);
+    await expect(queue).toHaveAttribute('aria-busy', 'true');
+    const duringQueue = await queue.boundingBox();
+    const duringTopGrid = await topGrid.boundingBox();
+    const duringWorkspace = await workspace.boundingBox();
+
+    expect(duringQueue.height).toBe(beforeQueue.height);
+    expect(duringTopGrid.height).toBe(beforeTopGrid.height);
+    expect(duringWorkspace.y - duringTopGrid.y - duringTopGrid.height)
+      .toBe(beforeWorkspace.y - beforeTopGrid.y - beforeTopGrid.height);
+    await expect(page.getByTestId('factory-queue-refresh-status')).toHaveCount(0);
+
+    releaseSecondRequest();
+    await expect(queue).toHaveAttribute('aria-busy', 'false');
+  });
+
+  test('keeps recent date groups open and older months compact', async ({ page }) => {
+    await page.route('**/api/folders', (route) => route.fulfill({
+      json: { folders: ['20260729', '20260630', '20260530', '20260420'] },
+    }));
+    await page.route('**/api/folders/*/files', (route) => route.fulfill({ json: { files: [] } }));
+    await page.goto('/');
+
+    await expect(page.getByRole('button', { name: '收起 2026.07' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '收起 2026.06' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '展开 2026.05' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '日期 2026.05.30' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: '展开 2026.05' }).click();
+    await expect(page.getByRole('button', { name: '日期 2026.05.30' })).toBeVisible();
+  });
+
+  test('searches, sorts and remembers a compact card-library view', async ({ page }) => {
+    await page.route('**/api/folders', (route) => route.fulfill({
+      json: { folders: ['20260730'] },
+    }));
+    await page.route('**/api/folders/20260730/files', (route) => route.fulfill({
+      json: {
+        files: [
+          { file: 'zeta.html', title: 'Zeta handoff', cardType: 'scenario_phrase' },
+          { file: 'alpha.html', title: 'Alpha grammar', cardType: 'grammar_ja' },
+          { file: 'meeting.html', title: 'Meeting phrase', cardType: 'trilingual' },
+          { file: 'beta.html', title: 'Beta phrase', cardType: 'trilingual' },
+          { file: 'clinic.html', title: 'Clinic grammar', cardType: 'grammar_ja' },
+        ],
+      },
+    }));
+    await page.goto('/');
+
+    const library = page.locator('.card-library');
+    const search = page.getByLabel('搜索当前日期卡片');
+    await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
+    await expect(page.getByTestId('react-file-list').locator('.file-card')).toHaveCount(5);
+
+    await search.fill('场景表达');
+    await expect(page.getByTestId('react-file-list').locator('.file-card')).toHaveCount(1);
+    await expect(page.getByTestId('react-file-list')).toContainText('Zeta handoff');
+    await search.fill('not-present');
+    await expect(page.getByText('没有匹配卡片')).toBeVisible();
+    await page.getByRole('button', { name: '清除搜索' }).click();
+
+    await page.getByLabel('卡片排序').selectOption('title');
+    await expect(page.getByTestId('react-file-list').locator('.file-card strong').first()).toHaveText('Alpha grammar');
+    await page.getByRole('button', { name: '紧凑显示' }).click();
+    await expect(library).toHaveClass(/density-compact/u);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+
+    await page.reload();
+    await expect(page.locator('.card-library')).toHaveClass(/density-compact/u);
+    await expect(page.getByLabel('卡片排序')).toHaveValue('title');
+  });
+
+  test('keeps card-list failures distinct from a genuinely empty date', async ({ page }) => {
+    await page.route('**/api/folders', (route) => route.fulfill({ json: { folders: ['20260729'] } }));
+    await page.route('**/api/folders/20260729/files', (route) => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'fixture unavailable' }),
+    }));
+    await page.goto('/');
+    await expect(page.getByTestId('factory-files-error')).toContainText('卡片列表暂时无法读取');
+    await expect(page.getByText('这个日期还没有学习卡')).toHaveCount(0);
+  });
+
   test('P3 queue opens only from its status card and closes outside', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('react-queue-status').click();
+    const queueTrigger = page.getByTestId('react-queue-status');
+    await queueTrigger.click();
     const dialog = page.getByRole('dialog', { name: '队列管理' });
     await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('react-queue-close')).toBeFocused();
     await expect(page.getByTestId('react-queue-timeline')).toBeVisible();
     const box = await dialog.boundingBox();
     expect(Math.abs((box.x + box.width / 2) - page.viewportSize().width / 2)).toBeLessThan(12);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(queueTrigger).toBeFocused();
+    await queueTrigger.click();
     await page.mouse.click(4, 4);
     await expect(dialog).toBeHidden();
+    await expect(queueTrigger).toBeFocused();
   });
 
   test('P3 UI enqueues the selected card type and keeps the workspace responsive', async ({ page, request }) => {
@@ -94,10 +221,10 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-card-type-scenario_phrase').click();
     await page.getByTestId('react-phrase-input').fill('React 场景入队验证');
     await page.getByTestId('react-generate-button').click();
-    await expect(page.getByRole('status')).toContainText('已加入共享任务队列');
+    await expect(page.getByRole('status').filter({ hasText: '已加入共享任务队列' })).toBeVisible();
     await expect(page.getByTestId('shell-feedback')).toContainText(/生成任务 #\d+ 已加入队列/u);
     await page.getByRole('button', { name: '后台活动' }).click();
-    await expect(page.getByRole('dialog', { name: '后台活动' })).toContainText('场景表达生成');
+    await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('场景表达生成');
     await page.getByRole('button', { name: '关闭后台活动' }).click();
     await expect.poll(async () => {
       const response = await request.get('/api/generation-jobs?limit=30');
@@ -156,17 +283,21 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-queue-status').click();
     await page.locator('.queue-job').filter({ hasText: phrase }).click();
-    await expect(page.getByTestId('react-queue-timeline')).toContainText('FAILED');
+    await expect(page.getByTestId('react-queue-timeline')).toContainText('生成失败');
     await page.getByRole('button', { name: '重试失败' }).click();
     await expect(page.getByTestId('shell-feedback')).toContainText(/已重新加入 \d+ 个失败任务/u);
     await expect.poll(async () => {
       const response = await request.get(`/api/generation-jobs/${id}`);
       return (await response.json()).job.status;
     }, { timeout: 30_000 }).toBe('success');
-    await expect(page.getByTestId('react-queue-timeline')).toContainText('SUCCEEDED');
+    await expect(page.getByTestId('react-queue-timeline')).toContainText('生成成功');
+    await page.getByRole('button', { name: '查看学习卡' }).click();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    await expect(page.getByTestId('react-card-content')).toContainText('React retry');
+    await page.keyboard.press('Escape');
   });
 
-  test('P4 renders full-height Markdown, kanji-only ruby, audio and INTEL', async ({ page }) => {
+  test('P4 renders full-height Markdown, kanji-only ruby, audio and generation details', async ({ page }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
@@ -182,11 +313,34 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(rubyBases.length).toBeGreaterThan(0);
     expect(rubyBases.every((text) => /^[\p{Script=Han}々〆ヵヶ]+$/u.test(text))).toBeTruthy();
     await expect(modal.locator('.audio-btn')).toHaveCount(4);
-    await page.getByRole('tab', { name: 'INTEL' }).click();
+    await page.getByRole('tab', { name: '生成信息' }).click();
     await expect(page.getByTestId('react-card-intel')).toContainText('DEEPSEEK');
     await page.keyboard.press('Escape');
     await expect(modal).toBeHidden();
     await expect(opener).toBeFocused();
+  });
+
+  test('reports cold card-modal opening time without sending card content', async ({ page }) => {
+    const batches = [];
+    await page.route('**/api/ui-performance', async (route) => {
+      batches.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, accepted: 1 }),
+      });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button')
+      .filter({ hasText: 'react trilingual fixture' }).click();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    await expect.poll(() => batches.flatMap((batch) => batch.metrics || [])
+      .find((metric) => metric.name === 'card-modal-open') || null).not.toBeNull();
+    const modalMetric = batches.flatMap((batch) => batch.metrics || [])
+      .find((metric) => metric.name === 'card-modal-open');
+    expect(modalMetric.context).toBe('cold');
+    expect(Object.keys(modalMetric).sort()).toEqual(['context', 'name', 'route', 'value']);
+    expect(JSON.stringify(batches)).not.toContain('react trilingual fixture');
   });
 
   test('P4 keeps furigana readable without making it a selection target', async ({ page }) => {

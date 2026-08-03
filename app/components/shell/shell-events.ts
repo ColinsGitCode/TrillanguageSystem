@@ -1,6 +1,19 @@
 export type ShellFeedbackTone = 'info' | 'success' | 'warning' | 'error';
-export type ShellActivityKind = 'generation-job' | 'textbook-operation';
-export type ShellActivityStatus = 'queued' | 'running' | 'succeeded' | 'partially_failed' | 'failed' | 'cancelled';
+export type ShellActivityKind =
+  | 'generation-job'
+  | 'textbook-operation'
+  | 'textbook-review'
+  | 'learning-session'
+  | 'knowledge-sync'
+  | 'knowledge-resolution';
+export type ShellActivityStatus =
+  | 'queued'
+  | 'running'
+  | 'needs_attention'
+  | 'succeeded'
+  | 'partially_failed'
+  | 'failed'
+  | 'cancelled';
 
 export type ShellFeedbackCommand = {
   id?: string;
@@ -18,6 +31,8 @@ export type ShellActivityCommand = {
   summary: string;
   href: string;
   updatedAt?: string;
+  source?: 'generation' | 'textbooks' | 'learning' | 'knowledge' | 'browser';
+  actionLabel?: string;
 };
 
 export const SHELL_FEEDBACK_EVENT = 'three-lans:shell-feedback';

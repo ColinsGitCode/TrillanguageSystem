@@ -42,6 +42,9 @@
   --color-card-scenario-border: #eeb34f;
   --color-card-scenario-text: #8a4b08;
   --color-card-scenario-strong: #c96f0b;
+  --color-textbook-accent: #e94b86;
+  --color-textbook-accent-strong: #b01859;
+  --color-textbook-accent-deep: #d71955;
 
   --color-obs-bg: #111827;
   --color-obs-surface: #1c2637;
@@ -73,6 +76,8 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-size-caption: 12px;
+  --font-size-badge: 10px;
   --font-ja: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
   --font-serif: Georgia, "Noto Serif CJK SC", "Songti SC", serif;
 
@@ -119,6 +124,9 @@
   --color-card-scenario-border: #c68d37;
   --color-card-scenario-text: #f0c477;
   --color-card-scenario-strong: #ffb14a;
+  --color-textbook-accent: #ff82b3;
+  --color-textbook-accent-strong: #ff9bc2;
+  --color-textbook-accent-deep: #ff6ba3;
   --color-obs-bg: #0f1217;
   --color-obs-surface: #191e26;
   --color-obs-border: #323b48;
