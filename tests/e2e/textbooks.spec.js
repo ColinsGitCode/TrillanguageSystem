@@ -149,6 +149,7 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
 
     await page.getByPlaceholder('搜索英文、日文或中文提示').fill('ready');
     await expect(page.locator('.textbook-search-results').getByText('I am ready now.')).toBeVisible();
+    await expect(page.locator('.textbook-expression-content .pronunciation-token').first()).toBeVisible();
     await assertContainedDesktop(page);
     await expect(page).toHaveScreenshot('textbook-courses-published-desktop.png', { animations: 'disabled' });
     expect(browserErrors).toEqual([]);

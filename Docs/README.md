@@ -28,6 +28,13 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；CA-R1 真实数据只读观察已通过；CA-I1 已补齐四色标记、取消标记、复制、显式确认的 KG 查询和键盘选区；本文不授权修改卡片正文；
+- Features/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_Design.md：**Draft，待产品与架构门禁确认**的日语按需注音浮层与 Ruby 退役方案。定义纯日语正文、整词 pronunciation token、轻量 Tooltip、交互式 Popover、人工纠音、与 annotation/TTS/KG/LA/教材的边界，以及历史 generation 不原地改写的受控迁移路线；真实卷审计确认 672/675 张卡含 13,528 个 Ruby 标签，PF-P0 已量化 466 种相邻复合候选并隔离 60 张历史结构破损卡；当前不授权历史 apply 或删除 legacy reader；
+- Architecture/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_ADR.md：注音独立投影、offset、纠音事件、API、feature flag 与消费者边界的实现基线；历史迁移、人工决策、shadow replay、Canary 和 Ruby 退役仍需各自验收；
+- Features/prototypes/pf-d1-pronunciation-overlay.html：PF-D1 桌面原型，包含 S1-S12 状态；当前作为交互参考，不替代用户逐状态确认；
+- superpowers/plans/2026-08-03-japanese-pronunciation-overlay-ruby-retirement.md：日语按需注音浮层与 Ruby 退役的详细执行任务表，共 76 项；代码路径、只读审计、P0-P3 报告和运行观测已开始落地，当前状态为 **In implementation · 历史迁移、Ruby 删除与 PF-R1 观察待门禁**；
+- Operations/Pronunciation_Overlay_Runbook.md：注音浮层的开关、Compose 重建、只读审计、历史迁移、降级回滚、隐私观测和桌面质量门禁手册；明确禁止在人工批准前执行历史 apply 或删除 Ruby；
+- TestReports/Pronunciation_PF_P0_Feasibility_20260803.md、Pronunciation_PF_P1_New_Cards_20260803.md、Pronunciation_PF_P2_CardModal_20260803.md、Pronunciation_PF_P3_Consumers_20260803.md、Pronunciation_PF_P4_Shadow_Replay_20260803.md、Pronunciation_PF_P4_Historical_Canary_20260803.md、Pronunciation_PF_P5_Ruby_Retirement_20260803.md、Pronunciation_PF_R1_Observation_20260803.md：本轮注音实施与门禁报告；报告明确区分自动化通过、只读证据和必须由用户/时间窗口完成的门禁；
+- TestReports/Pronunciation_Final_Acceptance_20260803.md：最终自动化与 Compose 运行态验收报告；记录 lint/typecheck、453/453 unit、89/89 integration、82/82 desktop E2E、7/7 smoke、health online 和 npm audit 0 vulnerabilities；历史迁移、Ruby 删除与 PF-R1 观察仍为 BLOCKED；
 - Features/Selection_TTS_Product_and_Technical_Design.md：**Accepted 且已实施**的朗读选区 TTS 产品与技术基线。ST-01–ST-37 已全部完成：CardModal 支持英日按需朗读、保守语言确认、三档语速、失败重试和键盘焦点恢复；服务端提供即时二进制 API、共享优先级协调器与独立缓存 volume；CardModal、教材和复习音频使用共享独占播放 owner，并已验证 annotation/KG/learning/FSRS 与 records 零写入；
 - Operations/Selection_TTS_Runbook.md：朗读选区 TTS 的启停、配置、Kokoro/VOICEVOX 故障诊断、缓存 MISS/HIT/BYPASS、争用行为、缓存清理和无数据库 downgrade 回滚手册；
 - TestReports/Selection_TTS_ST_P4_Acceptance_20260727.md：ST-P4 最终验收报告，记录真实英日 TTS、40 条批量争用、缓存、零业务写入、391 单元/65 集成/53 桌面 E2E 与最终 Compose 健康状态；

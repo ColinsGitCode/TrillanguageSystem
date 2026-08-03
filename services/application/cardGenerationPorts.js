@@ -12,6 +12,7 @@ const {
 const { generateAudioBatch } = require('../generation/ttsService');
 const { generateWithProvider } = require('../generation/cardGenerationService');
 const dbService = require('../storage/databaseService');
+const { createPronunciationService } = require('../pronunciation/pronunciationService');
 const { prepareInsertData } = require('../storage/databaseHelpers');
 const { buildE2EGenerateResult } = require('../../lib/e2eFixtures');
 const { buildAdmissionTags } = require('../dataPreparation/cardTagging');
@@ -29,12 +30,17 @@ const {
 const {
   DEFAULT_DEEPSEEK_MODEL,
   E2E_TEST_MODE,
+  PRONUNCIATION_LEGACY_RUBY_READER_ENABLED,
   normalizeCardType,
   normalizeSourceMode,
 } = require('../../lib/serverConfig');
 const log = require('../../lib/logger').child({ module: 'app/card-generation' });
 
 const ACTIVE_GENERATE_PROVIDER = 'deepseek';
+const pronunciationService = createPronunciationService({
+  dbService,
+  legacyReaderEnabled: PRONUNCIATION_LEGACY_RUBY_READER_ENABLED,
+});
 
 const cardGenerationPorts = {
   activeProvider: ACTIVE_GENERATE_PROVIDER,
@@ -63,6 +69,7 @@ const cardGenerationPorts = {
   assertDuplicatePolicy,
   prepareInsertData,
   insertGeneration: (data) => dbService.insertGeneration(data),
+  persistPronunciation: (generationId) => pronunciationService.ensureGeneration(generationId),
   deleteGeneration: (generationId) => dbService.deleteGeneration(generationId),
   getGenerationById: (generationId) => dbService.getGenerationById(generationId),
   listCardTags: (generationId) => dbService.listCardTags(generationId, { includeSuppressed: true }),

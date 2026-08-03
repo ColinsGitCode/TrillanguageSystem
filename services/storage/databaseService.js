@@ -22,6 +22,7 @@ const textbookOperationsDomain = require('./db/textbookOperations');
 const annotationsDomain = require('./db/annotations');
 const manualTagsDomain = require('./db/manualTags');
 const cardEngagementDomain = require('./db/cardEngagement');
+const pronunciationDomain = require('./db/pronunciation');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -358,6 +359,10 @@ class DatabaseService {
     return textbookWorkflowDomain.getRevision(this.db, revisionId);
   }
 
+  getTextbookExpression(expressionId) {
+    return textbookWorkflowDomain.getCurrentExpression(this.db, expressionId);
+  }
+
   updateTextbookReviewState(revisionId, expressionId, payload = {}) {
     return this.withBusyRetry(() => textbookWorkflowDomain.updateReviewState(
       this.db,
@@ -581,6 +586,30 @@ class DatabaseService {
 
   getAnnotationStats(filters = {}) {
     return annotationsDomain.getStats(this.db, filters);
+  }
+
+  getPronunciationDocument(targetKind, targetId, sourceContentHash) {
+    return pronunciationDomain.getDocument(this.db, targetKind, targetId, sourceContentHash);
+  }
+
+  listPronunciationTokens(documentId) {
+    return pronunciationDomain.listTokens(this.db, documentId);
+  }
+
+  createPronunciationDocument(payload) {
+    return this.withBusyRetry(() => pronunciationDomain.createDocument(this.db, payload));
+  }
+
+  appendPronunciationCorrection(payload) {
+    return this.withBusyRetry(() => pronunciationDomain.appendCorrection(this.db, payload));
+  }
+
+  updatePronunciationProjection(payload) {
+    return this.withBusyRetry(() => pronunciationDomain.updateProjection(this.db, payload));
+  }
+
+  applyPronunciationCorrection(payload) {
+    return this.withBusyRetry(() => pronunciationDomain.applyCorrection(this.db, payload));
   }
 
   /**

@@ -57,7 +57,7 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
   }
   const markdown = extractMarkdownProviderResponse(response);
   const audioTasks = buildAudioTasksFromMarkdown(markdown);
-  const preparedMarkdown = await prepareMarkdownForCard(markdown, { baseName, audioTasks });
+  const preparedMarkdown = await prepareMarkdownForCard(markdown, { baseName, audioTasks, legacyRuby: false });
   const htmlContent = await renderHtmlFromMarkdown(preparedMarkdown, { baseName, audioTasks, prepared: true });
   const content = {
     markdown_content: preparedMarkdown,

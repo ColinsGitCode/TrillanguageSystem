@@ -106,6 +106,7 @@ function createCardGenerationUseCase(customPorts = {}) {
       const preparedMarkdown = await ports.prepareMarkdownForCard(content.markdown_content, {
         baseName,
         audioTasks: content.audio_tasks,
+        legacyRuby: false,
       });
       content.markdown_content = preparedMarkdown;
       content.html_content = await ports.renderHtmlFromMarkdown(preparedMarkdown, {
@@ -124,6 +125,7 @@ function createCardGenerationUseCase(customPorts = {}) {
       });
 
       let audio = null;
+      let pronunciation = null;
       let persistedAudioTasks = [];
       if (!e2eTestMode && ports.hasTtsEndpoint() && content.audio_tasks.length) {
         const audioTasks = ports.normalizeAudioTasks(content.audio_tasks, stagedResult.baseName);
@@ -209,6 +211,21 @@ function createCardGenerationUseCase(customPorts = {}) {
           expectedAudioRows: e2eTestMode ? 0 : normalizedAudioTasks.length,
         });
         ports.log.info({ generationId }, 'inserted generation');
+        if (typeof ports.persistPronunciation === 'function') {
+          try {
+            pronunciation = await ports.persistPronunciation(generationId);
+          } catch (pronunciationError) {
+            pronunciation = {
+              status: 'deferred',
+              code: pronunciationError.code || 'PRONUNCIATION_PROJECTION_FAILED',
+            };
+            if (typeof ports.log.warn === 'function') {
+              ports.log.warn({ generationId, code: pronunciation.code }, 'pronunciation projection deferred');
+            } else {
+              ports.log.error({ generationId, code: pronunciation.code }, 'pronunciation projection deferred');
+            }
+          }
+        }
       } catch (dbError) {
         ports.log.error({ err: dbError }, 'database insert failed');
         throw dbError;
@@ -225,6 +242,7 @@ function createCardGenerationUseCase(customPorts = {}) {
         generationId,
         result,
         audio,
+        pronunciation,
         prompt,
         llm_output: content,
         observability,

@@ -73,6 +73,12 @@ const CARD_ENGAGEMENT_TABLES = Object.freeze([
   'card_engagement_events',
 ]);
 
+const PRONUNCIATION_TABLES = Object.freeze([
+  'pronunciation_documents',
+  'pronunciation_tokens',
+  'pronunciation_correction_events',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -179,6 +185,14 @@ function assertCardEngagementPostconditions(db) {
   if (missing.length) throw new Error(`Card engagement migration missing tables: ${missing.join(', ')}`);
 }
 
+function assertPronunciationPostconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = PRONUNCIATION_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Pronunciation migration missing tables: ${missing.join(', ')}`);
+}
+
 function parseMigrationDirectives(migration) {
   const lines = String(migration.sql || '').split(/\r?\n/u);
   const directives = new Set();
@@ -282,6 +296,7 @@ function runMigrations(db, options = {}) {
   assertCardAnnotationP3Postconditions(db);
   assertManualTagPostconditions(db);
   assertCardEngagementPostconditions(db);
+  assertPronunciationPostconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
@@ -289,6 +304,7 @@ module.exports = {
   BASELINE_VERSION,
   CARD_ANNOTATION_P3_TABLES,
   CARD_ENGAGEMENT_TABLES,
+  PRONUNCIATION_TABLES,
   MANUAL_TAG_TABLES,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
@@ -299,6 +315,7 @@ module.exports = {
   TEXTBOOK_WORKFLOW_TABLES,
   assertCardAnnotationP3Postconditions,
   assertCardEngagementPostconditions,
+  assertPronunciationPostconditions,
   assertManualTagPostconditions,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,

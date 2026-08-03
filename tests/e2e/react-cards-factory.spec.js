@@ -22,13 +22,44 @@ async function enqueueAndWait(request, phrase, cardType, { targetFolder = '' } =
   return body.job;
 }
 
+async function waitForPronunciationContent(page) {
+  await expect(page.getByTestId('react-card-content').locator('.pronunciation-token').first()).toBeVisible();
+}
+
 async function selectVisibleText(page, text, { keyboard = false } = {}) {
-  await page.getByTestId('react-card-content').evaluate((container, options) => {
+  const content = page.getByTestId('react-card-content');
+  await waitForPronunciationContent(page);
+  await content.evaluate((container, options) => {
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const nodes = [];
     let node = walker.nextNode();
-    while (node && !String(node.nodeValue || '').includes(options.text)) node = walker.nextNode();
-    if (!node) throw new Error(`Unable to find selection text: ${options.text}`);
-    const start = node.nodeValue.indexOf(options.text);
+    while (node) {
+      nodes.push(node);
+      node = walker.nextNode();
+    }
+    const joined = nodes.map((item) => item.nodeValue || '').join('');
+    const matchStart = joined.indexOf(options.text);
+    if (matchStart < 0) throw new Error(`Unable to find selection text: ${options.text}`);
+    const matchEnd = matchStart + options.text.length;
+    let cursor = 0;
+    let startNode = null;
+    let startOffset = 0;
+    let endNode = null;
+    let endOffset = 0;
+    for (const candidate of nodes) {
+      const length = String(candidate.nodeValue || '').length;
+      if (!startNode && matchStart >= cursor && matchStart <= cursor + length) {
+        startNode = candidate;
+        startOffset = matchStart - cursor;
+      }
+      if (matchEnd >= cursor && matchEnd <= cursor + length) {
+        endNode = candidate;
+        endOffset = matchEnd - cursor;
+        break;
+      }
+      cursor += length;
+    }
+    if (!startNode || !endNode) throw new Error(`Unable to map selection text: ${options.text}`);
     if (options.keyboard) {
       container.focus();
       container.dispatchEvent(new KeyboardEvent('keydown', {
@@ -38,8 +69,8 @@ async function selectVisibleText(page, text, { keyboard = false } = {}) {
       }));
     }
     const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, start + options.text.length);
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
@@ -330,7 +361,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('P4 renders full-height Markdown, kanji-only ruby, audio and generation details', async ({ page }) => {
+  test('P4 renders full-height Markdown, pronunciation tokens, audio and generation details', async ({ page }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
@@ -338,13 +369,10 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(modal).toBeVisible();
     const modalBox = await modal.locator('.react-card-modal').boundingBox();
     expect(modalBox.height).toBeGreaterThan(page.viewportSize().height - 30);
-    const rubyBases = await modal.locator('ruby').evaluateAll((nodes) => nodes.map((ruby) => {
-      const clone = ruby.cloneNode(true);
-      clone.querySelectorAll('rt, rp').forEach((node) => node.remove());
-      return clone.textContent.trim();
-    }));
-    expect(rubyBases.length).toBeGreaterThan(0);
-    expect(rubyBases.every((text) => /^[\p{Script=Han}々〆ヵヶ]+$/u.test(text))).toBeTruthy();
+    await expect(modal.locator('ruby')).toHaveCount(0);
+    await expect(modal.locator('.pronunciation-token').first()).toBeVisible();
+    expect(await modal.locator('.pronunciation-token').count()).toBeGreaterThan(0);
+    await expect(modal.locator('.pronunciation-token[data-pronunciation-status="accepted"]').first()).toBeVisible();
     await expect(modal.locator('.audio-btn')).toHaveCount(4);
     await page.getByRole('tab', { name: '生成信息' }).click();
     await expect(page.getByTestId('react-card-intel')).toContainText('DEEPSEEK');
@@ -399,39 +427,36 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(JSON.stringify(batches)).not.toContain('react trilingual fixture');
   });
 
-  test('P4 keeps furigana readable without making it a selection target', async ({ page }) => {
+  test('P4 uses a word-level pronunciation popover and keeps accepted words selectable', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
-    const ruby = page.getByTestId('react-card-content').locator('ruby').first();
-    const rubyBase = await ruby.evaluate((node) => {
-      const clone = node.cloneNode(true);
-      clone.querySelectorAll('rt, rp').forEach((annotation) => annotation.remove());
-      return clone.textContent.trim();
-    });
-    const annotation = ruby.locator('rt').first();
-    await expect(annotation).toHaveCSS('user-select', 'none');
-    await expect(annotation).toHaveCSS('pointer-events', 'none');
-    const annotationHit = await annotation.evaluate((node) => {
-      const rect = node.getBoundingClientRect();
-      return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.tagName.toLowerCase();
-    });
-    expect(annotationHit).not.toBe('rt');
-
-    await ruby.evaluate((node) => {
+    const content = page.getByTestId('react-card-content');
+    await expect(content.locator('ruby')).toHaveCount(0);
+    const token = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await expect(token).toBeVisible();
+    const surface = await token.getAttribute('data-pronunciation-surface');
+    expect(surface).toBeTruthy();
+    await token.hover();
+    await expect(page.getByRole('tooltip', { name: '日语读音' })).toBeVisible();
+    await page.reload();
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const selectableToken = page.getByTestId('react-card-content').locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await selectableToken.evaluate((node) => {
       const range = document.createRange();
       range.selectNodeContents(node);
       const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
       node.closest('[data-testid="react-card-content"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
-    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', rubyBase);
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
   });
 
   test('CA-P8 persists and restores a canonical annotation without legacy HTML', async ({ page, request }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
     await opener.click();
+    await waitForPronunciationContent(page);
     await page.getByTestId('react-card-content').evaluate((container) => {
       const text = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('E2E'))?.firstChild;
       const range = document.createRange();
@@ -578,6 +603,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await waitForPronunciationContent(page);
     await page.getByTestId('react-card-content').evaluate((container) => {
       const text = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('E2E'))?.firstChild;
       const range = document.createRange();
@@ -611,6 +637,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await waitForPronunciationContent(page);
     const content = page.getByTestId('react-card-content');
 
     await content.click({ button: 'right', position: { x: 12, y: 12 } });
@@ -657,6 +684,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await waitForPronunciationContent(page);
     await page.getByTestId('react-card-content').evaluate((container) => {
       const text = container.querySelector('h1')?.firstChild;
       const range = document.createRange();
@@ -858,7 +886,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(readButton).toBeFocused();
   });
 
-  test('P4 sanitizer blocks script, style and event attributes while preserving ruby', async ({ page }) => {
+  test('P4 sanitizer blocks script, style and event attributes while preserving readable Japanese text', async ({ page }) => {
     await page.route('**/api/folders', (route) => route.fulfill({ json: { folders: ['mock'] } }));
     await page.route('**/api/folders/mock/files', (route) => route.fulfill({ json: {
       files: [{ file: 'hostile.html', title: 'hostile', cardType: 'trilingual' }],
@@ -871,7 +899,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').getByRole('button', { name: /hostile/ }).click();
     const content = page.getByTestId('react-card-content');
-    await expect(content.locator('ruby')).toHaveCount(1);
+    await expect(content.locator('ruby')).toHaveCount(0);
+    await expect(content).toContainText('漢字');
     await expect(content.locator('script, style')).toHaveCount(0);
     await expect(content.locator('img')).not.toHaveAttribute('onerror');
     expect(await page.evaluate(() => Boolean(window.__pwned || window.__imgPwned))).toBeFalsy();

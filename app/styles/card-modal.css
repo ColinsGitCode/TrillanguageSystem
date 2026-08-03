@@ -14,6 +14,7 @@
 .modal-state { min-height: 360px; display: grid; place-items: center; color: var(--color-text-tertiary); }
 .modal-state.error { color: var(--color-danger); }
 .card-content-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; align-items: start; gap: 24px; max-width: 1440px; margin: 0 auto; padding: 28px; }
+.card-context-menu-trigger { min-width: 0; }
 .react-card-markdown { min-width: 0; }
 .card-study-meta { position: sticky; top: 20px; padding: 14px; background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .card-study-meta dl { margin: 0; }
@@ -474,4 +475,134 @@
   box-shadow: var(--shadow-modal);
   font: 600 13px/1 var(--font-sans);
   white-space: nowrap;
+}
+
+/* —— 按需注音浮层：词语是正文中的一个可发现单元，不把整篇文章变成彩色标记 —— */
+.pronunciation-card-content-shell {
+  display: contents;
+}
+
+.pronunciation-token {
+  border-bottom: 1px dotted color-mix(in srgb, var(--color-primary) 58%, transparent);
+  color: inherit;
+  cursor: help;
+  outline: none;
+}
+.pronunciation-token:hover,
+.pronunciation-token:focus-visible,
+.pronunciation-token[data-pronunciation-status="unresolved"] {
+  border-bottom-style: solid;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+.pronunciation-token:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 62%, transparent);
+}
+.pronunciation-popover {
+  position: fixed;
+  z-index: 145;
+  width: min(360px, calc(100vw - 24px));
+  padding: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-top: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+.pronunciation-popover.is-tooltip {
+  width: min(240px, calc(100vw - 24px));
+  padding: 9px 11px;
+  border-top-width: 2px;
+  pointer-events: auto;
+}
+.pronunciation-popover-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pronunciation-popover-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+.pronunciation-popover-heading span {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  font: 700 15px/1.2 var(--font-sans);
+}
+.pronunciation-popover-heading span.is-unresolved { color: var(--color-warning); }
+.pronunciation-tooltip-meta,
+.pronunciation-popover-status {
+  margin: 6px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.pronunciation-popover-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--color-text-tertiary);
+  font: 700 var(--font-size-badge)/1 var(--font-mono);
+  text-transform: uppercase;
+}
+.pronunciation-popover-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+.pronunciation-popover-actions button,
+.pronunciation-correction button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  cursor: pointer;
+  font: 650 12px/1 var(--font-sans);
+}
+.pronunciation-popover-actions button:hover,
+.pronunciation-correction button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.pronunciation-popover-actions button:disabled,
+.pronunciation-correction button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
+.pronunciation-popover-actions svg { width: 15px; height: 15px; }
+.pronunciation-correction {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.pronunciation-correction label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-tertiary);
+  font: 700 var(--font-size-badge)/1 var(--font-mono);
+}
+.pronunciation-correction > div { display: flex; gap: 6px; }
+.pronunciation-correction input {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  font: 600 13px/1 var(--font-sans);
+}
+.pronunciation-correction small {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
 }

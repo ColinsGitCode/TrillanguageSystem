@@ -16,6 +16,7 @@ import type {
   CardAnnotationSelector,
   RenderableCardAnnotation,
 } from '../card-modal/annotation-render.mjs';
+import type { PronunciationToken } from '../card-modal/pronunciation-overlay';
 
 export type CardAnnotation = RenderableCardAnnotation & {
   targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
@@ -35,6 +36,19 @@ export type AnnotationTarget = {
   targetId: number;
   targetRevision: string;
   sourceContentHash: string | null;
+};
+
+export type PronunciationDocument = {
+  id: number;
+  targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
+  targetId: number;
+  sourceContentHash: string;
+  projectionVersion: string;
+  status: 'partial' | 'ready' | 'stale' | 'archived';
+  analyzerVersion: string;
+  dictionaryVersion: string;
+  documentHash: string;
+  revision: number;
 };
 
 export const factoryApi = {
@@ -154,6 +168,33 @@ export const factoryApi = {
     requestJson<{ success: true; target: AnnotationTarget; annotations: CardAnnotation[] }>(
       `/api/annotations?targetKind=${encodeURIComponent(targetKind)}&targetId=${encodeURIComponent(String(targetId))}`
     ),
+  pronunciation: (targetKind: 'generation' | 'textbook_track' | 'textbook_expression', targetId: number) =>
+    requestJson<{
+      success: true;
+      target: { targetKind: string; targetId: number };
+      plainText: string;
+      document: PronunciationDocument;
+      tokens: PronunciationToken[];
+    }>(`/api/pronunciation?targetKind=${encodeURIComponent(targetKind)}&targetId=${encodeURIComponent(String(targetId))}`),
+  correctPronunciation: (payload: {
+    targetId: number;
+    tokenKey: string;
+    eventKey: string;
+    eventType: 'reading' | 'boundary' | 'resolve' | 'reject' | 'split' | 'merge';
+    expectedRevision: number;
+    readingRaw?: string;
+    readingHiragana?: string;
+    status?: PronunciationToken['status'];
+  }) => requestJson<{
+    success: true;
+    event: { id: number; eventKey: string };
+    document: PronunciationDocument;
+    tokens: PronunciationToken[];
+    idempotent: boolean;
+  }>('/api/pronunciation/corrections', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
   createAnnotation: (payload: {
     id: string;
     targetKind: CardAnnotation['targetKind'];

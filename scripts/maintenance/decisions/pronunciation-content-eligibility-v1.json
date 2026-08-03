@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "pronunciation-content-eligibility/v1",
+  "status": "template-awaiting-human-review",
+  "ruleVersion": "pronunciation-content-quality-v1",
+  "allowedDecisions": ["repair", "archive", "exclude", "false-positive"],
+  "applyPolicy": "This file is a review manifest, not an apply command. Every entry must bind a generationId and contentHash before any data repair or pronunciation migration.",
+  "entries": []
+}

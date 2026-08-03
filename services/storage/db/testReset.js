@@ -11,6 +11,11 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // Pronunciation projections/events before their document parent.
+  'pronunciation_correction_events',
+  'pronunciation_tokens',
+  'pronunciation_documents',
+
   // Append-only card interaction facts
   'card_engagement_events',
 
@@ -97,6 +102,8 @@ function truncateAll(db) {
           'card_annotation_migration_events_delete_block',
           'card_engagement_events_update_block',
           'card_engagement_events_delete_block',
+          'pronunciation_correction_events_update_block',
+          'pronunciation_correction_events_delete_block',
           'kg_resolution_events_update_block',
           'kg_resolution_events_delete_block',
           'kg_point_transitions_update_block',

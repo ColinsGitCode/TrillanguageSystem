@@ -1,5 +1,6 @@
 const KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]/g;
 const KANA_PAREN_REGEX = /[（(][\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\u30FC\s]+[）)]/g;
+const JAPANESE_EXPLICIT_READING_REGEX = /([\u3400-\u9FFF々〆ヵヶ]+)[（(][\u3040-\u309F\u30A0-\u30FF\u30FC\s]+[）)]/gu;
 const LOANWORD_PAREN_REGEX = /([\u30A0-\u30FF\u30FC]+)\(([A-Za-z0-9][A-Za-z0-9\s._-]*)\)/g;
 const LOANWORD_READING_REGEX =
   /([\u30A1-\u30FA\u30FC\u30FB\u30FD\u30FEA-Za-zＡ-Ｚａ-ｚ0-9０-９._/-]+)\s*[（(][\u3041-\u3096\u30A1-\u30FA\u30FC\u30FB\s]+[）)]/g;
@@ -106,6 +107,18 @@ function stripLoanwordReadingsInJapanese(markdown) {
   }
 
   return output.join('\n');
+}
+
+function stripJapaneseExplicitReadings(markdown) {
+  if (!markdown) return markdown;
+  const lines = String(markdown).split(/\r?\n/);
+  let inJapanese = false;
+  return lines.map((line) => {
+    const headerMatch = line.match(/^\s*##\s*\d+\.\s*(.+)$/);
+    if (headerMatch) inJapanese = /日本語|日语/.test(headerMatch[1]);
+    if (!inJapanese || line.includes(LOANWORD_LABEL) || line.includes('loanword-block')) return line;
+    return line.replace(JAPANESE_EXPLICIT_READING_REGEX, '$1');
+  }).join('\n');
 }
 
 function relocateLoanwordAnnotations(markdown) {
@@ -328,6 +341,7 @@ function postProcessGeneratedContent(content) {
   if (!content || typeof content !== 'object') return content;
   let markdown = content.markdown_content || '';
   markdown = relocateLoanwordAnnotations(markdown);
+  markdown = stripJapaneseExplicitReadings(markdown);
   markdown = stripLoanwordReadingsInJapanese(markdown);
   markdown = cleanJapaneseTranslations(markdown);
   markdown = dedupeTechSection(markdown);

@@ -22,7 +22,7 @@ test.describe('postProcessGeneratedContent', () => {
     assert.equal(postProcessGeneratedContent('plain string'), 'plain string');
   });
 
-  test.it('strips <ruby> markup from audio task text', () => {
+test.it('strips <ruby> markup from audio task text', () => {
     const result = run('# any', [
       { text: '<ruby>漢字<rt>かんじ</rt></ruby> です', lang: 'ja' },
     ]);
@@ -103,4 +103,21 @@ test.describe('postProcessGeneratedContent', () => {
     });
     assert.equal(twice.markdown_content, once.markdown_content);
   });
+});
+
+test.it('removes explicit Japanese parenthetical readings from the active Japanese section', () => {
+  const result = postProcessGeneratedContent({
+    markdown_content: [
+      '# sample',
+      '## 2. 日本語:',
+      '- **例句1**: 勤務表(きんむひょう)を確認します。',
+      '  - 勤務表(きんむひょう)を确认。',
+      '## 3. 中文:',
+      '- **解释**: 中文说明保留括号（示例）。',
+    ].join('\n'),
+    audio_tasks: [],
+  });
+  assert.match(result.markdown_content, /勤務表を確認/u);
+  assert.doesNotMatch(result.markdown_content, /勤務表\(きんむひょう\)/u);
+  assert.match(result.markdown_content, /中文说明保留括号（示例）/u);
 });

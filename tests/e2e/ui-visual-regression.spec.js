@@ -60,6 +60,10 @@ function visualMasks(page) {
 
 async function expectPageScreenshot(page, name) {
   await settleVisualPage(page);
+  if (await page.getByTestId('react-card-modal').count()) {
+    await expect(page.locator('.pronunciation-token').first()).toBeVisible();
+    await settleVisualPage(page);
+  }
   await expect(page).toHaveScreenshot(name, {
     fullPage: true,
     animations: 'disabled',

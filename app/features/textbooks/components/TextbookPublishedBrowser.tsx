@@ -1,5 +1,6 @@
 import { BookOpenCheck, Highlighter, Languages, Play, Sparkles } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { DesktopVirtualList } from '../../../components/virtual';
 import { createAnchor, resolveAnchor } from '../../card-modal/annotation-anchor.mjs';
 import type { CardAnnotationSelector } from '../../card-modal/annotation-render.mjs';
@@ -10,10 +11,15 @@ import {
   highlightedExpressionIds,
 } from '../textbook-highlight';
 import type { TextbookAudio, TextbookTrack } from '../types';
+import { factoryApi } from '../../factory/factory-api';
 
 const DeferredManualTagBar = lazy(async () => {
   const module = await import('../../manual-tags/ManualTagBar');
   return { default: module.ManualTagBar };
+});
+const DeferredPronunciationText = lazy(async () => {
+  const module = await import('../../card-modal/PronunciationText');
+  return { default: module.PronunciationText };
 });
 
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
@@ -75,6 +81,12 @@ export function TextbookPublishedBrowser({
     selectionRef.current = '';
     setSelectedText('');
   }, [expression?.id]);
+  const pronunciationQuery = useQuery({
+    queryKey: ['pronunciation', 'textbook_expression', expression?.expression_id || null],
+    queryFn: () => factoryApi.pronunciation('textbook_expression', Number(expression?.expression_id)),
+    enabled: Boolean(expression?.expression_id),
+    retry: false,
+  });
   if (!expression) return <section className="surface textbook-empty-workbench"><h2>没有可浏览表达</h2></section>;
   const fragments = expressionHighlightFragments(highlightHtml, expression.expression_id);
   const expressionAudioKey = expression.expression_key.replace(/^expr:/u, '').replace(/[^a-z0-9]+/giu, '_');
@@ -181,7 +193,15 @@ export function TextbookPublishedBrowser({
           </section>
           <section>
             <p className="textbook-lang-label">Japanese official</p>
-            <h3 className="textbook-ja" data-textbook-language="ja" dangerouslySetInnerHTML={{ __html: fragments?.ja || expression.ja_ruby_html }} />
+            <Suspense fallback={<h3 className="textbook-ja" data-textbook-language="ja" dangerouslySetInnerHTML={{ __html: escapeTextbookText(expression.official_ja_text) }} />}>
+              <DeferredPronunciationText
+                tagName="h3"
+                className="textbook-ja"
+                language="ja"
+                html={fragments?.ja || escapeTextbookText(expression.official_ja_text)}
+                tokens={pronunciationQuery.data?.tokens || []}
+              />
+            </Suspense>
             <button type="button" disabled={!canPlay(jaAudio)} onClick={() => jaAudio && onPlayAudio(jaAudio.playback_url)}><Play aria-hidden="true" />{canPlay(jaAudio) ? '播放 JA' : 'JA 语音未生成'}</button>
           </section>
           <div className="textbook-zh-cue"><Languages aria-hidden="true" /><span dangerouslySetInnerHTML={{ __html: fragments?.zh || escapeTextbookText(expression.zh_cue_text) }} /></div>

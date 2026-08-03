@@ -133,6 +133,22 @@ function getRevision(db, revisionId) {
   };
 }
 
+function getCurrentExpression(db, expressionId) {
+  return db.prepare(`
+    SELECT er.*, e.expression_key, e.lifecycle,
+      t.id AS track_id, t.track_number, t.status AS track_status,
+      c.course_key, c.title AS course_title
+    FROM textbook_expressions e
+    JOIN textbook_tracks t ON t.id = e.track_id
+    JOIN textbook_courses c ON c.id = t.course_id
+    JOIN textbook_expression_revisions er
+      ON er.expression_id = e.id
+     AND er.revision_id = COALESCE(t.pending_revision_id, t.current_revision_id)
+    WHERE e.id = ?
+    LIMIT 1
+  `).get(Number(expressionId)) || null;
+}
+
 function reviewSummary(db, revisionId) {
   const rows = listReviewStates(db, revisionId);
   return {
@@ -410,6 +426,7 @@ module.exports = {
   ensureReviewStates,
   expressionHashes,
   getRevision,
+  getCurrentExpression,
   listPendingTrackReviews,
   listReviewStates,
   reviewSummary,

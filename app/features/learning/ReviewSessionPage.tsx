@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ExternalLink, PanelLeftClose, PanelLeftOpen, Play, SkipForward, Volume2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
@@ -11,10 +11,16 @@ import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { renderCardMarkdown } from '../card-modal/markdown';
 import type { CardSelection } from '../factory/types';
+import { factoryApi } from '../factory/factory-api';
 import { learningApi } from './learning-api';
 import { itemPresentation, RATING_OPTIONS, reasonLabel, relativeDue } from './learning-format';
 import { splitReviewAnswerMarkdown } from './review-answer-layering.mjs';
 import type { LearningSession, ReviewResponse, StudyItem } from './types';
+
+const DeferredPronunciationText = lazy(async () => {
+  const module = await import('../card-modal/PronunciationText');
+  return { default: module.PronunciationText };
+});
 
 type PendingReview = {
   eventKey: string;
@@ -55,6 +61,13 @@ function LearningAnswer({ item }: { item: StudyItem }) {
   const playback = useExclusiveAudio();
   const renderCardType = item.source.cardType === 'textbook_track' ? 'trilingual' : item.source.cardType;
   const answerLayers = useMemo(() => splitReviewAnswerMarkdown(item.answer.markdown), [item.answer.markdown]);
+  const pronunciationQuery = useQuery({
+    queryKey: ['pronunciation', 'generation', item.source.generationId],
+    queryFn: () => factoryApi.pronunciation('generation', item.source.generationId),
+    enabled: Boolean(item.source.generationId),
+    retry: false,
+  });
+  const pronunciationTokens = pronunciationQuery.data?.tokens || [];
   const coreHtml = useMemo(
     () => renderCardMarkdown(answerLayers.coreMarkdown, renderCardType, item.source.folder),
     [answerLayers.coreMarkdown, item.source.folder, renderCardType]
@@ -86,7 +99,11 @@ function LearningAnswer({ item }: { item: StudyItem }) {
         const button = (event.target as HTMLElement).closest<HTMLElement>('.audio-btn');
         const source = button?.dataset.src;
         if (source) playSource(source, button);
-      }} dangerouslySetInnerHTML={{ __html: coreHtml }} />
+      }}>
+        <Suspense fallback={<div dangerouslySetInnerHTML={{ __html: coreHtml }} />}>
+          <DeferredPronunciationText html={coreHtml} tokens={pronunciationTokens} />
+        </Suspense>
+      </div>
       {supplementaryHtml && (
         <details className="learning-answer-supplementary">
           <summary>
@@ -97,7 +114,11 @@ function LearningAnswer({ item }: { item: StudyItem }) {
             const button = (event.target as HTMLElement).closest<HTMLElement>('.audio-btn');
             const source = button?.dataset.src;
             if (source) playSource(source, button);
-          }} dangerouslySetInnerHTML={{ __html: supplementaryHtml }} />
+          }}>
+            <Suspense fallback={<div dangerouslySetInnerHTML={{ __html: supplementaryHtml }} />}>
+              <DeferredPronunciationText html={supplementaryHtml} tokens={pronunciationTokens} />
+            </Suspense>
+          </div>
         </details>
       )}
       {item.audioFiles.length > 0 && <div className="learning-audio-strip"><span><Volume2 aria-hidden="true" /> 发音核对</span>{item.audioFiles.map((audio) => <button key={audio.id} type="button" disabled={!['success', 'generated', 'fallback_generated'].includes(audio.status)} onClick={() => playSource(audio.filename_suffix, undefined, audio.playback_url)}><Play aria-hidden="true" /> {audio.language.toUpperCase()} 发音</button>)}</div>}

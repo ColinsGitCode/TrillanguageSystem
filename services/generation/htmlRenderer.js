@@ -256,8 +256,14 @@ function injectAudioTags(markdown, baseName, audioTasks) {
 }
 
 async function prepareMarkdownForCard(markdown, options = {}) {
-  const { baseName = 'phrase', audioTasks = [] } = options;
-  const normalized = rewriteLegacyAudioTagExtensions(await normalizeJapaneseRuby(markdown));
+  const {
+    baseName = 'phrase',
+    audioTasks = [],
+    legacyRuby = process.env.PRONUNCIATION_LEGACY_RUBY_READER_ENABLED !== 'false',
+  } = options;
+  const normalized = rewriteLegacyAudioTagExtensions(
+    legacyRuby ? await normalizeJapaneseRuby(markdown) : String(markdown || '')
+  );
   const hasAudio =
     /<div\s+class=["']audio["']\s*>/i.test(normalized) || /<audio\b/i.test(normalized);
   if (hasAudio) return normalized;

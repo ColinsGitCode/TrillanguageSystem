@@ -120,6 +120,7 @@ function createHarness(overrides = {}) {
       calls.persistedData = data;
       return 42;
     },
+    persistPronunciation: () => null,
     getGenerationById: () => ({ content_hash: 'a'.repeat(64), audioFiles: [{}] }),
     listCardTags: () => [
       { namespace: 'lang', status: 'active' },
@@ -147,7 +148,7 @@ test.describe('executeCardGeneration application use case', () => {
 
     assert.deepEqual(Object.keys(result), [
       'success', 'card_type', 'source_mode', 'provider_requested', 'provider_used',
-      'fallback', 'duplicate_policy', 'generationId', 'result', 'audio', 'prompt', 'llm_output',
+      'fallback', 'duplicate_policy', 'generationId', 'result', 'audio', 'pronunciation', 'prompt', 'llm_output',
       'observability', 'admission',
     ]);
     assert.equal(result.success, true);
@@ -158,6 +159,7 @@ test.describe('executeCardGeneration application use case', () => {
     assert.equal(result.admission.status, 'eligible');
     assert.equal(result.llm_output.html_content, '<article>Card</article>');
     assert.equal(result.audio.files[0].provider, 'kokoro');
+    assert.equal(result.pronunciation, null);
     assert.equal(calls.generatedOptions.targetFolder, 'custom');
     assert.equal(calls.generatedOptions.modelOverride, 'deepseek-v4-pro');
     assert.equal(calls.insertData.audioTasks[0].status, 'generated');

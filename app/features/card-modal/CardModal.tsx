@@ -70,6 +70,10 @@ const DeferredCardEngagementMeta = lazy(async () => {
   const module = await import('./CardEngagementMeta');
   return { default: module.CardEngagementMeta };
 });
+const DeferredPronunciationCardContent = lazy(async () => {
+  const module = await import('./PronunciationCardContent');
+  return { default: module.PronunciationCardContent };
+});
 
 type Props = {
   selection: CardSelection;
@@ -654,6 +658,27 @@ export function CardModal({
     if (marker?.dataset.annotationId) activateAnnotation(marker.dataset.annotationId);
   };
 
+  const handlePronunciationKnowledge = (surface: string) => {
+    const currentGenerationId = cardQuery.data?.record?.id;
+    lookupSourceRef.current = { surface: 'pronunciation-popover', targetKind: 'generation', targetId: currentGenerationId || null };
+    knowledgeMutation.reset();
+    setKnowledgeDraft({ phrase: surface, language: 'ja', kind: inferLookupKind(surface, 'ja') });
+  };
+
+  const handlePronunciationGenerateCard = (surface: string) => {
+    generateMutation.mutate({ phrase: surface, cardType: 'trilingual' });
+  };
+
+  const handlePronunciationCorrectionSaved = (result: Awaited<ReturnType<typeof factoryApi.correctPronunciation>>) => {
+    if (!generationId) return;
+    queryClient.setQueryData(['pronunciation', 'generation', generationId], (current: {
+      document: unknown;
+      tokens: unknown[];
+    } | undefined) => (
+      current ? { ...current, document: result.document, tokens: result.tokens } : current
+    ));
+  };
+
   const preserveSelectionOutsideActions = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) event.preventDefault();
   };
@@ -693,7 +718,16 @@ export function CardModal({
     buttons[nextIndex]?.focus();
   };
 
-  const cardContent = renderedHtml ? (
+  const handleContentContextMenuCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
+    if (marker?.dataset.annotationId) {
+      activateAnnotation(marker.dataset.annotationId);
+      return;
+    }
+    if (!hasSelection && !toolbar?.annotationId) event.stopPropagation();
+  };
+
+  const plainCardContent = renderedHtml ? (
     <div
       ref={contentRef}
       className="react-card-markdown"
@@ -702,16 +736,27 @@ export function CardModal({
       aria-label="学习卡片正文，可选择文字后操作"
       onMouseUp={() => captureSelection(false)}
       onClick={handleContentClick}
-      onContextMenuCapture={(event) => {
-        const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
-        if (marker?.dataset.annotationId) {
-          activateAnnotation(marker.dataset.annotationId);
-          return;
-        }
-        if (!hasSelection && !toolbar?.annotationId) event.stopPropagation();
-      }}
+      onContextMenuCapture={handleContentContextMenuCapture}
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
+  ) : null;
+
+  const cardContent = renderedHtml ? (
+    <Suspense fallback={plainCardContent}>
+      <DeferredPronunciationCardContent
+        html={renderedHtml}
+        generationId={generationId ? Number(generationId) : null}
+        readOnly={readOnly}
+        contentRef={contentRef}
+        onCaptureSelection={captureSelection}
+        onContentClick={handleContentClick}
+        onContextMenuCapture={handleContentContextMenuCapture}
+        onKnowledge={handlePronunciationKnowledge}
+        onGenerateCard={handlePronunciationGenerateCard}
+        onCorrectionSaved={handlePronunciationCorrectionSaved}
+        onToast={showToast}
+      />
+    </Suspense>
   ) : null;
 
   return (
@@ -760,14 +805,20 @@ export function CardModal({
           </Suspense>
         )}
 
-        <div className="react-card-scroll" onScroll={() => setToolbar(null)}>
+        <div className="react-card-scroll" onScroll={() => {
+          setToolbar(null);
+        }}>
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
             <div className="card-content-layout">
               {readOnly ? cardContent : (
                 <ContextMenu.Root>
-                  <ContextMenu.Trigger asChild>{cardContent}</ContextMenu.Trigger>
+                  <ContextMenu.Trigger asChild>
+                    <div className="card-context-menu-trigger">
+                      {cardContent}
+                    </div>
+                  </ContextMenu.Trigger>
                   <ContextMenu.Portal>
                     <ContextMenu.Content
                       className="csa-gen-menu csa-context-menu"

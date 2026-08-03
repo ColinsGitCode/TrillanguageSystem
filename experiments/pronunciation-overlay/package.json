@@ -1,0 +1,9 @@
+{
+  "name": "three-lans-pronunciation-overlay-poc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Isolated, synthetic POC harness for the Japanese pronunciation overlay.",
+  "scripts": {
+    "check": "node -e \"console.log('pronunciation overlay POC fixture is ready')\""
+  }
+}

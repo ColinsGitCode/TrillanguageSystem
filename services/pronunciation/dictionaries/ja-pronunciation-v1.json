@@ -1,0 +1,35 @@
+{
+  "version": "ja-pronunciation-v1",
+  "entries": [
+    {
+      "surface": "取り扱い説明書",
+      "reading": "とりあつかいせつめいしょ",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "勤務表",
+      "reading": "きんむひょう",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "掲示板",
+      "reading": "けいじばん",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "一人",
+      "reading": "ひとり",
+      "unitKind": "word",
+      "reason": "irregular counter reading"
+    },
+    {
+      "surface": "来月",
+      "reading": "らいげつ",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    }
+  ]
+}
