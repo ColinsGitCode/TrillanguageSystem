@@ -1511,6 +1511,41 @@ INSERT OR IGNORE INTO manual_tag_definitions(
   ('语法', '语法', 'skill', 'purple', 'active', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('工作', '工作', 'topic', 'gray', 'active', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
+-- ========================================
+-- 表 57: card_engagement_events（卡片查询与再次学习事实）
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS card_engagement_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_key TEXT NOT NULL UNIQUE CHECK (length(event_key) BETWEEN 8 AND 128),
+  request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
+  generation_id INTEGER,
+  phrase_normalized TEXT NOT NULL CHECK (length(trim(phrase_normalized)) BETWEEN 1 AND 500),
+  card_type TEXT NOT NULL
+    CHECK (card_type IN ('trilingual', 'grammar_ja', 'scenario_phrase', 'textbook_track')),
+  event_kind TEXT NOT NULL CHECK (event_kind IN (
+    'generation_requested',
+    'duplicate_card_hit',
+    'existing_card_opened',
+    'added_to_today',
+    'new_version_requested',
+    'library_search_submitted'
+  )),
+  source_surface TEXT NOT NULL DEFAULT 'cards_factory'
+    CHECK (source_surface IN ('cards_factory', 'card_modal', 'learning_history', 'api')),
+  learning_day TEXT NOT NULL CHECK (length(learning_day) = 10),
+  time_zone TEXT NOT NULL CHECK (length(trim(time_zone)) BETWEEN 1 AND 64),
+  metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
+  created_at_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_engagement_generation_kind_day
+  ON card_engagement_events(generation_id, event_kind, learning_day);
+CREATE INDEX IF NOT EXISTS idx_card_engagement_phrase_type_kind
+  ON card_engagement_events(phrase_normalized, card_type, event_kind, created_at_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_card_engagement_day_kind
+  ON card_engagement_events(learning_day, event_kind, created_at_utc DESC);
+
 CREATE TRIGGER IF NOT EXISTS textbook_operation_events_update_block
 BEFORE UPDATE ON textbook_operation_events
 BEGIN
@@ -1533,6 +1568,18 @@ CREATE TRIGGER IF NOT EXISTS card_annotation_migration_events_delete_block
 BEFORE DELETE ON card_annotation_migration_events
 BEGIN
   SELECT RAISE(ABORT, 'card annotation migration events are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS card_engagement_events_update_block
+BEFORE UPDATE ON card_engagement_events
+BEGIN
+  SELECT RAISE(ABORT, 'card engagement events are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS card_engagement_events_delete_block
+BEFORE DELETE ON card_engagement_events
+BEGIN
+  SELECT RAISE(ABORT, 'card engagement events are immutable');
 END;
 
 CREATE TRIGGER IF NOT EXISTS kg_resolution_events_update_block

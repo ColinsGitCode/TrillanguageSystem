@@ -83,7 +83,7 @@ function createCardGenerationUseCase(customPorts = {}) {
       const duplicateAdmission = ports.assertDuplicatePolicy({ cardType, duplicates, duplicatePolicy });
 
       const generation = e2eTestMode
-        ? ports.buildFixtureResult({ phrase, cardType, requestedProvider, sourceMode })
+        ? ports.buildFixtureResult({ phrase, cardType, requestedProvider, sourceMode, targetFolder })
         : await ports.generateWithProvider(phrase, requestedProvider, perf, {
             targetFolder,
             cardType,

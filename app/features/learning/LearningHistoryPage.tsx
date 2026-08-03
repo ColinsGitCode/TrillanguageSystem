@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
-import { Activity, ArrowRight, CalendarDays, Clock3, History, Layers3, Target } from 'lucide-react';
+import { Activity, ArrowRight, CalendarDays, Clock3, Eye, History, Layers3, Search, Target } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '../../components/PageHeader';
 import { ProductShell } from '../../components/ProductShell';
@@ -152,6 +152,14 @@ export function LearningHistoryPage() {
           onRetry={() => void historyQuery.refetch()}
           testId="learning-history-refresh-status"
         />
+
+        <section className="learning-engagement-strip" aria-label="学习关注行为">
+          <div><Search aria-hidden="true" /><span>生成查询</span><strong>{data.engagement.generationRequests}</strong></div>
+          <div><History aria-hidden="true" /><span>命中已有卡</span><strong>{data.engagement.duplicateHits}</strong></div>
+          <div><Eye aria-hidden="true" /><span>打开已有卡</span><strong>{data.engagement.existingCardOpens}</strong></div>
+          <div><CalendarDays aria-hidden="true" /><span>加入今日</span><strong>{data.engagement.addedToToday}</strong></div>
+          <p>这些是关注度信号，不代表已经掌握；系统只在既定队列内部用它们解释排序。</p>
+        </section>
 
         {!data.overview.totalReviews ? (
           <section className="surface learning-empty learning-history-empty" data-testid="learning-history-empty">

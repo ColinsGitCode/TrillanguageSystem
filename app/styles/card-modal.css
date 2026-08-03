@@ -21,6 +21,8 @@
 .card-study-meta dl > div:last-child { border-bottom: 0; }
 .card-study-meta dt { color: var(--color-text-tertiary); font-size: 12px; letter-spacing: .01em; }
 .card-study-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 600 12px/1.4 var(--font-mono); }
+.card-study-meta dd small { color: var(--color-text-tertiary); font: inherit; }
+.card-study-meta .card-engagement-note dd { color: var(--color-text-tertiary); font: 400 11px/1.45 var(--font-body); }
 
 .react-card-renderer { color: var(--color-text-primary); font-size: 18px; line-height: 1.75; }
 .react-card-renderer > h1:first-child { display: none; }

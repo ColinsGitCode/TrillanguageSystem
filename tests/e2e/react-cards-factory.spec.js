@@ -8,9 +8,9 @@ const FIXTURES = [
   ['保育园早上送孩子并说明昨晚有点咳嗽', 'scenario_phrase'],
 ];
 
-async function enqueueAndWait(request, phrase, cardType) {
+async function enqueueAndWait(request, phrase, cardType, { targetFolder = '' } = {}) {
   const created = await request.post('/api/generation-jobs', {
-    data: { phrase, card_type: cardType, source_mode: 'input' },
+    data: { phrase, card_type: cardType, source_mode: 'input', target_folder: targetFolder },
   });
   expect(created.ok()).toBeTruthy();
   const body = await created.json();
@@ -19,6 +19,7 @@ async function enqueueAndWait(request, phrase, cardType) {
     const response = await request.get(`/api/generation-jobs/${id}`);
     return (await response.json()).job.status;
   }, { timeout: 30_000, intervals: [100, 200, 500] }).toBe('success');
+  return body.job;
 }
 
 async function selectVisibleText(page, text, { keyboard = false } = {}) {
@@ -266,6 +267,38 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByPlaceholder('搜索历史').fill('なくなった');
     await expect(page.locator('.history-items button')).toHaveCount(1);
     await expect(page.locator('.history-items button')).toContainText('〜なくなった');
+  });
+
+  test('opens an existing duplicate card and resurfaces it today without moving the original', async ({ page, request }) => {
+    const phrase = `historical duplicate fixture ${Date.now()}`;
+    await enqueueAndWait(request, phrase, 'trilingual', { targetFolder: '20260714' });
+    await page.goto('/');
+    await page.getByTestId('react-phrase-input').fill(phrase);
+    await page.getByTestId('react-generate-button').click();
+
+    const duplicatePanel = page.getByTestId('factory-duplicate-card-panel');
+    await expect(duplicatePanel).toContainText('已有相同学习卡');
+    await expect(duplicatePanel).toContainText('这不是搜索历史，而是已经成功生成的卡片');
+    await expect(duplicatePanel).toContainText('最初生成于 2026-07-14');
+
+    await duplicatePanel.getByRole('button', { name: '打开已有卡' }).click();
+    const modal = page.getByTestId('react-card-modal');
+    await expect(modal).toBeVisible();
+    await expect(page.getByTestId('react-card-content')).toContainText(phrase);
+    await expect(modal).toContainText('打开次数');
+    await page.getByTestId('react-card-modal-close').click();
+
+    await page.getByTestId('react-generate-button').click();
+    await duplicatePanel.getByRole('button', { name: '加入今日' }).click();
+    await expect(page.getByText(/已加入今日卡片/u)).toBeVisible();
+    await expect(page.getByTestId('react-file-list')).toContainText('今日再次学习');
+    await expect(page.getByTestId('react-file-list')).toContainText(phrase);
+
+    const today = await request.get('/api/card-engagement/today');
+    expect(today.ok()).toBeTruthy();
+    const todayBody = await today.json();
+    const resurfaced = todayBody.cards.find((card) => card.phrase === phrase);
+    expect(resurfaced).toMatchObject({ folder: '20260714' });
   });
 
   test('P3 retries a failed shared-queue job from the centered dialog', async ({ page, request }) => {

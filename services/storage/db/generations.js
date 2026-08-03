@@ -270,7 +270,8 @@ function getByFile(db, folderName, baseFilename) {
 
 function listDuplicateCandidates(db, cardType) {
   return db.prepare(`
-    SELECT id, phrase, card_type, content_hash, folder_name, base_filename
+    SELECT id, phrase, card_type, content_hash, folder_name, base_filename,
+           generation_date, created_at
     FROM generations
     WHERE card_type = ?
       AND card_type <> 'textbook_track'

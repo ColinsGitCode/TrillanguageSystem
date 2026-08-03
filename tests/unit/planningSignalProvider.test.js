@@ -144,6 +144,38 @@ test.describe('PlanningSignalProvider contract', () => {
     }]);
   });
 
+  test.it('uses engagement as an explainable score without changing the candidate set', () => {
+    const provider = createDefaultPlanningSignalProvider({
+      engagementSignalReader: {
+        readPlanningSignal: () => ({
+          score: 11,
+          groups: ['behavior:active-attention'],
+          reasons: [{ code: 'repeated-generation-query', label: '近 30 天重复查询 2 次' }],
+          evidence: [{
+            source: 'card-engagement-events',
+            ruleVersion: 'card-engagement-v1',
+            ruleKey: 'generation:7',
+          }],
+        }),
+      },
+    });
+    const result = provider.evaluate({
+      studyItemId: 7,
+      generationId: 7,
+      unitKind: 'trilingual_en',
+      cardType: 'trilingual',
+      sourceTitle: 'fixture',
+      tags: [],
+      reviewEvidence: {},
+    }, {});
+    assert.equal(result.score, 11);
+    assert.equal(result.diagnostics['card-engagement-v1'].applied, 1);
+    assert.equal(result.signals[1].providerId, 'card-engagement-v1');
+    assert.deepEqual(result.signals[1].reasons, [
+      { code: 'repeated-generation-query', label: '近 30 天重复查询 2 次' },
+    ]);
+  });
+
   test.it('degrades throwing, invalid and over-budget graph readers independently', () => {
     const throwing = new CompositePlanningSignalProvider({
       providers: [new GraphPlanningSignalProvider({

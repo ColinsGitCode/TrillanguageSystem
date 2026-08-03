@@ -69,6 +69,10 @@ const MANUAL_TAG_TABLES = Object.freeze([
   'manual_tag_assignments',
 ]);
 
+const CARD_ENGAGEMENT_TABLES = Object.freeze([
+  'card_engagement_events',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -165,6 +169,14 @@ function assertManualTagPostconditions(db) {
   );
   const missing = MANUAL_TAG_TABLES.filter((table) => !existing.has(table));
   if (missing.length) throw new Error(`Manual tag migration missing tables: ${missing.join(', ')}`);
+}
+
+function assertCardEngagementPostconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = CARD_ENGAGEMENT_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Card engagement migration missing tables: ${missing.join(', ')}`);
 }
 
 function parseMigrationDirectives(migration) {
@@ -269,12 +281,14 @@ function runMigrations(db, options = {}) {
   assertTextbookWorkflowPostconditions(db);
   assertCardAnnotationP3Postconditions(db);
   assertManualTagPostconditions(db);
+  assertCardEngagementPostconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
 module.exports = {
   BASELINE_VERSION,
   CARD_ANNOTATION_P3_TABLES,
+  CARD_ENGAGEMENT_TABLES,
   MANUAL_TAG_TABLES,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
@@ -284,6 +298,7 @@ module.exports = {
   TEXTBOOK_P1_TABLES,
   TEXTBOOK_WORKFLOW_TABLES,
   assertCardAnnotationP3Postconditions,
+  assertCardEngagementPostconditions,
   assertManualTagPostconditions,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,

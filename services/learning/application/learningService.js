@@ -220,6 +220,7 @@ function buildQueueCandidates(
     const row = rowsByStudyItem.get(entry.studyItemId);
     const evaluation = planningSignalProvider.evaluate({
       studyItemId: entry.studyItemId,
+      generationId: Number(row.generation_id),
       unitKind: row.unit_kind,
       cardType: row.card_type,
       generationDate: row.generation_date,
@@ -1107,6 +1108,60 @@ class LearningService {
     return result;
   }
 
+  addGenerationToToday(input = {}) {
+    const generationId = integer(input.generationId, 'generationId', { min: 1 });
+    const requestKey = String(input.requestKey || '').trim();
+    if (!IDEMPOTENCY_KEY_PATTERN.test(requestKey) || requestKey.length > 96) {
+      throw learningError('LEARNING_INVALID_REQUEST', 'requestKey must be 8-96 safe characters', 400);
+    }
+    const items = this.db.prepare(`
+      SELECT item.id,
+             CASE WHEN schedule.study_item_id IS NULL THEN 0 ELSE 1 END AS already_scheduled
+      FROM study_items item
+      LEFT JOIN learning_schedule_states schedule ON schedule.study_item_id = item.id
+      WHERE item.generation_id = ? AND item.lifecycle = 'active'
+      ORDER BY item.id
+    `).all(generationId);
+    const outcomes = [];
+    for (const item of items) {
+      if (!item.already_scheduled) {
+        outcomes.push({
+          studyItemId: Number(item.id),
+          status: 'plan-controlled',
+          code: 'LEARNING_MANUAL_INTENT_FRESH_ITEM',
+        });
+        continue;
+      }
+      try {
+        const result = this.addManualQueueIntent({
+          intentKey: `${requestKey}:item:${item.id}`,
+          studyItemId: Number(item.id),
+          confirmed: true,
+        });
+        outcomes.push({
+          studyItemId: Number(item.id),
+          status: result.alreadyQueued ? 'already-queued' : result.reused ? 'reused' : 'queued',
+          queueEntryId: Number(result.entry?.id || 0) || null,
+        });
+      } catch (error) {
+        outcomes.push({
+          studyItemId: Number(item.id),
+          status: 'not-queued',
+          code: error?.code || 'LEARNING_MANUAL_INTENT_INELIGIBLE',
+        });
+      }
+    }
+    const queuedStatuses = new Set(['queued', 'reused', 'already-queued']);
+    return {
+      generationId,
+      total: items.length,
+      eligible: items.filter((item) => Boolean(item.already_scheduled)).length,
+      queued: outcomes.filter((item) => queuedStatuses.has(item.status)).length,
+      planControlled: outcomes.filter((item) => item.status === 'plan-controlled').length,
+      outcomes,
+    };
+  }
+
   _nextEntry(queueId, nowUtc) {
     return this.db.prepare(`
       SELECT * FROM learning_queue_entries
@@ -1385,6 +1440,8 @@ class LearningService {
         SELECT learning_day AS day FROM learning_daily_queues
         UNION ALL
         SELECT learning_day AS day FROM learning_manual_queue_intents
+        UNION ALL
+        SELECT learning_day AS day FROM card_engagement_events
       )
     `).get();
     const presetDays = HISTORY_PRESETS.get(preset);
@@ -1440,6 +1497,15 @@ class LearningService {
         AND intent.status <> 'cancelled'${unitKind ? ' AND item.unit_kind = ?' : ''}
       ORDER BY intent.learning_day, intent.id
     `).all(...rangeParameters, ...(unitKind ? [unitKind] : []));
+    const engagementRows = unitKind ? [] : this.db.prepare(`
+      SELECT event.id, event.event_kind, event.learning_day, event.created_at_utc,
+             event.generation_id, event.phrase_normalized, event.card_type,
+             generation.folder_name, generation.base_filename
+      FROM card_engagement_events event
+      LEFT JOIN generations generation ON generation.id = event.generation_id
+      WHERE event.learning_day BETWEEN ? AND ?
+      ORDER BY event.id DESC
+    `).all(...rangeParameters);
 
     const daily = new Map(dateSequence(startDay, endDay).map((day) => [day, {
       learningDay: day,
@@ -1571,6 +1637,10 @@ class LearningService {
     const recentActiveDays30 = new Set(eventRows.filter((event) => event.learning_day >= last30Start).map((event) => event.learning_day)).size;
 
     const totalReviews = eventRows.length;
+    const engagementCounts = {};
+    for (const event of engagementRows) {
+      engagementCounts[event.event_kind] = Number(engagementCounts[event.event_kind] || 0) + 1;
+    }
     return {
       range: {
         preset,
@@ -1641,12 +1711,33 @@ class LearningService {
         title: event.source_title || event.unit_key,
         contentAvailable: Boolean(event.generation_id && event.lifecycle !== 'archived'),
       })),
+      engagement: {
+        generationRequests: Number(engagementCounts.generation_requested || 0),
+        duplicateHits: Number(engagementCounts.duplicate_card_hit || 0),
+        existingCardOpens: Number(engagementCounts.existing_card_opened || 0),
+        addedToToday: Number(engagementCounts.added_to_today || 0),
+        newVersionRequests: Number(engagementCounts.new_version_requested || 0),
+        librarySearches: Number(engagementCounts.library_search_submitted || 0),
+        activeDays: new Set(engagementRows.map((event) => event.learning_day)).size,
+        recent: engagementRows.slice(0, 30).map((event) => ({
+          id: Number(event.id),
+          eventKind: event.event_kind,
+          learningDay: event.learning_day,
+          createdAtUtc: event.created_at_utc,
+          generationId: event.generation_id ? Number(event.generation_id) : null,
+          phrase: event.phrase_normalized,
+          cardType: event.card_type,
+          folder: event.folder_name || null,
+          baseFilename: event.base_filename || null,
+        })),
+      },
       dataQuality: {
         historicalSkipMetricsAvailable: false,
         notes: [
           '跳过是会话内临时状态；当前事实模型不会持久化历史跳过次数。',
           '按学习单元筛选时，不计算无法归属到单元的计划级目标与整场会话完成率。',
           '评分、响应时间、会话和队列指标均直接来自学习领域事实。',
+          '查询、打开与加入今日属于行为信号，只参与可解释排序，不等同于掌握度。',
         ],
       },
     };

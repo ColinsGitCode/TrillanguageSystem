@@ -6,6 +6,37 @@ export type FolderFile = {
   title: string;
   cardType?: CardType;
   card_type?: CardType;
+  generationId?: number;
+  sourceFolder?: string;
+  sourceBaseFilename?: string;
+  resurfacedToday?: boolean;
+};
+
+export type DuplicateCardSummary = {
+  generationId: number;
+  phrase: string;
+  cardType: CardType;
+  contentHash: string | null;
+  folderName: string;
+  baseFilename: string;
+  generationDate: string | null;
+  createdAt: string | null;
+};
+
+export type CardEngagementStats = {
+  generationId: number;
+  phrase: string;
+  cardType: CardType;
+  generationRequests: number;
+  duplicateHits: number;
+  opens: number;
+  addedToToday: number;
+  newVersionRequests: number;
+  successfulVersions: number;
+  reviewCount: number;
+  attentionScore: number;
+  lastInteractionAtUtc: string | null;
+  lastInteractionDay: string | null;
 };
 
 export type GenerationJobStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
@@ -91,4 +122,5 @@ export type CardSelection = {
   baseName: string;
   title: string;
   cardType: CardType;
+  generationId?: number;
 };

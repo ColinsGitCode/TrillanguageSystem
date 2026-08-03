@@ -8,8 +8,10 @@ const {
 } = require('../lib/serverConfig');
 const dbService = require('../services/storage/databaseService');
 const { GraphPlanningSignalReader } = require('../services/kg/storage/graphPlanningSignalReader');
+const { CardEngagementPlanningSignalReader } = require('../services/cardEngagement/cardEngagementPlanningSignalReader');
 const { LearningService } = require('../services/learning/application/learningService');
 const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
+const cardEngagementService = require('../services/cardEngagement/cardEngagementService');
 const {
   annotationService,
   textbookAnnotationService,
@@ -20,10 +22,11 @@ const graphSignalReader = new GraphPlanningSignalReader({
   db: dbService.db,
   enabled: KG_ENABLED && KG_PLANNING_ENABLED,
 });
+const engagementSignalReader = new CardEngagementPlanningSignalReader({ db: dbService.db });
 const service = new LearningService({
   db: dbService.db,
   busyRetry: (operation) => dbService.withBusyRetry(operation),
-  planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader }),
+  planningSignalProvider: createDefaultPlanningSignalProvider({ graphSignalReader, engagementSignalReader }),
   annotationsEnabled: CARD_ANNOTATIONS_ENABLED,
   annotationService,
   textbookAnnotationService,
@@ -56,6 +59,31 @@ router.post('/api/learning/queues/today', route((_req, res) => send(res, { queue
 router.get('/api/learning/queues/today', route((_req, res) => send(res, service.getTodayQueue())));
 router.post('/api/learning/manual-queue-intents', route((req, res) => send(res, service.addManualQueueIntent(req.body))));
 router.get('/api/learning/manual-queue-intents/today', route((_req, res) => send(res, service.getTodayManualQueueIntents())));
+router.post('/api/learning/generations/:id/add-to-today', route((req, res) => {
+  const generation = dbService.getGenerationById(req.params.id);
+  if (!generation) {
+    const error = new Error('Generation not found');
+    error.code = 'CARD_ENGAGEMENT_GENERATION_NOT_FOUND';
+    error.status = 404;
+    throw error;
+  }
+  const requestKey = String(req.body?.requestKey || '').trim();
+  const result = service.addGenerationToToday({ generationId: generation.id, requestKey });
+  const engagement = cardEngagementService.record({
+    eventKey: `${requestKey}:added`,
+    generationId: generation.id,
+    phrase: generation.phrase,
+    cardType: generation.card_type || 'trilingual',
+    eventKind: 'added_to_today',
+    sourceSurface: 'cards_factory',
+    metadata: {
+      queuedStudyItems: result.queued,
+      eligibleStudyItems: result.eligible,
+      totalStudyItems: result.total,
+    },
+  });
+  return send(res, { engagement: engagement.event, learning: result });
+}));
 
 router.get('/api/learning/sessions/active', route((_req, res) => send(res, service.getActiveSession())));
 router.post('/api/learning/sessions', route((req, res) => send(res, service.startSession(req.body))));

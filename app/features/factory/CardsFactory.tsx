@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BookOpen, CalendarDays, ChevronDown, FileText, Image, Languages, LayoutGrid,
-  List, MessagesSquare, RefreshCw, Search, Upload, X,
+  BookOpen, CalendarDays, CalendarPlus, ChevronDown, ExternalLink, FileText, Image, Languages, LayoutGrid,
+  List, MessagesSquare, PlusCircle, RefreshCw, Search, Upload, X,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductShell } from '../../components/ProductShell';
@@ -18,10 +18,20 @@ import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { factoryApi } from './factory-api';
 import { fileToDataUrl, normalizeOcrText } from './ocr';
 import { QueuePanel } from './QueuePanel';
-import type { CardSelection, CardType, FolderFile, GenerationJob, SourceMode } from './types';
+import type { CardSelection, CardType, DuplicateCardSummary, FolderFile, GenerationJob, SourceMode } from './types';
 
 type CardSort = 'newest' | 'title' | 'type';
 type CardDensity = 'comfortable' | 'compact';
+type DuplicateConflict = {
+  phrase: string;
+  cardType: CardType;
+  sourceMode: SourceMode;
+  cards: DuplicateCardSummary[];
+};
+
+function createInteractionKey(prefix: string) {
+  return `${prefix}:${crypto.randomUUID()}`;
+}
 
 const CARD_CONFIG: Record<CardType, {
   label: string;
@@ -52,6 +62,12 @@ function dateParts(folder: string) {
   const lastTwo = day % 100;
   const suffix = lastTwo >= 11 && lastTwo <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
   return { group: `${match[1]}.${match[2]}`, day: `${day}${suffix}`, title: `${match[1]}.${match[2]}.${match[3]}` };
+}
+
+function displayGenerationDate(value: string | null, fallback: string) {
+  const date = String(value || fallback || '').trim();
+  const compact = date.match(/^(\d{4})(\d{2})(\d{2})$/u);
+  return compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : date;
 }
 
 function queueCounts(jobs: GenerationJob[]) {
@@ -95,6 +111,7 @@ export function CardsFactory() {
   const [ocrRaw, setOcrRaw] = useState('');
   const [ocrClean, setOcrClean] = useState('');
   const [notice, setNotice] = useState('');
+  const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastSuccessRef = useRef(0);
   const trackedJobIdsRef = useRef<Set<number>>(new Set());
@@ -106,6 +123,9 @@ export function CardsFactory() {
   });
   const foldersQuery = useQuery({
     queryKey: ['folders'], queryFn: factoryApi.folders, enabled: hydrated, refetchInterval: 60_000,
+  });
+  const todayCardsQuery = useQuery({
+    queryKey: ['card-engagement', 'today'], queryFn: factoryApi.todayCards, enabled: hydrated,
   });
   const filesQuery = useQuery({
     queryKey: ['files', selectedFolder],
@@ -124,8 +144,32 @@ export function CardsFactory() {
     enabled: hydrated && libraryMode === 'history',
   });
 
-  const folders = foldersQuery.data?.folders || [];
-  const files = filesQuery.data?.files || [];
+  const physicalFolders = foldersQuery.data?.folders || [];
+  const todayFolder = todayCardsQuery.data?.learningDay?.replaceAll('-', '') || '';
+  const folders = useMemo(() => {
+    const result = new Set(physicalFolders);
+    if (todayFolder && todayCardsQuery.data?.cards.length) result.add(todayFolder);
+    return [...result];
+  }, [physicalFolders, todayCardsQuery.data?.cards.length, todayFolder]);
+  const files = useMemo(() => {
+    const physical = filesQuery.data?.files || [];
+    if (!todayFolder || selectedFolder !== todayFolder) return physical;
+    const merged = new Map(physical.map((file) => [`${selectedFolder}/${file.file}`, file]));
+    for (const card of todayCardsQuery.data?.cards || []) {
+      const key = `${card.folder}/${card.baseFilename}.html`;
+      if (merged.has(key)) continue;
+      merged.set(key, {
+        file: `${card.baseFilename}.html`,
+        title: card.phrase,
+        cardType: card.cardType,
+        generationId: card.id,
+        sourceFolder: card.folder,
+        sourceBaseFilename: card.baseFilename,
+        resurfacedToday: true,
+      });
+    }
+    return [...merged.values()];
+  }, [filesQuery.data?.files, selectedFolder, todayCardsQuery.data?.cards, todayFolder]);
   const visibleFiles = useMemo(() => {
     const query = cardSearch.trim().toLocaleLowerCase();
     const collator = new Intl.Collator(['zh-CN', 'ja', 'en'], { sensitivity: 'base', numeric: true });
@@ -285,10 +329,19 @@ export function CardsFactory() {
   };
 
   const enqueueMutation = useMutation({
-    mutationFn: ({ value, sourceMode }: { value: string; sourceMode: SourceMode }) => factoryApi.enqueue({
+    mutationFn: ({ value, sourceMode, duplicatePolicy = 'reject', interactionKey, preflightRecorded = false }: {
+      value: string;
+      sourceMode: SourceMode;
+      duplicatePolicy?: 'reject' | 'create-version';
+      interactionKey?: string;
+      preflightRecorded?: boolean;
+    }) => factoryApi.enqueue({
       phrase: value,
       cardType,
       sourceMode,
+      duplicatePolicy,
+      interactionKey,
+      preflightRecorded,
     }),
     onSuccess: async (data) => {
       trackedJobIdsRef.current.add(data.job.id);
@@ -309,14 +362,74 @@ export function CardsFactory() {
         actionHref: `/?queue=1&job=${data.job.id}`,
       });
       setPhrase('');
+      setDuplicateConflict(null);
       setNotice('已加入共享任务队列');
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
     },
-    onError: (error) => {
-      const message = error instanceof ApiError && error.status === 409 ? '该内容已在队列中' : `入队失败：${error.message}`;
+    onError: (error, variables) => {
+      const payload = error instanceof ApiError ? error.payload as { code?: string; details?: DuplicateCardSummary[] } : null;
+      if (error instanceof ApiError && error.status === 409 && payload?.code === 'CARD_DUPLICATE_EXISTS' && payload.details?.length) {
+        setDuplicateConflict({ phrase: variables.value, cardType, sourceMode: variables.sourceMode, cards: payload.details });
+        setNotice('');
+        return;
+      }
+      const message = error instanceof ApiError && error.status === 409 ? '相同生成任务正在队列中' : `入队失败：${error.message}`;
       setNotice(message);
       publishShellFeedback({ tone: error instanceof ApiError && error.status === 409 ? 'warning' : 'error', message });
     },
+  });
+  const preflightMutation = useMutation({
+    mutationFn: ({ value, sourceMode }: { value: string; sourceMode: SourceMode }) => {
+      const interactionKey = createInteractionKey('generation');
+      return factoryApi.preflight({ phrase: value, cardType, interactionKey })
+        .then((result) => ({ ...result, value, sourceMode }));
+    },
+    onSuccess: (result) => {
+      if (result.duplicates.length) {
+        setDuplicateConflict({
+          phrase: result.value,
+          cardType,
+          sourceMode: result.sourceMode,
+          cards: result.duplicates,
+        });
+        setNotice('');
+        return;
+      }
+      if (result.activeJob) {
+        setNotice(`相同任务 #${result.activeJob.id} 正在队列中`);
+        setQueueRoute(true, result.activeJob.id);
+        return;
+      }
+      enqueueMutation.mutate({
+        value: result.value,
+        sourceMode: result.sourceMode,
+        interactionKey: result.interactionKey,
+        preflightRecorded: true,
+      });
+    },
+    onError: (error) => setNotice(`检查已有卡片失败：${error.message}`),
+  });
+  const addToTodayMutation = useMutation({
+    mutationFn: (card: DuplicateCardSummary) => factoryApi.addToToday(
+      card.generationId,
+      createInteractionKey('add-today')
+    ),
+    onSuccess: async (result) => {
+      const queued = result.learning.queued;
+      const planControlled = result.learning.planControlled;
+      setNotice(queued
+        ? `已加入今日卡片，并将 ${queued} 个可复习单元加入今日学习`
+        : planControlled
+          ? '已加入今日卡片；新学习单元仍按每日新卡上限进入计划'
+          : '已加入今日卡片');
+      setDuplicateConflict(null);
+      setSelectedFolder(result.engagement.learningDay.replaceAll('-', ''));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['card-engagement'] }),
+        queryClient.invalidateQueries({ queryKey: ['learning'] }),
+      ]);
+    },
+    onError: (error) => setNotice(`加入今日失败：${error.message}`),
   });
   const ocrMutation = useMutation({
     mutationFn: factoryApi.ocr,
@@ -377,13 +490,26 @@ export function CardsFactory() {
   }, []);
 
   const openFile = (file: FolderFile) => {
-    const baseName = file.file.replace(/\.html$/i, '');
+    const baseName = file.sourceBaseFilename || file.file.replace(/\.html$/i, '');
     setSelectedCard({
-      folder: selectedFolder,
+      folder: file.sourceFolder || selectedFolder,
       baseName,
       title: file.title || baseName,
       cardType: cardTypeOf(file),
+      generationId: file.generationId,
     });
+  };
+
+  const openDuplicateCard = (card: DuplicateCardSummary) => {
+    setSelectedFolder(card.folderName);
+    setSelectedCard({
+      folder: card.folderName,
+      baseName: card.baseFilename,
+      title: card.phrase,
+      cardType: card.cardType,
+      generationId: card.generationId,
+    });
+    setDuplicateConflict(null);
   };
 
   const openGeneratedResult = (job: GenerationJob) => {
@@ -459,11 +585,11 @@ export function CardsFactory() {
                 <button
                   className="primary-button"
                   type="button"
-                  disabled={!phrase.trim() || enqueueMutation.isPending || healthUnhealthy}
+                  disabled={!phrase.trim() || preflightMutation.isPending || enqueueMutation.isPending || healthUnhealthy}
                   data-testid="react-generate-button"
-                  onClick={() => enqueueMutation.mutate({ value: phrase.trim(), sourceMode: ocrClean && phrase === ocrClean ? 'ocr' : 'input' })}
+                  onClick={() => preflightMutation.mutate({ value: phrase.trim(), sourceMode: ocrClean && phrase === ocrClean ? 'ocr' : 'input' })}
                 >
-                  {enqueueMutation.isPending ? '正在加入队列…' : CARD_CONFIG[cardType].action}
+                  {preflightMutation.isPending ? '正在检查已有卡片…' : enqueueMutation.isPending ? '正在加入队列…' : CARD_CONFIG[cardType].action}
                 </button>
               </label>
               <div className="ocr-block">
@@ -488,6 +614,39 @@ export function CardsFactory() {
               </div>
             </div>
             {notice && <div className="inline-notice" role="status">{notice}<button type="button" aria-label="关闭提示" onClick={() => setNotice('')}><X /></button></div>}
+            {duplicateConflict && (
+              <section className="duplicate-card-panel" data-testid="factory-duplicate-card-panel" aria-label="已有相同学习卡">
+                <header>
+                  <div><strong>已有相同学习卡</strong><span>这不是搜索历史，而是已经成功生成的卡片。</span></div>
+                  <button type="button" aria-label="关闭已有卡片提示" onClick={() => setDuplicateConflict(null)}><X aria-hidden="true" /></button>
+                </header>
+                {duplicateConflict.cards.slice(0, 3).map((card) => (
+                  <div className="duplicate-card-result" key={card.generationId}>
+                    <div>
+                      <strong>{card.phrase}</strong>
+                      <span>最初生成于 {displayGenerationDate(card.generationDate, card.folderName)} · {CARD_CONFIG[card.cardType].label}</span>
+                    </div>
+                    <div>
+                      <button type="button" onClick={() => openDuplicateCard(card)}><ExternalLink aria-hidden="true" /> 打开已有卡</button>
+                      <button type="button" disabled={addToTodayMutation.isPending} onClick={() => addToTodayMutation.mutate(card)}><CalendarPlus aria-hidden="true" /> 加入今日</button>
+                    </div>
+                  </div>
+                ))}
+                <footer>
+                  <span>旧文件与原始日期保持不变；加入今日只建立今日学习关联。</span>
+                  <button
+                    type="button"
+                    disabled={enqueueMutation.isPending}
+                    onClick={() => enqueueMutation.mutate({
+                      value: duplicateConflict.phrase,
+                      sourceMode: duplicateConflict.sourceMode,
+                      duplicatePolicy: 'create-version',
+                      interactionKey: createInteractionKey('new-version'),
+                    })}
+                  ><PlusCircle aria-hidden="true" /> 确认生成新版</button>
+                </footer>
+              </section>
+            )}
           </article>
 
           <button
@@ -667,6 +826,17 @@ export function CardsFactory() {
                         aria-label="搜索当前日期卡片"
                         placeholder="搜索标题或卡片类型"
                         onChange={(event) => setCardSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' || !cardSearch.trim()) return;
+                          void factoryApi.recordEngagement({
+                            eventKey: createInteractionKey('library-search'),
+                            phrase: cardSearch.trim(),
+                            cardType,
+                            eventKind: 'library_search_submitted',
+                            sourceSurface: 'cards_factory',
+                            metadata: { folder: selectedFolder, resultCount: visibleFiles.length },
+                          }).catch(() => {});
+                        }}
                       />
                       {cardSearch && (
                         <button type="button" aria-label="清除卡片搜索" onClick={() => setCardSearch('')}>
@@ -711,8 +881,8 @@ export function CardsFactory() {
                 <div className="card-file-grid" data-testid="react-file-list">
                   {visibleFiles.map(({ file, type }) => {
                     return (
-                      <button key={file.file} type="button" className={`file-card type-${type}`} onClick={() => openFile(file)}>
-                        <span>{CARD_CONFIG[type].label}</span><strong>{file.title || file.file}</strong>
+                      <button key={`${file.sourceFolder || selectedFolder}/${file.file}`} type="button" className={`file-card type-${type}`} onClick={() => openFile(file)}>
+                        <span>{file.resurfacedToday ? '今日再次学习' : CARD_CONFIG[type].label}</span><strong>{file.title || file.file}</strong>
                       </button>
                     );
                   })}

@@ -21,6 +21,7 @@ const textbookWorkflowDomain = require('./db/textbookWorkflow');
 const textbookOperationsDomain = require('./db/textbookOperations');
 const annotationsDomain = require('./db/annotations');
 const manualTagsDomain = require('./db/manualTags');
+const cardEngagementDomain = require('./db/cardEngagement');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -840,6 +841,32 @@ class DatabaseService {
 
   listManualTagTargets(tagId, options = {}) {
     return manualTagsDomain.listTargets(this.db, tagId, options);
+  }
+
+  // ========== Card engagement events ==========
+
+  getCardEngagementEventByKey(eventKey) {
+    return cardEngagementDomain.getByKey(this.db, eventKey);
+  }
+
+  mapCardEngagementEvent(row) {
+    return cardEngagementDomain.mapEvent(row);
+  }
+
+  insertCardEngagementEvent(event) {
+    return this.withBusyRetry(() => cardEngagementDomain.insert(this.db, event));
+  }
+
+  aggregateCardEngagement(generation) {
+    return cardEngagementDomain.aggregateForCard(this.db, generation);
+  }
+
+  listTodayEngagementCards(learningDay) {
+    return cardEngagementDomain.listTodayCards(this.db, learningDay);
+  }
+
+  aggregateCardEngagementRange(startDay, endDay) {
+    return cardEngagementDomain.aggregateRange(this.db, startDay, endDay);
   }
 
   // ========== Generation jobs ==========

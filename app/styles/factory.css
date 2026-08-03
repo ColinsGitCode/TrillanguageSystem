@@ -55,6 +55,25 @@
 .ocr-result p { margin: 4px 0 8px; white-space: pre-wrap; }
 .inline-notice { grid-area: notice; min-height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; color: var(--color-primary); background: var(--color-primary-subtle); border-radius: var(--radius-md); }
 .inline-notice button { border: 0; background: transparent; cursor: pointer; }
+.duplicate-card-panel { grid-column: 1 / -1; overflow: hidden; border: 1px solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border)); border-radius: var(--radius-md); background: var(--color-bg-surface); }
+.duplicate-card-panel > header, .duplicate-card-panel > footer { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; background: var(--color-warning-subtle); }
+.duplicate-card-panel > header > div { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.duplicate-card-panel > header strong { font-size: 13px; }
+.duplicate-card-panel > header span, .duplicate-card-panel > footer span { color: var(--color-text-secondary); font-size: 12px; }
+.duplicate-card-panel > header > button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.duplicate-card-panel > header svg { width: 15px; }
+.duplicate-card-result { min-height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 7px 10px; border-top: 1px solid var(--color-border); }
+.duplicate-card-result > div:first-child { min-width: 0; }
+.duplicate-card-result strong, .duplicate-card-result span { display: block; }
+.duplicate-card-result strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.duplicate-card-result span { margin-top: 3px; color: var(--color-text-tertiary); font-size: 12px; }
+.duplicate-card-result > div:last-child { display: flex; gap: 6px; }
+.duplicate-card-result button, .duplicate-card-panel > footer button { min-height: 30px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-surface); cursor: pointer; font-size: 12px; font-weight: 600; }
+.duplicate-card-result button:hover, .duplicate-card-panel > footer button:hover { border-color: var(--color-primary); }
+.duplicate-card-result button:disabled, .duplicate-card-panel > footer button:disabled { cursor: not-allowed; opacity: .55; }
+.duplicate-card-result svg, .duplicate-card-panel > footer svg { width: 14px; }
+.duplicate-card-panel > footer { border-top: 1px solid var(--color-border); background: var(--color-bg-subtle); }
+.duplicate-card-panel > footer button { color: var(--color-primary); }
 
 .queue-status { width: 100%; min-width: 0; padding: 10px 12px; text-align: left; cursor: pointer; }
 .queue-status:hover { border-color: var(--color-primary); }

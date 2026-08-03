@@ -29,6 +29,10 @@ function assertDuplicatePolicy({ cardType, duplicates = [], duplicatePolicy = 'r
       phrase: item.phrase,
       cardType: item.card_type || item.cardType || cardType,
       contentHash: item.content_hash || item.contentHash || null,
+      folderName: item.folder_name || item.folderName || null,
+      baseFilename: item.base_filename || item.baseFilename || null,
+      generationDate: item.generation_date || item.generationDate || null,
+      createdAt: item.created_at || item.createdAt || null,
     })),
   });
 }

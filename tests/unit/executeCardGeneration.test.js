@@ -175,10 +175,12 @@ test.describe('executeCardGeneration application use case', () => {
 
   test.it('uses deterministic fixtures and skips TTS in E2E context', async () => {
     let fixtureCalls = 0;
+    let fixtureOptions = null;
     let ttsCalls = 0;
     const { execute } = createHarness({
-      buildFixtureResult: ({ cardType }) => {
+      buildFixtureResult: (options) => {
         fixtureCalls += 1;
+        fixtureOptions = options;
         return {
           output: { markdown_content: '# Fixture', html_content: '', audio_tasks: [] },
           prompt: 'fixture',
@@ -187,15 +189,20 @@ test.describe('executeCardGeneration application use case', () => {
           targetDir: '/tmp/cards',
           folderName: '20260713',
           fallback: null,
-          cardType,
+          cardType: options.cardType,
         };
       },
       generateAudioBatch: async () => { ttsCalls += 1; },
     });
 
-    const result = await execute({ phrase: 'fixture', cardType: 'scenario_phrase' }, { e2eTestMode: true });
+    const result = await execute({
+      phrase: 'fixture',
+      cardType: 'scenario_phrase',
+      targetFolder: '20260714',
+    }, { e2eTestMode: true });
     assert.equal(result.card_type, 'scenario_phrase');
     assert.equal(fixtureCalls, 1);
+    assert.equal(fixtureOptions.targetFolder, '20260714');
     assert.equal(ttsCalls, 0);
     assert.equal(result.audio, null);
   });

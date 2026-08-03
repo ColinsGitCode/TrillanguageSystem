@@ -332,6 +332,26 @@ export type LearningHistoryResponse = {
     title: string;
     contentAvailable: boolean;
   }>;
+  engagement: {
+    generationRequests: number;
+    duplicateHits: number;
+    existingCardOpens: number;
+    addedToToday: number;
+    newVersionRequests: number;
+    librarySearches: number;
+    activeDays: number;
+    recent: Array<{
+      id: number;
+      eventKind: string;
+      learningDay: string;
+      createdAtUtc: string;
+      generationId: number | null;
+      phrase: string;
+      cardType: string;
+      folder: string | null;
+      baseFilename: string | null;
+    }>;
+  };
   dataQuality: {
     historicalSkipMetricsAvailable: boolean;
     notes: string[];

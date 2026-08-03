@@ -214,6 +214,12 @@
 
 .sr-only { width: 1px; height: 1px; position: absolute; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .learning-history-page { padding-bottom: 28px; }
+.learning-engagement-strip { min-height: 74px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(280px, 1.4fr); margin-bottom: 14px; overflow: hidden; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.learning-engagement-strip > div { display: grid; grid-template-columns: 24px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; column-gap: 8px; padding: 11px 14px; border-right: 1px solid var(--color-border); }
+.learning-engagement-strip svg { grid-row: 1 / 3; align-self: center; width: 17px; color: var(--color-text-tertiary); }
+.learning-engagement-strip span { color: var(--color-text-tertiary); font-size: 12px; }
+.learning-engagement-strip strong { margin-top: 3px; font: 600 19px/1 var(--font-mono); }
+.learning-engagement-strip > p { align-self: center; margin: 0; padding: 12px 16px; color: var(--color-text-secondary); background: var(--color-bg-subtle); font-size: 12px; line-height: 1.5; }
 .learning-history-head { align-items: center; }
 .learning-history-filters { display: flex; align-items: center; gap: 8px; }
 .learning-range-control { display: inline-flex; padding: 3px; background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); }

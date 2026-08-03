@@ -11,6 +11,9 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // Append-only card interaction facts
+  'card_engagement_events',
+
   // User-managed labels (assignments before the global catalog)
   'manual_tag_assignments',
   'manual_tag_definitions',
@@ -92,6 +95,8 @@ function truncateAll(db) {
           'textbook_operation_events_delete_block',
           'card_annotation_migration_events_update_block',
           'card_annotation_migration_events_delete_block',
+          'card_engagement_events_update_block',
+          'card_engagement_events_delete_block',
           'kg_resolution_events_update_block',
           'kg_resolution_events_delete_block',
           'kg_point_transitions_update_block',

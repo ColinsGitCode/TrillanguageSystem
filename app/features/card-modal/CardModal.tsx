@@ -66,6 +66,10 @@ const DeferredManualTagBar = lazy(async () => {
   const module = await import('../manual-tags/ManualTagBar');
   return { default: module.ManualTagBar };
 });
+const DeferredCardEngagementMeta = lazy(async () => {
+  const module = await import('./CardEngagementMeta');
+  return { default: module.CardEngagementMeta };
+});
 
 type Props = {
   selection: CardSelection;
@@ -158,6 +162,7 @@ export function CardModal({
     queryKey: ['card', selection.folder, selection.baseName],
     queryFn: () => factoryApi.card(selection),
   });
+  const generationId = cardQuery.data?.record?.id || selection.generationId || null;
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
 
   useEffect(() => {
@@ -845,6 +850,14 @@ export function CardModal({
                   <div><dt>Type</dt><dd>{selection.cardType}</dd></div>
                   <div><dt>Model</dt><dd>{cardQuery.data?.record?.llm_model || 'unknown'}</dd></div>
                   <div><dt>Source</dt><dd>Markdown</dd></div>
+                  <Suspense fallback={null}>
+                    <DeferredCardEngagementMeta
+                      generationId={generationId}
+                      phrase={cardQuery.data?.record?.phrase || selection.title}
+                      cardType={selection.cardType}
+                      readOnly={readOnly}
+                    />
+                  </Suspense>
                 </dl>
               </aside>
             </div>

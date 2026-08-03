@@ -9,6 +9,8 @@ import type {
   HealthResponse,
   QueueSummary,
   SourceMode,
+  DuplicateCardSummary,
+  CardEngagementStats,
 } from './types';
 import type {
   CardAnnotationSelector,
@@ -58,7 +60,29 @@ export const factoryApi = {
     ]);
     return { markdown, record: recordResult?.record || null };
   },
-  enqueue: (payload: { phrase: string; cardType: CardType; sourceMode: SourceMode; targetFolder?: string }) =>
+  preflight: (payload: { phrase: string; cardType: CardType; interactionKey: string }) =>
+    requestJson<{
+      success: true;
+      interactionKey: string;
+      duplicates: DuplicateCardSummary[];
+      activeJob: GenerationJob | null;
+    }>('/api/generation-jobs/preflight', {
+      method: 'POST',
+      body: JSON.stringify({
+        phrase: payload.phrase,
+        card_type: payload.cardType,
+        interaction_key: payload.interactionKey,
+      }),
+    }),
+  enqueue: (payload: {
+    phrase: string;
+    cardType: CardType;
+    sourceMode: SourceMode;
+    targetFolder?: string;
+    duplicatePolicy?: 'reject' | 'create-version';
+    interactionKey?: string;
+    preflightRecorded?: boolean;
+  }) =>
     requestJson<{ success: true; job: GenerationJob; summary: QueueSummary }>('/api/generation-jobs', {
       method: 'POST',
       body: JSON.stringify({
@@ -66,8 +90,54 @@ export const factoryApi = {
         card_type: payload.cardType,
         source_mode: payload.sourceMode,
         target_folder: payload.targetFolder || '',
+        duplicate_policy: payload.duplicatePolicy || 'reject',
+        interaction_key: payload.interactionKey || '',
+        preflight_recorded: payload.preflightRecorded === true,
       }),
     }),
+  recordEngagement: (payload: {
+    eventKey: string;
+    generationId?: number;
+    phrase: string;
+    cardType: CardType;
+    eventKind: 'existing_card_opened' | 'library_search_submitted';
+    sourceSurface: 'cards_factory' | 'card_modal';
+    metadata?: Record<string, unknown>;
+  }) => requestJson('/api/card-engagement/events', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  cardStats: (generationId: number) => requestJson<{ success: true; stats: CardEngagementStats }>(
+    `/api/card-engagement/generations/${generationId}/stats`
+  ),
+  todayCards: () => requestJson<{
+    success: true;
+    learningDay: string;
+    timeZone: string;
+    cards: Array<{
+      id: number;
+      phrase: string;
+      cardType: CardType;
+      folder: string;
+      baseFilename: string;
+      generationDate: string;
+      addedAtUtc: string;
+    }>;
+  }>('/api/card-engagement/today'),
+  addToToday: (generationId: number, requestKey: string) => requestJson<{
+    success: true;
+    engagement: { id: number; learningDay: string };
+    learning: {
+      generationId: number;
+      total: number;
+      eligible: number;
+      queued: number;
+      planControlled: number;
+    };
+  }>(`/api/learning/generations/${generationId}/add-to-today`, {
+    method: 'POST',
+    body: JSON.stringify({ requestKey }),
+  }),
   jobs: () => requestJson<{ jobs: GenerationJob[] }>('/api/generation-jobs?limit=30'),
   queueSummary: () => requestJson<{ summary: QueueSummary }>('/api/generation-jobs/summary'),
   events: (jobId: number) => requestJson<{ events: GenerationJobEvent[] }>(
