@@ -320,6 +320,29 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(opener).toBeFocused();
   });
 
+  test('creates, colors and restores a manual page tag', async ({ page }) => {
+    await page.goto('/');
+    const opener = page.getByTestId('react-file-list').locator('button')
+      .filter({ hasText: 'react trilingual fixture' });
+    await opener.click();
+    const modal = page.getByTestId('react-card-modal');
+    await modal.getByRole('button', { name: '管理标签' }).click();
+    const dialog = page.getByRole('dialog', { name: '标签管理' });
+    await dialog.getByRole('button', { name: '新建' }).click();
+    await dialog.getByLabel('名称').fill('E2E 重点');
+    await dialog.getByLabel('类型').selectOption('priority');
+    await dialog.getByRole('button', { name: 'purple' }).click();
+    await dialog.getByRole('button', { name: '保存标签' }).click();
+    await expect(dialog.getByText('E2E 重点')).toBeVisible();
+    await dialog.getByRole('button', { name: '应用到当前页面' }).click();
+    await expect(modal.locator('.manual-tag-chip')).toContainText('E2E 重点');
+
+    await page.getByTestId('react-card-modal-close').click();
+    await opener.click();
+    await expect(page.getByTestId('react-card-modal').locator('.manual-tag-chip'))
+      .toContainText('E2E 重点');
+  });
+
   test('reports cold card-modal opening time without sending card content', async ({ page }) => {
     const batches = [];
     await page.route('**/api/ui-performance', async (route) => {

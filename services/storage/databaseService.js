@@ -20,6 +20,7 @@ const textbooksDomain = require('./db/textbooks');
 const textbookWorkflowDomain = require('./db/textbookWorkflow');
 const textbookOperationsDomain = require('./db/textbookOperations');
 const annotationsDomain = require('./db/annotations');
+const manualTagsDomain = require('./db/manualTags');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -801,6 +802,44 @@ class DatabaseService {
 
   getCardTagCounts() {
     return cardTagsDomain.counts(this.db);
+  }
+
+  listManualTagDefinitions(options = {}) {
+    return manualTagsDomain.listDefinitions(this.db, options);
+  }
+
+  getManualTagDefinition(id) {
+    return manualTagsDomain.getDefinition(this.db, id);
+  }
+
+  createManualTagDefinition(tag) {
+    return this.withBusyRetry(() => manualTagsDomain.createDefinition(this.db, tag));
+  }
+
+  updateManualTagDefinition(id, expectedVersion, tag) {
+    return this.withBusyRetry(() => manualTagsDomain.updateDefinition(
+      this.db, id, expectedVersion, tag
+    ));
+  }
+
+  archiveManualTagDefinition(id, expectedVersion) {
+    return this.withBusyRetry(() => manualTagsDomain.archiveDefinition(
+      this.db, id, expectedVersion
+    ));
+  }
+
+  listManualTagsForTarget(targetKind, targetId) {
+    return manualTagsDomain.listAssigned(this.db, targetKind, targetId);
+  }
+
+  replaceManualTagsForTarget(targetKind, targetId, tagIds) {
+    return this.withBusyRetry(() => manualTagsDomain.replaceAssignments(
+      this.db, targetKind, targetId, tagIds
+    ));
+  }
+
+  listManualTagTargets(tagId, options = {}) {
+    return manualTagsDomain.listTargets(this.db, tagId, options);
   }
 
   // ========== Generation jobs ==========

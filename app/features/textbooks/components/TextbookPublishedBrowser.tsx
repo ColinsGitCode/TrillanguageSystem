@@ -1,5 +1,5 @@
 import { BookOpenCheck, Highlighter, Languages, Play, Sparkles } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { DesktopVirtualList } from '../../../components/virtual';
 import { createAnchor, resolveAnchor } from '../../card-modal/annotation-anchor.mjs';
 import type { CardAnnotationSelector } from '../../card-modal/annotation-render.mjs';
@@ -10,6 +10,11 @@ import {
   highlightedExpressionIds,
 } from '../textbook-highlight';
 import type { TextbookAudio, TextbookTrack } from '../types';
+
+const DeferredManualTagBar = lazy(async () => {
+  const module = await import('../../manual-tags/ManualTagBar');
+  return { default: module.ManualTagBar };
+});
 
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
   try {
@@ -141,6 +146,10 @@ export function TextbookPublishedBrowser({
   };
   return (
     <div className="textbook-published-browser">
+      <div className="textbook-track-tags">
+        <span>Track 标签</span>
+        <Suspense fallback={null}><DeferredManualTagBar targetKind="textbook_track" targetId={track.id} compact /></Suspense>
+      </div>
       <aside className="surface textbook-published-list">
         <header><p className="eyebrow">EXPRESSIONS</p><h2>教材浏览</h2></header>
         <DesktopVirtualList
@@ -163,6 +172,7 @@ export function TextbookPublishedBrowser({
       </aside>
       <article className="surface textbook-study-detail">
         <header><p className="eyebrow">EXPR {String(expression.display_ordinal).padStart(2, '0')}</p><h2>英日表达</h2></header>
+        <Suspense fallback={null}><DeferredManualTagBar targetKind="textbook_expression" targetId={expression.expression_id} compact /></Suspense>
         <div ref={contentRef} className="textbook-expression-content" onMouseUp={captureSelection}>
           <section>
             <p className="textbook-lang-label">English official</p>

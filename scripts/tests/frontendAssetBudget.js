@@ -19,7 +19,9 @@ function readReactRouterManifest(clientDir) {
 }
 
 function assetStats(clientDir, assetUrl) {
-  const relativePath = assetUrl.replace(/^\/+/u, '');
+  // React Router may append a cache-busting hash marker to route CSS URLs.
+  // Filesystem lookup must use only the URL pathname.
+  const relativePath = assetUrl.replace(/^\/+/u, '').split(/[?#]/u, 1)[0];
   const bytes = fs.readFileSync(path.join(clientDir, relativePath));
   return {
     url: assetUrl,

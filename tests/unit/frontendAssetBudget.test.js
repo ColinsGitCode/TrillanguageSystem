@@ -31,7 +31,7 @@ function fixtureManifest(routeImports = ['/assets/DeferredCardModal-1.js']) {
       'routes/_index': {
         module: '/assets/factory.js',
         imports: routeImports,
-        css: ['/assets/factory.css'],
+        css: ['/assets/factory.css#'],
       },
     },
   };

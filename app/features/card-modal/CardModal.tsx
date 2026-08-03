@@ -62,6 +62,10 @@ const DeferredSelectionTtsControls = lazy(async () => {
   const module = await import('./SelectionTtsControls');
   return { default: module.SelectionTtsControls };
 });
+const DeferredManualTagBar = lazy(async () => {
+  const module = await import('../manual-tags/ManualTagBar');
+  return { default: module.ManualTagBar };
+});
 
 type Props = {
   selection: CardSelection;
@@ -214,6 +218,7 @@ export function CardModal({
         // Radix menus are portaled outside the dialog. Let their own Escape and
         // focus-restoration contract run before considering the dialog close.
         if (target?.closest('.csa-gen-menu')) return;
+        if (target?.closest('.manual-tag-dialog')) return;
         if (target?.closest('.card-knowledge-inspector')) {
           event.preventDefault();
           setKnowledgeDraft(null);
@@ -739,6 +744,16 @@ export function CardModal({
             </button>
           )}
         </nav>
+
+        {cardQuery.data?.record?.id && (
+          <Suspense fallback={null}>
+            <DeferredManualTagBar
+              targetKind="generation"
+              targetId={cardQuery.data.record.id}
+              readOnly={readOnly}
+            />
+          </Suspense>
+        )}
 
         <div className="react-card-scroll" onScroll={() => setToolbar(null)}>
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}

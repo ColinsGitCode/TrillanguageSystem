@@ -11,6 +11,10 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // User-managed labels (assignments before the global catalog)
+  'manual_tag_assignments',
+  'manual_tag_definitions',
+
   // Card annotations (migration facts before current annotation rows)
   'card_annotation_migration_events',
   'card_annotations',

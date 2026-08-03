@@ -18,6 +18,7 @@ const {
   KG_R2_TABLES,
   LEARNING_P3_TABLES,
   LEARNING_P0_TABLES,
+  MANUAL_TAG_TABLES,
   TEXTBOOK_P1_TABLES,
   TEXTBOOK_WORKFLOW_TABLES,
   runMigrations,
@@ -76,11 +77,11 @@ function textbookManifestForMigration() {
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001-008 on a new database and creates LA, textbook, KG, workflow, and annotation tables', () => {
+  test.it('registers 001-009 on a new database and creates every product table', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001', '002', '003', '004', '005', '006', '007', '008'],
+        applied: ['001', '002', '003', '004', '005', '006', '007', '008', '009'],
         skipped: [],
         baselineRegistered: false,
       });
@@ -96,6 +97,7 @@ test.describe('versioned migration runner', () => {
         { version: '006', is_baseline: 0 },
         { version: '007', is_baseline: 0 },
         { version: '008', is_baseline: 0 },
+        { version: '009', is_baseline: 0 },
       ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -107,6 +109,7 @@ test.describe('versioned migration runner', () => {
       KG_R2_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       TEXTBOOK_WORKFLOW_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       CARD_ANNOTATION_P3_TABLES.forEach((table) => assert.ok(tables.has(table), table));
+      MANUAL_TAG_TABLES.forEach((table) => assert.ok(tables.has(table), table));
     } finally {
       service.close();
     }
@@ -140,6 +143,7 @@ test.describe('versioned migration runner', () => {
         { version: '006', is_baseline: 0 },
         { version: '007', is_baseline: 0 },
         { version: '008', is_baseline: 0 },
+        { version: '009', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {

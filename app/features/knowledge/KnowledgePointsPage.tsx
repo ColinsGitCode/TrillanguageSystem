@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import {
@@ -34,6 +34,11 @@ import type {
   RecentKnowledgeLookup,
   ResolutionCase,
 } from './types';
+
+const DeferredManualTagBar = lazy(async () => {
+  const module = await import('../manual-tags/ManualTagBar');
+  return { default: module.ManualTagBar };
+});
 
 const languageLabels: Record<KnowledgeLanguage, string> = { en: 'English', ja: '日本語', zh: '中文' };
 const kindLabels: Record<KnowledgeKind, string> = { lexeme: '词语', phrase: '短语', grammar_pattern: '语法' };
@@ -663,6 +668,7 @@ export function KnowledgePointsPage() {
                     <div><p className="eyebrow">{languageLabels[point.language]} · {kindLabels[point.kind]}</p><h2>{point.canonicalForm}</h2>{point.canonicalReading && <p>{point.canonicalReading}</p>}</div>
                     <div className="knowledge-stat-row"><span><b>{point.stats?.reviewEventCount || 0}</b>复习</span><span><b>{point.stats?.explicitLookupCount30d || 0}</b>近 30 天查找</span><span><b>{point.stats?.studyItemCount || 0}</b>学习单元</span></div>
                   </header>
+                  <Suspense fallback={null}><DeferredManualTagBar targetKind="knowledge_point" targetId={point.id} compact /></Suspense>
                   <section className="knowledge-forms"><h3>相关词形</h3><div>{point.forms.map((form) => <span key={`${form.id}-${form.linkKind}`}><b>{form.text}</b><small>{formKindLabels[form.linkKind]}</small></span>)}</div></section>
                   <section className="knowledge-evidence"><h3>出现位置</h3>{point.evidence.length ? point.evidence.map((evidence) => <article key={evidence.id}><span>{evidenceSourceLabels[evidence.sourceKind]}</span><p>{evidence.sourceText}</p><small>{evidence.evidenceRole === 'primary' ? '主要内容' : '上下文内容'}</small></article>) : <p>暂无内容来源。</p>}</section>
                 </>
