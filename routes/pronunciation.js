@@ -48,9 +48,9 @@ router.get('/api/pronunciation', enabled, async (req, res, next) => {
       return res.status(501).json({ error: 'This pronunciation target is not enabled yet', code: 'PRONUNCIATION_TARGET_UNSUPPORTED' });
     }
     const result = targetKind === 'textbook_expression'
-      ? await pronunciationService.ensureTextbookExpression(targetId, { force: String(req.query.refresh || '') === '1' })
-      : await pronunciationService.getGeneration(targetId, {
-      force: String(req.query.refresh || '') === '1',
+      ? await pronunciationService.readTextbookExpression(targetId, { refresh: String(req.query.refresh || '') === '1' })
+      : await pronunciationService.readGeneration(targetId, {
+      refresh: String(req.query.refresh || '') === '1',
     });
     return res.json({
       success: true,

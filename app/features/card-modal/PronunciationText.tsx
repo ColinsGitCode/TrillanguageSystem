@@ -7,6 +7,7 @@ import {
   enhancePronunciationHtml,
   movePronunciationFocus,
   pronunciationTokenFromElement,
+  pronunciationTokenRect,
   selectPronunciationToken,
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
@@ -25,7 +26,8 @@ const PRONUNCIATION_TOOLTIP_DELAY_MS = 250;
 export function PronunciationText({ html, tokens, className = '', testId, tagName = 'div', language }: Props) {
   const audio = useExclusiveAudio();
   const [overlay, setOverlay] = useState<{ token: PronunciationToken; left: number; top: number; tooltip: boolean } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [ttsState, setTtsState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const [ttsMessage, setTtsMessage] = useState('');
   const closeTimerRef = useRef<number | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -61,7 +63,7 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
     const compact = pronunciationTokenFromElement(element);
     if (!compact) return;
     const token = tokens.find((item) => item.tokenKey === compact.tokenKey) || compact;
-    const rect = element.getBoundingClientRect();
+    const rect = pronunciationTokenRect(element);
     const width = tooltip ? 240 : 320;
     const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), Math.max(12, window.innerWidth - width - 12));
     const top = Math.min(Math.max(12, rect.bottom + 8), Math.max(12, window.innerHeight - (tooltip ? 90 : 210)));
@@ -73,7 +75,7 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
     setOverlay({ token, left, top, tooltip });
   };
   const play = async () => {
-    if (!overlay || loading) return;
+    if (!overlay || ttsState === 'loading') return;
     controllerRef.current?.abort();
     audio.stop();
     const controller = new AbortController();
@@ -82,13 +84,18 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
     const length = Array.from(overlay.token.surface).length;
     reportPronunciationTelemetry({ eventType: 'action', uiSurface: language === 'ja' ? 'textbook' : 'review', action: 'tts', outcome: 'started', length });
     reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: language === 'ja' ? 'textbook' : 'review', resource: 'controller', outcome: 'start' });
-    setLoading(true);
+    setTtsState('loading');
+    setTtsMessage('正在生成发音…');
     try {
       const result = await selectionTtsApi.synthesize({ text: overlay.token.surface, language: 'ja', speed: 1 }, controller.signal);
       if (controller.signal.aborted) return;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = URL.createObjectURL(result.blob);
-      await audio.playUrl(urlRef.current, { onEnded: () => setLoading(false), onError: () => setLoading(false), onStop: () => setLoading(false) });
+      await audio.playUrl(urlRef.current, {
+        onEnded: () => { setTtsState('idle'); setTtsMessage(''); },
+        onError: () => { setTtsState('error'); setTtsMessage('发音播放失败，请重试'); },
+        onStop: () => setTtsState('idle'),
+      });
       reportPronunciationTelemetry({
         eventType: 'action',
         uiSurface: language === 'ja' ? 'textbook' : 'review',
@@ -98,6 +105,8 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
         durationMs: performance.now() - startedAt,
         queueWaitMs: result.queueWaitMs,
       });
+      setTtsState('playing');
+      setTtsMessage(result.contended ? '发音服务较忙，已完成排队' : '');
     } catch (error) {
       if (!controller.signal.aborted) {
         reportPronunciationTelemetry({
@@ -109,12 +118,12 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
           durationMs: performance.now() - startedAt,
           errorCode: 'TTS_FAILED',
         });
+        setTtsState('error');
+        setTtsMessage(error instanceof Error && error.message ? error.message : '发音生成失败，请重试');
       }
-      throw error;
     } finally {
       reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: language === 'ja' ? 'textbook' : 'review', resource: 'controller', outcome: controller.signal.aborted ? 'aborted' : 'end' });
       if (controllerRef.current === controller) controllerRef.current = null;
-      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -186,10 +195,11 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
             <p className="pronunciation-tooltip-meta">{overlay.token.unitKind === 'word' ? '词语读音' : '汉字读音'} · 悬停不记录查询</p>
           ) : (
             <div className="pronunciation-popover-actions">
-              <button type="button" onClick={() => void play()} disabled={loading}>{loading ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <Volume2 aria-hidden="true" />}{loading ? '生成中…' : '朗读'}</button>
+              <button type="button" onClick={() => void play()} disabled={ttsState === 'loading'}>{ttsState === 'loading' ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <Volume2 aria-hidden="true" />}{ttsState === 'loading' ? '生成中…' : ttsState === 'error' ? '重试朗读' : '朗读'}</button>
               <button type="button" onClick={() => { void navigator.clipboard?.writeText(overlay.token.surface); setOverlay(null); }}><Copy aria-hidden="true" />复制</button>
             </div>
           )}
+          {!overlay.tooltip && ttsMessage && <p className="pronunciation-popover-status" role={ttsState === 'error' ? 'alert' : 'status'}>{ttsMessage}</p>}
         </div>
       )}
     </div>

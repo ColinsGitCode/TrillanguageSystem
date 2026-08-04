@@ -551,7 +551,7 @@ export function CardModal({
     setColorMenuOpen(false);
   };
 
-  const captureSelection = (focusToolbar = false) => {
+  const captureSelection = (focusToolbar = false, ignoreAnnotationOverlap = false) => {
     const container = contentRef.current;
     if (!container) return;
     const candidate = buildSelectionCandidate(container);
@@ -571,11 +571,11 @@ export function CardModal({
         .map((node) => node.dataset.annotationId)
         .filter((id): id is string => Boolean(id))
     );
-    if (overlappingIds.size === 1) {
+    if (!ignoreAnnotationOverlap && overlappingIds.size === 1) {
       activateAnnotation([...overlappingIds][0], focusToolbar);
       return;
     }
-    if (overlappingIds.size > 1) {
+    if (!ignoreAnnotationOverlap && overlappingIds.size > 1) {
       showToast('选区包含多个标记，请点击单个标记后操作');
       setToolbar(null);
       return;

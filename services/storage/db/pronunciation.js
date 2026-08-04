@@ -4,6 +4,7 @@ function mapDocument(row) {
   if (!row) return null;
   return {
     id: row.id,
+    persisted: true,
     targetKind: row.target_kind,
     targetId: row.target_id,
     sourceContentHash: row.source_content_hash,
@@ -15,6 +16,23 @@ function mapDocument(row) {
     revision: row.revision,
     createdAtUtc: row.created_at_utc,
     updatedAtUtc: row.updated_at_utc,
+  };
+}
+
+function getCorrectionEvent(db, eventKey) {
+  const row = db.prepare('SELECT * FROM pronunciation_correction_events WHERE event_key = ?').get(String(eventKey || ''));
+  if (!row) return null;
+  return {
+    id: row.id,
+    eventKey: row.event_key,
+    documentId: row.document_id,
+    tokenKey: row.token_key,
+    eventType: row.event_type,
+    payloadHash: row.payload_hash,
+    payloadJson: row.payload_json,
+    expectedRevision: row.expected_revision,
+    resultingRevision: row.resulting_revision,
+    createdAtUtc: row.created_at_utc,
   };
 }
 
@@ -277,6 +295,7 @@ function applyCorrection(db, payload = {}) {
 
 module.exports = {
   getDocument,
+  getCorrectionEvent,
   listTokens,
   createDocument,
   updateProjection,

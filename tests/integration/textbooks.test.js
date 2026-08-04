@@ -464,6 +464,22 @@ test('verified textbook track publishes textbook study items and creates derivat
   assert.match(item.body.item.audioFiles[0].playback_url, /^\/api\/textbooks\/audio\/\d+\/content$/u);
   assert.equal(item.body.item.annotationReference, null);
   assert.equal(item.body.item.highlightReference, undefined);
+  assert.equal(item.body.item.pronunciation.targetKind, 'textbook_expression');
+  const expectedExpressionId = dbService.db.prepare(`
+    SELECT er.expression_id
+    FROM study_items si
+    JOIN textbook_expression_revisions er
+      ON er.id = json_extract(si.unit_locator_json, '$.expressionRevisionId')
+    WHERE si.id = ?
+  `).get(itemId).expression_id;
+  assert.equal(item.body.item.pronunciation.targetId, expectedExpressionId);
+  assert.ok(item.body.item.pronunciation.tokens.length > 0);
+  for (const token of item.body.item.pronunciation.tokens) {
+    assert.equal(
+      Array.from(item.body.item.pronunciation.plainText).slice(token.startCodePoint, token.endCodePoint).join(''),
+      token.surface
+    );
+  }
 
   const audioId = audioGenerated.track.tts_audio[0].id;
   const audioHead = await api('HEAD', `/api/textbooks/audio/${audioId}/content`);

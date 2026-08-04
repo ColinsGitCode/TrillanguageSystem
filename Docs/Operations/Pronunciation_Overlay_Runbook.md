@@ -53,8 +53,23 @@ curl -fsS 'http://127.0.0.1:3010/api/pronunciation?targetKind=textbook_expressio
 curl -fsS http://127.0.0.1:3010/api/pronunciation/telemetry
 ```
 
+`GET /api/pronunciation` 是严格只读接口。目标没有持久化投影时，接口在内存中返回
+`persisted=false`、`revision=0` 的临时投影；普通浏览、刷新和 Review 读取都不得创建
+`pronunciation_documents` 或 `pronunciation_tokens`。持久化只能来自新卡生成事务、教材发布流程，
+或 PF-P4 人工批准后的迁移工具。
+
 开关关闭时预期是明确的 404/feature-disabled 响应，不应在前端伪造 token。纠音使用
-`POST /api/pronunciation/corrections`，服务端按 document revision 和 event key 做幂等/冲突校验。
+`POST /api/pronunciation/corrections`，且只接受已经持久化的 document。服务端必须先验证 token、
+event type、边界和 split/merge 结构，再写 append-only event；无效请求不得推进 revision 或留下事件。
+同一 event key + 同一 body 返回幂等结果，同 key + 不同 body 返回冲突。
+
+因此，尚未完成 PF-P4 受控迁移的历史卡目前只能查看临时注音，不能纠音；前端应禁用纠音
+输入并显示原因。纠音适用于新生成且已持久化 pronunciation document 的卡片。不得通过访问
+GET 接口、刷新页面或打开 Review 来为历史卡补建 document。
+
+Review 不再自行查询完整 generation 并套用全局 offset；学习 item API 直接返回当前单元的
+`pronunciation` 引用和局部坐标。教材单元必须使用 `textbook_expression` target，普通卡使用
+`generation` target。
 
 ## 5. 只读审计和历史迁移
 
@@ -103,6 +118,10 @@ npm run pronunciation:migration-apply -- \
 
 注音浮层不负责 TTS/KG 的事实写入。TTS 失败应显示重试/降级，KG 关闭应显示能力不可用；
 不要把失败当成读音修正，不要手动改 generation Markdown。
+
+注音词被 annotation 或 Markdown 拆成多个 DOM 片段时，各片段必须共享同一 token key，Popover
+锚点使用所有片段的 union rect；双击任一片段应选择完整词语。不得因为
+`Range.surroundContents()` 跨节点失败而静默丢失注音。
 
 ### 6.3 历史迁移回滚
 

@@ -319,6 +319,7 @@ class LearningService {
     annotationsEnabled = false,
     annotationService = null,
     textbookAnnotationService = null,
+    pronunciationService = null,
     now = () => new Date().toISOString(),
     busyRetry,
   } = {}) {
@@ -329,6 +330,7 @@ class LearningService {
     this.annotationsEnabled = Boolean(annotationsEnabled);
     this.annotationService = annotationService;
     this.textbookAnnotationService = textbookAnnotationService;
+    this.pronunciationService = pronunciationService;
     this.now = now;
     this.busyRetry = busyRetry || ((operation) => operation());
   }
@@ -2004,6 +2006,17 @@ class LearningService {
         `- **English**: ${highlightFragments?.en || expression.official_en_text}`,
         `- **日本語**: ${highlightFragments?.ja || expression.ja_ruby_html || expression.official_ja_text}`,
       ].join('\n');
+      const pronunciationProjection = this.pronunciationService
+        ? await this.pronunciationService.readTextbookExpression(expression.expression_id)
+        : null;
+      const localizedPronunciation = pronunciationProjection
+        ? this.pronunciationService.localizeProjection(
+          markdown,
+          pronunciationProjection.plainText,
+          pronunciationProjection.tokens,
+          expression.official_ja_text
+        )
+        : null;
       const scheduleRow = this.db.prepare(`
         SELECT *, version AS schedule_version, last_event_id AS schedule_last_event_id,
           algorithm_id AS schedule_algorithm_id, algorithm_version AS schedule_algorithm_version,
@@ -2043,6 +2056,15 @@ class LearningService {
         expectedScheduleVersion: scheduleState?.version || 0,
         audioFiles,
         annotationReference: currentAnnotationReference,
+        pronunciation: localizedPronunciation ? {
+          targetKind: 'textbook_expression',
+          targetId: Number(expression.expression_id),
+          sourceContentHash: pronunciationProjection.document.sourceContentHash,
+          persisted: pronunciationProjection.document.persisted !== false,
+          documentRevision: Number(pronunciationProjection.document.revision || 0),
+          plainText: localizedPronunciation.plainText,
+          tokens: localizedPronunciation.tokens,
+        } : null,
       };
     }
     const targetLanguages = row.unit_kind === 'scenario_bilingual' ? ['en', 'ja']
@@ -2084,6 +2106,17 @@ class LearningService {
       FROM learning_schedule_states WHERE study_item_id = ?
     `).get(row.id);
     const scheduleState = mapSchedule(scheduleRow ? { ...scheduleRow, study_item_id: row.id } : null);
+    const pronunciationProjection = this.pronunciationService && targetLanguages.includes('ja')
+      ? await this.pronunciationService.readGeneration(row.generation_id)
+      : null;
+    const localizedPronunciation = pronunciationProjection
+      ? this.pronunciationService.localizeProjection(
+        unitMarkdown,
+        pronunciationProjection.plainText,
+        pronunciationProjection.tokens,
+        typeof targetText === 'string' ? targetText : targetText?.ja || ''
+      )
+      : null;
     return {
       id: Number(row.id),
       unitKind: row.unit_kind,
@@ -2106,6 +2139,15 @@ class LearningService {
       expectedScheduleVersion: scheduleState?.version || 0,
       audioFiles,
       annotationReference: currentAnnotationReference,
+      pronunciation: localizedPronunciation ? {
+        targetKind: 'generation',
+        targetId: Number(row.generation_id),
+        sourceContentHash: pronunciationProjection.document.sourceContentHash,
+        persisted: pronunciationProjection.document.persisted !== false,
+        documentRevision: Number(pronunciationProjection.document.revision || 0),
+        plainText: localizedPronunciation.plainText,
+        tokens: localizedPronunciation.tokens,
+      } : null,
     };
   }
 }

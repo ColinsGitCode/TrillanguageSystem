@@ -148,3 +148,47 @@ test('generation document creation and correction are revision guarded and idemp
     dbService.close();
   }
 });
+
+test('split and merge corrections change token boundaries only after validating contiguous source ranges', async () => {
+  const dbService = new DatabaseService(':memory:');
+  try {
+    const generationId = insertGeneration(dbService.db);
+    const service = createPronunciationService({ dbService, now: () => '2026-08-03T00:00:00.000Z' });
+    const projection = await service.ensureGeneration(generationId);
+    const token = projection.tokens.find((item) => item.surface === '勤務表');
+    assert.ok(token);
+    const splitPoint = token.startCodePoint + 2;
+    const splitPayload = {
+      targetId: generationId,
+      tokenKey: token.tokenKey,
+      eventKey: 'pron-split-001',
+      eventType: 'split',
+      expectedRevision: projection.document.revision,
+      parts: [
+        { surface: '勤務', startCodePoint: token.startCodePoint, endCodePoint: splitPoint, readingHiragana: 'きんむ' },
+        { surface: '表', startCodePoint: splitPoint, endCodePoint: token.endCodePoint, readingHiragana: 'ひょう' },
+      ],
+    };
+    const split = await service.correct(splitPayload);
+    assert.equal(split.document.revision, 2);
+    assert.deepEqual(split.tokens.filter((item) => item.tokenKey.startsWith(`${token.tokenKey}:split:`)).map((item) => item.surface), ['勤務', '表']);
+    const repeated = await service.correct(splitPayload);
+    assert.equal(repeated.idempotent, true);
+
+    const splitKeys = split.tokens.filter((item) => item.tokenKey.startsWith(`${token.tokenKey}:split:`)).map((item) => item.tokenKey);
+    const merged = await service.correct({
+      targetId: generationId,
+      tokenKey: splitKeys[0],
+      tokenKeys: splitKeys,
+      eventKey: 'pron-merge-001',
+      eventType: 'merge',
+      expectedRevision: split.document.revision,
+      readingHiragana: 'きんむひょう',
+    });
+    assert.equal(merged.document.revision, 3);
+    assert.ok(merged.tokens.some((item) => item.surface === '勤務表' && item.source === 'manual'));
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM pronunciation_correction_events').get().count, 2);
+  } finally {
+    dbService.close();
+  }
+});

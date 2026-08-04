@@ -189,6 +189,9 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     }).toBe(1);
     await page.unroute('**/api/learning/sessions/*/reviews');
 
+    await page.keyboard.press('Space');
+    await expect(page.getByTestId('learning-answer').locator('.pronunciation-token').first()).toBeVisible();
+
     const endSessionButton = page.getByRole('button', { name: '结束' });
     await endSessionButton.click();
     const endDialog = page.getByRole('alertdialog', { name: '结束本次会话' });

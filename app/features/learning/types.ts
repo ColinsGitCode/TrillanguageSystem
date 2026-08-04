@@ -190,6 +190,15 @@ export type StudyItem = {
     count: number;
     source: 'card_annotations';
   } | null;
+  pronunciation?: {
+    targetKind: 'generation' | 'textbook_expression';
+    targetId: number;
+    sourceContentHash: string;
+    persisted: boolean;
+    documentRevision: number;
+    plainText: string;
+    tokens: import('../card-modal/pronunciation-overlay').PronunciationToken[];
+  } | null;
 };
 
 export type ManualQueueIntent = {

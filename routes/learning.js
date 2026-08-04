@@ -5,11 +5,13 @@ const {
   CARD_ANNOTATIONS_ENABLED,
   KG_ENABLED,
   KG_PLANNING_ENABLED,
+  PRONUNCIATION_LEGACY_RUBY_READER_ENABLED,
 } = require('../lib/serverConfig');
 const dbService = require('../services/storage/databaseService');
 const { GraphPlanningSignalReader } = require('../services/kg/storage/graphPlanningSignalReader');
 const { CardEngagementPlanningSignalReader } = require('../services/cardEngagement/cardEngagementPlanningSignalReader');
 const { LearningService } = require('../services/learning/application/learningService');
+const { createPronunciationService } = require('../services/pronunciation/pronunciationService');
 const { createDefaultPlanningSignalProvider } = require('../services/learning/planning/defaultPlanningSignalProvider');
 const cardEngagementService = require('../services/cardEngagement/cardEngagementService');
 const {
@@ -23,6 +25,10 @@ const graphSignalReader = new GraphPlanningSignalReader({
   enabled: KG_ENABLED && KG_PLANNING_ENABLED,
 });
 const engagementSignalReader = new CardEngagementPlanningSignalReader({ db: dbService.db });
+const pronunciationService = createPronunciationService({
+  dbService,
+  legacyReaderEnabled: PRONUNCIATION_LEGACY_RUBY_READER_ENABLED,
+});
 const service = new LearningService({
   db: dbService.db,
   busyRetry: (operation) => dbService.withBusyRetry(operation),
@@ -30,6 +36,7 @@ const service = new LearningService({
   annotationsEnabled: CARD_ANNOTATIONS_ENABLED,
   annotationService,
   textbookAnnotationService,
+  pronunciationService,
 });
 
 function send(res, payload) {

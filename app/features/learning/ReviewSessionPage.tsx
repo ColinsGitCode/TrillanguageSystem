@@ -11,7 +11,6 @@ import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { renderCardMarkdown } from '../card-modal/markdown';
 import type { CardSelection } from '../factory/types';
-import { factoryApi } from '../factory/factory-api';
 import { learningApi } from './learning-api';
 import { itemPresentation, RATING_OPTIONS, reasonLabel, relativeDue } from './learning-format';
 import { splitReviewAnswerMarkdown } from './review-answer-layering.mjs';
@@ -61,13 +60,7 @@ function LearningAnswer({ item }: { item: StudyItem }) {
   const playback = useExclusiveAudio();
   const renderCardType = item.source.cardType === 'textbook_track' ? 'trilingual' : item.source.cardType;
   const answerLayers = useMemo(() => splitReviewAnswerMarkdown(item.answer.markdown), [item.answer.markdown]);
-  const pronunciationQuery = useQuery({
-    queryKey: ['pronunciation', 'generation', item.source.generationId],
-    queryFn: () => factoryApi.pronunciation('generation', item.source.generationId),
-    enabled: Boolean(item.source.generationId),
-    retry: false,
-  });
-  const pronunciationTokens = pronunciationQuery.data?.tokens || [];
+  const pronunciationTokens = item.pronunciation?.tokens || [];
   const coreHtml = useMemo(
     () => renderCardMarkdown(answerLayers.coreMarkdown, renderCardType, item.source.folder),
     [answerLayers.coreMarkdown, item.source.folder, renderCardType]

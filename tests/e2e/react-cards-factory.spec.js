@@ -452,6 +452,55 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
   });
 
+  test('keeps one pronunciation token interactive when an annotation splits it across DOM nodes', async ({ page, request }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const content = page.getByTestId('react-card-content');
+    const acceptedTokens = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]');
+    await expect(acceptedTokens.first()).toBeVisible();
+    const candidate = await acceptedTokens.evaluateAll((nodes) => nodes.map((node, index) => ({
+      index,
+      surface: node.getAttribute('data-pronunciation-surface') || '',
+      tokenKey: node.getAttribute('data-pronunciation-token-key') || '',
+    })).find((item) => Array.from(item.surface).length >= 2));
+    expect(candidate).toBeTruthy();
+    const token = acceptedTokens.nth(candidate.index);
+    await expect(token).toBeVisible();
+    await token.evaluate((node) => {
+      const text = node.firstChild;
+      const firstCharacterLength = Array.from(text.nodeValue || '')[0]?.length || 1;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, firstCharacterLength);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      node.closest('[data-testid="react-card-content"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const saved = page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/annotations'
+    ));
+    await page.getByRole('button', { name: '标红选区' }).click();
+    const savedResponse = await saved;
+    expect(savedResponse.status()).toBe(201);
+    const savedAnnotation = (await savedResponse.json()).annotation;
+
+    const fragments = content.locator(`.pronunciation-token[data-pronunciation-token-key="${candidate.tokenKey}"]`);
+    await expect(fragments).toHaveCount(2);
+    await expect(fragments.first()).toHaveAttribute('data-pronunciation-fragment-count', '2');
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await fragments.first().dispatchEvent('click');
+    await expect(page.getByRole('dialog', { name: '读音与学习动作' })).toContainText(candidate.surface);
+    await fragments.last().dispatchEvent('dblclick');
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', candidate.surface);
+
+    const removed = await request.delete(`/api/annotations/${savedAnnotation.id}`, {
+      data: { expectedVersion: savedAnnotation.version },
+    });
+    expect(removed.ok()).toBeTruthy();
+  });
+
   test('CA-P8 persists and restores a canonical annotation without legacy HTML', async ({ page, request }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });

@@ -35,6 +35,7 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Operations/Pronunciation_Overlay_Runbook.md：注音浮层的开关、Compose 重建、只读审计、历史迁移、降级回滚、隐私观测和桌面质量门禁手册；明确禁止在人工批准前执行历史 apply 或删除 Ruby；
 - TestReports/Pronunciation_PF_P0_Feasibility_20260803.md、Pronunciation_PF_P1_New_Cards_20260803.md、Pronunciation_PF_P2_CardModal_20260803.md、Pronunciation_PF_P3_Consumers_20260803.md、Pronunciation_PF_P4_Shadow_Replay_20260803.md、Pronunciation_PF_P4_Historical_Canary_20260803.md、Pronunciation_PF_P5_Ruby_Retirement_20260803.md、Pronunciation_PF_R1_Observation_20260803.md：本轮注音实施与门禁报告；报告明确区分自动化通过、只读证据和必须由用户/时间窗口完成的门禁；
 - TestReports/Pronunciation_Final_Acceptance_20260803.md：最终自动化与 Compose 运行态验收报告；记录 lint/typecheck、456/456 unit、89/89 integration、82/82 desktop E2E、7/7 smoke、health online 和 npm audit 0 vulnerabilities；历史迁移、Ruby 删除与 PF-R1 观察仍为 BLOCKED；
+- TestReports/Pronunciation_Read_Contract_Remediation_20260804.md：注音只读合同与消费者缺陷修复报告；记录历史 GET 零写入、纠音验证、Review 局部坐标、多片段整词交互、TTS 失败重试、5 条旁路投影备份清理，以及 457 unit / 92 integration / 84 desktop E2E 的复核；仍不批准历史迁移或 Ruby 删除；
 - TestReports/Pronunciation_Compound_Review_Batches_20260803.md：466 个复合词候选的只读人工确认批次定义；默认 25 个/批、19 批、全部 `unreviewed`，不自动接受读音、不授权历史迁移；
 - Features/Selection_TTS_Product_and_Technical_Design.md：**Accepted 且已实施**的朗读选区 TTS 产品与技术基线。ST-01–ST-37 已全部完成：CardModal 支持英日按需朗读、保守语言确认、三档语速、失败重试和键盘焦点恢复；服务端提供即时二进制 API、共享优先级协调器与独立缓存 volume；CardModal、教材和复习音频使用共享独占播放 owner，并已验证 annotation/KG/learning/FSRS 与 records 零写入；
 - Operations/Selection_TTS_Runbook.md：朗读选区 TTS 的启停、配置、Kokoro/VOICEVOX 故障诊断、缓存 MISS/HIT/BYPASS、争用行为、缓存清理和无数据库 downgrade 回滚手册；

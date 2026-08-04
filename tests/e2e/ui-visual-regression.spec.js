@@ -49,13 +49,16 @@ async function enqueueAndWait(request, fixture) {
   }, { timeout: 30_000, intervals: [100, 200, 500] }).toBe('success');
 }
 
-function visualMasks(page) {
-  return [
+async function visualMasks(page) {
+  const masks = [
     page.locator('#heroTaskQueueElapsed'),
     page.locator('.queue-event-time'),
-    page.locator('time'),
-    page.getByTestId('react-folder-list').locator('button')
+    page.locator('time')
   ];
+  if (!await page.getByTestId('react-card-modal').count()) {
+    masks.push(page.getByTestId('react-folder-list').locator('button'));
+  }
+  return masks;
 }
 
 async function expectPageScreenshot(page, name) {
@@ -68,7 +71,7 @@ async function expectPageScreenshot(page, name) {
     fullPage: true,
     animations: 'disabled',
     caret: 'hide',
-    mask: visualMasks(page)
+    mask: await visualMasks(page)
   });
 }
 

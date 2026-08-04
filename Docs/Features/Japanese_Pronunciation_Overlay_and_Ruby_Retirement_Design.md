@@ -638,12 +638,23 @@ POST /api/pronunciation/corrections
 
 ```json
 {
+  "targetKind": "generation",
+  "targetId": 850,
+  "tokenKey": "token:example",
   "eventKey": "client-generated-idempotency-key",
-  "correctionKind": "reading",
-  "correctedValue": { "reading": "ひとり" },
-  "reason": "用户确认常用读音"
+  "eventType": "reading",
+  "expectedRevision": 1,
+  "readingRaw": "ひとり",
+  "readingHiragana": "ひとり",
+  "status": "accepted"
 }
 ```
+
+`eventType` 当前支持 `reading`、`resolve`、`reject`、`boundary`、`split` 和 `merge`。
+不同事件必须携带对应 payload；服务端在写入 append-only correction event 前校验 document、
+token、revision、范围和 split/merge 结构。尚未完成受控迁移的历史卡只会得到
+`persisted=false` 的临时投影，因此只能浏览，不能提交纠音；不得为了启用纠音而在 GET 路径
+中创建持久化 document。
 
 ### 11.3 人工确认队列（后续 contract）
 

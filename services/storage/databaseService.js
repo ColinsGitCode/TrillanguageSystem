@@ -592,6 +592,10 @@ class DatabaseService {
     return pronunciationDomain.getDocument(this.db, targetKind, targetId, sourceContentHash);
   }
 
+  getPronunciationCorrectionEvent(eventKey) {
+    return pronunciationDomain.getCorrectionEvent(this.db, eventKey);
+  }
+
   listPronunciationTokens(documentId) {
     return pronunciationDomain.listTokens(this.db, documentId);
   }

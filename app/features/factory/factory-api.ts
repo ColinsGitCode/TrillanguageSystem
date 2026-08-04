@@ -39,7 +39,8 @@ export type AnnotationTarget = {
 };
 
 export type PronunciationDocument = {
-  id: number;
+  id: number | null;
+  persisted: boolean;
   targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
   targetId: number;
   sourceContentHash: string;
@@ -185,6 +186,18 @@ export const factoryApi = {
     readingRaw?: string;
     readingHiragana?: string;
     status?: PronunciationToken['status'];
+    startCodePoint?: number;
+    endCodePoint?: number;
+    parts?: Array<{
+      tokenKey?: string;
+      surface: string;
+      startCodePoint: number;
+      endCodePoint: number;
+      readingRaw?: string;
+      readingHiragana?: string;
+    }>;
+    tokenKeys?: string[];
+    mergedTokenKey?: string;
   }) => requestJson<{
     success: true;
     event: { id: number; eventKey: string };

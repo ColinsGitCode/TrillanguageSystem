@@ -45,6 +45,43 @@ test.describe('Learning Assistance 2.0 API', () => {
     assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM learning_review_events').get().count, 0);
   });
 
+  test.it('returns pronunciation tokens localized to the review unit without writing a projection', async () => {
+    const seeded = seedStudyItem(dbService.db, {
+      phrase: '勤務表',
+      unitKind: 'trilingual_ja',
+      unitKey: 'ja',
+      jaTranslation: '勤務表を確認します。',
+      markdown: [
+        '# 勤務表',
+        '',
+        '## 1. 英文:',
+        '- **English**: Check the duty roster.',
+        '',
+        '## 2. 日本語:',
+        '- **例句1**: <ruby>勤務表<rt>きんむひょう</rt></ruby>を確認します。',
+        '',
+        '## 3. 中文:',
+        '- 查看勤务表。',
+      ].join('\n'),
+    });
+    const before = dbService.db.prepare('SELECT COUNT(*) AS count FROM pronunciation_documents').get().count;
+
+    const response = await api('GET', `/api/learning/items/${seeded.studyItemId}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.item.pronunciation.targetKind, 'generation');
+    assert.equal(response.body.item.pronunciation.targetId, seeded.generationId);
+    assert.equal(response.body.item.pronunciation.persisted, false);
+    assert.ok(response.body.item.pronunciation.tokens.some((token) => token.surface === '勤務表'));
+    for (const token of response.body.item.pronunciation.tokens) {
+      assert.equal(
+        Array.from(response.body.item.pronunciation.plainText).slice(token.startCodePoint, token.endCodePoint).join(''),
+        token.surface
+      );
+    }
+    assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM pronunciation_documents').get().count, before);
+  });
+
   test.it('previews arbitrary scopes and exposes queue-ready item summaries without writes', async () => {
     const english = seedStudyItem(dbService.db, { phrase: 'preview English', unitKey: 'preview-en' });
     seedStudyItem(dbService.db, {

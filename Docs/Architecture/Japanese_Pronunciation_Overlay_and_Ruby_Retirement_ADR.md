@@ -148,6 +148,26 @@ document view-model 和 token 列表。feature flag 关闭返回 404 + `PRONUNCI
 payload 返回 `PRONUNCIATION_EVENT_CONFLICT`；revision 过期返回
 `PRONUNCIATION_REVISION_STALE`。
 
+`eventType` 的正式取值为 `reading|resolve|reject|boundary|split|merge`。`reading` 请求示例：
+
+```json
+{
+  "targetKind": "generation",
+  "targetId": 850,
+  "tokenKey": "token:example",
+  "eventKey": "client-generated-idempotency-key",
+  "eventType": "reading",
+  "expectedRevision": 1,
+  "readingRaw": "ひとり",
+  "readingHiragana": "ひとり",
+  "status": "accepted"
+}
+```
+
+纠音只接受已持久化 document。未迁移历史卡的 GET 只返回 `persisted=false`、`revision=0`
+的内存临时投影，纠音必须返回 `PRONUNCIATION_DOCUMENT_NOT_FOUND`；禁止由读取或纠音请求
+隐式创建历史投影。
+
 日志只允许记录 target id、状态、耗时、长度和错误码，不记录完整卡片、选区或读音文本。
 
 ### 6.3 中文残留过滤

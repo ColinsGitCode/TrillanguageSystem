@@ -328,6 +328,36 @@ function documentHash(plainText, tokens) {
   })) }));
 }
 
+function localizePronunciationProjection(markdown, sourcePlainText, tokens, preferredText = '') {
+  const targetPlainText = stripMarkdownToJapaneseText(markdown);
+  const source = String(sourcePlainText || '');
+  const preferred = stripMarkdownToJapaneseText(preferredText);
+  let sourceUtf16Start = source.indexOf(targetPlainText);
+  let targetUtf16Start = 0;
+  let matchText = targetPlainText;
+  if (sourceUtf16Start < 0 && preferred) {
+    sourceUtf16Start = source.indexOf(preferred);
+    targetUtf16Start = targetPlainText.indexOf(preferred);
+    matchText = preferred;
+  }
+  if (sourceUtf16Start < 0 || targetUtf16Start < 0 || !matchText) {
+    return { plainText: targetPlainText, tokens: [] };
+  }
+  const sourceStart = codePointLength(source.slice(0, sourceUtf16Start));
+  const targetStart = codePointLength(targetPlainText.slice(0, targetUtf16Start));
+  const sourceEnd = sourceStart + codePointLength(matchText);
+  return {
+    plainText: targetPlainText,
+    tokens: tokens
+      .filter((token) => token.startCodePoint >= sourceStart && token.endCodePoint <= sourceEnd)
+      .map((token) => ({
+        ...token,
+        startCodePoint: targetStart + token.startCodePoint - sourceStart,
+        endCodePoint: targetStart + token.endCodePoint - sourceStart,
+      })),
+  };
+}
+
 function createPronunciationService({
   dbService,
   dictionaryReader = createDictionaryReader(),
@@ -335,20 +365,41 @@ function createPronunciationService({
   legacyReaderEnabled = true,
 } = {}) {
   if (!dbService) throw new TypeError('PronunciationService requires dbService');
-  async function ensureGeneration(generationId, options = {}) {
+  function targetNotFound(message) {
+    const error = new Error(message);
+    error.code = 'PRONUNCIATION_TARGET_NOT_FOUND';
+    error.status = 404;
+    return error;
+  }
+
+  function ephemeralDocument(payload) {
+    return {
+      id: null,
+      persisted: false,
+      targetKind: payload.targetKind,
+      targetId: payload.targetId,
+      sourceContentHash: payload.sourceContentHash,
+      projectionVersion: payload.projectionVersion,
+      status: payload.status,
+      analyzerVersion: payload.analyzerVersion,
+      dictionaryVersion: payload.dictionaryVersion,
+      documentHash: payload.documentHash,
+      revision: 0,
+      createdAtUtc: null,
+      updatedAtUtc: null,
+    };
+  }
+
+  function generationRecord(generationId) {
     const record = dbService.getGenerationById(Number(generationId));
-    if (!record) {
-      const error = new Error('Generation not found');
-      error.code = 'PRONUNCIATION_TARGET_NOT_FOUND';
-      error.status = 404;
-      throw error;
-    }
+    if (!record) throw targetNotFound('Generation not found');
+    return record;
+  }
+
+  async function buildGenerationProjection(generationId, sourceRecord = null) {
+    const record = sourceRecord || generationRecord(generationId);
     const plainText = stripMarkdownToJapaneseText(record.markdown_content);
     const japaneseSegments = locateJapaneseSegments(record.markdown_content, plainText);
-    const existing = dbService.getPronunciationDocument('generation', record.id, record.content_hash);
-    if (existing && !options.force) {
-      return { document: existing, tokens: dbService.listPronunciationTokens(existing.id), plainText };
-    }
     const built = await buildTokens(plainText, {
       dictionaryReader,
       japaneseSegments,
@@ -360,30 +411,58 @@ function createPronunciationService({
       projectionVersion: PROJECTION_VERSION, documentHash: documentHash(built.plainText, built.tokens),
       tokens: built.tokens, now: now(),
     };
+    return { record, plainText, payload };
+  }
+
+  async function readGeneration(generationId, options = {}) {
+    const record = generationRecord(generationId);
+    const existing = dbService.getPronunciationDocument('generation', record.id, record.content_hash);
+    if (existing && !options.refresh) {
+      return {
+        document: existing,
+        tokens: dbService.listPronunciationTokens(existing.id),
+        plainText: stripMarkdownToJapaneseText(record.markdown_content),
+      };
+    }
+    const { plainText, payload } = await buildGenerationProjection(generationId, record);
+    return { document: ephemeralDocument(payload), tokens: payload.tokens, plainText };
+  }
+
+  async function ensureGeneration(generationId, options = {}) {
+    const record = generationRecord(generationId);
+    const existing = dbService.getPronunciationDocument('generation', record.id, record.content_hash);
+    if (existing && !options.force) {
+      return {
+        document: existing,
+        tokens: dbService.listPronunciationTokens(existing.id),
+        plainText: stripMarkdownToJapaneseText(record.markdown_content),
+      };
+    }
+    const { payload } = await buildGenerationProjection(generationId, record);
     if (existing) return dbService.updatePronunciationProjection({ ...payload, documentId: existing.id, expectedRevision: existing.revision });
     return dbService.createPronunciationDocument(payload);
   }
 
   async function getGeneration(generationId, options = {}) {
-    return ensureGeneration(generationId, options);
+    return readGeneration(generationId, options);
   }
 
-  async function ensureTextbookExpression(expressionId, options = {}) {
+  function textbookExpressionRecord(expressionId) {
     const record = dbService.getTextbookExpression(Number(expressionId));
-    if (!record) {
-      const error = new Error('Textbook expression not found');
-      error.code = 'PRONUNCIATION_TARGET_NOT_FOUND';
-      error.status = 404;
-      throw error;
-    }
-    const plainText = stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || '');
-    const sourceContentHash = record.ja_unit_hash && /^[a-f0-9]{64}$/u.test(record.ja_unit_hash)
+    if (!record) throw targetNotFound('Textbook expression not found');
+    return record;
+  }
+
+  function textbookExpressionSourceHash(record) {
+    return record.ja_unit_hash && /^[a-f0-9]{64}$/u.test(record.ja_unit_hash)
       ? record.ja_unit_hash
       : sourceHash(record.official_ja_text || '');
-    const existing = dbService.getPronunciationDocument('textbook_expression', record.expression_id, sourceContentHash);
-    if (existing && !options.force) {
-      return { document: existing, tokens: dbService.listPronunciationTokens(existing.id), plainText };
-    }
+  }
+
+  async function buildTextbookExpressionProjection(expressionId, sourceRecord = null) {
+    const record = sourceRecord || textbookExpressionRecord(expressionId);
+    const plainText = stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || '');
+    const sourceContentHash = textbookExpressionSourceHash(record);
     const built = await buildTokens(record.official_ja_text || plainText, {
       dictionaryReader,
       legacyMarkdown: legacyReaderEnabled ? record.ja_ruby_html || null : null,
@@ -401,8 +480,223 @@ function createPronunciationService({
       projectionVersion: PROJECTION_VERSION, documentHash: documentHash(built.plainText, tokens),
       tokens, now: now(),
     };
+    return { record, plainText, sourceContentHash, payload };
+  }
+
+  async function readTextbookExpression(expressionId, options = {}) {
+    const record = textbookExpressionRecord(expressionId);
+    const sourceContentHash = textbookExpressionSourceHash(record);
+    const existing = dbService.getPronunciationDocument('textbook_expression', record.expression_id, sourceContentHash);
+    if (existing && !options.refresh) {
+      return {
+        document: existing,
+        tokens: dbService.listPronunciationTokens(existing.id),
+        plainText: stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || ''),
+      };
+    }
+    const { plainText, payload } = await buildTextbookExpressionProjection(expressionId, record);
+    return { document: ephemeralDocument(payload), tokens: payload.tokens, plainText };
+  }
+
+  async function ensureTextbookExpression(expressionId, options = {}) {
+    const record = textbookExpressionRecord(expressionId);
+    const sourceContentHash = textbookExpressionSourceHash(record);
+    const existing = dbService.getPronunciationDocument('textbook_expression', record.expression_id, sourceContentHash);
+    if (existing && !options.force) {
+      return {
+        document: existing,
+        tokens: dbService.listPronunciationTokens(existing.id),
+        plainText: stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || ''),
+      };
+    }
+    const { payload } = await buildTextbookExpressionProjection(expressionId, record);
     if (existing) return dbService.updatePronunciationProjection({ ...payload, documentId: existing.id, expectedRevision: existing.revision });
     return dbService.createPronunciationDocument(payload);
+  }
+
+  function correctionError(code, message, status = 422) {
+    const error = new Error(message);
+    error.code = code;
+    error.status = status;
+    return error;
+  }
+
+  function codePointSlice(value, start, end) {
+    return Array.from(String(value || '')).slice(start, end).join('');
+  }
+
+  function acceptedReading(payload) {
+    const readingHiragana = String(payload.readingHiragana || '').trim();
+    if (!readingHiragana) {
+      throw correctionError('PRONUNCIATION_READING_REQUIRED', 'readingHiragana is required for this correction');
+    }
+    return {
+      readingRaw: String(payload.readingRaw || readingHiragana).trim(),
+      readingHiragana,
+    };
+  }
+
+  function manualToken(token, overrides = {}) {
+    return {
+      ...token,
+      ...overrides,
+      source: 'manual',
+      ruleVersion: 'manual-v1',
+      evidence: { ...(token.evidence || {}), correction: true },
+    };
+  }
+
+  function buildCorrection(tokens, payload, plainText) {
+    const eventType = String(payload.eventType || '');
+    const supported = new Set(['reading', 'boundary', 'resolve', 'reject', 'split', 'merge']);
+    if (!supported.has(eventType)) {
+      throw correctionError('PRONUNCIATION_EVENT_TYPE_INVALID', 'Unsupported pronunciation correction event type', 400);
+    }
+    const tokenIndex = tokens.findIndex((token) => token.tokenKey === payload.tokenKey);
+    if (tokenIndex < 0) {
+      throw correctionError('PRONUNCIATION_TOKEN_NOT_FOUND', 'Pronunciation token not found', 404);
+    }
+    const token = tokens[tokenIndex];
+
+    if (eventType === 'reading' || eventType === 'resolve') {
+      const reading = acceptedReading(payload);
+      const body = { tokenKey: token.tokenKey, ...reading, status: 'accepted' };
+      return {
+        body,
+        tokens: tokens.map((item, index) => index === tokenIndex
+          ? manualToken(item, { ...reading, status: 'accepted' })
+          : item),
+      };
+    }
+
+    if (eventType === 'reject') {
+      const body = { tokenKey: token.tokenKey, status: 'rejected' };
+      return {
+        body,
+        tokens: tokens.map((item, index) => index === tokenIndex
+          ? manualToken(item, { status: 'rejected' })
+          : item),
+      };
+    }
+
+    if (eventType === 'boundary') {
+      const startCodePoint = Number(payload.startCodePoint);
+      const endCodePoint = Number(payload.endCodePoint);
+      const length = Array.from(plainText).length;
+      if (!Number.isInteger(startCodePoint) || !Number.isInteger(endCodePoint)
+        || startCodePoint < 0 || endCodePoint <= startCodePoint || endCodePoint > length) {
+        throw correctionError('PRONUNCIATION_BOUNDARY_INVALID', 'Boundary must be a valid non-empty range in the pronunciation source');
+      }
+      const surface = codePointSlice(plainText, startCodePoint, endCodePoint);
+      if (tokens.some((item, index) => index !== tokenIndex
+        && startCodePoint < item.endCodePoint && item.startCodePoint < endCodePoint)) {
+        throw correctionError('PRONUNCIATION_BOUNDARY_INVALID', 'Boundary overlaps another pronunciation token');
+      }
+      const body = { tokenKey: token.tokenKey, startCodePoint, endCodePoint, surface };
+      return {
+        body,
+        tokens: tokens.map((item, index) => index === tokenIndex
+          ? manualToken(item, { startCodePoint, endCodePoint, surface })
+          : item),
+      };
+    }
+
+    if (eventType === 'split') {
+      const parts = Array.isArray(payload.parts) ? payload.parts : [];
+      if (parts.length < 2) {
+        throw correctionError('PRONUNCIATION_SPLIT_INVALID', 'Split requires at least two parts');
+      }
+      const normalizedParts = parts.map((part, index) => {
+        const startCodePoint = Number(part.startCodePoint);
+        const endCodePoint = Number(part.endCodePoint);
+        const surface = codePointSlice(plainText, startCodePoint, endCodePoint);
+        if (!Number.isInteger(startCodePoint) || !Number.isInteger(endCodePoint)
+          || endCodePoint <= startCodePoint || surface !== String(part.surface || surface)) {
+          throw correctionError('PRONUNCIATION_SPLIT_INVALID', 'Each split part must match its source range');
+        }
+        return {
+          tokenKey: String(part.tokenKey || `${token.tokenKey}:split:${index + 1}`),
+          surface,
+          startCodePoint,
+          endCodePoint,
+          readingRaw: String(part.readingRaw || part.readingHiragana || '').trim() || null,
+          readingHiragana: String(part.readingHiragana || '').trim() || null,
+        };
+      });
+      if (normalizedParts[0].startCodePoint !== token.startCodePoint
+        || normalizedParts.at(-1).endCodePoint !== token.endCodePoint
+        || normalizedParts.some((part, index) => index > 0 && normalizedParts[index - 1].endCodePoint !== part.startCodePoint)
+        || new Set(normalizedParts.map((part) => part.tokenKey)).size !== normalizedParts.length) {
+        throw correctionError('PRONUNCIATION_SPLIT_INVALID', 'Split parts must uniquely and contiguously cover the original token');
+      }
+      const existingKeys = new Set(tokens.filter((_, index) => index !== tokenIndex).map((item) => item.tokenKey));
+      if (normalizedParts.some((part) => existingKeys.has(part.tokenKey))) {
+        throw correctionError('PRONUNCIATION_SPLIT_INVALID', 'Split token keys must not conflict with existing tokens');
+      }
+      const replacements = normalizedParts.map((part) => manualToken(token, {
+        ...part,
+        id: undefined,
+        documentId: undefined,
+        status: part.readingHiragana ? 'accepted' : 'unresolved',
+        unitKind: 'component',
+        components: [{ tokenKey: token.tokenKey, surface: token.surface }],
+      }));
+      const nextTokens = [...tokens.slice(0, tokenIndex), ...replacements, ...tokens.slice(tokenIndex + 1)];
+      return { body: { tokenKey: token.tokenKey, parts: normalizedParts }, tokens: nextTokens };
+    }
+
+    const tokenKeys = Array.isArray(payload.tokenKeys) ? payload.tokenKeys.map(String) : [];
+    if (tokenKeys.length < 2 || !tokenKeys.includes(token.tokenKey) || new Set(tokenKeys).size !== tokenKeys.length) {
+      throw correctionError('PRONUNCIATION_MERGE_INVALID', 'Merge requires at least two unique token keys including tokenKey');
+    }
+    const selected = tokenKeys.map((key) => tokens.find((item) => item.tokenKey === key));
+    if (selected.some((item) => !item)) {
+      throw correctionError('PRONUNCIATION_TOKEN_NOT_FOUND', 'A pronunciation token selected for merge was not found', 404);
+    }
+    selected.sort((left, right) => left.startCodePoint - right.startCodePoint);
+    if (selected.some((item, index) => index > 0 && selected[index - 1].endCodePoint !== item.startCodePoint)) {
+      throw correctionError('PRONUNCIATION_MERGE_INVALID', 'Merged tokens must be contiguous');
+    }
+    const startCodePoint = selected[0].startCodePoint;
+    const endCodePoint = selected.at(-1).endCodePoint;
+    const surface = codePointSlice(plainText, startCodePoint, endCodePoint);
+    const readingHiragana = String(payload.readingHiragana || '').trim() || selected.map((item) => item.readingHiragana || '').join('') || null;
+    const readingRaw = String(payload.readingRaw || '').trim() || selected.map((item) => item.readingRaw || '').join('') || readingHiragana;
+    const merged = manualToken(token, {
+      tokenKey: String(payload.mergedTokenKey || token.tokenKey),
+      surface,
+      startCodePoint,
+      endCodePoint,
+      readingRaw,
+      readingHiragana,
+      status: readingHiragana ? 'accepted' : 'unresolved',
+      unitKind: 'word',
+      components: selected.map((item) => ({ tokenKey: item.tokenKey, surface: item.surface })),
+    });
+    const selectedKeys = new Set(tokenKeys);
+    if (tokens.some((item) => !selectedKeys.has(item.tokenKey) && item.tokenKey === merged.tokenKey)) {
+      throw correctionError('PRONUNCIATION_MERGE_INVALID', 'Merged token key conflicts with an existing token');
+    }
+    const nextTokens = tokens.filter((item) => !selectedKeys.has(item.tokenKey));
+    nextTokens.push(merged);
+    return {
+      body: { tokenKey: token.tokenKey, tokenKeys: selected.map((item) => item.tokenKey), mergedTokenKey: merged.tokenKey, surface, readingRaw, readingHiragana },
+      tokens: nextTokens,
+    };
+  }
+
+  function correctionRequestBody(payload) {
+    const eventType = String(payload.eventType || '');
+    const body = { eventType, tokenKey: String(payload.tokenKey || '') };
+    if (payload.readingRaw !== undefined) body.readingRaw = String(payload.readingRaw || '');
+    if (payload.readingHiragana !== undefined) body.readingHiragana = String(payload.readingHiragana || '');
+    if (payload.status !== undefined) body.status = String(payload.status || '');
+    if (payload.startCodePoint !== undefined) body.startCodePoint = Number(payload.startCodePoint);
+    if (payload.endCodePoint !== undefined) body.endCodePoint = Number(payload.endCodePoint);
+    if (Array.isArray(payload.parts)) body.parts = payload.parts;
+    if (Array.isArray(payload.tokenKeys)) body.tokenKeys = payload.tokenKeys.map(String);
+    if (payload.mergedTokenKey !== undefined) body.mergedTokenKey = String(payload.mergedTokenKey || '');
+    return body;
   }
 
   async function correct(payload = {}) {
@@ -414,17 +708,26 @@ function createPronunciationService({
       error.status = 404;
       throw error;
     }
-    const tokens = dbService.listPronunciationTokens(document.id);
-    const nextTokens = tokens.map((token) => token.tokenKey === payload.tokenKey ? {
-      ...token,
-      readingHiragana: payload.readingHiragana ?? token.readingHiragana,
-      readingRaw: payload.readingRaw ?? token.readingRaw,
-      status: payload.status || token.status,
-      source: 'manual',
-      ruleVersion: 'manual-v1',
-    } : token);
-    const body = { tokenKey: payload.tokenKey, readingRaw: payload.readingRaw || null, readingHiragana: payload.readingHiragana || null, status: payload.status || 'accepted' };
-    const payloadJson = JSON.stringify(body);
+    const payloadJson = JSON.stringify(correctionRequestBody(payload));
+    const payloadHash = sha256(payloadJson);
+    const existingEvent = dbService.getPronunciationCorrectionEvent(String(payload.eventKey || ''));
+    if (existingEvent) {
+      if (existingEvent.payloadHash !== payloadHash) {
+        throw correctionError('PRONUNCIATION_EVENT_CONFLICT', 'Pronunciation correction event conflicts with existing event', 409);
+      }
+      return dbService.applyPronunciationCorrection({
+        documentId: document.id,
+        tokenKey: payload.tokenKey,
+        eventKey: String(payload.eventKey || ''),
+        eventType: payload.eventType,
+        payloadJson,
+        payloadHash,
+        expectedRevision: payload.expectedRevision,
+        documentHash: document.documentHash,
+        tokens: dbService.listPronunciationTokens(document.id),
+        now: now(),
+      });
+    }
     const record = targetKind === 'textbook_expression'
       ? dbService.getTextbookExpression(Number(payload.targetId))
       : dbService.getGenerationById(Number(payload.targetId));
@@ -433,24 +736,29 @@ function createPronunciationService({
         ? record?.ja_ruby_html || record?.official_ja_text || ''
         : record?.markdown_content || ''
     );
+    const tokens = dbService.listPronunciationTokens(document.id);
+    const correction = buildCorrection(tokens, payload, plainText);
     return dbService.applyPronunciationCorrection({
       documentId: document.id,
       tokenKey: payload.tokenKey,
       eventKey: String(payload.eventKey || ''),
       eventType: payload.eventType || 'reading',
       payloadJson,
-      payloadHash: sha256(payloadJson),
+      payloadHash,
       expectedRevision: payload.expectedRevision,
-      documentHash: documentHash(plainText, nextTokens),
-      tokens: nextTokens,
+      documentHash: documentHash(plainText, correction.tokens),
+      tokens: correction.tokens,
+      status: correction.tokens.some((token) => token.status === 'unresolved') ? 'partial' : 'ready',
       now: now(),
     });
   }
 
   return {
     ensureGeneration,
+    readGeneration,
     getGeneration,
     ensureTextbookExpression,
+    readTextbookExpression,
     correct,
     buildTokens: (text, options) => buildTokens(text, { dictionaryReader, ...options }),
     stripMarkdownToJapaneseText,
@@ -458,6 +766,7 @@ function createPronunciationService({
     japaneseMarkupForLegacyReader,
     toHiragana,
     documentHash,
+    localizeProjection: localizePronunciationProjection,
   };
 }
 
@@ -473,4 +782,5 @@ module.exports = {
   toHiragana,
   isUnresolvedHanResidue,
   documentHash,
+  localizePronunciationProjection,
 };

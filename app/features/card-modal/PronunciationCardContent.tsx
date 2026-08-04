@@ -11,6 +11,7 @@ import {
   enhancePronunciationHtml,
   movePronunciationFocus,
   pronunciationTokenFromElement,
+  pronunciationTokenRect,
   selectPronunciationToken,
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
@@ -20,7 +21,7 @@ type Props = {
   generationId: number | null;
   readOnly: boolean;
   contentRef: RefObject<HTMLDivElement | null>;
-  onCaptureSelection: (keyboard: boolean) => void;
+  onCaptureSelection: (keyboard: boolean, ignoreAnnotationOverlap?: boolean) => void;
   onContentClick: (event: MouseEvent<HTMLDivElement>) => void;
   onContextMenuCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onKnowledge: (surface: string) => void;
@@ -136,7 +137,7 @@ export function PronunciationCardContent({
     const compact = pronunciationTokenFromElement(element);
     if (!compact) return;
     const token = tokenRef.current.find((item) => item.tokenKey === compact.tokenKey) || compact;
-    const rect = element.getBoundingClientRect();
+    const rect = pronunciationTokenRect(element);
     const width = mode === 'popover' ? 360 : 240;
     const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), Math.max(12, window.innerWidth - width - 12));
     const top = Math.min(Math.max(12, rect.bottom + 8), Math.max(12, window.innerHeight - (mode === 'popover' ? 280 : 90)));
@@ -201,7 +202,7 @@ export function PronunciationCardContent({
   const saveCorrection = async () => {
     const token = overlay?.token;
     const document = pronunciationQuery.data?.document;
-    if (!token || !document || !generationId || !correctionReading.trim() || correctionBusy || readOnly) return;
+    if (!token || !document || document.persisted === false || !generationId || !correctionReading.trim() || correctionBusy || readOnly) return;
     setCorrectionBusy(true);
     reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'correction', outcome: 'started' });
     try {
@@ -279,8 +280,8 @@ export function PronunciationCardContent({
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
           if (!token || !selectPronunciationToken(token)) return;
           event.preventDefault();
+          onCaptureSelection(true, true);
           setOverlay(null);
-          window.requestAnimationFrame(() => onCaptureSelection(true));
         }}
         onContextMenuCapture={onContextMenuCapture}
         dangerouslySetInnerHTML={{ __html: contentHtml }}
@@ -323,10 +324,10 @@ export function PronunciationCardContent({
               <div className="pronunciation-correction">
                 <label htmlFor="pronunciation-correction-reading">修正平假名</label>
                 <div>
-                  <input id="pronunciation-correction-reading" value={correctionReading} onChange={(event) => setCorrectionReading(event.target.value)} inputMode="text" placeholder="例如：きんむひょう" disabled={readOnly} />
-                  <button type="button" disabled={readOnly || correctionBusy || !correctionReading.trim()} onClick={() => void saveCorrection()}>{correctionBusy ? '保存中…' : '保存'}</button>
+                  <input id="pronunciation-correction-reading" value={correctionReading} onChange={(event) => setCorrectionReading(event.target.value)} inputMode="text" placeholder="例如：きんむひょう" disabled={readOnly || pronunciationQuery.data?.document.persisted === false} />
+                  <button type="button" disabled={readOnly || pronunciationQuery.data?.document.persisted === false || correctionBusy || !correctionReading.trim()} onClick={() => void saveCorrection()}>{correctionBusy ? '保存中…' : '保存'}</button>
                 </div>
-                <small>只修正读音数据，不改写卡片正文。</small>
+                <small>{pronunciationQuery.data?.document.persisted === false ? '历史卡当前使用只读临时注音；完成受控迁移后才可纠音。' : '只修正读音数据，不改写卡片正文。'}</small>
               </div>
             </>
           )}

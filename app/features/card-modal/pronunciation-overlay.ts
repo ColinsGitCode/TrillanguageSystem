@@ -18,7 +18,7 @@ const SKIP_SELECTOR = 'button, audio, source, script, style, .audio-btn';
 const BLOCK_TAGS = new Set(['article', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ol', 'p', 'section', 'tr', 'ul']);
 const CJK_RE = /[぀-ヿ㐀-鿿々〆ヵヶ]/u;
 
-function createTokenSpan(document: Document, token: PronunciationToken) {
+function createTokenSpan(document: Document, token: PronunciationToken, fragmentText = token.surface, fragmentIndex = 0, fragmentCount = 1) {
   const span = document.createElement('span');
   span.className = 'pronunciation-token';
   span.dataset.pronunciationTokenKey = token.tokenKey;
@@ -26,19 +26,33 @@ function createTokenSpan(document: Document, token: PronunciationToken) {
   span.dataset.pronunciationReading = token.readingHiragana || '';
   span.dataset.pronunciationStatus = token.status;
   span.dataset.pronunciationSource = token.source;
-  span.tabIndex = 0;
-  span.setAttribute('role', 'button');
-  span.setAttribute('aria-label', token.readingHiragana
-    ? `${token.surface}，读音 ${token.readingHiragana}`
-    : `${token.surface}，读音待确认`);
-  span.textContent = token.surface;
+  span.dataset.pronunciationFragmentIndex = String(fragmentIndex);
+  span.dataset.pronunciationFragmentCount = String(fragmentCount);
+  span.tabIndex = fragmentIndex === 0 ? 0 : -1;
+  if (fragmentIndex === 0) {
+    span.setAttribute('role', 'button');
+    span.setAttribute('aria-label', token.readingHiragana
+      ? `${token.surface}，读音 ${token.readingHiragana}`
+      : `${token.surface}，读音待确认`);
+  } else {
+    span.setAttribute('aria-hidden', 'true');
+  }
+  span.textContent = fragmentText;
   return span;
 }
 
 function setRovingTabIndex(root: HTMLElement) {
   const tokens = Array.from(root.querySelectorAll<HTMLElement>('.pronunciation-token'));
-  tokens.forEach((token, index) => {
-    token.tabIndex = index === 0 ? 0 : -1;
+  const seen = new Set<string>();
+  let representativeIndex = 0;
+  tokens.forEach((token) => {
+    const key = token.dataset.pronunciationTokenKey || '';
+    const representative = !seen.has(key);
+    token.tabIndex = representative && representativeIndex === 0 ? 0 : -1;
+    if (representative) {
+      seen.add(key);
+      representativeIndex += 1;
+    }
   });
 }
 
@@ -153,17 +167,48 @@ function wrapTokenAtProjection(root: HTMLElement, token: PronunciationToken) {
     .map((point) => point.character)
     .join('');
   if (projected.normalize('NFKC') !== token.surface.normalize('NFKC')) return false;
-  const range = root.ownerDocument.createRange();
-  range.setStart(startPoint.startNode, startPoint.startOffset);
-  range.setEnd(endPoint.endNode, endPoint.endOffset);
-  try {
-    range.surroundContents(createTokenSpan(root.ownerDocument, token));
-    return true;
-  } catch {
-    // Cross-node or annotation-overlapping spans are intentionally left plain.
-    // A missing visual token is safer than attaching a reading to the wrong text.
-    return false;
+  const groups: Array<{ node: Text; startOffset: number; endOffset: number }> = [];
+  points.slice(token.startCodePoint, token.endCodePoint).forEach((point) => {
+    if (!point.startNode || !point.endNode || point.startNode !== point.endNode) return;
+    const previous = groups.at(-1);
+    if (previous?.node === point.startNode && point.startOffset <= previous.endOffset) {
+      previous.endOffset = Math.max(previous.endOffset, point.endOffset);
+      return;
+    }
+    groups.push({ node: point.startNode, startOffset: point.startOffset, endOffset: point.endOffset });
+  });
+  if (!groups.length) return false;
+  const fragmentCount = groups.length;
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const group = groups[index];
+    if (!group.node.parentNode || group.endOffset > (group.node.nodeValue || '').length) return false;
+    const selected = group.node.splitText(group.startOffset);
+    selected.splitText(group.endOffset - group.startOffset);
+    const span = createTokenSpan(root.ownerDocument, token, selected.nodeValue || '', index, fragmentCount);
+    selected.replaceWith(span);
   }
+  return true;
+}
+
+export function pronunciationTokenFragments(element: Element) {
+  if (!(element instanceof HTMLElement)) return [];
+  const key = element.dataset.pronunciationTokenKey;
+  if (!key) return [];
+  const root = element.closest('.pronunciation-card-content-shell, .pronunciation-text-shell') || element.parentElement;
+  return Array.from(root?.querySelectorAll<HTMLElement>('.pronunciation-token') || [])
+    .filter((item) => item.dataset.pronunciationTokenKey === key)
+    .sort((left, right) => Number(left.dataset.pronunciationFragmentIndex || 0) - Number(right.dataset.pronunciationFragmentIndex || 0));
+}
+
+export function pronunciationTokenRect(element: Element) {
+  const fragments = pronunciationTokenFragments(element);
+  const rects = fragments.map((fragment) => fragment.getBoundingClientRect());
+  if (!rects.length) return element.getBoundingClientRect();
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
 }
 
 export function enhancePronunciationHtml(html: string, tokens: PronunciationToken[]) {
@@ -184,8 +229,12 @@ export function enhancePronunciationHtml(html: string, tokens: PronunciationToke
 }
 
 export function movePronunciationFocus(root: HTMLElement, current: HTMLElement, key: string) {
-  const tokens = Array.from(root.querySelectorAll<HTMLElement>('.pronunciation-token'));
-  const index = tokens.indexOf(current);
+  const allTokens = Array.from(root.querySelectorAll<HTMLElement>('.pronunciation-token'));
+  const tokens = allTokens.filter((token, index) => allTokens.findIndex((candidate) => (
+    candidate.dataset.pronunciationTokenKey === token.dataset.pronunciationTokenKey
+  )) === index);
+  const currentKey = current.dataset.pronunciationTokenKey;
+  const index = tokens.findIndex((token) => token.dataset.pronunciationTokenKey === currentKey);
   if (index < 0 || !tokens.length) return false;
   let nextIndex = index;
   if (key === 'Home') nextIndex = 0;
@@ -193,7 +242,8 @@ export function movePronunciationFocus(root: HTMLElement, current: HTMLElement, 
   else if (key === 'ArrowLeft' || key === 'ArrowUp') nextIndex = (index - 1 + tokens.length) % tokens.length;
   else if (key === 'ArrowRight' || key === 'ArrowDown') nextIndex = (index + 1) % tokens.length;
   else return false;
-  tokens.forEach((token, tokenIndex) => { token.tabIndex = tokenIndex === nextIndex ? 0 : -1; });
+  allTokens.forEach((token) => { token.tabIndex = -1; });
+  tokens[nextIndex].tabIndex = 0;
   tokens[nextIndex].focus({ preventScroll: true });
   return true;
 }
@@ -203,8 +253,12 @@ export function selectPronunciationToken(element: HTMLElement) {
   if (status !== 'accepted') return false;
   const selection = element.ownerDocument.defaultView?.getSelection();
   if (!selection) return false;
+  const fragments = pronunciationTokenFragments(element);
+  if (!fragments.length) return false;
+  const lastFragment = fragments[fragments.length - 1];
   const range = element.ownerDocument.createRange();
-  range.selectNodeContents(element);
+  range.setStartBefore(fragments[0]);
+  range.setEndAfter(lastFragment);
   selection.removeAllRanges();
   selection.addRange(range);
   return true;

@@ -168,6 +168,29 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     await expect(expressionButtons.nth(1)).toHaveClass(/active/u);
   });
 
+  test('shows a retryable error when pronunciation TTS fails without an unhandled rejection', async ({ page }) => {
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.route('**/api/tts/selection', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
+      }
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: '发音服务暂时不可用', code: 'TTS_UNAVAILABLE' }),
+      });
+    });
+    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
+    const token = page.locator('.textbook-expression-content .pronunciation-token').first();
+    await expect(token).toBeVisible();
+    await token.click();
+    await page.getByRole('dialog').getByRole('button', { name: '朗读' }).click();
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('发音服务暂时不可用');
+    await expect(page.getByRole('dialog').getByRole('button', { name: '重试朗读' })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+
   test('cancels a queued textbook operation and resumes its retained steps', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     let status = 'queued';
