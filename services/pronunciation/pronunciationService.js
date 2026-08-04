@@ -9,6 +9,7 @@ const ANALYZER_VERSION = 'kuromoji-kuroshiro-v1';
 const PROJECTION_VERSION = 'pronunciation-plain-text-v1';
 const KANA_RE = /[ぁ-ゖァ-ヺー]/u;
 const JAPANESE_RE = /[\u3040-\u30ff\u3400-\u9fff々〆ヵヶ]/u;
+const HAN_ONLY_RE = /^[\u3400-\u9fff々〆ヵヶ]+$/u;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -71,6 +72,13 @@ function isScenarioJapaneseLine(line) {
 
 function hasJapaneseSignal(value) {
   return KANA_RE.test(String(value || ''));
+}
+
+function isUnresolvedHanResidue(analyzed, surface) {
+  const reading = analyzed?.reading && analyzed.reading !== '*'
+    ? String(analyzed.reading).trim()
+    : '';
+  return !reading && analyzed?.basic_form === '*' && HAN_ONLY_RE.test(String(surface || ''));
 }
 
 function extractJapaneseMarkup(markdown) {
@@ -245,6 +253,7 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
     ? japaneseSegments
     : [{ text: plainText, startCodePoint: 0, endCodePoint: codePointLength(plainText) }];
   const tokens = [];
+  const skippedTokens = [];
   for (const segment of segments) {
     tokens.push(...chooseDictionaryTokens(segment.text, dictionaryReader.entries())
       .map((token) => shiftToken(token, segment.startCodePoint)));
@@ -260,6 +269,15 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
         endCodePoint: segment.startCodePoint + codePointLength(segment.text.slice(0, index + surface.length)),
       };
       searchCursor = index + surface.length;
+      if (isUnresolvedHanResidue(analyzed, surface)) {
+        skippedTokens.push({
+          ...span,
+          surface,
+          reason: 'han-only-without-reading',
+          analyzerVersion: ANALYZER_VERSION,
+        });
+        continue;
+      }
       if (tokens.some((existing) => overlaps(existing, span))) continue;
       const readingRaw = analyzed.reading && analyzed.reading !== '*' ? analyzed.reading : null;
       tokens.push({
@@ -288,7 +306,12 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
     .filter((token, index, all) => !all.some((other, otherIndex) => (
       otherIndex < index && other.status === 'accepted' && overlaps(other, token)
     )));
-  return { plainText, tokens: addTokenKeys(accepted), status: accepted.some((token) => token.status === 'unresolved') ? 'partial' : 'ready' };
+  return {
+    plainText,
+    tokens: addTokenKeys(accepted),
+    skippedTokens,
+    status: accepted.some((token) => token.status === 'unresolved') ? 'partial' : 'ready',
+  };
 }
 
 function addTokenKeys(tokens) {
@@ -448,5 +471,6 @@ module.exports = {
   locateJapaneseSegments,
   japaneseMarkupForLegacyReader,
   toHiragana,
+  isUnresolvedHanResidue,
   documentHash,
 };

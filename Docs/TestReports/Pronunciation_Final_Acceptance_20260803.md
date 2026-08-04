@@ -14,7 +14,7 @@
 |---|---|---|
 | ESLint | PASS | `npm run lint` 无报错 |
 | React TypeScript | PASS | `npm run typecheck:react` 通过 |
-| Unit | PASS | **453/453** |
+| Unit | PASS | **456/456** |
 | Integration | PASS | **89/89** |
 | Architecture / React build / frontend budget | PASS | `npm run test:architecture` 通过；所有路由和 CardModal 延迟包预算通过 |
 | Desktop E2E | PASS | `npm run test:e2e -- --workers=1`：**82/82** |
@@ -54,6 +54,10 @@ npm run smoke
 - Textbook 和 Review 使用共享 `PronunciationText`，不与官方 Track 音频或生成句子播放混用。
 - 迁移审计、60 张历史结构问题卡清单、466 种复合候选、manifest、备份脚本、shadow replay、
   telemetry 隐私约束和运行手册已经落地。
+- 对纯汉字且分析器没有读音、`basic_form=*` 的残留 token 增加了保守过滤；这类内容不进入可见的
+  日语注音投影，也不会被伪造为日语读音，原始 Markdown、generation 和学习数据不变。
+- 466 种复合候选已经拆成 19 个只读人工评审批次（每批最多 25 个）；当前全部仍是
+  `unreviewed`，不代表已接受，也不授权历史迁移。
 - legacy Ruby reader 仍受 feature flag 保护，历史 Ruby 生成与渲染链路尚未删除。
 
 ## 5. 仍然阻塞 Final PASS 的事项
@@ -62,7 +66,7 @@ npm run smoke
 
 1. 用户逐项确认 PF-D0、PF-D1、PF-D2 的产品与交互决策。
 2. 60 张历史结构问题卡的 `repair/archive/exclude/false-positive` 人工决策。
-3. 466 种复合词候选的 accepted 来源、整词读音和人工抽样确认。
+3. 466 种复合词候选的 accepted 来源、整词读音和人工抽样确认；当前只生成了 19 批只读评审清单。
 4. 批准的历史 Canary、回滚演练、再次前进和全量 apply。
 5. 全量迁移完成后的 PF-P5 Ruby 生产链路删除与容器验收。
 6. 至少 7 个真实使用日的 PF-R1 观察，以及观察后的最终退役复核。

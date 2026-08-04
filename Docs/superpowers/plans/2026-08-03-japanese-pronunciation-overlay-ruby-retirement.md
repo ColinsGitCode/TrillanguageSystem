@@ -1882,12 +1882,17 @@ npm run smoke
 ### 已验证的自动化结果
 
 - `npm run lint`、`npm run typecheck:react`、`npm run test:architecture`：通过。
-- Unit：**453/453**；Integration：**89/89**。
+- Unit：**456/456**；Integration：**89/89**。
 - Desktop E2E：`npm run test:e2e -- --workers=1`，**82/82**。
 - `npm run test:textbooks:acceptance`：完成，TC-P4 acceptance gates passed。
 - `npm audit --omit=dev --audit-level=high`：0 vulnerabilities。
 - Compose 四服务运行态健康，`/api/health` overall online，`npm run smoke`：**7/7**。
 - 新增 telemetry/shadow replay 单元与集成测试：6/6 通过。
+- 新增 `pronunciation-quality-v1` 中文残留保护：纯汉字、无读音且 `basic_form=*` 的分析器 token
+  不进入可见日语注音投影，并由单元测试覆盖；该规则不改写原始正文或任何业务数据。
+- 新增复合候选人工评审批次 manifest：466 个不同候选、598 次出现、479 次合格出现，按每批 25 个
+  拆成 19 批；manifest hash 为 `e0ba515763676dd64546f61cee43a87f32ed23c21453ca1b076e6b5a1886354c`。
+  所有候选仍为 `unreviewed`，没有 accepted 来源，不得据此执行历史迁移。
 - Shadow replay 连续两次 `reportHash`：
   `bfcab5224107848f3c3ee8e4051a554b237c93cddff6ca78307b212c4bfab1cc`。
 - Shadow replay 不写真实 annotation、Ruby 或 generation；1 条原有 orphaned 保持原状。

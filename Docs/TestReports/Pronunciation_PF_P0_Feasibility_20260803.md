@@ -16,6 +16,9 @@
 npm run pronunciation:ruby-inventory -- --db /tmp/pronunciation-gate0.db
 npm run pronunciation:eligibility -- --db /tmp/pronunciation-gate0.db
 npm run pronunciation:compound-candidates -- --db /tmp/pronunciation-gate0.db
+npm run pronunciation:compound-batches -- --db /tmp/pronunciation-gate0.db \
+  --output /tmp/pronunciation-compound-review-batches.json --batch-size 25 \
+  --minutes-per-candidate 1
 npm run pronunciation:benchmark -- --db /tmp/pronunciation-gate0.db
 npm run pronunciation:migration-manifest -- --db /tmp/pronunciation-gate0.db
 ```
@@ -73,6 +76,24 @@ npm run pronunciation:migration-manifest -- --db /tmp/pronunciation-gate0.db
 
 复合候选 manifest 哈希：`4f639ab18f72f46ea7abe7ca02a901542faf0cdca6de67f57bfa67f575b7a0b1`
 
+### 5.1 人工评审批次
+
+为避免把 466 种候选当作一张不可操作的人工清单，新增只读批次生成器。当前基线输出：
+
+| 指标 | 结果 |
+|---|---:|
+| 不同候选 | 466 |
+| 候选出现次数 | 598 |
+| 合格出现次数 | 479 |
+| 批次大小 | 25 |
+| 批次数 | 19 |
+| 未评审候选 | 466 |
+| 计划评审时间 | 466 分钟 |
+
+批次 manifest 哈希：`e0ba515763676dd64546f61cee43a87f32ed23c21453ca1b076e6b5a1886354c`。
+它只保存稳定候选 ID、批次和人工评审字段，所有候选的 `acceptedSource` 都仍为空；分析器输出
+只是提案，不能直接变成产品事实，也不授权 `--apply`。
+
 ## 6. 迁移投影基准
 
 612 张合格卡的只读 projection 结果：
@@ -92,6 +113,8 @@ npm run pronunciation:migration-manifest -- --db /tmp/pronunciation-gate0.db
 - Ruby 解析和相邻组件候选生成；
 - 只读历史准入审计；
 - 当前分析器/词典的真实语料 benchmark；
+- `pronunciation-quality-v1` 中文残留质量规则：纯汉字、无读音且 `basic_form=*` 的分析器 token
+  被跳过并登记为 skipped，不改写原文；有读音的日语汉字词、词典命中和人工接受内容仍保留；
 - 纯正文 pronunciation document/token projection；
 - code point offset 和内容哈希；
 - 生成卡、教材表达和 Review 的统一读取接口；
@@ -104,7 +127,7 @@ npm run pronunciation:migration-manifest -- --db /tmp/pronunciation-gate0.db
 PF-P0 不能翻 PASS，原因不是代码无法运行，而是以下业务前置尚未完成：
 
 1. 人工审核 60 张 `needs-review` 卡，决定修复、隔离或排除；
-2. 对 466 个复合候选建立 accepted 来源、词典或人工裁决；
+2. 对 466 个复合候选按 19 个批次建立 accepted 来源、词典或人工裁决；
 3. 对整词读音的正确性进行抽样验收，尤其是同形异义和不规则读音；
 4. 用户确认 PF-D1 原型中的 Tooltip、Popover、双击选词、纠音和降级行为；
 5. 只有上述决策完成后，才允许执行 PF-P4 的历史 canary；

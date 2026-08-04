@@ -36,6 +36,7 @@
     "pronunciation:ruby-inventory": "node scripts/maintenance/auditPronunciationRubyInventory.js",
     "pronunciation:eligibility": "node scripts/maintenance/auditPronunciationMigrationEligibility.js",
     "pronunciation:compound-candidates": "node scripts/maintenance/buildPronunciationCompoundCandidates.js",
+    "pronunciation:compound-batches": "node scripts/maintenance/buildPronunciationCompoundReviewBatches.js",
     "pronunciation:benchmark": "node scripts/maintenance/benchmarkPronunciationAnalyzer.js",
     "pronunciation:migration-manifest": "node scripts/maintenance/buildPronunciationMigrationManifest.js",
     "pronunciation:migration-apply": "node scripts/maintenance/applyPronunciationMigrationPlan.js",

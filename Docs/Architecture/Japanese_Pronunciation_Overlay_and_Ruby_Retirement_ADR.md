@@ -150,6 +150,13 @@ payload 返回 `PRONUNCIATION_EVENT_CONFLICT`；revision 过期返回
 
 日志只允许记录 target id、状态、耗时、长度和错误码，不记录完整卡片、选区或读音文本。
 
+### 6.3 中文残留过滤
+
+分析器返回的纯汉字 token 只有在存在 reading、词典命中或人工/教材 accepted 来源时才进入
+pronunciation projection。若 surface 只含汉字、Kuromoji 的 `basic_form` 为 `*` 且没有
+reading，则按 `pronunciation-quality-v1` 跳过，避免把中文提示残留显示成“读音待确认”。
+该规则不修改原 Markdown，不改变 generation、annotation、KG、LA 或 FSRS 数据。
+
 ## 7. 前端所有权
 
 - CardModal、TextbookPublishedBrowser、ReviewSessionPage 共享 `PronunciationText`/token

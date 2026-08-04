@@ -9,6 +9,7 @@ const {
   locateJapaneseSegments,
   stripMarkdownToJapaneseText,
   toHiragana,
+  isUnresolvedHanResidue,
 } = require('../../services/pronunciation/pronunciationService');
 
 function insertGeneration(db, markdown = '# sample\n\n## 2. 日本語:\n- **例句1**: 勤務表を確認します。') {
@@ -26,6 +27,13 @@ function insertGeneration(db, markdown = '# sample\n\n## 2. 日本語:\n- **例�
 test('converts analyzer katakana to hiragana deterministically', () => {
   assert.equal(toHiragana('キンムヒョウ'), 'きんむひょう');
   assert.equal(toHiragana('カタカナABC'), 'かたかなABC');
+});
+
+test('identifies unresolved Han-only analyzer residue without rejecting normal Japanese readings', () => {
+  assert.equal(isUnresolvedHanResidue({ basic_form: '*', reading: undefined }, '风'), true);
+  assert.equal(isUnresolvedHanResidue({ basic_form: '来月', reading: 'ライゲツ' }, '来月'), false);
+  assert.equal(isUnresolvedHanResidue({ basic_form: '*', reading: 'キンム' }, '勤務'), false);
+  assert.equal(isUnresolvedHanResidue({ basic_form: '*', reading: undefined }, '勤務表を'), false);
 });
 
 test('dictionary entries override Kuromoji readings and preserve word boundaries', async () => {
@@ -64,6 +72,14 @@ test('generation projection analyzes Japanese sections without treating Chinese 
   assert.ok(result.tokens.some((token) => token.surface === '勤務表'));
   assert.equal(result.tokens.some((token) => token.surface === '工作'), false);
   assert.equal(result.tokens.some((token) => token.surface === '查看'), false);
+});
+
+test('skips Han-only analyzer residue when it has no Japanese reading', async () => {
+  const result = await buildTokens('风 语 标 无 勤務表 来月');
+  assert.equal(result.tokens.some((token) => ['风', '语', '标', '无'].includes(token.surface)), false);
+  assert.deepEqual(result.skippedTokens.map((token) => token.surface), ['风', '语', '标', '无']);
+  assert.ok(result.tokens.some((token) => token.surface === '勤務表' && token.status === 'accepted'));
+  assert.ok(result.tokens.some((token) => token.surface === '来月' && token.status === 'accepted'));
 });
 
 test('scenario projection only analyzes 日本語 expression fields', async () => {

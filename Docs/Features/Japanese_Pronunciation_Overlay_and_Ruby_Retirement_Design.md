@@ -617,20 +617,21 @@ PF-D2 必须在以下两种方案中正式裁决：
 
 ## 11. API 草案
 
-### 11.1 读取
+### 11.1 读取（当前实现）
 
 ```text
-GET /api/pronunciation/documents/:targetKind/:targetId
-GET /api/pronunciation/tokens/:tokenId
+GET /api/pronunciation?targetKind=generation&targetId=:targetId
+GET /api/pronunciation?targetKind=textbook_expression&targetId=:targetId
 ```
 
-响应必须包含 `targetRevisionHash`。客户端发现卡片 hash 与文档 hash 不一致时，应将读音层
-标为 stale 并降级成纯正文，不得错位展示。
+当前响应包含 `plainText`、document view-model 和 token 列表。客户端发现卡片 content hash
+与 pronunciation source hash 不一致时，应将读音层标为 stale 并降级成纯正文，不得错位展示。
+按 token id 读取的独立 endpoint 尚未实现，不得在前端直接拼接一个不存在的路径。
 
-### 11.2 修正
+### 11.2 修正（当前实现）
 
 ```text
-POST /api/pronunciation/tokens/:tokenId/corrections
+POST /api/pronunciation/corrections
 ```
 
 请求包含：
@@ -644,7 +645,7 @@ POST /api/pronunciation/tokens/:tokenId/corrections
 }
 ```
 
-### 11.3 人工确认队列
+### 11.3 人工确认队列（后续 contract）
 
 ```text
 GET /api/pronunciation/unresolved
@@ -653,6 +654,17 @@ POST /api/pronunciation/unresolved/:id/resolve
 
 该队列属于 pronunciation 内容质量域，不得复活旧 Knowledge OPS 页面。未来可作为新的
 受控 workflow 页面接入 App Shell。
+
+### 11.4 中文残留质量规则
+
+如果 Kuromoji 返回的 token 同时满足以下条件，系统将其视为内容残留并跳过，不生成伪读音：
+
+- surface 只包含汉字，没有假名；
+- analyzer 没有返回 reading，且 `basic_form` 为 `*`；
+- 没有被本地词典、教材官方读音或人工 correction 覆盖。
+
+这不是“所有汉字都按中文删除”。有 reading 的日语汉字词、词典命中和 legacy/教材 accepted
+来源优先保留。被跳过的 token 只作为分析质量指标，不改变原 Markdown 或其它领域数据。
 
 ## 12. Feature Flag 与切换
 
