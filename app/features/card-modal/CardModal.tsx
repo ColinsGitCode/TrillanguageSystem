@@ -9,6 +9,7 @@ import {
 import {
   ChevronDown,
   ChevronRight,
+  BookOpen,
   Copy,
   Eraser,
   Highlighter,
@@ -35,7 +36,11 @@ import { markUiInteractionEnd } from '../../lib/performance';
 import { createAnchor } from './annotation-anchor.mjs';
 import { applyAnnotations } from './annotation-render.mjs';
 import type { CardAnnotationSelector } from './annotation-render.mjs';
-import { buildSelectionCandidate } from './selection';
+import {
+  buildSelectionCandidate,
+  buildWordRangeAtPoint,
+  selectionRangeContainsPoint,
+} from './selection';
 import {
   extractMarkdownTitle,
   renderCardMarkdown,
@@ -48,6 +53,13 @@ import {
 import type {
   KnowledgeLookupDraft,
 } from './SelectionKnowledgePanel';
+import {
+  pronunciationTokenForRange,
+  rangeIntersectsPronunciationToken,
+  selectPronunciationToken,
+} from './pronunciation-overlay';
+import type { PronunciationToken } from './pronunciation-overlay';
+import type { CardLookupLanguage } from './selection-actions';
 import '../../styles/card-modal.css';
 
 const DeferredIntelPanel = lazy(async () => {
@@ -61,6 +73,10 @@ const DeferredSelectionKnowledgePanel = lazy(async () => {
 const DeferredSelectionTtsControls = lazy(async () => {
   const module = await import('./SelectionTtsControls');
   return { default: module.SelectionTtsControls };
+});
+const DeferredSelectionGlossaryInline = lazy(async () => {
+  const module = await import('./SelectionGlossaryInline');
+  return { default: module.SelectionGlossaryInline };
 });
 const DeferredManualTagBar = lazy(async () => {
   const module = await import('../manual-tags/ManualTagBar');
@@ -109,6 +125,8 @@ type SelectionToolbarState = {
   phrase: string;
   rawText: string;
   annotationId: string | null;
+  language: CardLookupLanguage | null;
+  pronunciationToken: PronunciationToken | null;
 };
 
 function lookupErrorMessage(error: unknown): string {
@@ -157,6 +175,7 @@ export function CardModal({
   const [genMenuOpen, setGenMenuOpen] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [knowledgeDraft, setKnowledgeDraft] = useState<KnowledgeLookupDraft | null>(null);
+  const [pronunciationDetailTokenKey, setPronunciationDetailTokenKey] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const annotationStateRef = useRef<{
     target: AnnotationTarget;
@@ -167,6 +186,19 @@ export function CardModal({
     queryFn: () => factoryApi.card(selection),
   });
   const generationId = cardQuery.data?.record?.id || selection.generationId || null;
+  const cardReaderShadowConfig = useQuery({
+    queryKey: ['card-reader-shadow', 'config'],
+    queryFn: factoryApi.cardReaderShadowConfig,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+  useQuery({
+    queryKey: ['card-reader-shadow', generationId],
+    queryFn: () => factoryApi.cardReaderShadow(Number(generationId)),
+    enabled: Boolean(generationId) && cardReaderShadowConfig.data?.enabled === true,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
 
   useEffect(() => {
@@ -407,6 +439,7 @@ export function CardModal({
     setGenMenuOpen(false);
     setColorMenuOpen(false);
     setKnowledgeDraft(null);
+    setPronunciationDetailTokenKey(null);
     knowledgeMutation.reset();
   };
 
@@ -494,7 +527,7 @@ export function CardModal({
   const openKnowledgeLookup = () => {
     const phrase = toolbar?.phrase || '';
     if (!phrase) return;
-    const language = inferLookupLanguage(phrase);
+    const language = toolbar?.language || inferLookupLanguage(phrase);
     const generationId = cardQuery.data?.record?.id;
     lookupSourceRef.current = {
       targetKind: 'generation',
@@ -546,6 +579,8 @@ export function CardModal({
       phrase: annotation.selector.textQuote.exact,
       rawText: annotation.selector.textQuote.exact,
       annotationId,
+      language: inferLookupLanguage(annotation.selector.textQuote.exact),
+      pronunciationToken: null,
     });
     setGenMenuOpen(false);
     setColorMenuOpen(false);
@@ -556,6 +591,7 @@ export function CardModal({
     if (!container) return;
     const candidate = buildSelectionCandidate(container);
     if (!candidate) {
+      window.getSelection()?.removeAllRanges();
       selectedRangeRef.current = null;
       selectedAnchorRef.current = null;
       selectedTextRef.current = '';
@@ -592,6 +628,8 @@ export function CardModal({
     const rect = candidate.range.getBoundingClientRect();
     const placeBelow = rect.top < 64;
     const anchorLeft = rect.left + rect.width / 2;
+    const pronunciationToken = pronunciationTokenForRange(container, candidate.range);
+    const isJapaneseProjection = rangeIntersectsPronunciationToken(container, candidate.range);
     setKnowledgeDraft(null);
     knowledgeMutation.reset();
     focusToolbarAfterSelectionRef.current = focusToolbar;
@@ -603,6 +641,8 @@ export function CardModal({
       phrase: candidate.normalized,
       rawText: candidate.rawText,
       annotationId: null,
+      language: isJapaneseProjection ? 'ja' : inferLookupLanguage(candidate.normalized),
+      pronunciationToken,
     });
     setGenMenuOpen(false);
     setColorMenuOpen(false);
@@ -658,17 +698,6 @@ export function CardModal({
     if (marker?.dataset.annotationId) activateAnnotation(marker.dataset.annotationId);
   };
 
-  const handlePronunciationKnowledge = (surface: string) => {
-    const currentGenerationId = cardQuery.data?.record?.id;
-    lookupSourceRef.current = { surface: 'pronunciation-popover', targetKind: 'generation', targetId: currentGenerationId || null };
-    knowledgeMutation.reset();
-    setKnowledgeDraft({ phrase: surface, language: 'ja', kind: inferLookupKind(surface, 'ja') });
-  };
-
-  const handlePronunciationGenerateCard = (surface: string) => {
-    generateMutation.mutate({ phrase: surface, cardType: 'trilingual' });
-  };
-
   const handlePronunciationCorrectionSaved = (result: Awaited<ReturnType<typeof factoryApi.correctPronunciation>>) => {
     if (!generationId) return;
     queryClient.setQueryData(['pronunciation', 'generation', generationId], (current: {
@@ -680,7 +709,7 @@ export function CardModal({
   };
 
   const preserveSelectionOutsideActions = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) event.preventDefault();
+    if (!(event.target instanceof HTMLElement) || !event.target.closest('button, input, select, textarea')) event.preventDefault();
   };
 
   const restoreGenerateTriggerFocus = (event: Event) => {
@@ -701,6 +730,7 @@ export function CardModal({
   };
 
   const handleToolbarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const buttons = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
@@ -724,7 +754,46 @@ export function CardModal({
       activateAnnotation(marker.dataset.annotationId);
       return;
     }
-    if (!hasSelection && !toolbar?.annotationId) event.stopPropagation();
+    const container = contentRef.current;
+    if (!container) return;
+
+    const current = buildSelectionCandidate(container);
+    if (current && selectionRangeContainsPoint(current.range, event.clientX, event.clientY)) {
+      window.requestAnimationFrame(() => captureSelection(false));
+      return;
+    }
+
+    const storedRange = selectedRangeRef.current;
+    if (storedRange && selectionRangeContainsPoint(storedRange, event.clientX, event.clientY)) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(storedRange.cloneRange());
+      window.requestAnimationFrame(() => captureSelection(false));
+      return;
+    }
+
+    const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
+    if (token && selectPronunciationToken(token)) {
+      window.requestAnimationFrame(() => captureSelection(false, true));
+      return;
+    }
+
+    const range = buildWordRangeAtPoint(container, event.clientX, event.clientY);
+    if (range) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      window.requestAnimationFrame(() => captureSelection(false, true));
+      return;
+    }
+
+    window.getSelection()?.removeAllRanges();
+    selectedRangeRef.current = null;
+    selectedAnchorRef.current = null;
+    selectedTextRef.current = '';
+    setHasSelection(false);
+    setToolbar(null);
+    event.stopPropagation();
   };
 
   const plainCardContent = renderedHtml ? (
@@ -751,8 +820,8 @@ export function CardModal({
         onCaptureSelection={captureSelection}
         onContentClick={handleContentClick}
         onContextMenuCapture={handleContentContextMenuCapture}
-        onKnowledge={handlePronunciationKnowledge}
-        onGenerateCard={handlePronunciationGenerateCard}
+        requestedDetailTokenKey={pronunciationDetailTokenKey}
+        onDetailRequestHandled={() => setPronunciationDetailTokenKey(null)}
         onCorrectionSaved={handlePronunciationCorrectionSaved}
         onToast={showToast}
       />
@@ -939,6 +1008,15 @@ export function CardModal({
               <span>已选</span>
               <strong>{toolbar.phrase}</strong>
             </output>
+            <Suspense fallback={<span className="csa-gloss is-muted" role="status">正在载入本地释义…</span>}>
+              <DeferredSelectionGlossaryInline
+                phrase={toolbar.phrase}
+                language={toolbar.language}
+                generationId={generationId ? Number(generationId) : null}
+                contextLabel={displayTitle}
+                onToast={showToast}
+              />
+            </Suspense>
             <span className="csa-sep" aria-hidden="true" />
             {!readOnly && <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
               <DropdownMenu.Trigger asChild>
@@ -997,8 +1075,19 @@ export function CardModal({
               <Copy aria-hidden="true" />
             </button>
             <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
-              <DeferredSelectionTtsControls phrase={toolbar.phrase} />
+              <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
             </Suspense>
+            {toolbar.pronunciationToken && (
+              <button
+                type="button"
+                className="csa-icon-action"
+                aria-label="查看日语读音详情"
+                title="查看日语读音详情"
+                onClick={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)}
+              >
+                <BookOpen aria-hidden="true" />
+              </button>
+            )}
             <button
               ref={lookupTriggerRef}
               type="button"

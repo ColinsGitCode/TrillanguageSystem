@@ -79,6 +79,11 @@ const PRONUNCIATION_TABLES = Object.freeze([
   'pronunciation_correction_events',
 ]);
 
+const LOCAL_GLOSSARY_TABLES = Object.freeze([
+  'local_glossary_entries',
+  'local_glossary_proposals',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -193,6 +198,14 @@ function assertPronunciationPostconditions(db) {
   if (missing.length) throw new Error(`Pronunciation migration missing tables: ${missing.join(', ')}`);
 }
 
+function assertLocalGlossaryPostconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = LOCAL_GLOSSARY_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Local glossary migration missing tables: ${missing.join(', ')}`);
+}
+
 function parseMigrationDirectives(migration) {
   const lines = String(migration.sql || '').split(/\r?\n/u);
   const directives = new Set();
@@ -297,6 +310,7 @@ function runMigrations(db, options = {}) {
   assertManualTagPostconditions(db);
   assertCardEngagementPostconditions(db);
   assertPronunciationPostconditions(db);
+  assertLocalGlossaryPostconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
@@ -305,6 +319,7 @@ module.exports = {
   CARD_ANNOTATION_P3_TABLES,
   CARD_ENGAGEMENT_TABLES,
   PRONUNCIATION_TABLES,
+  LOCAL_GLOSSARY_TABLES,
   MANUAL_TAG_TABLES,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
@@ -316,6 +331,7 @@ module.exports = {
   assertCardAnnotationP3Postconditions,
   assertCardEngagementPostconditions,
   assertPronunciationPostconditions,
+  assertLocalGlossaryPostconditions,
   assertManualTagPostconditions,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,

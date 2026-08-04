@@ -11,6 +11,10 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // LLM proposals before confirmed local glossary entries.
+  'local_glossary_proposals',
+  'local_glossary_entries',
+
   // Pronunciation projections/events before their document parent.
   'pronunciation_correction_events',
   'pronunciation_tokens',

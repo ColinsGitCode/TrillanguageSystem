@@ -16,6 +16,7 @@ Current runtime capabilities:
 - folder/card browsing, history, deletion, and highlights;
 - card modal with CONTENT and INTEL;
 - desktop CardModal English/Japanese selection read-aloud with conservative language confirmation, three speeds, retry, exclusive cross-surface playback, and an isolated ephemeral cache;
+- one shared CardModal selection toolbar for English and Japanese, with read-only layered Chinese gloss lookup, manually managed local glossary entries, and explicit human-confirmed DeepSeek proposals;
 - generation observability and infrastructure health;
 - Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics;
 - Textbook Courses TC-P4: Git-external draft Manifest import, textbook search, controlled official Track audio streaming, `/textbooks` desktop review page, persisted selection highlights, human verification, explicit Track publishing to `textbook_track` generation projections, formal English/Japanese per-expression TTS assets, `textbook_en/ja` Study Items, learning plan scope v2, review item view-models, history filters, textbook selection card derivation, full desktop E2E/visual acceptance, and documented backup/recovery.
@@ -67,7 +68,9 @@ The active Cards Factory frontend is React Router v8 + TypeScript at `/`; `/api/
 
 `server.js` is not a second production entry. It is the CommonJS API-only bootstrap used by `tests/integration/_harness.js`; both entrypoints delegate Express construction and startup to `lib/httpRuntime`, while only `server.mjs` mounts React Router and runs in Compose.
 
-Frontend feature styles belong to their React Router route modules, not `app/root.tsx`; the root may load only shared tokens, page-header, dialog, and page-state styles. The full CardModal is a deferred interaction module reached through `DeferredCardModal`, so Cards Factory and the review session must not eagerly import its JS or CSS. CardModal's generation info, selection knowledge, and selection read-aloud panels are separate deferred chunks and must not be folded back into the main modal bundle. `npm run test:architecture` includes `check:frontend-budget`, which enforces global CSS, per-route initial assets, and deferred chunk budgets in `config/frontend-asset-budgets.json`.
+Frontend feature styles belong to their React Router route modules, not `app/root.tsx`; the root may load only shared tokens, page-header, dialog, and page-state styles. The full CardModal is a deferred interaction module reached through `DeferredCardModal`, so Cards Factory and the review session must not eagerly import its JS or CSS. CardModal's generation info, selection knowledge, selection read-aloud, and local-glossary panels are separate deferred chunks and must not be folded back into the main modal bundle. `npm run test:architecture` includes `check:frontend-budget`, which enforces global CSS, per-route initial assets, and deferred chunk budgets in `config/frontend-asset-budgets.json`.
+
+Card Reader v3 is at CR-P1 shadow only. `services/cardReader/` owns the server-side Unified/Remark parser and bounded v2/v3 comparator; `routes/cardReader.js` may return only parity, counts, hashes and fixed diagnostic codes, never Markdown, CardDocument, title, translation, reading or selection content. Shadow reads must remain SQLite-write-free. The browser continues to render only v2, and no frontend module may import Unified/Remark/Rehype. `CARD_READER_V3_SHADOW_ENABLED` may disable the probe without changing card behavior. CR-P1 does not authorize a visible v3 Canary, historical Ruby migration, legacy-reader removal, or analyzer proposal acceptance.
 
 Public SaaS readiness does not add account, tenant, role, or billing UI. `lib/workspaceAccess.js` owns the process-level `owner` / `sandbox` boundary and `routes/runtime.js` exposes the sanitized public descriptor. A public owner workspace must be protected by a real gateway, VPN, or reverse proxy. A sandbox process must use a dedicated instance id and keep SQLite, records, textbook source/work files, and selection-TTS cache inside that instance root. Sandbox writes are fail-closed and high-cost operations use a second gate. Never bypass these checks or mount the owner's persistent volumes into an anonymous sandbox; see `Docs/Operations/Public_SaaS_Workspace_Runbook.md`.
 
@@ -89,6 +92,8 @@ Active route modules:
 - routes/uiPerformance.js: bounded, content-free UI performance samples at `POST /api/ui-performance`;
 - routes/ocr.js: /api/ocr;
 - routes/selectionTts.js: `GET/POST /api/tts/selection` config discovery and immediate English/Japanese binary synthesis;
+- routes/localGlossary.js: read-only layered English/Japanese Chinese-gloss lookup, manual local glossary CRUD, and explicit DeepSeek proposal acceptance/rejection;
+- routes/cardReader.js: CR-P1 read-only Card Reader v3 shadow config and bounded parity report by generation id;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
 - routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, explicit publish, persisted highlights, selection derivation jobs, official audio content, and generated per-expression TTS content, feature-flagged on by default for TC-P4;
@@ -126,6 +131,9 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         selectionTtsCache.js
         selectionTtsErrors.js
         selectionTtsService.js
+      localGlossary/
+        localGlossaryNormalizer.js
+        localGlossaryService.js
       learning/
         application/
           learningService.js
@@ -182,6 +190,7 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - Selection TTS is a desktop-only, on-demand English/Japanese tool. It calls the same Kokoro/VOICEVOX providers through `synthesizeSpeech()` and the shared priority coordinator; interactive work enters before waiting batch work, while a 5-second anti-starvation window preserves batch progress.
 - `GET /api/tts/selection` exposes only controlled client configuration. `POST /api/tts/selection` returns immediate binary audio with provider/cache metadata; it must not create `audio_files`, generations, annotations, KG facts, Study Items, Review Events, or FSRS state.
 - Selection TTS cache is an opaque-hash, TTL-bounded named volume at `three_lans_system_selection_tts_cache`. It is outside SQLite, `RECORDS_PATH`, textbook media, and `express.static`; cache write failure must degrade to `X-TTS-Cache: BYPASS` while still returning successful provider audio.
+- Local Chinese-gloss lookup is read-only and local-first: current-card exact translations, textbook expressions, confirmed local entries, then exact recent-card history. It must never call DeepSeek or persist data during lookup. `LOCAL_GLOSSARY_LLM_ENABLED` controls only the explicit proposal endpoint; proposals remain pending and editable until a user accepts them into `local_glossary_entries`.
 
 Provider errors use structured Error.code, Error.status, and Error.payload. Do not classify by matching message text.
 
@@ -204,6 +213,7 @@ Required invariants:
 - highlights and notes persist through `card_annotations`; `card_highlights` is a frozen
   migration/audit snapshot and must not be used by runtime readers or writers;
 - desktop modal height, focus trap, Escape, and focus restoration remain stable.
+- English and Japanese selections use the same toolbar. A selection intersecting a pronunciation token is deterministically Japanese, including kanji-only text; a kanji-only selection outside that projection remains ambiguous and must not be guessed.
 
 ## Frontend
 
@@ -286,6 +296,8 @@ Current tables:
 - kg_lookup_events;
 - kg_point_stats;
 - kg_planning_signals;
+- local_glossary_entries;
+- local_glossary_proposals;
 - generations_fts virtual table and triggers.
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
@@ -363,6 +375,7 @@ See .env.example. Key groups:
 - TTS: TTS_EN_ENDPOINT, TTS_JA_ENDPOINT;
 - OCR: OCR_PROVIDER, OCR_TESSERACT_ENDPOINT, OCR_LANGS;
 - optional local OCR/dev LLM: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_OCR_MODEL.
+- local glossary proposal gate: LOCAL_GLOSSARY_LLM_ENABLED.
 
 Knowledge and SRS environment variables are retired and must not be reintroduced.
 

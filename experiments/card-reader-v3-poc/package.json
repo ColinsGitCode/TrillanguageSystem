@@ -1,0 +1,33 @@
+{
+  "name": "three-lans-card-reader-v3-poc",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx --test src/card-document.test.tsx",
+    "prebuild": "tsx scripts/generate-fixture.ts",
+    "build": "vite build",
+    "verify": "node verify.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "unified": "^11.0.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@types/hast": "^3.0.4",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}

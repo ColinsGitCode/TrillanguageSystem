@@ -22,7 +22,13 @@ function errorMessage(error: unknown) {
   return '发音生成失败，请重试';
 }
 
-export function SelectionTtsControls({ phrase }: { phrase: string }) {
+export function SelectionTtsControls({
+  phrase,
+  languageHint,
+}: {
+  phrase: string;
+  languageHint?: SelectionTtsLanguage | null;
+}) {
   const configQuery = useQuery({
     queryKey: ['selection-tts', 'config'],
     queryFn: selectionTtsApi.config,
@@ -63,7 +69,7 @@ export function SelectionTtsControls({ phrase }: { phrase: string }) {
     setMessage('');
   };
 
-  useEffect(() => reset, [phrase]);
+  useEffect(() => reset, [phrase, languageHint]);
   useEffect(() => () => {
     cancelRequest();
     playback.stop();
@@ -81,7 +87,7 @@ export function SelectionTtsControls({ phrase }: { phrase: string }) {
   if (!configQuery.data?.enabled) return null;
 
   const play = async (confirmedLanguage?: SelectionTtsLanguage) => {
-    const resolvedLanguage = confirmedLanguage || language || inferSelectionTtsLanguage(phrase);
+    const resolvedLanguage = confirmedLanguage || languageHint || language || inferSelectionTtsLanguage(phrase);
     if (!resolvedLanguage) {
       setConfirmLanguage(true);
       return;

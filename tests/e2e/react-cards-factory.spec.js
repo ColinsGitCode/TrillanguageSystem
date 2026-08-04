@@ -364,9 +364,17 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test('P4 renders full-height Markdown, pronunciation tokens, audio and generation details', async ({ page }) => {
     await page.goto('/');
     const opener = page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' });
+    const shadowResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/card-reader/shadow' && response.request().method() === 'GET';
+    });
     await opener.click();
     const modal = page.getByTestId('react-card-modal');
     await expect(modal).toBeVisible();
+    const shadowPayload = await (await shadowResponse).json();
+    expect(shadowPayload.report.parity).toBe(true);
+    await expect(modal.locator('[data-card-renderer-version="3"]')).toHaveCount(0);
+    await expect(modal.locator('[data-card-renderer-version="2"]')).toHaveCount(1);
     const modalBox = await modal.locator('.react-card-modal').boundingBox();
     expect(modalBox.height).toBeGreaterThan(page.viewportSize().height - 30);
     await expect(modal.locator('ruby')).toHaveCount(0);
@@ -491,9 +499,11 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(fragments.first()).toHaveAttribute('data-pronunciation-fragment-count', '2');
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     await fragments.first().dispatchEvent('click');
-    await expect(page.getByRole('dialog', { name: '读音与学习动作' })).toContainText(candidate.surface);
+    await expect(page.getByRole('dialog', { name: '读音详情' })).toHaveCount(0);
     await fragments.last().dispatchEvent('dblclick');
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', candidate.surface);
+    await page.getByRole('button', { name: '查看日语读音详情' }).click();
+    await expect(page.getByRole('dialog', { name: '读音详情' })).toContainText(candidate.surface);
 
     const removed = await request.delete(`/api/annotations/${savedAnnotation.id}`, {
       data: { expectedVersion: savedAnnotation.version },
@@ -628,16 +638,74 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(greenMarker).toHaveCount(0);
   });
 
-  test('CA-I1 requires an explicit language choice for a kanji-only lookup', async ({ page }) => {
+  test('shows a local Chinese gloss for both English and Japanese selections without an automatic LLM call', async ({ page }) => {
+    const lookups = [];
+    let proposalCalls = 0;
+    await page.route('**/api/local-glossary/lookup*', async (route) => {
+      const url = new URL(route.request().url());
+      const language = url.searchParams.get('language');
+      lookups.push({ language, text: url.searchParams.get('text') });
+      await route.fulfill({
+        json: {
+          success: true,
+          lookup: {
+            status: 'exact',
+            query: { text: url.searchParams.get('text'), language, canonicalForm: url.searchParams.get('text'), normalizedForm: url.searchParams.get('text') },
+            gloss: { id: null, zhGloss: language === 'ja' ? '日语本地释义' : '英语本地释义', sourceKind: 'current-card', sourceId: 1, confidence: 'high', version: null },
+            alternatives: [],
+          },
+        },
+      });
+    });
+    await page.route('**/api/local-glossary/proposals', async (route) => {
+      proposalCalls += 1;
+      await route.abort();
+    });
+
     await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'deterministic');
+    await expect(page.locator('.csa-gloss')).toContainText('英语本地释义');
+
+    await page.getByTestId('react-card-modal-close').click();
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
-    await selectVisibleText(page, '昨夜', { keyboard: true });
+    const japaneseToken = page.getByTestId('react-card-content').locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await japaneseToken.dispatchEvent('dblclick');
+    await expect(page.locator('.csa-gloss')).toContainText('日语本地释义');
+    expect(lookups.some((item) => item.language === 'en')).toBeTruthy();
+    expect(lookups.some((item) => item.language === 'ja')).toBeTruthy();
+    expect(proposalCalls).toBe(0);
+  });
+
+  test('uses the Japanese pronunciation projection to classify a kanji-only selection', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const content = page.getByTestId('react-card-content');
+    const tokens = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]');
+    await expect(tokens.first()).toBeVisible();
+    const kanjiIndex = await tokens.evaluateAll((nodes) => nodes.findIndex((node) => (
+      /[\p{Script=Han}々〆ヵヶ]/u.test(node.getAttribute('data-pronunciation-surface') || '')
+    )));
+    expect(kanjiIndex).toBeGreaterThanOrEqual(0);
+    await tokens.nth(kanjiIndex).evaluate((node) => {
+      const textNode = Array.from(node.childNodes).find((child) => (
+        child.nodeType === Node.TEXT_NODE && /[\p{Script=Han}々〆ヵヶ]/u.test(child.nodeValue || '')
+      ));
+      if (!textNode) throw new Error('Expected a kanji text fragment inside the pronunciation token');
+      const match = /[\p{Script=Han}々〆ヵヶ]/u.exec(textNode.nodeValue || '');
+      const range = document.createRange();
+      range.setStart(textNode, match.index);
+      range.setEnd(textNode, match.index + match[0].length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      node.closest('[data-testid="react-card-content"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
     await page.getByRole('button', { name: '查知识点' }).click();
 
     const inspector = page.getByTestId('card-knowledge-inspector');
-    await expect(inspector).toContainText('汉字选区无法可靠判断');
-    await expect(inspector.getByRole('button', { name: '确认查询' })).toBeDisabled();
-    await inspector.getByRole('button', { name: '日本語' }).click();
+    await expect(inspector).not.toContainText('汉字选区无法可靠判断');
+    await expect(inspector).toContainText('日本語');
     await expect(inspector.getByRole('button', { name: '确认查询' })).toBeEnabled();
   });
 
@@ -675,7 +743,69 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     });
   });
 
-  test('CA-P1 keeps selection actions keyboard-accessible and only takes over right click with a selection', async ({ page }) => {
+  test('right click replaces a stale range with the English word or Japanese pronunciation token under the pointer', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await waitForPronunciationContent(page);
+    const content = page.getByTestId('react-card-content');
+
+    const staleSelectionLength = await content.evaluate((container) => {
+      const nodes = [];
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        nodes.push(node);
+        node = walker.nextNode();
+      }
+      const start = nodes.find((candidate) => candidate.nodeValue?.includes('deterministic'));
+      const startBlock = start.parentElement.closest('li, p, h1, h2, h3, h4, blockquote');
+      const blocks = Array.from(container.querySelectorAll('li, p, h1, h2, h3, h4, blockquote'));
+      const endBlock = blocks.slice(blocks.indexOf(startBlock) + 1).find((candidate) => candidate.textContent?.trim());
+      const endWalker = document.createTreeWalker(endBlock, NodeFilter.SHOW_TEXT);
+      const end = endWalker.nextNode();
+      const range = document.createRange();
+      range.setStart(start, start.nodeValue.indexOf('deterministic'));
+      range.setEnd(end, Math.min(5, end.nodeValue.length));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      const selectedLength = Array.from(selection.toString()).length;
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      return selectedLength;
+    });
+    expect(staleSelectionLength).toBeLessThan(200);
+    await expect.poll(() => content.evaluate(() => window.getSelection()?.toString() || '')).toBe('');
+    await expect(page.locator('.card-selection-toolbar')).toHaveCount(0);
+
+    const englishPoint = await content.evaluate((container) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node && !node.nodeValue?.includes('deterministic')) node = walker.nextNode();
+      const start = node.nodeValue.indexOf('deterministic');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 'deterministic'.length);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await page.mouse.click(englishPoint.x, englishPoint.y, { button: 'right' });
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', 'deterministic');
+    await expect(page.locator('.csa-context-menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const japaneseTokens = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]');
+    const japaneseIndex = await japaneseTokens.evaluateAll((nodes) => nodes.findIndex((node) => (
+      /[\p{Script=Han}々〆ヵヶ]/u.test(node.getAttribute('data-pronunciation-surface') || '')
+    )));
+    expect(japaneseIndex).toBeGreaterThanOrEqual(0);
+    const japaneseToken = japaneseTokens.nth(japaneseIndex);
+    const surface = await japaneseToken.getAttribute('data-pronunciation-surface');
+    await japaneseToken.click({ button: 'right' });
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
+    await expect(page.locator('.csa-context-menu')).toBeVisible();
+  });
+
+  test('CA-P1 keeps selection actions keyboard-accessible and restores focus after closing a menu', async ({ page }) => {
     let resolveQueuedRequest;
     const queuedRequest = new Promise((resolve) => { resolveQueuedRequest = resolve; });
     await page.route('**/api/generation-jobs', async (route) => {
@@ -688,9 +818,6 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
     await waitForPronunciationContent(page);
     const content = page.getByTestId('react-card-content');
-
-    await content.click({ button: 'right', position: { x: 12, y: 12 } });
-    await expect(page.locator('.csa-context-menu')).toHaveCount(0);
 
     await content.evaluate((container) => {
       const text = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('E2E'))?.firstChild;
@@ -713,20 +840,13 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.locator(':focus')).toHaveAttribute('role', 'menuitem');
     await page.keyboard.press('Escape');
     await expect(generateTrigger).toBeFocused();
-
-    await content.click({ button: 'right', position: { x: 30, y: 30 } });
-    const contextMenu = page.locator('.csa-context-menu');
-    await expect(contextMenu).toBeVisible();
-    await contextMenu.getByRole('menuitem', { name: '生成卡片' }).hover();
-    const contextMenus = page.locator('[role="menu"]');
-    await expect(contextMenus).toHaveCount(2);
-    await contextMenus.nth(1).getByRole('menuitem', { name: '单词卡' }).click();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: '单词卡' }).click();
     await expect(queuedRequest).resolves.toMatchObject({
       phrase: selectedPhrase,
       card_type: 'trilingual',
       source_mode: 'selection',
     });
-    await expect(content).toBeFocused();
   });
 
   test('P4 keeps the selection toolbar inside the desktop viewport', async ({ page }) => {
@@ -816,13 +936,15 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     });
   });
 
-  test('ST-P2 requires explicit language for kanji and aborts stale selection work', async ({ page }) => {
+  test('ST-P2 reuses the Japanese projection language and aborts stale selection work', async ({ page }) => {
     let requestCount = 0;
+    const requests = [];
     await page.route('**/api/tts/selection', async (route) => {
       if (route.request().method() === 'GET') {
         return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
       }
       requestCount += 1;
+      requests.push(route.request().postDataJSON());
       await new Promise((resolve) => setTimeout(resolve, requestCount === 1 ? 500 : 0));
       return route.fulfill({
         status: 200,
@@ -853,10 +975,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
     await selectVisibleText(page, '昨夜', { keyboard: true });
     await page.getByRole('button', { name: '朗读选区' }).click();
-    const confirmation = page.getByRole('dialog', { name: '选择朗读语言' });
-    await expect(confirmation).toBeVisible();
-    await confirmation.getByRole('button', { name: '日本語' }).click();
     await expect.poll(() => requestCount).toBe(1);
+    expect(requests[0]).toMatchObject({ text: '昨夜', language: 'ja' });
+    await expect(page.getByRole('dialog', { name: '选择朗读语言' })).toHaveCount(0);
     await selectVisibleText(page, 'そうです');
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', 'そうです');
     await page.getByRole('button', { name: '朗读选区' }).click();
@@ -924,7 +1045,18 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByRole('button', { name: '停止朗读' })).toBeVisible();
     expect(postCount).toBe(2);
 
-    await selectVisibleText(page, '昨夜', { keyboard: true });
+    await page.getByTestId('react-card-content').evaluate((container) => {
+      const unclassified = document.createElement('span');
+      unclassified.textContent = '纯汉字';
+      unclassified.dataset.testid = 'unclassified-kanji-selection';
+      container.append(unclassified);
+      const range = document.createRange();
+      range.selectNodeContents(unclassified);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
     const readButton = page.getByRole('button', { name: '朗读选区' });
     await readButton.click();
     const confirmation = page.getByRole('dialog', { name: '选择朗读语言' });

@@ -1,4 +1,5 @@
 node_modules
+**/node_modules
 npm-debug.log*
 .DS_Store
 .git
@@ -8,3 +9,7 @@ data
 logs
 output
 trilingual_records
+experiments
+.tmp
+test-results
+playwright-report

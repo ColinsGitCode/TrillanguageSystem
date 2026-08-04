@@ -26,12 +26,17 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - ../CLAUDE.md：当前架构索引；
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
+- Architecture/Card_Reader_v3_Structured_Rendering_ADR.md：学习卡片结构化渲染演进基线。CR-P0 隔离 POC 与 CR-P1 服务端双渲染 shadow 已完成；生产页面仍只显示 v2，shadow 只比较有界 hash/计数并保持 SQLite 零写入，不批准 CR-P2 可见 Canary、历史 Ruby 迁移或 analyzer acceptance；
+- TestReports/Card_Reader_v3_POC_20260804.md：Card Reader v3 隔离 POC 报告；记录 4/4 合同、Chromium 桌面交互、危险节点阻断和 parser 浏览器体积发现，结论为 POC PASS、生产迁移未授权；
+- TestReports/Card_Reader_v3_CR_P1_20260804.md：Card Reader v3 双渲染 shadow 验收；记录服务端 parser、v2/v3 可见合同、内容不出 API/日志、真实三卡 SQLite 指纹零写入、466 unit / 99 integration、桌面 E2E 和前端 parser 零打包，结论为 CR-P1 PASS、生产仍显示 v2；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；CA-R1 真实数据只读观察已通过；CA-I1 已补齐四色标记、取消标记、复制、显式确认的 KG 查询和键盘选区；本文不授权修改卡片正文；
+- Features/Unified_Selection_and_Local_Chinese_Glossary.md：已实施的英日统一选区与本地中文释义基线。CardModal 在同一工具条中完成英文/日文选择、简明中文释义、标记、复制、朗读、知识点查找和派生卡操作；普通查询只读且不调用 LLM，本地未命中时仅由用户显式请求 DeepSeek 候选，并在人工确认后写入本地词库；
 - Features/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_Design.md：**Draft，待产品与架构门禁确认**的日语按需注音浮层与 Ruby 退役方案。定义纯日语正文、整词 pronunciation token、轻量 Tooltip、交互式 Popover、人工纠音、与 annotation/TTS/KG/LA/教材的边界，以及历史 generation 不原地改写的受控迁移路线；真实卷审计确认 672/675 张卡含 13,528 个 Ruby 标签，PF-P0 已量化 466 种相邻复合候选并隔离 60 张历史结构破损卡；当前不授权历史 apply 或删除 legacy reader；
 - Architecture/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_ADR.md：注音独立投影、offset、纠音事件、API、feature flag 与消费者边界的实现基线；历史迁移、人工决策、shadow replay、Canary 和 Ruby 退役仍需各自验收；
 - Features/prototypes/pf-d1-pronunciation-overlay.html：PF-D1 桌面原型，包含 S1-S12 状态；当前作为交互参考，不替代用户逐状态确认；
 - superpowers/plans/2026-08-03-japanese-pronunciation-overlay-ruby-retirement.md：日语按需注音浮层与 Ruby 退役的详细执行任务表，共 76 项；代码路径、只读审计、P0-P3 报告和运行观测已开始落地，当前状态为 **In implementation · 历史迁移、Ruby 删除与 PF-R1 观察待门禁**；
+- superpowers/plans/2026-08-04-pronunciation-historical-migration-and-ruby-retirement-remaining-tasks.md：从总计划提取的 24 项剩余执行清单，按 Gate A 人工准入、Gate B PF-P4 Canary、Gate C PF-P5 全量迁移与运行时 Ruby 退役、Gate D PF-R1 七个真实使用日组织；明确四次人工批准点、真实写入/只读边界、回滚证据和当前 612 eligible / 60 needs-review / 466 复合词 / 340 unresolved 的工作量；本文不授权历史 `--apply`、关闭 legacy reader 或删除 Ruby；
 - Operations/Pronunciation_Overlay_Runbook.md：注音浮层的开关、Compose 重建、只读审计、历史迁移、降级回滚、隐私观测和桌面质量门禁手册；明确禁止在人工批准前执行历史 apply 或删除 Ruby；
 - TestReports/Pronunciation_PF_P0_Feasibility_20260803.md、Pronunciation_PF_P1_New_Cards_20260803.md、Pronunciation_PF_P2_CardModal_20260803.md、Pronunciation_PF_P3_Consumers_20260803.md、Pronunciation_PF_P4_Shadow_Replay_20260803.md、Pronunciation_PF_P4_Historical_Canary_20260803.md、Pronunciation_PF_P5_Ruby_Retirement_20260803.md、Pronunciation_PF_R1_Observation_20260803.md：本轮注音实施与门禁报告；报告明确区分自动化通过、只读证据和必须由用户/时间窗口完成的门禁；
 - TestReports/Pronunciation_Final_Acceptance_20260803.md：最终自动化与 Compose 运行态验收报告；记录 lint/typecheck、456/456 unit、89/89 integration、82/82 desktop E2E、7/7 smoke、health online 和 npm audit 0 vulnerabilities；历史迁移、Ruby 删除与 PF-R1 观察仍为 BLOCKED；

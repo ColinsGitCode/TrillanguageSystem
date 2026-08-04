@@ -44,8 +44,8 @@
   },
   "chunkBudgets": {
     "CardModal": {
-      "maxRawBytes": 116000,
-      "maxGzipBytes": 39000
+      "maxRawBytes": 119000,
+      "maxGzipBytes": 40000
     },
     "IntelPanel": {
       "maxRawBytes": 3000,
@@ -58,6 +58,10 @@
     "SelectionTtsControls": {
       "maxRawBytes": 6000,
       "maxGzipBytes": 2800
+    },
+    "SelectionGlossaryInline": {
+      "maxRawBytes": 10000,
+      "maxGzipBytes": 4000
     }
   }
 }

@@ -52,6 +52,24 @@ export type PronunciationDocument = {
   revision: number;
 };
 
+export type CardReaderShadowReport = {
+  version: 'card-reader-shadow-v1';
+  generationId: number;
+  cardType: string;
+  sourceContentHash: string;
+  parity: boolean;
+  matches: {
+    visibleText: boolean;
+    sectionLanguages: boolean;
+    audioNodes: boolean;
+  };
+  counts: Record<string, number>;
+  hashes: { v2VisibleText: string; v3VisibleText: string };
+  mismatchCodes: string[];
+  diagnosticCodes: string[];
+  durationMs: number;
+};
+
 export const factoryApi = {
   health: () => requestJson<HealthResponse>('/api/health'),
   folders: () => requestJson<{ folders: string[] }>('/api/folders'),
@@ -75,6 +93,15 @@ export const factoryApi = {
     ]);
     return { markdown, record: recordResult?.record || null };
   },
+  cardReaderShadowConfig: () => requestJson<{
+    success: true;
+    enabled: boolean;
+    version: 'card-reader-shadow-v1';
+  }>('/api/card-reader/shadow/config'),
+  cardReaderShadow: (generationId: number) => requestJson<{
+    success: true;
+    report: CardReaderShadowReport;
+  }>(`/api/card-reader/shadow?generationId=${encodeURIComponent(String(generationId))}`),
   preflight: (payload: { phrase: string; cardType: CardType; interactionKey: string }) =>
     requestJson<{
       success: true;

@@ -1,0 +1,210 @@
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Languages, Pencil, Sparkles, X } from 'lucide-react';
+import { localGlossaryApi } from './local-glossary';
+import type { LocalGlossaryProposal } from './local-glossary';
+import type { CardLookupLanguage } from './selection-actions';
+
+type Props = {
+  phrase: string;
+  language: CardLookupLanguage | null;
+  generationId: number | null;
+  contextLabel: string;
+  onToast: (message: string) => void;
+};
+
+const SOURCE_LABEL = {
+  'current-card': '本卡片',
+  textbook: '教材确认',
+  manual: '本地词库',
+  'llm-confirmed': '人工确认',
+  imported: '本地导入',
+  'history-card': '历史卡片',
+} as const;
+
+export function SelectionGlossaryInline({
+  phrase,
+  language,
+  generationId,
+  contextLabel,
+  onToast,
+}: Props) {
+  const queryClient = useQueryClient();
+  const [editMode, setEditMode] = useState<'none' | 'manual' | 'proposal' | 'edit'>('none');
+  const [draftGloss, setDraftGloss] = useState('');
+  const [proposal, setProposal] = useState<LocalGlossaryProposal | null>(null);
+  const queryKey = ['local-glossary', language, phrase, generationId];
+  const lookupQuery = useQuery({
+    queryKey,
+    queryFn: () => localGlossaryApi.lookup({ text: phrase, language: language!, generationId }),
+    enabled: Boolean(language && phrase),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const lookup = lookupQuery.data?.lookup || null;
+
+  useEffect(() => {
+    setEditMode('none');
+    setDraftGloss('');
+    setProposal(null);
+  }, [phrase, language]);
+
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey });
+    setEditMode('none');
+    setProposal(null);
+  };
+
+  const manualMutation = useMutation({
+    mutationFn: () => localGlossaryApi.createEntry({
+      language: language!,
+      canonicalForm: phrase,
+      zhGloss: draftGloss,
+    }),
+    onSuccess: async () => {
+      await refresh();
+      onToast('本地释义已保存');
+    },
+    onError: () => onToast('本地释义保存失败，请重试'),
+  });
+  const editMutation = useMutation({
+    mutationFn: () => localGlossaryApi.updateEntry(Number(lookup?.gloss?.id), {
+      expectedVersion: Number(lookup?.gloss?.version),
+      canonicalForm: phrase,
+      zhGloss: draftGloss,
+    }),
+    onSuccess: async () => {
+      await refresh();
+      onToast('本地释义已更新');
+    },
+    onError: () => onToast('释义已变化，请重新选择后再试'),
+  });
+  const proposalMutation = useMutation({
+    mutationFn: () => localGlossaryApi.propose({
+      requestKey: crypto.randomUUID(),
+      text: phrase,
+      language: language!,
+      contextLabel,
+    }),
+    onSuccess: ({ proposal: next }) => {
+      setProposal(next);
+      setDraftGloss(next.zhGloss);
+      setEditMode('proposal');
+    },
+    onError: () => onToast('AI 释义候选生成失败，请稍后重试'),
+  });
+  const acceptMutation = useMutation({
+    mutationFn: () => localGlossaryApi.acceptProposal(Number(proposal?.id), draftGloss),
+    onSuccess: async () => {
+      await refresh();
+      onToast('AI 候选已人工确认并保存');
+    },
+    onError: () => onToast('候选保存失败，请重试'),
+  });
+  const rejectMutation = useMutation({
+    mutationFn: () => localGlossaryApi.rejectProposal(Number(proposal?.id)),
+    onSuccess: () => {
+      setProposal(null);
+      setDraftGloss('');
+      setEditMode('none');
+    },
+  });
+
+  if (!language) {
+    return <span className="csa-gloss is-muted"><Languages aria-hidden="true" />中译：请先确认是英语还是日语</span>;
+  }
+  if (lookupQuery.isPending) {
+    return <span className="csa-gloss is-muted" role="status"><Languages aria-hidden="true" />正在查本地释义…</span>;
+  }
+  if (lookupQuery.isError) {
+    return <span className="csa-gloss is-error" role="status"><Languages aria-hidden="true" />本地释义暂不可用</span>;
+  }
+
+  if (editMode !== 'none') {
+    const busy = manualMutation.isPending || editMutation.isPending || acceptMutation.isPending || rejectMutation.isPending;
+    return (
+      <span className="csa-gloss-editor">
+        <Languages aria-hidden="true" />
+        <input
+          aria-label="中文释义"
+          value={draftGloss}
+          onChange={(event) => setDraftGloss(event.target.value)}
+          placeholder="输入简明中文释义"
+          autoFocus
+          maxLength={120}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          aria-label="保存中文释义"
+          title="保存中文释义"
+          disabled={busy || !draftGloss.trim()}
+          onClick={() => {
+            if (editMode === 'proposal') acceptMutation.mutate();
+            else if (editMode === 'edit') editMutation.mutate();
+            else manualMutation.mutate();
+          }}
+        >
+          <Check aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label="取消"
+          title="取消"
+          disabled={busy}
+          onClick={() => {
+            if (editMode === 'proposal' && proposal) rejectMutation.mutate();
+            else {
+              setEditMode('none');
+              setDraftGloss('');
+            }
+          }}
+        >
+          <X aria-hidden="true" />
+        </button>
+      </span>
+    );
+  }
+
+  if (lookup?.gloss) {
+    const editable = Boolean(
+      lookup.gloss.id
+      && lookup.gloss.version
+      && ['manual', 'llm-confirmed', 'imported'].includes(lookup.gloss.sourceKind)
+    );
+    return (
+      <span className="csa-gloss" title={`来源：${SOURCE_LABEL[lookup.gloss.sourceKind]}`}>
+        <Languages aria-hidden="true" />
+        <span>中译</span>
+        <strong>{lookup.gloss.zhGloss}</strong>
+        <small>{SOURCE_LABEL[lookup.gloss.sourceKind]}</small>
+        {editable && (
+          <button
+            type="button"
+            aria-label="编辑本地释义"
+            title="编辑本地释义"
+            onClick={() => {
+              setDraftGloss(lookup.gloss?.zhGloss || '');
+              setEditMode('edit');
+            }}
+          >
+            <Pencil aria-hidden="true" />
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className="csa-gloss is-missing">
+      <Languages aria-hidden="true" />
+      <span>暂无本地释义</span>
+      <button type="button" onClick={() => { setDraftGloss(''); setEditMode('manual'); }}>
+        <Pencil aria-hidden="true" />手动填写
+      </button>
+      <button type="button" disabled={proposalMutation.isPending} onClick={() => proposalMutation.mutate()}>
+        <Sparkles aria-hidden="true" />{proposalMutation.isPending ? '生成中…' : 'AI 候选'}
+      </button>
+    </span>
+  );
+}

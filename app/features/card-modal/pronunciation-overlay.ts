@@ -280,3 +280,31 @@ export function pronunciationTokenFromElement(element: Element | null): Pronunci
     ruleVersion: 'dom-v1',
   };
 }
+
+export function pronunciationTokenForRange(root: HTMLElement, range: Range): PronunciationToken | null {
+  const fragments = pronunciationFragmentsForRange(root, range);
+  const keys = new Set(fragments.map((element) => element.dataset.pronunciationTokenKey).filter(Boolean));
+  if (keys.size !== 1 || !fragments.length) return null;
+  const token = pronunciationTokenFromElement(fragments[0]);
+  if (!token || token.status !== 'accepted') return null;
+  const selected = String(range.cloneContents().textContent || '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  const surface = token.surface.normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  return selected === surface ? token : null;
+}
+
+function pronunciationFragmentsForRange(root: HTMLElement, range: Range) {
+  return Array.from(root.querySelectorAll<HTMLElement>('.pronunciation-token'))
+    .filter((element) => {
+      try {
+        return range.intersectsNode(element);
+      } catch (_error) {
+        return false;
+      }
+    });
+}
+
+export function rangeIntersectsPronunciationToken(root: HTMLElement, range: Range) {
+  return pronunciationFragmentsForRange(root, range).some((element) => (
+    element.dataset.pronunciationStatus === 'accepted'
+  ));
+}

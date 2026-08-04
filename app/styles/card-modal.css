@@ -115,9 +115,13 @@
   position: fixed;
   z-index: 120;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: stretch;
+  justify-content: center;
   gap: 2px;
-  max-width: calc(100vw - 16px);
+  width: min(1120px, calc(100vw - 16px));
+  min-width: 0;
+  box-sizing: border-box;
   padding: 4px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
@@ -151,6 +155,68 @@
   font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.card-selection-toolbar .csa-gloss,
+.card-selection-toolbar .csa-gloss-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 300px;
+  padding: 0 7px;
+  color: var(--color-text-secondary);
+  font: 600 12px/1.2 var(--font-sans);
+  white-space: nowrap;
+}
+.card-selection-toolbar .csa-gloss > svg,
+.card-selection-toolbar .csa-gloss-editor > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--color-lang-zh);
+}
+.card-selection-toolbar .csa-gloss strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+}
+.card-selection-toolbar .csa-gloss small {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-badge);
+}
+.card-selection-toolbar .csa-gloss.is-muted { color: var(--color-text-tertiary); }
+.card-selection-toolbar .csa-gloss.is-error { color: var(--color-danger); }
+.card-selection-toolbar .csa-gloss.is-missing { max-width: none; }
+.card-selection-toolbar .csa-gloss button,
+.card-selection-toolbar .csa-gloss-editor button {
+  height: 26px;
+  padding: 4px 7px;
+  border: 1px solid var(--color-border);
+  color: var(--color-primary);
+  font-size: var(--font-size-caption);
+}
+.card-selection-toolbar .csa-gloss button[aria-label],
+.card-selection-toolbar .csa-gloss-editor button[aria-label] {
+  width: 26px;
+  justify-content: center;
+  padding: 4px;
+}
+.card-selection-toolbar .csa-gloss-editor { max-width: 320px; }
+.card-selection-toolbar .csa-gloss-editor input {
+  width: 190px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: 600 12px/1 var(--font-sans);
+}
+.card-selection-toolbar .csa-gloss-editor input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
 }
 .card-selection-toolbar button,
 .csa-gen-menu button,

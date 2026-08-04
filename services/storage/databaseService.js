@@ -23,6 +23,7 @@ const annotationsDomain = require('./db/annotations');
 const manualTagsDomain = require('./db/manualTags');
 const cardEngagementDomain = require('./db/cardEngagement');
 const pronunciationDomain = require('./db/pronunciation');
+const localGlossaryDomain = require('./db/localGlossary');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -874,6 +875,54 @@ class DatabaseService {
 
   listManualTagTargets(tagId, options = {}) {
     return manualTagsDomain.listTargets(this.db, tagId, options);
+  }
+
+  // ========== Local Chinese glossary ==========
+
+  getLocalGlossaryEntry(id) {
+    return localGlossaryDomain.getEntry(this.db, id);
+  }
+
+  findLocalGlossaryEntry(language, normalizedForm, senseKey = 'default') {
+    return localGlossaryDomain.findActiveEntry(this.db, language, normalizedForm, senseKey);
+  }
+
+  listLocalGlossaryEntries(options = {}) {
+    return localGlossaryDomain.listEntries(this.db, options);
+  }
+
+  createLocalGlossaryEntry(payload) {
+    return this.withBusyRetry(() => localGlossaryDomain.createEntry(this.db, payload));
+  }
+
+  updateLocalGlossaryEntry(id, expectedVersion, payload) {
+    return this.withBusyRetry(() => localGlossaryDomain.updateEntry(
+      this.db, id, expectedVersion, payload
+    ));
+  }
+
+  archiveLocalGlossaryEntry(id, expectedVersion, updatedAtUtc) {
+    return this.withBusyRetry(() => localGlossaryDomain.archiveEntry(
+      this.db, id, expectedVersion, updatedAtUtc
+    ));
+  }
+
+  getLocalGlossaryProposal(id) {
+    return localGlossaryDomain.getProposal(this.db, id);
+  }
+
+  findLocalGlossaryProposalByKey(proposalKey) {
+    return localGlossaryDomain.findProposalByKey(this.db, proposalKey);
+  }
+
+  createLocalGlossaryProposal(payload) {
+    return this.withBusyRetry(() => localGlossaryDomain.createProposal(this.db, payload));
+  }
+
+  decideLocalGlossaryProposal(id, status, acceptedEntryId, updatedAtUtc) {
+    return this.withBusyRetry(() => localGlossaryDomain.decideProposal(
+      this.db, id, status, acceptedEntryId, updatedAtUtc
+    ));
   }
 
   // ========== Card engagement events ==========

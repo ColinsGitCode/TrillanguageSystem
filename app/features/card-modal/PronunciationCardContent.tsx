@@ -1,11 +1,8 @@
-import { Copy, LoaderCircle, Search, Sparkles, Volume2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent, RefObject } from 'react';
 import { ApiError } from '../../lib/api/client';
-import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { factoryApi } from '../factory/factory-api';
-import { selectionTtsApi } from './selection-tts';
 import { reportPronunciationTelemetry } from './pronunciation-telemetry';
 import {
   enhancePronunciationHtml,
@@ -24,8 +21,8 @@ type Props = {
   onCaptureSelection: (keyboard: boolean, ignoreAnnotationOverlap?: boolean) => void;
   onContentClick: (event: MouseEvent<HTMLDivElement>) => void;
   onContextMenuCapture: (event: MouseEvent<HTMLDivElement>) => void;
-  onKnowledge: (surface: string) => void;
-  onGenerateCard: (surface: string) => void;
+  requestedDetailTokenKey: string | null;
+  onDetailRequestHandled: () => void;
   onCorrectionSaved: (result: Awaited<ReturnType<typeof factoryApi.correctPronunciation>>) => void;
   onToast: (message: string) => void;
 };
@@ -39,10 +36,6 @@ type OverlayState = {
 
 const TOOLTIP_DELAY_MS = 250;
 
-function errorMessage(error: unknown) {
-  return error instanceof ApiError ? error.message : '发音生成失败，请重试';
-}
-
 export function PronunciationCardContent({
   html,
   generationId,
@@ -51,12 +44,11 @@ export function PronunciationCardContent({
   onCaptureSelection,
   onContentClick,
   onContextMenuCapture,
-  onKnowledge,
-  onGenerateCard,
+  requestedDetailTokenKey,
+  onDetailRequestHandled,
   onCorrectionSaved,
   onToast,
 }: Props) {
-  const audio = useExclusiveAudio();
   const pronunciationQuery = useQuery({
     queryKey: ['pronunciation', 'generation', generationId],
     queryFn: () => factoryApi.pronunciation('generation', Number(generationId)),
@@ -66,11 +58,7 @@ export function PronunciationCardContent({
   const tokens = pronunciationQuery.data?.tokens || [];
   const tokenRef = useRef<PronunciationToken[]>([]);
   const closeTimerRef = useRef<number | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
-  const [ttsState, setTtsState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
-  const [ttsMessage, setTtsMessage] = useState('');
   const [correctionReading, setCorrectionReading] = useState('');
   const [correctionBusy, setCorrectionBusy] = useState(false);
 
@@ -92,10 +80,7 @@ export function PronunciationCardContent({
 
   useEffect(() => () => {
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    controllerRef.current?.abort();
-    audio.stop();
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-  }, [audio.stop]);
+  }, []);
 
   useEffect(() => {
     if (!overlay) return undefined;
@@ -146,8 +131,6 @@ export function PronunciationCardContent({
       setOverlay({ token, left, top, mode });
       if (mode === 'popover') {
         setCorrectionReading(token.readingHiragana || '');
-        setTtsState('idle');
-        setTtsMessage('');
       }
     };
     if (mode === 'tooltip') {
@@ -157,47 +140,13 @@ export function PronunciationCardContent({
     }
   };
 
-  const playPronunciation = async () => {
-    const token = overlay?.token;
-    if (!token || ttsState === 'loading') return;
-    controllerRef.current?.abort();
-    audio.stop();
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const startedAt = performance.now();
-    const length = Array.from(token.surface).length;
-    reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'tts', outcome: 'started', length });
-    reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: 'card-modal', resource: 'controller', outcome: 'start' });
-    setTtsState('loading');
-    setTtsMessage('正在生成发音…');
-    try {
-      const result = await selectionTtsApi.synthesize({ text: token.surface, language: 'ja', speed: 1 }, controller.signal);
-      if (controller.signal.aborted) return;
-      const url = URL.createObjectURL(result.blob);
-      audioUrlRef.current = url;
-      await audio.playUrl(url, {
-        onEnded: () => setTtsState('idle'),
-        onError: () => {
-          setTtsState('error');
-          setTtsMessage('发音播放失败，请重试');
-        },
-        onStop: () => setTtsState('idle'),
-      });
-      reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'tts', outcome: 'success', length, durationMs: performance.now() - startedAt, queueWaitMs: result.queueWaitMs });
-      setTtsState('playing');
-      setTtsMessage(result.contended ? '发音服务较忙，已完成排队' : '');
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'tts', outcome: 'error', length, durationMs: performance.now() - startedAt, errorCode: 'TTS_FAILED', statusCode: error instanceof ApiError ? error.status : 500 });
-      setTtsState('error');
-      setTtsMessage(errorMessage(error));
-    } finally {
-      if (controller.signal.aborted) reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'tts', outcome: 'aborted', length });
-      reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: 'card-modal', resource: 'controller', outcome: controller.signal.aborted ? 'aborted' : 'end' });
-      if (controllerRef.current === controller) controllerRef.current = null;
-    }
-  };
+  useEffect(() => {
+    if (!requestedDetailTokenKey || !contentRef.current) return;
+    const element = Array.from(contentRef.current.querySelectorAll<HTMLElement>('.pronunciation-token'))
+      .find((item) => item.dataset.pronunciationTokenKey === requestedDetailTokenKey);
+    if (element) openOverlay(element, 'popover');
+    onDetailRequestHandled();
+  }, [requestedDetailTokenKey, tokens.length]);
 
   const saveCorrection = async () => {
     const token = overlay?.token;
@@ -228,16 +177,6 @@ export function PronunciationCardContent({
     }
   };
 
-  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
-    const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
-    if (token && (window.getSelection()?.isCollapsed ?? true)) {
-      event.preventDefault();
-      openOverlay(token, 'popover');
-      return;
-    }
-    onContentClick(event);
-  };
-
   const contentHtml = enhancePronunciationHtml(html, tokens);
   return (
     <div className="pronunciation-card-content-shell">
@@ -248,7 +187,7 @@ export function PronunciationCardContent({
         tabIndex={0}
         aria-label="学习卡片正文，可选择文字后操作"
         onMouseUp={() => onCaptureSelection(false)}
-        onClick={handleClick}
+        onClick={onContentClick}
         onMouseOver={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
           if (!token || (event.relatedTarget instanceof Node && token.contains(event.relatedTarget))) return;
@@ -290,7 +229,7 @@ export function PronunciationCardContent({
         <div
           className={`pronunciation-popover is-${overlay.mode}`}
           role={overlay.mode === 'tooltip' ? 'tooltip' : 'dialog'}
-          aria-label={overlay.mode === 'tooltip' ? '日语读音' : '读音与学习动作'}
+          aria-label={overlay.mode === 'tooltip' ? '日语读音' : '读音详情'}
           style={{ left: overlay.left, top: overlay.top }}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
@@ -314,13 +253,6 @@ export function PronunciationCardContent({
                 <span>{overlay.token.unitKind === 'word' ? '词语' : '单字/词素'}</span>
                 <span>{overlay.token.source === 'manual' ? '人工确认' : overlay.token.source === 'dictionary' ? '词典' : '分析器'}</span>
               </div>
-              <div className="pronunciation-popover-actions">
-                <button type="button" onClick={() => void playPronunciation()} disabled={ttsState === 'loading'}>{ttsState === 'loading' ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <Volume2 aria-hidden="true" />}{ttsState === 'loading' ? '生成中…' : '朗读'}</button>
-                <button type="button" onClick={() => { reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'knowledge', outcome: 'started' }); onKnowledge(overlay.token.surface); setOverlay(null); }}><Search aria-hidden="true" />查知识点</button>
-                <button type="button" onClick={() => { reportPronunciationTelemetry({ eventType: 'action', uiSurface: 'card-modal', action: 'generate-card', outcome: 'started' }); onGenerateCard(overlay.token.surface); setOverlay(null); }}><Sparkles aria-hidden="true" />生成三语卡</button>
-                <button type="button" onClick={() => { void navigator.clipboard?.writeText(overlay.token.surface); onToast('词语已复制'); }}><Copy aria-hidden="true" />复制</button>
-              </div>
-              {ttsMessage && <p className="pronunciation-popover-status" role="status">{ttsMessage}</p>}
               <div className="pronunciation-correction">
                 <label htmlFor="pronunciation-correction-reading">修正平假名</label>
                 <div>
