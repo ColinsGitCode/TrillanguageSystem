@@ -1,6 +1,7 @@
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { CardType } from '../factory/types';
+import { extractCardTitle } from './card-title.mjs';
 import {
   adaptAudioToButtons,
   CARD_RENDER_ALLOWED_ATTR,
@@ -46,5 +47,5 @@ export function computeTextHash(input: string) {
 }
 
 export function extractMarkdownTitle(markdown: string, fallback: string) {
-  return markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || fallback;
+  return extractCardTitle(markdown, fallback);
 }
