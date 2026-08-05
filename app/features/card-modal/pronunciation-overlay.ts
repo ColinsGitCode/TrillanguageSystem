@@ -215,17 +215,22 @@ export function enhancePronunciationHtml(html: string, tokens: PronunciationToke
   if (typeof document === 'undefined') return html;
   const wrapper = document.createElement('div');
   wrapper.innerHTML = html;
-  replaceLegacyRuby(wrapper);
-  if (!tokens.length) return wrapper.innerHTML;
+  enhancePronunciationRoot(wrapper, tokens);
+  return wrapper.innerHTML;
+}
+
+export function enhancePronunciationRoot(root: HTMLElement, tokens: PronunciationToken[]) {
+  replaceLegacyRuby(root);
+  if (!tokens.length) return root;
   for (const token of [...tokens].sort((left, right) => (
     left.startCodePoint - right.startCodePoint || right.endCodePoint - left.endCodePoint
   ))) {
-    if (Array.from(wrapper.querySelectorAll<HTMLElement>('.pronunciation-token'))
+    if (Array.from(root.querySelectorAll<HTMLElement>('.pronunciation-token'))
       .some((node) => node.dataset.pronunciationTokenKey === token.tokenKey)) continue;
-    wrapTokenAtProjection(wrapper, token);
+    wrapTokenAtProjection(root, token);
   }
-  setRovingTabIndex(wrapper);
-  return wrapper.innerHTML;
+  setRovingTabIndex(root);
+  return root;
 }
 
 export function movePronunciationFocus(root: HTMLElement, current: HTMLElement, key: string) {

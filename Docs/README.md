@@ -26,9 +26,10 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - ../CLAUDE.md：当前架构索引；
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
 - Architecture/Fullstack_Migration_Acceptance_Report.md：D0-P6 架构完成验收记录；
-- Architecture/Card_Reader_v3_Structured_Rendering_ADR.md：学习卡片结构化渲染演进基线。CR-P0 隔离 POC 与 CR-P1 服务端双渲染 shadow 已完成；生产页面仍只显示 v2，shadow 只比较有界 hash/计数并保持 SQLite 零写入，不批准 CR-P2 可见 Canary、历史 Ruby 迁移或 analyzer acceptance；
+- Architecture/Card_Reader_v3_Structured_Rendering_ADR.md：学习卡片结构化渲染演进基线。CR-P0 隔离 POC、CR-P1 服务端双渲染 shadow 与 CR-P2 单卡型可见 Canary 已完成；仅人工白名单的新三语卡 `1040/1039/1038` 显示 v3，其余卡片及任何失败继续回退 v2，不批准 CR-P3 全量切换、历史 Ruby 迁移或 analyzer acceptance；
 - TestReports/Card_Reader_v3_POC_20260804.md：Card Reader v3 隔离 POC 报告；记录 4/4 合同、Chromium 桌面交互、危险节点阻断和 parser 浏览器体积发现，结论为 POC PASS、生产迁移未授权；
 - TestReports/Card_Reader_v3_CR_P1_20260804.md：Card Reader v3 双渲染 shadow 验收；记录服务端 parser、v2/v3 可见合同、内容不出 API/日志、真实三卡 SQLite 指纹零写入、466 unit / 99 integration、桌面 E2E 和前端 parser 零打包，结论为 CR-P1 PASS、生产仍显示 v2；
+- TestReports/Card_Reader_v3_CR_P2_20260804.md：Card Reader v3 单卡型可见 Canary 验收；记录服务端 allowlist、受控 React renderer、v2 即时降级、真实三卡零写入、469 unit / 101 integration / 87 desktop E2E、视觉基线与前端预算，结论为 CR-P2 PASS；
 - Architecture/TTS_Model_Selection.md：TTS 决策；
 - Features/Card_Annotation_and_Selection_UX_Evaluation.md：当前学习卡片选区与注解层专题评估。CA-P1 已完成 Radix 菜单/右键接入，CA-P2 已完成 ruby-aware selector、历史迁移与 Recogito 取舍 POC，CA-P3–P4 已完成 schema、受控迁移与 shadow read，CA-P5–P7 已切换三个消费者，CA-P8 已停止旧 HTML 双写并切换删除、改期和统计；CA-R1 真实数据只读观察已通过；CA-I1 已补齐四色标记、取消标记、复制、显式确认的 KG 查询和键盘选区；本文不授权修改卡片正文；
 - Features/Unified_Selection_and_Local_Chinese_Glossary.md：已实施的英日统一选区与本地中文释义基线。CardModal 在同一工具条中完成英文/日文选择、简明中文释义、标记、复制、朗读、知识点查找和派生卡操作；普通查询只读且不调用 LLM，本地未命中时仅由用户显式请求 DeepSeek 候选，并在人工确认后写入本地词库；

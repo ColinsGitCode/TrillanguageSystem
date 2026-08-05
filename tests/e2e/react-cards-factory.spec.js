@@ -368,13 +368,18 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       const url = new URL(response.url());
       return url.pathname === '/api/card-reader/shadow' && response.request().method() === 'GET';
     });
+    const canaryResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/card-reader/canary' && response.request().method() === 'GET';
+    });
     await opener.click();
     const modal = page.getByTestId('react-card-modal');
     await expect(modal).toBeVisible();
     const shadowPayload = await (await shadowResponse).json();
     expect(shadowPayload.report.parity).toBe(true);
-    await expect(modal.locator('[data-card-renderer-version="3"]')).toHaveCount(0);
-    await expect(modal.locator('[data-card-renderer-version="2"]')).toHaveCount(1);
+    expect((await (await canaryResponse).json()).canary.rendererVersion).toBe(3);
+    await expect(modal.locator('[data-card-renderer-version="3"]')).toHaveCount(1);
+    await expect(modal.locator('[data-card-renderer-version="2"]')).toHaveCount(0);
     const modalBox = await modal.locator('.react-card-modal').boundingBox();
     expect(modalBox.height).toBeGreaterThan(page.viewportSize().height - 30);
     await expect(modal.locator('ruby')).toHaveCount(0);
@@ -387,6 +392,19 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.keyboard.press('Escape');
     await expect(modal).toBeHidden();
     await expect(opener).toBeFocused();
+  });
+
+  test('CR-P2 falls back to v2 when an allowlisted Canary request fails', async ({ page }) => {
+    await page.route('**/api/card-reader/canary?generationId=*', (route) => route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'CARD_READER_V3_CANARY_PARITY_FAILED' }),
+    }));
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const modal = page.getByTestId('react-card-modal');
+    await expect(modal.locator('[data-card-renderer-version="2"]')).toHaveCount(1);
+    await expect(modal.locator('[data-card-renderer-version="3"]')).toHaveCount(0);
   });
 
   test('creates, colors and restores a manual page tag', async ({ page }) => {

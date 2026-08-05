@@ -37,6 +37,12 @@ test.describe('serverConfig.toNumberOr', () => {
   });
 });
 
+test.describe('serverConfig.parsePositiveIntegerList', () => {
+  test.it('keeps unique positive generation ids only', () => {
+    assert.deepEqual(cfg.parsePositiveIntegerList('1040, 1039, nope, -1, 1040, 0'), [1040, 1039]);
+  });
+});
+
 test.describe('serverConfig.normalizeCardType', () => {
   test.it('keeps grammar_ja', () => {
     assert.equal(cfg.normalizeCardType('grammar_ja'), 'grammar_ja');

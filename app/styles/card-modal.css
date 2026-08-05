@@ -35,6 +35,7 @@
 .react-card-renderer strong { color: var(--color-primary); }
 .react-card-renderer blockquote { margin: 16px 0; padding: 8px 16px; color: var(--color-text-secondary); border-left: 3px solid var(--color-border-strong); }
 .react-card-renderer code { padding: 2px 5px; background: var(--color-bg-subtle); border-radius: var(--radius-sm); font-family: var(--font-mono); }
+.card-reader-v3 .loanword-line { display: contents; }
 .react-card-renderer ruby { ruby-position: over; }
 .react-card-renderer rt { color: var(--color-text-tertiary); font: 600 12px/1 var(--font-ja); }
 /* Furigana remains readable, but drag selection should land on the Japanese base text. */

@@ -166,6 +166,7 @@ export function CardModal({
   const keyboardSelectionRef = useRef(false);
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [renderedHtml, setRenderedHtml] = useState('');
+  const [annotationSnapshot, setAnnotationSnapshot] = useState<CardAnnotation[]>([]);
   const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'unavailable'>('pending');
   const [isSavingAnnotation, setIsSavingAnnotation] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
@@ -199,6 +200,19 @@ export function CardModal({
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
+  const canaryEligible = Boolean(
+    generationId
+    && selection.cardType === 'trilingual'
+    && cardReaderShadowConfig.data?.canaryEnabled
+    && cardReaderShadowConfig.data.canaryGenerationIds.includes(Number(generationId))
+  );
+  const cardReaderCanary = useQuery({
+    queryKey: ['card-reader-canary', generationId],
+    queryFn: () => factoryApi.cardReaderCanary(Number(generationId)),
+    enabled: canaryEligible,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
 
   useEffect(() => {
@@ -215,6 +229,7 @@ export function CardModal({
     let cancelled = false;
     const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
     annotationStateRef.current = null;
+    setAnnotationSnapshot([]);
     setAnnotationMode('pending');
     setRenderedHtml(freshHtml);
 
@@ -235,11 +250,15 @@ export function CardModal({
             target: result.target,
             annotations: result.annotations,
           };
+          setAnnotationSnapshot(result.annotations);
           setRenderedHtml(renderAnnotations(result.annotations));
           setAnnotationMode('annotations');
         })
         .catch(() => {
-          if (!cancelled) setAnnotationMode('unavailable');
+          if (!cancelled) {
+            setAnnotationSnapshot([]);
+            setAnnotationMode('unavailable');
+          }
         });
     }
     return () => {
@@ -426,6 +445,7 @@ export function CardModal({
     const state = annotationStateRef.current;
     if (!state) return;
     annotationStateRef.current = { ...state, annotations };
+    setAnnotationSnapshot(annotations);
     setRenderedHtml(renderAnnotationSnapshot(annotations));
   };
 
@@ -814,6 +834,9 @@ export function CardModal({
     <Suspense fallback={plainCardContent}>
       <DeferredPronunciationCardContent
         html={renderedHtml}
+        document={cardReaderCanary.data?.canary.document || null}
+        annotations={annotationSnapshot}
+        cardType={selection.cardType}
         generationId={generationId ? Number(generationId) : null}
         readOnly={readOnly}
         contentRef={contentRef}

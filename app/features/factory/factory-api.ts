@@ -17,6 +17,7 @@ import type {
   RenderableCardAnnotation,
 } from '../card-modal/annotation-render.mjs';
 import type { PronunciationToken } from '../card-modal/pronunciation-overlay';
+import type { CardDocument } from '../card-modal/card-document';
 
 export type CardAnnotation = RenderableCardAnnotation & {
   targetKind: 'generation' | 'textbook_track' | 'textbook_expression';
@@ -97,11 +98,24 @@ export const factoryApi = {
     success: true;
     enabled: boolean;
     version: 'card-reader-shadow-v1';
+    canaryEnabled: boolean;
+    canaryGenerationIds: number[];
   }>('/api/card-reader/shadow/config'),
   cardReaderShadow: (generationId: number) => requestJson<{
     success: true;
     report: CardReaderShadowReport;
   }>(`/api/card-reader/shadow?generationId=${encodeURIComponent(String(generationId))}`),
+  cardReaderCanary: (generationId: number) => requestJson<{
+    success: true;
+    canary: {
+      version: 'card-reader-canary-v1';
+      rendererVersion: 3;
+      generationId: number;
+      cardType: 'trilingual';
+      sourceContentHash: string;
+      document: CardDocument;
+    };
+  }>(`/api/card-reader/canary?generationId=${encodeURIComponent(String(generationId))}`),
   preflight: (payload: { phrase: string; cardType: CardType; interactionKey: string }) =>
     requestJson<{
       success: true;

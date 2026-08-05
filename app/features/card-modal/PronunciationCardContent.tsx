@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
-import type { MouseEvent, RefObject } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
+import type { MouseEvent, ReactNode, RefObject } from 'react';
 import { ApiError } from '../../lib/api/client';
 import { factoryApi } from '../factory/factory-api';
 import { reportPronunciationTelemetry } from './pronunciation-telemetry';
@@ -12,9 +12,16 @@ import {
   selectPronunciationToken,
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
+import type { CardDocument } from './card-document';
+import type { CardAnnotation } from '../factory/factory-api';
+import type { CardType } from '../factory/types';
+import { CardReaderV3 } from './CardReaderV3';
 
 type Props = {
   html: string;
+  document?: CardDocument | null;
+  annotations?: CardAnnotation[];
+  cardType?: CardType;
   generationId: number | null;
   readOnly: boolean;
   contentRef: RefObject<HTMLDivElement | null>;
@@ -27,6 +34,26 @@ type Props = {
   onToast: (message: string) => void;
 };
 
+class CanaryBoundary extends Component<{ fallback: ReactNode; resetKey: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error('Card Reader v3 Canary fell back to v2', error);
+  }
+
+  componentDidUpdate(previous: Readonly<{ resetKey: string }>) {
+    if (previous.resetKey !== this.props.resetKey && this.state.failed) this.setState({ failed: false });
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 type OverlayState = {
   token: PronunciationToken;
   left: number;
@@ -38,6 +65,9 @@ const TOOLTIP_DELAY_MS = 250;
 
 export function PronunciationCardContent({
   html,
+  document: cardDocument = null,
+  annotations = [],
+  cardType = 'trilingual',
   generationId,
   readOnly,
   contentRef,
@@ -178,6 +208,8 @@ export function PronunciationCardContent({
   };
 
   const contentHtml = enhancePronunciationHtml(html, tokens);
+  const legacySurface = <div dangerouslySetInnerHTML={{ __html: contentHtml }} />;
+  const canaryResetKey = `${generationId || 0}:${cardDocument?.version || 'v2'}`;
   return (
     <div className="pronunciation-card-content-shell">
       <div
@@ -223,8 +255,18 @@ export function PronunciationCardContent({
           setOverlay(null);
         }}
         onContextMenuCapture={onContextMenuCapture}
-        dangerouslySetInnerHTML={{ __html: contentHtml }}
-      />
+      >
+        {cardDocument ? (
+          <CanaryBoundary fallback={legacySurface} resetKey={canaryResetKey}>
+            <CardReaderV3
+              document={cardDocument}
+              cardType={cardType}
+              annotations={annotations}
+              pronunciationTokens={tokens}
+            />
+          </CanaryBoundary>
+        ) : legacySurface}
+      </div>
       {overlay && (
         <div
           className={`pronunciation-popover is-${overlay.mode}`}

@@ -6,6 +6,12 @@ import rehypeRaw from 'rehype-raw';
 
 const UNSAFE_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed']);
 const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'blockquote', 'hr', 'div']);
+const INLINE_ROLES = new Map([
+  ['explanation-text', 'explanation'],
+  ['loanword-label', 'loanword-label'],
+  ['loanword-line', 'loanword-line'],
+  ['loanword-tag', 'loanword-tag'],
+]);
 
 function isElement(node) {
   return node?.type === 'element';
@@ -30,6 +36,20 @@ function hasClass(node, className) {
   return String(value || '').split(/\s+/u).includes(className);
 }
 
+function controlledInlineRole(node) {
+  for (const [className, role] of INLINE_ROLES) {
+    if (hasClass(node, className)) return role;
+  }
+  return null;
+}
+
+function safeLinkHref(value) {
+  const href = String(value || '').trim();
+  if (!href) return '';
+  if (/^(https?:|mailto:|#)/iu.test(href) || /^\/(?!\/)/u.test(href)) return href;
+  return '';
+}
+
 function inlineNodes(nodes, diagnostics) {
   return nodes.flatMap((node) => {
     if (node.type === 'text') return [{ kind: 'text', value: node.value }];
@@ -44,8 +64,12 @@ function inlineNodes(nodes, diagnostics) {
     if (node.tagName === 'code') return [{ kind: 'code', value: allText(node) }];
     if (node.tagName === 'br') return [{ kind: 'break' }];
     if (node.tagName === 'a') {
-      const href = typeof node.properties?.href === 'string' ? node.properties.href : '';
+      const href = safeLinkHref(node.properties?.href);
       return [{ kind: 'link', href, children: children() }];
+    }
+    if (node.tagName === 'span') {
+      const role = controlledInlineRole(node);
+      return role ? [{ kind: 'span', role, children: children() }] : children();
     }
     if (node.tagName === 'mark') {
       const tone = typeof node.properties?.dataTone === 'string' ? node.properties.dataTone : 'blue';
@@ -165,12 +189,16 @@ export function parseCardDocument(markdown) {
   const root = processor.runSync(processor.parse(String(markdown || '')));
   const diagnostics = [];
   const sections = [];
-  let title = 'Untitled card';
+  // The card title uses the same structured inline pipeline as section titles so
+  // that ruby in the H1 becomes pronunciation nodes instead of being flattened
+  // into visible text (which injected the readings into the title).
+  let title = [{ kind: 'text', value: 'Untitled card' }];
   let current = null;
 
   root.children.forEach((node, index) => {
     if (isElement(node) && node.tagName === 'h1') {
-      title = allText(node).trim() || title;
+      const titleInline = inlineNodes(node.children, diagnostics);
+      if (inlineText(titleInline).trim()) title = titleInline;
       return;
     }
     if (isElement(node) && node.tagName === 'h2') {

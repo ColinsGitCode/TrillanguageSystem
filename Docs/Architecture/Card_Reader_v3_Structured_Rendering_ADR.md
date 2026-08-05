@@ -1,6 +1,6 @@
 # Card Reader v3 结构化渲染架构草案
 
-> 状态：CR-P1 shadow implemented · 当前生产显示仍为 v2
+> 状态：CR-P2 visible Canary implemented · 仅人工白名单的新三语卡显示 v3，其余卡片仍为 v2
 > 日期：2026-08-04
 > 范围：桌面端学习卡片正文；不改变 Cards Factory、学习调度、数据库或 Markdown 文件所有权
 
@@ -157,3 +157,35 @@ CardModal 读取 generation.id
 首批真实 shadow 样本使用 generation `1040`、`1039`、`1038`。三张卡的可见正文、三语 section 和 4 个音频节点均一致。样本同时确认 `loanword-block` 必须保留为可显示的 `aside(role=loanword)`，但与 v2 一样不进入 `card-visible-text-v1` selector 投影。调用前后 63 张业务表、22,806 行的表级计数 SHA-256 保持为 `ac205f3b40f74b86184fa119dcea2fddb073fb2a8d427a2349cdbfb8faab92ce`，证明真实卷读取零写入。
 
 验证记录见 `Docs/TestReports/Card_Reader_v3_CR_P1_20260804.md`。进入 CR-P2 前，必须先对真实新三语卡积累 shadow parity 样本，并由人工指定 Canary 卡；不得把 shadow 全绿自动解释为 Ruby 迁移或 v3 全量切换批准。
+
+## 11. CR-P2 单卡型可见 Canary 实施记录
+
+2026-08-04 已把 CardDocument 接入 CardModal，但只对服务端确认的人工白名单三语卡显示：
+
+```text
+CardModal 读取 generation.id
+  -> GET /api/card-reader/shadow/config
+  -> generation.id 同时满足 flag + allowlist 时
+     GET /api/card-reader/canary?generationId=...
+  -> 服务端重新校验 allowlist、card_type、parity 与 diagnostics
+  -> 合格：React CardReaderV3 显示 CardDocument
+  -> 任一失败：本次打开立即回退 v2 HTML
+```
+
+实施合同：
+
+- `CARD_READER_V3_CANARY_ENABLED` 代码与示例环境默认关闭；Compose 本地观察显式开启；
+- `CARD_READER_V3_CANARY_GENERATION_IDS` 是唯一可见白名单，当前为 `1040,1039,1038`；
+- 浏览器只按 config 决定是否发起请求，服务端仍独立校验白名单、三语卡型、shadow parity 和零 diagnostics，不能信任前端；
+- CardDocument 由服务端 parser 生成；浏览器 bundle 不包含 Unified/Remark/Rehype；
+- React renderer 不使用 `dangerouslySetInnerHTML`，只渲染受控节点；未知危险节点仍被丢弃；
+- annotation 与 pronunciation 暂通过一个隔离的兼容桥接器挂到 React-owned surface；该桥接不改变 selector、数据库或纠音合同；
+- 选区、右键、四色注解、日语读音浮层、音频、中文释义与派生卡仍只有一套交互 owner；
+- 任一 API、解析或 React runtime 错误只让当前卡片退回 v2，不影响其它卡片；
+- 单段与带子列表的 Markdown 列表项保持 v2 的紧凑 DOM 语义，既避免选区扩大，也保持现有视觉基线。
+
+白名单真实卡：generation `1040`（`primitive`）、`1039`（`at the frontier`）、`1038`（`stunt`）。三张卡均返回 3 个语言 section、0 diagnostics。调用前后真实卷保持 63 张业务表、22,806 行，当前计数清单 SHA-256 均为 `562dde0c8300e14594ec673ca0f892a08bc697531fdee3af40329d878ad61a59`。
+
+生产构建中 CardModal 为 119.29 kB raw / 39.70 kB gzip。因新增可见 React renderer，raw 预算由 119,000 显式调整到 120,000；gzip 预算仍保持 40,000。完整验证为 469 unit、101 integration、87 desktop E2E，视觉基线无需更新。
+
+验证记录见 `Docs/TestReports/Card_Reader_v3_CR_P2_20260804.md`。CR-P2 不批准 CR-P3 全量三语卡切换、语法卡/场景卡迁移、历史 Ruby 迁移、legacy reader 删除或 analyzer proposal acceptance。
