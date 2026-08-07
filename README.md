@@ -87,7 +87,7 @@ Cards Factory 由 React Router v7 + TypeScript 在根路径渲染；同一 `serv
 
 ## Provider
 
-- DeepSeek：默认 deepseek-v4-pro。
+- DeepSeek：默认 deepseek-v4-flash。
 - 英文 TTS：Kokoro，MP3。
 - 日文 TTS：VOICEVOX，WAV。
 - 中文作为母语解释文本，不生成语音。

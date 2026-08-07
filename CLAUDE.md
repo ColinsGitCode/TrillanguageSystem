@@ -181,7 +181,7 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 ## LLM and TTS
 
 - DeepSeek is the only active card-generation provider.
-- DEEPSEEK_MODEL defaults to deepseek-v4-pro.
+- DEEPSEEK_MODEL defaults to deepseek-v4-flash.
 - Legacy provider names normalize to deepseek.
 - localLlmService is only an optional OpenAI-compatible OCR/development adapter.
 - English TTS: Kokoro, MP3.
