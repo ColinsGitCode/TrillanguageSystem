@@ -93,18 +93,21 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
   });
 
-  test('P3 desktop composition keeps 2:1 and 1:3 working ratios', async ({ page }) => {
+  test('desktop composition keeps the 4:1 workspace rail and 1:3 library ratios', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('factory-composer-header')).toContainText('创建学习卡');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
-    const topGrid = await page.locator('.factory-top-grid').boundingBox();
+    const workspaceMain = await page.locator('.product-workspace-main').boundingBox();
+    const controlRail = await page.locator('.product-workspace-rail').boundingBox();
     const composer = await page.locator('.factory-composer').boundingBox();
     const queue = await page.getByTestId('react-queue-status').boundingBox();
     const dates = await page.locator('.date-rail').boundingBox();
     const library = await page.locator('.card-library').boundingBox();
-    expect(topGrid.height).toBeLessThanOrEqual(170);
-    expect(composer.width / queue.width).toBeGreaterThan(1.85);
-    expect(composer.width / queue.width).toBeLessThan(2.15);
+    expect(workspaceMain.width / controlRail.width).toBeGreaterThan(3.85);
+    expect(workspaceMain.width / controlRail.width).toBeLessThan(4.15);
+    expect(composer.width / queue.width).toBeGreaterThan(.98);
+    expect(composer.width / queue.width).toBeLessThan(1.02);
+    expect(composer.x).toBeGreaterThanOrEqual(workspaceMain.x + workspaceMain.width);
     expect(library.width / dates.width).toBeGreaterThan(2.85);
     expect(library.width / dates.width).toBeLessThan(3.15);
     await expect(page.getByRole('button', { name: /场景表达/ }).last()).toHaveCSS('background-color', 'rgb(255, 244, 220)');
@@ -113,6 +116,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test('background queue polling does not move the factory workspace', async ({ page }) => {
     let jobsCalls = 0;
     let releaseSecondRequest = () => {};
+    await page.route('**/api/health', (route) => route.fulfill({
+      json: { status: 'healthy', system: { criticalOnline: true }, services: [] },
+    }));
     await page.route('**/api/generation-jobs*', async (route) => {
       const url = new URL(route.request().url());
       if (url.pathname !== '/api/generation-jobs' || url.searchParams.get('limit') !== '30') {
@@ -137,24 +143,23 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
 
     const queue = page.getByTestId('react-queue-status');
-    const topGrid = page.locator('.factory-top-grid');
+    const controlRail = page.locator('.product-workspace-rail');
     const workspace = page.locator('.factory-library-grid');
     await expect(queue).toContainText('stable queue fixture');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     const beforeQueue = await queue.boundingBox();
-    const beforeTopGrid = await topGrid.boundingBox();
+    const beforeControlRail = await controlRail.boundingBox();
     const beforeWorkspace = await workspace.boundingBox();
 
     await expect.poll(() => jobsCalls, { timeout: 6_000 }).toBeGreaterThan(2);
     await expect(queue).toHaveAttribute('aria-busy', 'true');
     const duringQueue = await queue.boundingBox();
-    const duringTopGrid = await topGrid.boundingBox();
+    const duringControlRail = await controlRail.boundingBox();
     const duringWorkspace = await workspace.boundingBox();
 
     expect(duringQueue.height).toBe(beforeQueue.height);
-    expect(duringTopGrid.height).toBe(beforeTopGrid.height);
-    expect(duringWorkspace.y - duringTopGrid.y - duringTopGrid.height)
-      .toBe(beforeWorkspace.y - beforeTopGrid.y - beforeTopGrid.height);
+    expect(duringControlRail.width).toBe(beforeControlRail.width);
+    expect(duringWorkspace.y).toBe(beforeWorkspace.y);
     await expect(page.getByTestId('factory-queue-refresh-status')).toHaveCount(0);
 
     releaseSecondRequest();
@@ -872,16 +877,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
     await waitForPronunciationContent(page);
-    await page.getByTestId('react-card-content').evaluate((container) => {
-      const text = container.querySelector('h1')?.firstChild;
-      const range = document.createRange();
-      range.setStart(text, 0);
-      range.setEnd(text, Math.min(2, text.nodeValue.length));
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
+    await selectVisibleText(page, 'react');
 
     const box = await page.locator('.card-selection-toolbar').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(8);

@@ -51,6 +51,7 @@ type Props = {
   title: string;
   children: React.ReactNode;
   focusMode?: boolean;
+  workspaceLayout?: (content: React.ReactNode, recovery: React.ReactNode) => React.ReactNode;
 };
 
 function isHealthUnhealthy(data: Awaited<ReturnType<typeof factoryApi.health>> | undefined, isError: boolean) {
@@ -115,7 +116,7 @@ const ACTIVITY_SOURCE_BY_AREA: Record<ProductArea, ActivitySource> = {
   knowledge: 'knowledge',
 };
 
-export function ProductShell({ active, title, children, focusMode = false }: Props) {
+export function ProductShell({ active, title, children, focusMode = false, workspaceLayout }: Props) {
   const location = useLocation();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mobileNav, setMobileNav] = useState(false);
@@ -331,6 +332,13 @@ export function ProductShell({ active, title, children, focusMode = false }: Pro
   const visibleFeedback = focusMode
     ? feedback.filter((item) => item.tone === 'warning' || item.tone === 'error')
     : feedback;
+  const recoveryBanner = !focusMode && recoveryItem ? (
+    <RecoveryBanner
+      item={recoveryItem}
+      count={recoveryItems.length}
+      onViewAll={() => setActivityOpen(true)}
+    />
+  ) : null;
 
   return (
     <div
@@ -471,15 +479,8 @@ export function ProductShell({ active, title, children, focusMode = false }: Pro
             onRetry={() => void healthQuery.refetch()}
           />
         )}
-        {!focusMode && recoveryItem && (
-          <RecoveryBanner
-            item={recoveryItem}
-            count={recoveryItems.length}
-            onViewAll={() => setActivityOpen(true)}
-          />
-        )}
         <GlobalFeedback items={visibleFeedback} onDismiss={(id) => setFeedback((current) => current.filter((item) => item.id !== id))} />
-        {children}
+        {workspaceLayout ? workspaceLayout(children, recoveryBanner) : <>{recoveryBanner}{children}</>}
       </main>
       <ActivityDrawer
         open={activityOpen}

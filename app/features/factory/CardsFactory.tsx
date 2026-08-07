@@ -94,6 +94,7 @@ export function CardsFactory() {
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const [cardType, setCardType] = useState<CardType>('trilingual');
+  const [composerSource, setComposerSource] = useState<'text' | 'image'>('text');
   const [phrase, setPhrase] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('');
   const [selectedCard, setSelectedCard] = useState<CardSelection | null>(null);
@@ -438,6 +439,7 @@ export function CardsFactory() {
       setOcrRaw(normalized.raw);
       setOcrClean(normalized.clean);
       setPhrase(normalized.clean);
+      setComposerSource('text');
       setNotice(normalized.changed ? 'OCR 内容已清洗并填入文本框' : 'OCR 内容已填入文本框');
     },
     onError: (error) => setNotice(`OCR 失败：${error.message}`),
@@ -475,6 +477,7 @@ export function CardsFactory() {
       setNotice('图片不能超过 4 MB');
       return;
     }
+    setComposerSource('image');
     setImageData(await fileToDataUrl(file));
     setOcrRaw('');
     setOcrClean('');
@@ -535,141 +538,198 @@ export function CardsFactory() {
     || healthQuery.data?.system?.criticalOnline === false
     || deepSeekOffline;
 
-  return (
-    <ProductShell active="factory" title="Cards Factory">
-      <div data-testid="react-cards-factory">
-        {healthUnhealthy && (
-          <div className="react-alert" role="alert">
-            <span>生成服务当前不可用，请检查 DeepSeek API 状态。</span>
-            <button type="button" onClick={() => healthQuery.refetch()}><RefreshCw aria-hidden="true" /> 刷新</button>
+  const factoryRail = (
+    <div className="factory-control-rail" data-testid="factory-control-rail">
+      {healthUnhealthy && (
+        <div className="react-alert factory-rail-alert" role="alert">
+          <span>生成服务不可用，请检查 DeepSeek API。</span>
+          <button type="button" aria-label="重新检查生成服务" title="重新检查" onClick={() => healthQuery.refetch()}>
+            <RefreshCw aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      <article className="surface factory-composer">
+        <PageHeader
+          className="surface-heading"
+          compact
+          testId="factory-composer-header"
+          eyebrow="Cards Factory"
+          title="创建学习卡"
+          actions={<span>DeepSeek V4 Pro</span>}
+        />
+        <div className="card-type-control" role="radiogroup" aria-label="卡片类型">
+          {(Object.entries(CARD_CONFIG) as [CardType, typeof CARD_CONFIG[CardType]][]).map(([type, config]) => {
+            const Icon = config.icon;
+            return (
+              <button
+                key={type}
+                type="button"
+                role="radio"
+                aria-checked={cardType === type}
+                aria-label={`${config.label}：${config.hint}`}
+                title={config.hint}
+                className={`card-type-choice type-${type}${cardType === type ? ' active' : ''}`}
+                data-testid={`react-card-type-${type}`}
+                onClick={() => setCardType(type)}
+              >
+                <Icon aria-hidden="true" />
+                <span><strong>{config.label.replace('卡片', '卡')}</strong></span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="factory-source-tabs" role="tablist" aria-label="输入方式">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={composerSource === 'text'}
+            className={composerSource === 'text' ? 'active' : ''}
+            onClick={() => setComposerSource('text')}
+          >
+            <FileText aria-hidden="true" /> 文本
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={composerSource === 'image'}
+            className={composerSource === 'image' ? 'active' : ''}
+            onClick={() => setComposerSource('image')}
+          >
+            <Image aria-hidden="true" /> 图片
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          data-testid="react-image-input"
+          onChange={(event) => void handleImage(event.target.files?.[0])}
+        />
+
+        {composerSource === 'text' ? (
+          <label className="text-input-block">
+            <span>学习内容</span>
+            <textarea
+              value={phrase}
+              data-testid="react-phrase-input"
+              placeholder={cardType === 'scenario_phrase' ? '描述一个具体场景…' : '输入短语或句子…'}
+              onChange={(event) => setPhrase(event.target.value)}
+            />
+          </label>
+        ) : (
+          <div className="ocr-block">
+            <button
+              type="button"
+              className={`image-drop${imageData ? ' has-image' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => { event.preventDefault(); void handleImage(event.dataTransfer.files[0]); }}
+            >
+              {imageData
+                ? <img src={imageData} alt="OCR 预览" />
+                : <><Upload aria-hidden="true" /><span>粘贴、拖放或选择图片</span></>}
+            </button>
+            <div className="ocr-actions">
+              <button type="button" data-testid="react-ocr-button" disabled={!imageData || ocrMutation.isPending} onClick={() => ocrMutation.mutate(imageData)}>
+                {ocrMutation.isPending ? '识别中…' : '识别文字'}
+              </button>
+              <button type="button" aria-label="清除图片" title="清除图片" disabled={!imageData} onClick={() => { setImageData(''); setOcrRaw(''); setOcrClean(''); }}>
+                <X aria-hidden="true" />
+              </button>
+            </div>
           </div>
         )}
 
-        <section className="factory-top-grid">
-          <article className="surface factory-composer">
-            <PageHeader
-              className="surface-heading"
-              compact
-              testId="factory-composer-header"
-              eyebrow="Cards Factory"
-              title="创建学习卡"
-              actions={<span>Markdown · English / 日本語</span>}
-            />
-            <div className="card-type-control" role="radiogroup" aria-label="卡片类型">
-              {(Object.entries(CARD_CONFIG) as [CardType, typeof CARD_CONFIG[CardType]][]).map(([type, config]) => {
-                const Icon = config.icon;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    role="radio"
-                    aria-checked={cardType === type}
-                    className={`card-type-choice type-${type}${cardType === type ? ' active' : ''}`}
-                    data-testid={`react-card-type-${type}`}
-                    onClick={() => setCardType(type)}
-                  >
-                    <Icon aria-hidden="true" /><span><strong>{config.label}</strong><small>{config.hint}</small></span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="factory-input-grid">
-              <label className="text-input-block">
-                <span><FileText aria-hidden="true" /> 文本输入</span>
-                <textarea
-                  value={phrase}
-                  data-testid="react-phrase-input"
-                  placeholder={cardType === 'scenario_phrase' ? '描述一个具体场景，例如：保育园早上送孩子，说明昨晚有点咳嗽…' : '输入短语或句子…'}
-                  onChange={(event) => setPhrase(event.target.value)}
-                />
-                <button
-                  className="primary-button"
-                  type="button"
-                  disabled={!phrase.trim() || preflightMutation.isPending || enqueueMutation.isPending || healthUnhealthy}
-                  data-testid="react-generate-button"
-                  onClick={() => preflightMutation.mutate({ value: phrase.trim(), sourceMode: ocrClean && phrase === ocrClean ? 'ocr' : 'input' })}
-                >
-                  {preflightMutation.isPending ? '正在检查已有卡片…' : enqueueMutation.isPending ? '正在加入队列…' : CARD_CONFIG[cardType].action}
-                </button>
-              </label>
-              <div className="ocr-block">
-                <span><Image aria-hidden="true" /> 图片识别</span>
-                <button
-                  type="button"
-                  className={`image-drop${imageData ? ' has-image' : ''}`}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => { event.preventDefault(); void handleImage(event.dataTransfer.files[0]); }}
-                >
-                  {imageData ? <img src={imageData} alt="OCR 预览" /> : <><Upload aria-hidden="true" /><span>粘贴、拖放或选择图片</span></>}
-                </button>
-                <input ref={fileInputRef} type="file" accept="image/*" hidden data-testid="react-image-input" onChange={(event) => void handleImage(event.target.files?.[0])} />
-                <div className="ocr-actions">
-                  <button type="button" data-testid="react-ocr-button" disabled={!imageData || ocrMutation.isPending} onClick={() => ocrMutation.mutate(imageData)}>
-                    {ocrMutation.isPending ? '识别中…' : '识别文字'}
-                  </button>
-                  <button type="button" disabled={!imageData} onClick={() => { setImageData(''); setOcrRaw(''); setOcrClean(''); }}>清除</button>
+        {ocrClean && <details className="ocr-result"><summary>OCR 结果</summary><strong>清洗后</strong><p>{ocrClean}</p><strong>原文</strong><p>{ocrRaw}</p></details>}
+
+        <button
+          className="primary-button"
+          type="button"
+          disabled={!phrase.trim() || preflightMutation.isPending || enqueueMutation.isPending || healthUnhealthy}
+          data-testid="react-generate-button"
+          onClick={() => preflightMutation.mutate({ value: phrase.trim(), sourceMode: ocrClean && phrase === ocrClean ? 'ocr' : 'input' })}
+        >
+          {preflightMutation.isPending ? '检查已有卡片…' : enqueueMutation.isPending ? '正在加入队列…' : CARD_CONFIG[cardType].action}
+        </button>
+
+        {notice && <div className="inline-notice" role="status">{notice}<button type="button" aria-label="关闭提示" onClick={() => setNotice('')}><X /></button></div>}
+        {duplicateConflict && (
+          <section className="duplicate-card-panel" data-testid="factory-duplicate-card-panel" aria-label="已有相同学习卡">
+            <header>
+              <div><strong>已有相同学习卡</strong><span>这不是搜索历史，而是已经成功生成的卡片。</span></div>
+              <button type="button" aria-label="关闭已有卡片提示" onClick={() => setDuplicateConflict(null)}><X aria-hidden="true" /></button>
+            </header>
+            {duplicateConflict.cards.slice(0, 3).map((card) => (
+              <div className="duplicate-card-result" key={card.generationId}>
+                <div>
+                  <strong>{card.phrase}</strong>
+                  <span>最初生成于 {displayGenerationDate(card.generationDate, card.folderName)} · {CARD_CONFIG[card.cardType].label}</span>
                 </div>
-                {ocrClean && <details className="ocr-result"><summary>OCR 结果</summary><strong>清洗后</strong><p>{ocrClean}</p><strong>原文</strong><p>{ocrRaw}</p></details>}
+                <div>
+                  <button type="button" onClick={() => openDuplicateCard(card)}><ExternalLink aria-hidden="true" /> 打开已有卡</button>
+                  <button type="button" disabled={addToTodayMutation.isPending} onClick={() => addToTodayMutation.mutate(card)}><CalendarPlus aria-hidden="true" /> 加入今日</button>
+                </div>
               </div>
-            </div>
-            {notice && <div className="inline-notice" role="status">{notice}<button type="button" aria-label="关闭提示" onClick={() => setNotice('')}><X /></button></div>}
-            {duplicateConflict && (
-              <section className="duplicate-card-panel" data-testid="factory-duplicate-card-panel" aria-label="已有相同学习卡">
-                <header>
-                  <div><strong>已有相同学习卡</strong><span>这不是搜索历史，而是已经成功生成的卡片。</span></div>
-                  <button type="button" aria-label="关闭已有卡片提示" onClick={() => setDuplicateConflict(null)}><X aria-hidden="true" /></button>
-                </header>
-                {duplicateConflict.cards.slice(0, 3).map((card) => (
-                  <div className="duplicate-card-result" key={card.generationId}>
-                    <div>
-                      <strong>{card.phrase}</strong>
-                      <span>最初生成于 {displayGenerationDate(card.generationDate, card.folderName)} · {CARD_CONFIG[card.cardType].label}</span>
-                    </div>
-                    <div>
-                      <button type="button" onClick={() => openDuplicateCard(card)}><ExternalLink aria-hidden="true" /> 打开已有卡</button>
-                      <button type="button" disabled={addToTodayMutation.isPending} onClick={() => addToTodayMutation.mutate(card)}><CalendarPlus aria-hidden="true" /> 加入今日</button>
-                    </div>
-                  </div>
-                ))}
-                <footer>
-                  <span>旧文件与原始日期保持不变；加入今日只建立今日学习关联。</span>
-                  <button
-                    type="button"
-                    disabled={enqueueMutation.isPending}
-                    onClick={() => enqueueMutation.mutate({
-                      value: duplicateConflict.phrase,
-                      sourceMode: duplicateConflict.sourceMode,
-                      duplicatePolicy: 'create-version',
-                      interactionKey: createInteractionKey('new-version'),
-                    })}
-                  ><PlusCircle aria-hidden="true" /> 确认生成新版</button>
-                </footer>
-              </section>
-            )}
-          </article>
+            ))}
+            <footer>
+              <span>旧文件与原始日期保持不变；加入今日只建立今日学习关联。</span>
+              <button
+                type="button"
+                disabled={enqueueMutation.isPending}
+                onClick={() => enqueueMutation.mutate({
+                  value: duplicateConflict.phrase,
+                  sourceMode: duplicateConflict.sourceMode,
+                  duplicatePolicy: 'create-version',
+                  interactionKey: createInteractionKey('new-version'),
+                })}
+              ><PlusCircle aria-hidden="true" /> 确认生成新版</button>
+            </footer>
+          </section>
+        )}
+      </article>
 
-          <button
-            className={`surface queue-status queue-status-${activeJob?.status || 'idle'}${queueUnavailable || queueRefreshFailed ? ' queue-status-warning' : ''}`}
-            type="button"
-            data-testid="react-queue-status"
-            aria-busy={queueInitialLoading || queueRefreshing}
-            onClick={() => setQueueRoute(true, activeJob?.id)}
-          >
-            <div className="surface-heading"><div><p className="eyebrow">任务队列</p><h2>队列管理</h2></div><span>点击查看详情</span></div>
-            <div className="queue-current" role="status" aria-live="polite">
-              <i />
-              <strong>{queueStatusLabel}</strong>
-              <span>{queueStatusDescription}</span>
-            </div>
-            <div className="queue-progress"><i style={{ width: `${jobs.length ? ((Number(summary.success || 0) + Number(summary.failed || 0)) / jobs.length) * 100 : 0}%` }} /></div>
-            <div className="queue-counts">
-              <span>待执行 {queueUnavailable || queueInitialLoading ? '--' : summary.queued || 0}</span><span>运行中 {queueUnavailable || queueInitialLoading ? '--' : summary.running || 0}</span>
-              <span>已完成 {queueUnavailable || queueInitialLoading ? '--' : summary.success || 0}</span><span>失败 {queueUnavailable || queueInitialLoading ? '--' : summary.failed || 0}</span>
-            </div>
-          </button>
-        </section>
+      <button
+        className={`surface queue-status queue-status-${activeJob?.status || 'idle'}${queueUnavailable || queueRefreshFailed ? ' queue-status-warning' : ''}`}
+        type="button"
+        data-testid="react-queue-status"
+        aria-busy={queueInitialLoading || queueRefreshing}
+        onClick={() => setQueueRoute(true, activeJob?.id)}
+      >
+        <div className="surface-heading"><div><p className="eyebrow">任务队列</p><h2>队列管理</h2></div><span>查看</span></div>
+        <div className="queue-current" role="status" aria-live="polite">
+          <i />
+          <strong>{queueStatusLabel}</strong>
+          <span>{queueStatusDescription}</span>
+        </div>
+        <div className="queue-progress"><i style={{ width: `${jobs.length ? ((Number(summary.success || 0) + Number(summary.failed || 0)) / jobs.length) * 100 : 0}%` }} /></div>
+        <div className="queue-counts">
+          <span>待执行 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.queued || 0}</b></span>
+          <span>运行中 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.running || 0}</b></span>
+          <span>完成 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.success || 0}</b></span>
+          <span>失败 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.failed || 0}</b></span>
+        </div>
+      </button>
+    </div>
+  );
 
+  return (
+    <ProductShell
+      active="factory"
+      title="Cards Factory"
+      workspaceLayout={(content, recovery) => (
+        <div className="product-workspace-layout">
+          <div className="product-workspace-main">{content}</div>
+          <aside className="product-workspace-rail" aria-label="Cards Factory 工具栏">
+            {recovery}
+            {factoryRail}
+          </aside>
+        </div>
+      )}
+    >
+      <div data-testid="react-cards-factory">
         <section className="factory-library-grid">
           <aside className="surface date-rail">
             <div className="library-tabs" role="tablist">
