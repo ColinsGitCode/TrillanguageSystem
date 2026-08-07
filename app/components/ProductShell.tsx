@@ -434,6 +434,7 @@ export function ProductShell({ active, title, children, focusMode = false, works
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>
         </header>
+        <p className="workspace-title">{title}</p>
         <ShellTools
           activeCount={activities.filter((item) => ['queued', 'running'].includes(item.status)).length}
           attentionCount={activities.filter((item) => ['needs_attention', 'partially_failed', 'failed'].includes(item.status)).length}

@@ -729,7 +729,7 @@ export function CardsFactory() {
         </div>
       )}
     >
-      <div data-testid="react-cards-factory">
+      <div className="factory-content-fill" data-testid="react-cards-factory">
         <section className="factory-library-grid">
           <aside className="surface date-rail">
             <div className="library-tabs" role="tablist">

@@ -20,7 +20,8 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .react-app-shell { min-height: 100dvh; display: grid; grid-template-columns: 224px minmax(0, 1fr); }
 .react-app-shell.is-focus-mode { grid-template-columns: minmax(0, 1fr); }
 .react-app-shell.is-focus-mode .react-sidebar,
-.react-app-shell.is-focus-mode .shell-tools { display: none; }
+.react-app-shell.is-focus-mode .shell-tools,
+.react-app-shell.is-focus-mode .workspace-title { display: none; }
 .react-app-shell.is-focus-mode .react-workspace { padding: 20px; }
 .react-sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; padding: 18px 14px; background: var(--color-bg-surface); border-right: 1px solid var(--color-border); z-index: 30; }
 .brand-block { display: flex; align-items: center; gap: 12px; padding: 0 6px 26px; }
@@ -66,6 +67,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
 
 .react-workspace { min-width: 0; padding: 20px 72px 20px 20px; }
 .mobile-topbar { display: none; }
+.workspace-title { margin: 0 0 16px; color: var(--color-text-primary); font-size: 20px; line-height: 1.2; }
 .shell-tools { position: fixed; z-index: 72; top: 18px; right: 20px; display: flex; gap: 6px; }
 .shell-activity-trigger, .shell-info-trigger { position: relative; background: var(--color-bg-elevated); box-shadow: var(--shadow-sm); }
 .shell-activity-trigger > span { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 4px; border: 2px solid var(--color-bg-page); border-radius: 999px; color: var(--color-text-inverse); font-size: var(--font-size-badge); font-weight: 700; }
@@ -184,6 +186,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
   .sidebar-collapse-button { display: none; }
   .react-workspace { padding: 10px; }
   .mobile-topbar { height: 48px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .workspace-title { display: none; }
 }
 
 .icon-button, .react-sidebar nav a {
