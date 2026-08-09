@@ -909,10 +909,6 @@ class DatabaseService {
     return localDictionaryDomain.findEntry(this.db, language, normalizedForms);
   }
 
-  listLocalDictionaryEntries(options = {}) {
-    return localDictionaryDomain.listEntries(this.db, options);
-  }
-
   upsertLocalDictionaryEntry(payload) {
     return this.withBusyRetry(() => localDictionaryDomain.upsertEntry(this.db, payload));
   }

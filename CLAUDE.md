@@ -134,6 +134,8 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
       localGlossary/
         localGlossaryNormalizer.js
         localGlossaryService.js
+        localDictionaryCatalog.js
+        openDictionaryImport.js
       learning/
         application/
           learningService.js
@@ -155,6 +157,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
           generations.js
           helpers.js
           highlights.js
+          localDictionary.js
           textbooks.js
           testReset.js
 
@@ -190,7 +193,8 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - Selection TTS is a desktop-only, on-demand English/Japanese tool. It calls the same Kokoro/VOICEVOX providers through `synthesizeSpeech()` and the shared priority coordinator; interactive work enters before waiting batch work, while a 5-second anti-starvation window preserves batch progress.
 - `GET /api/tts/selection` exposes only controlled client configuration. `POST /api/tts/selection` returns immediate binary audio with provider/cache metadata; it must not create `audio_files`, generations, annotations, KG facts, Study Items, Review Events, or FSRS state.
 - Selection TTS cache is an opaque-hash, TTL-bounded named volume at `three_lans_system_selection_tts_cache`. It is outside SQLite, `RECORDS_PATH`, textbook media, and `express.static`; cache write failure must degrade to `X-TTS-Cache: BYPASS` while still returning successful provider audio.
-- Local Chinese-gloss lookup is read-only and local-first: current-card exact translations, textbook expressions, confirmed local entries, then exact recent-card history. It must never call DeepSeek or persist data during lookup. `LOCAL_GLOSSARY_LLM_ENABLED` controls only the explicit proposal endpoint; proposals remain pending and editable until a user accepts them into `local_glossary_entries`.
+- Local Chinese-gloss lookup is read-only and local-first: current-card exact translations, textbook expressions, confirmed local entries, versioned local dictionary entries, then exact recent-card history. It must never call DeepSeek or persist data during lookup. `LOCAL_GLOSSARY_LLM_ENABLED` controls only the explicit proposal endpoint; proposals remain pending and editable until a user accepts them into `local_glossary_entries`.
+- Open local dictionaries are imported only through `scripts/import/importOpenDictionaries.js`. Dry-run is the default; `--apply` is required for SQLite writes. ECDICT provides English-to-Chinese entries. Japanese JMdict-Simplified entries use only the first exact English-to-ECDICT Chinese mapping, are shown as medium confidence, and retain both JMdict and ECDICT source hashes, URLs, and licenses. Importing a new source version retires previous active versions for that source; it never deletes audit rows or overrides confirmed local entries.
 
 Provider errors use structured Error.code, Error.status, and Error.payload. Do not classify by matching message text.
 
@@ -298,6 +302,7 @@ Current tables:
 - kg_planning_signals;
 - local_glossary_entries;
 - local_glossary_proposals;
+- local_dictionary_entries;
 - generations_fts virtual table and triggers.
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.

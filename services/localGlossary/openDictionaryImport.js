@@ -2,6 +2,8 @@
 
 const crypto = require('node:crypto');
 
+const ECDICT_REQUIRED_HEADERS = ['word', 'translation'];
+
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -64,9 +66,22 @@ function compactChineseGloss(value) {
     .map((part) => part
       .replace(/^\[[^\]]+\]\s*/u, '')
       .replace(/^(?:n|v|vt|vi|adj|adv|pron|prep|conj|aux|num|art)\.\s*/iu, '')
-      .trim())
+    .trim())
     .filter(Boolean);
-  return [...new Set(parts)].slice(0, 2).join('；').slice(0, 120).trim();
+  const primary = [...new Set(parts)][0] || '';
+  return primary.split(/[,，;；]/u).map((part) => part.trim()).find(Boolean)?.slice(0, 120) || '';
+}
+
+function extractPartOfSpeech(value) {
+  return /^\s*((?:n|v|vt|vi|adj|adv|pron|prep|conj|aux|num|art)\.)/iu.exec(String(value || ''))?.[1] || null;
+}
+
+function assertEcdictHeaders(headers) {
+  const available = new Set(headers.map((header) => header.replace(/^\uFEFF/u, '').trim()));
+  const missing = ECDICT_REQUIRED_HEADERS.filter((header) => !available.has(header));
+  if (missing.length) {
+    throw new Error(`ECDICT CSV 缺少必需列: ${missing.join(', ')}`);
+  }
 }
 
 function isCommonEcdictRow(row) {
@@ -81,35 +96,38 @@ function isCommonEcdictRow(row) {
 function readEcdictEntries(input, options = {}) {
   const rows = parseCsvRows(input);
   if (!rows.length) return [];
-  const headers = rows[0].map((header) => header.trim());
+  const headers = rows[0].map((header) => header.replace(/^\uFEFF/u, '').trim());
+  assertEcdictHeaders(headers);
   const entries = [];
   const seen = new Set();
   const scope = options.scope || 'common';
 
   for (const values of rows.slice(1)) {
     const row = Object.fromEntries(headers.map((header, index) => [header, values[index] || '']));
-    const word = normalizeEnglish(row.word);
-    const zhGloss = compactChineseGloss(row.translation);
+    const wordValue = String(row.word || '').trim();
+    const translationValue = String(row.translation || '');
+    const word = normalizeEnglish(wordValue);
+    const zhGloss = compactChineseGloss(translationValue);
     if (!word || !zhGloss || (scope === 'common' && !isCommonEcdictRow(row))) continue;
     if (seen.has(word)) continue;
     seen.add(word);
     entries.push({
       language: 'en',
-      surfaceForm: row.word.trim(),
+      surfaceForm: wordValue,
       normalizedForm: word,
       lemma: word,
-      reading: row.phonetic.trim() || null,
-      partOfSpeech: row.pos.trim() || null,
+      reading: String(row.phonetic || '').trim() || null,
+      partOfSpeech: String(row.pos || '').trim() || extractPartOfSpeech(translationValue),
       zhGloss,
       senseKey: 'default',
       sourceRef: {
-        definition: row.definition.trim() || null,
-        exchange: row.exchange.trim() || null,
-        collins: row.collins.trim() || null,
-        oxford: row.oxford.trim() || null,
-        tag: row.tag.trim() || null,
-        bnc: row.bnc.trim() || null,
-        frq: row.frq.trim() || null,
+        definition: String(row.definition || '').trim() || null,
+        exchange: String(row.exchange || '').trim() || null,
+        collins: String(row.collins || '').trim() || null,
+        oxford: String(row.oxford || '').trim() || null,
+        tag: String(row.tag || '').trim() || null,
+        bnc: String(row.bnc || '').trim() || null,
+        frq: String(row.frq || '').trim() || null,
       },
     });
   }
@@ -145,6 +163,7 @@ function firstApplicableReading(word, surface) {
 
 function readJmdictEntries(payload, options = {}) {
   const englishGlossMap = options.englishGlossMap || new Map();
+  const englishSource = options.englishSource || null;
   const entries = [];
   const seen = new Set();
   const words = Array.isArray(payload.words) ? payload.words : [];
@@ -180,6 +199,8 @@ function readJmdictEntries(payload, options = {}) {
           sourceRef: {
             jmdictId: word.id,
             englishGlosses: mapped.matchedEnglish,
+            translationPath: 'jmdict-simplified-eng-to-ecdict-zh',
+            zhGlossSource: englishSource,
           },
         });
       }

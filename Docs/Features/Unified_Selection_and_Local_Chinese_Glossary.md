@@ -93,9 +93,9 @@ npm run dictionary:import:open -- \
   --source=jmdict --file=/path/jmdict.json --ecdict-file=/path/ecdict.csv
 ```
 
-确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。
+确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的首个中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。日语的中文释义经过英语桥接，页面标记为“中可信度”；英语 ECDICT 释义标记为“高可信度”。
 
-外部原始文件不进入 Git，也不复制进应用镜像；每条导入记录把 `source_id`、输入文件 SHA-256、来源 URL、许可和 `dictionary_version` 写入词典表，便于审计、升级和重建。更新时导入新的版本，不原地覆盖旧版本；查询仍按现有的人工词条优先、本地词典兜底规则执行。
+外部原始文件不进入 Git，也不复制进应用镜像；每条导入记录把 `source_id`、输入文件 SHA-256、来源 URL、许可和 `dictionary_version` 写入词典表，便于审计、升级和重建。更新时导入新的版本，同一来源的旧版本会标记为 `retired`，保留审计记录但不再参与查询；查询仍按现有的人工词条优先、本地词典兜底规则执行。
 
 来源与许可：
 

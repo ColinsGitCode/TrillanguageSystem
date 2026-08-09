@@ -200,7 +200,7 @@ class LocalGlossaryService {
           ...dictionaryEntry,
           sourceKind: 'dictionary',
           sourceId: dictionaryEntry.id,
-          confidence: 'high',
+          confidence: dictionaryEntry.language === 'ja' ? 'medium' : 'high',
         }),
       );
     }

@@ -46,8 +46,8 @@ function usage(message) {
   process.exitCode = 1;
 }
 
-function readInput(file) {
-  if (!file) throw new Error('缺少 --file');
+function readInput(file, optionName = '--file') {
+  if (!file) throw new Error(`缺少 ${optionName}`);
   return fs.readFileSync(file);
 }
 
@@ -57,28 +57,38 @@ function limitEntries(entries) {
 
 function loadEntries() {
   if (!SOURCES[source]) throw new Error(`不支持的 source: ${source || '(empty)'}`);
-  const input = readInput(filePath);
+  const input = readInput(filePath, '--file');
   const inputSha256 = sha256(input);
   const sourceInfo = { ...SOURCES[source], inputSha256 };
   if (source === 'ecdict') {
     return { entries: limitEntries(readEcdictEntries(input.toString('utf8'), { scope })), sourceInfo };
   }
 
-  const englishInput = readInput(englishFilePath);
+  const englishInput = readInput(englishFilePath, '--ecdict-file');
+  const englishInputSha256 = sha256(englishInput);
   const englishEntries = readEcdictEntries(englishInput.toString('utf8'), { scope: 'all' });
   const payload = JSON.parse(input.toString('utf8'));
   return {
-    entries: limitEntries(readJmdictEntries(payload, { englishGlossMap: buildEnglishGlossMap(englishEntries) })),
-    sourceInfo,
+    entries: limitEntries(readJmdictEntries(payload, {
+      englishGlossMap: buildEnglishGlossMap(englishEntries),
+      englishSource: {
+        sourceId: SOURCES.ecdict.sourceId,
+        sourceUrl: SOURCES.ecdict.sourceUrl,
+        license: SOURCES.ecdict.license,
+        inputSha256: englishInputSha256,
+      },
+    })),
+    sourceInfo: { ...sourceInfo, englishInputSha256 },
   };
 }
 
 function main() {
   if (!source || !filePath) return usage('必须提供 --source 和 --file');
   const { entries, sourceInfo } = loadEntries();
+  if (!entries.length) throw new Error('没有解析出可导入的词典条目，请检查文件、表头和中文释义覆盖范围');
   const version = source === 'ecdict'
     ? `ecdict-${sourceInfo.inputSha256.slice(0, 12)}`
-    : `jmdict-${sourceInfo.inputSha256.slice(0, 12)}`;
+    : `jmdict-${sourceInfo.inputSha256.slice(0, 12)}-ecdict-${sourceInfo.englishInputSha256.slice(0, 12)}`;
   const counts = entries.reduce((result, entry) => {
     result[entry.language] = (result[entry.language] || 0) + 1;
     return result;
@@ -99,6 +109,11 @@ function main() {
   try {
     const now = new Date().toISOString();
     const insert = database.db.transaction(() => {
+      localDictionaryDomain.retirePreviousVersions(database.db, {
+        sourceId: sourceInfo.sourceId,
+        dictionaryVersion: version,
+        updatedAtUtc: now,
+      });
       for (const entry of entries) {
         localDictionaryDomain.upsertEntry(database.db, {
           language: entry.language,
@@ -126,5 +141,6 @@ function main() {
 try {
   main();
 } catch (error) {
-  usage(error.message);
+  console.error(`导入失败: ${error.message}`);
+  process.exitCode = 1;
 }

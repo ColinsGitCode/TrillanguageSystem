@@ -36,23 +36,26 @@ function findEntry(db, language, normalizedForms = []) {
   return mapEntry(row);
 }
 
-function listEntries(db, options = {}) {
-  const clauses = ["status = 'active'"];
-  const params = { limit: Math.min(Math.max(Number(options.limit) || 100, 1), 5000) };
-  if (options.language) {
-    clauses.push('language = @language');
-    params.language = options.language;
-  }
-  if (options.dictionaryVersion) {
-    clauses.push('dictionary_version = @dictionaryVersion');
-    params.dictionaryVersion = options.dictionaryVersion;
-  }
-  return db.prepare(`
+function findEntryByIdentity(db, payload) {
+  const row = db.prepare(`
     SELECT * FROM local_dictionary_entries
-    WHERE ${clauses.join(' AND ')}
-    ORDER BY language, normalized_form, id
-    LIMIT @limit
-  `).all(params).map(mapEntry);
+    WHERE language = @language
+      AND normalized_form = @normalizedForm
+      AND sense_key = @senseKey
+      AND dictionary_version = @dictionaryVersion
+    LIMIT 1
+  `).get(payload);
+  return mapEntry(row);
+}
+
+function retirePreviousVersions(db, { sourceId, dictionaryVersion, updatedAtUtc }) {
+  return db.prepare(`
+    UPDATE local_dictionary_entries
+    SET status = 'retired', updated_at_utc = @updatedAtUtc
+    WHERE source_id = @sourceId
+      AND dictionary_version <> @dictionaryVersion
+      AND status = 'active'
+  `).run({ sourceId, dictionaryVersion, updatedAtUtc }).changes;
 }
 
 function upsertEntry(db, payload) {
@@ -78,7 +81,7 @@ function upsertEntry(db, payload) {
       status = 'active',
       updated_at_utc = excluded.updated_at_utc
   `).run(payload);
-  return findEntry(db, payload.language, [payload.normalizedForm]);
+  return findEntryByIdentity(db, payload);
 }
 
 function countEntries(db, dictionaryVersion) {
@@ -89,8 +92,9 @@ function countEntries(db, dictionaryVersion) {
 
 module.exports = {
   findEntry,
+  findEntryByIdentity,
   countEntries,
-  listEntries,
   mapEntry,
+  retirePreviousVersions,
   upsertEntry,
 };
