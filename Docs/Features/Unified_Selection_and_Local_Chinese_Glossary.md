@@ -82,7 +82,25 @@ Migration `013_local_glossary.sql` 新增：
 - `local_glossary_entries`：人工确认后的活动/归档词条；
 - `local_glossary_proposals`：DeepSeek 候选与人工裁决审计。
 
-Migration `014_local_dictionary.sql` 新增 `local_dictionary_entries`。仓库内的 `services/localGlossary/dictionaries/local-en-ja-zh-v1.json` 是一份原创简明启动词典，不包含第三方词典内容；后续授权词典通过 `npm run dictionary:import -- --file=/path/catalog.json --apply` 导入。导入文件必须带版本、来源和许可信息。
+Migration `014_local_dictionary.sql` 新增 `local_dictionary_entries`。仓库内的 `services/localGlossary/dictionaries/local-en-ja-zh-v1.json` 是一份原创简明启动词典，不包含第三方词典内容。
+
+授权的第三方词典通过 `npm run dictionary:import:open` 导入，默认先 dry-run：
+
+```bash
+npm run dictionary:import:open -- \
+  --source=ecdict --file=/path/ecdict.csv --scope=common
+npm run dictionary:import:open -- \
+  --source=jmdict --file=/path/jmdict.json --ecdict-file=/path/ecdict.csv
+```
+
+确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。
+
+外部原始文件不进入 Git，也不复制进应用镜像；每条导入记录把 `source_id`、输入文件 SHA-256、来源 URL、许可和 `dictionary_version` 写入词典表，便于审计、升级和重建。更新时导入新的版本，不原地覆盖旧版本；查询仍按现有的人工词条优先、本地词典兜底规则执行。
+
+来源与许可：
+
+- ECDICT：[upstream repository](https://github.com/skywind3000/ECDICT)，仓库声明 MIT；由于其数据来自多个上游，重新分发前仍需保留并复核上游 notices。
+- JMdict：[EDRDG license](https://www.edrdg.org/edrdg/licence.html) 与 [JMdict documentation](https://www.edrdg.org/jmdict/edict_doc_depr.html)；采用 CC BY-SA 4.0 / EDRDG 条款，更新时保留署名和许可信息。
 
 HTTP contract：
 
