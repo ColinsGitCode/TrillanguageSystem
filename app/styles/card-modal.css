@@ -182,6 +182,31 @@
   color: var(--color-text-primary);
   text-overflow: ellipsis;
 }
+.card-selection-toolbar .csa-gloss-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.card-selection-toolbar .csa-gloss-line {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+}
+.card-selection-toolbar .csa-gloss-line > span {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.card-selection-toolbar .csa-gloss-meta {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-badge);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-selection-toolbar .csa-gloss-source {
+  align-self: center;
+}
 .card-selection-toolbar .csa-gloss small {
   flex: none;
   color: var(--color-text-tertiary);

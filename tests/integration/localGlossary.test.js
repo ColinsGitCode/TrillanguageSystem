@@ -39,6 +39,22 @@ test('looks up a current-card Chinese translation without creating persistent gl
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM local_glossary_proposals').get().count, 0);
 });
 
+test('looks up a simple English term from the local dictionary without remote access', async () => {
+  const response = await api('GET', '/api/local-glossary/lookup?language=en&text=public%20schedule');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.lookup.gloss.sourceKind, 'dictionary');
+  assert.equal(response.body.lookup.gloss.zhGloss, '公共日程；共享日历');
+  assert.equal(response.body.lookup.gloss.partOfSpeech, 'noun phrase');
+});
+
+test('looks up a Japanese term with local reading and part of speech', async () => {
+  const response = await api('GET', '/api/local-glossary/lookup?language=ja&text=%E5%8B%A4%E5%8B%99%E8%A1%A8');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.lookup.gloss.sourceKind, 'dictionary');
+  assert.equal(response.body.lookup.gloss.reading, 'きんむひょう');
+  assert.equal(response.body.lookup.gloss.zhGloss, '考勤表；工作时间表');
+});
+
 test('supports manual glossary create, normalized lookup, edit and archive', async () => {
   const created = await api('POST', '/api/local-glossary/entries', {
     body: { language: 'en', canonicalForm: 'timesheet', zhGloss: '考勤表' },

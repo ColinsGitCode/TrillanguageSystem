@@ -24,6 +24,8 @@ const manualTagsDomain = require('./db/manualTags');
 const cardEngagementDomain = require('./db/cardEngagement');
 const pronunciationDomain = require('./db/pronunciation');
 const localGlossaryDomain = require('./db/localGlossary');
+const localDictionaryDomain = require('./db/localDictionary');
+const { readCatalog } = require('../localGlossary/localDictionaryCatalog');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
 const { ensureGenerationsFtsInfrastructure } = require('./db/ftsInfrastructure');
@@ -104,6 +106,7 @@ class DatabaseService {
     this.dropDeprecatedTables();
     this.ensureSchemaMigrations();
     this.migrationResult = migrationRunner.runMigrations(this.db, { preexistingTables });
+    this.seedLocalDictionary();
 
     log.info('database tables initialized');
   }
@@ -878,6 +881,41 @@ class DatabaseService {
   }
 
   // ========== Local Chinese glossary ==========
+
+  seedLocalDictionary() {
+    const catalog = readCatalog();
+    if (localDictionaryDomain.countEntries(this.db, catalog.version) > 0) return;
+    const now = new Date().toISOString();
+    const insert = this.db.transaction(() => {
+      catalog.entries.forEach((entry) => localDictionaryDomain.upsertEntry(this.db, {
+        language: entry.language,
+        surfaceForm: entry.surfaceForm,
+        normalizedForm: entry.normalizedForm,
+        lemma: entry.lemma || entry.surfaceForm,
+        reading: entry.reading || null,
+        partOfSpeech: entry.partOfSpeech || null,
+        zhGloss: entry.zhGloss,
+        senseKey: entry.senseKey || 'default',
+        sourceId: catalog.sourceId,
+        dictionaryVersion: catalog.version,
+        sourceRefJson: JSON.stringify({ license: catalog.license, catalog: catalog.version }),
+        createdAtUtc: now,
+      }));
+    });
+    insert();
+  }
+
+  findLocalDictionaryEntry(language, normalizedForms = []) {
+    return localDictionaryDomain.findEntry(this.db, language, normalizedForms);
+  }
+
+  listLocalDictionaryEntries(options = {}) {
+    return localDictionaryDomain.listEntries(this.db, options);
+  }
+
+  upsertLocalDictionaryEntry(payload) {
+    return this.withBusyRetry(() => localDictionaryDomain.upsertEntry(this.db, payload));
+  }
 
   getLocalGlossaryEntry(id) {
     return localGlossaryDomain.getEntry(this.db, id);

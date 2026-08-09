@@ -39,10 +39,14 @@ export type LocalGlossaryLookup = {
   gloss: null | {
     id: number | null;
     zhGloss: string;
-    sourceKind: 'current-card' | 'textbook' | 'manual' | 'llm-confirmed' | 'imported' | 'history-card';
+    sourceKind: 'current-card' | 'textbook' | 'manual' | 'llm-confirmed' | 'imported' | 'history-card' | 'dictionary';
     sourceId: number | null;
     confidence: 'high' | 'medium' | 'low';
     version: number | null;
+    lemma: string | null;
+    reading: string | null;
+    partOfSpeech: string | null;
+    dictionaryVersion: string | null;
   };
   alternatives: Array<unknown>;
 };

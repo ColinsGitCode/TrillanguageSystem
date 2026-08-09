@@ -20,6 +20,7 @@ const SOURCE_LABEL = {
   'llm-confirmed': '人工确认',
   imported: '本地导入',
   'history-card': '历史卡片',
+  dictionary: '本地词典',
 } as const;
 
 export function SelectionGlossaryInline({
@@ -175,9 +176,18 @@ export function SelectionGlossaryInline({
     return (
       <span className="csa-gloss" title={`来源：${SOURCE_LABEL[lookup.gloss.sourceKind]}`}>
         <Languages aria-hidden="true" />
-        <span>中译</span>
-        <strong>{lookup.gloss.zhGloss}</strong>
-        <small>{SOURCE_LABEL[lookup.gloss.sourceKind]}</small>
+        <span className="csa-gloss-copy">
+          <span className="csa-gloss-line">
+            <span>中译</span>
+            <strong>{lookup.gloss.zhGloss}</strong>
+          </span>
+          {(lookup.gloss.reading || lookup.gloss.partOfSpeech) && (
+            <small className="csa-gloss-meta">
+              {[lookup.gloss.reading, lookup.gloss.partOfSpeech].filter(Boolean).join(' · ')}
+            </small>
+          )}
+        </span>
+        <small className="csa-gloss-source">{SOURCE_LABEL[lookup.gloss.sourceKind]}</small>
         {editable && (
           <button
             type="button"

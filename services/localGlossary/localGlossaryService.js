@@ -127,6 +127,10 @@ function mapGloss(pair) {
     sourceId: pair.sourceId || null,
     confidence: pair.confidence,
     version: pair.version || null,
+    lemma: pair.lemma || null,
+    reading: pair.reading || null,
+    partOfSpeech: pair.partOfSpeech || null,
+    dictionaryVersion: pair.dictionaryVersion || null,
   };
 }
 
@@ -180,6 +184,25 @@ class LocalGlossaryService {
           version: entry.version,
         });
       }
+    }
+
+    const dictionaryForms = term.aliases.map((alias) => (
+      language === 'en' ? alias.toLocaleLowerCase('en-US') : alias
+    ));
+    const dictionaryEntry = this.database.findLocalDictionaryEntry(language, dictionaryForms);
+    if (dictionaryEntry) {
+      return this.buildLookup(
+        dictionaryEntry.normalizedForm === dictionaryForms[0] ? 'exact' : 'candidate',
+        text,
+        language,
+        term,
+        mapGloss({
+          ...dictionaryEntry,
+          sourceKind: 'dictionary',
+          sourceId: dictionaryEntry.id,
+          confidence: 'high',
+        }),
+      );
     }
 
     const generations = this.database.db.prepare(`
