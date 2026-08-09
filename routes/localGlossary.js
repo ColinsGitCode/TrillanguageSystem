@@ -13,6 +13,8 @@ router.get('/api/local-glossary/lookup', async (req, res, next) => {
       text: req.query.text,
       language: req.query.language,
       generationId: req.query.generationId,
+      reading: req.query.reading,
+      context: req.query.context,
     });
     return res.json({ success: true, lookup });
   } catch (error) { return next(error); }

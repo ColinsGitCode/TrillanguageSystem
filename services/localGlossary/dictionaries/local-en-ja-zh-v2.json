@@ -1,9 +1,11 @@
 {
-  "version": "local-en-ja-zh-v1",
+  "version": "local-en-ja-zh-v2",
   "sourceId": "three-lans-curated-starter",
   "license": "original-curated-data",
   "entries": [
     { "language": "en", "surfaceForm": "public schedule", "normalizedForm": "public schedule", "lemma": "public schedule", "partOfSpeech": "noun phrase", "zhGloss": "公共日程；共享日历" },
+    { "language": "en", "surfaceForm": "public", "normalizedForm": "public", "lemma": "public", "partOfSpeech": "adjective", "zhGloss": "公共的；公开的", "senseKey": "adjective" },
+    { "language": "en", "surfaceForm": "public", "normalizedForm": "public", "lemma": "public", "partOfSpeech": "noun", "zhGloss": "公众；民众", "senseKey": "noun" },
     { "language": "en", "surfaceForm": "shared calendar", "normalizedForm": "shared calendar", "lemma": "shared calendar", "partOfSpeech": "noun phrase", "zhGloss": "共享日历" },
     { "language": "en", "surfaceForm": "fine folks", "normalizedForm": "fine folks", "lemma": "fine folks", "partOfSpeech": "noun phrase", "zhGloss": "好人；友善的人" },
     { "language": "en", "surfaceForm": "handoff", "normalizedForm": "handoff", "lemma": "handoff", "partOfSpeech": "noun", "zhGloss": "工作交接" },
@@ -20,6 +22,9 @@
     { "language": "en", "surfaceForm": "go off", "normalizedForm": "go off", "lemma": "go off", "partOfSpeech": "phrasal verb", "zhGloss": "（闹钟）响" },
     { "language": "en", "surfaceForm": "overslept", "normalizedForm": "overslept", "lemma": "oversleep", "partOfSpeech": "verb", "zhGloss": "睡过头" },
     { "language": "ja", "surfaceForm": "勤務表", "normalizedForm": "勤務表", "lemma": "勤務表", "reading": "きんむひょう", "partOfSpeech": "名词", "zhGloss": "考勤表；工作时间表" },
+    { "language": "ja", "surfaceForm": "公開", "normalizedForm": "公開", "lemma": "公開", "reading": "こうかい", "partOfSpeech": "名词・动词", "zhGloss": "公开；公开发布", "senseKey": "public-release" },
+    { "language": "ja", "surfaceForm": "本", "normalizedForm": "本", "lemma": "本", "reading": "ほん", "partOfSpeech": "名词", "zhGloss": "书；书本", "senseKey": "book" },
+    { "language": "ja", "surfaceForm": "本", "normalizedForm": "本", "lemma": "本", "reading": "もと", "partOfSpeech": "名词", "zhGloss": "根源；基础", "senseKey": "origin" },
     { "language": "ja", "surfaceForm": "朝食", "normalizedForm": "朝食", "lemma": "朝食", "reading": "ちょうしょく", "partOfSpeech": "名词", "zhGloss": "早餐" },
     { "language": "ja", "surfaceForm": "冷蔵庫", "normalizedForm": "冷蔵庫", "lemma": "冷蔵庫", "reading": "れいぞうこ", "partOfSpeech": "名词", "zhGloss": "冰箱" },
     { "language": "ja", "surfaceForm": "携帯電話", "normalizedForm": "携帯電話", "lemma": "携帯電話", "reading": "けいたいでんわ", "partOfSpeech": "名词", "zhGloss": "手机；移动电话" },

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Languages, Pencil, Sparkles, X } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Check, ChevronDown, Languages, Pencil, Sparkles, X } from 'lucide-react';
 import { localGlossaryApi } from './local-glossary';
-import type { LocalGlossaryProposal } from './local-glossary';
+import type { LocalGlossaryGloss, LocalGlossaryProposal } from './local-glossary';
 import type { CardLookupLanguage } from './selection-actions';
 
 type Props = {
@@ -10,6 +11,8 @@ type Props = {
   language: CardLookupLanguage | null;
   generationId: number | null;
   contextLabel: string;
+  contextText: string;
+  readingHint: string | null;
   onToast: (message: string) => void;
 };
 
@@ -23,37 +26,58 @@ const SOURCE_LABEL = {
   dictionary: '本地词典',
 } as const;
 
+const CONFIDENCE_LABEL = {
+  high: '高可信',
+  medium: '需核对',
+  low: '低可信',
+} as const;
+
 export function SelectionGlossaryInline({
   phrase,
   language,
   generationId,
   contextLabel,
+  contextText,
+  readingHint,
   onToast,
 }: Props) {
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState<'none' | 'manual' | 'proposal' | 'edit'>('none');
   const [draftGloss, setDraftGloss] = useState('');
   const [proposal, setProposal] = useState<LocalGlossaryProposal | null>(null);
-  const queryKey = ['local-glossary', language, phrase, generationId];
+  const [choiceIndex, setChoiceIndex] = useState(0);
+  const queryKey = ['local-glossary', language, phrase, generationId, readingHint, contextText];
   const lookupQuery = useQuery({
     queryKey,
-    queryFn: () => localGlossaryApi.lookup({ text: phrase, language: language!, generationId }),
+    queryFn: () => localGlossaryApi.lookup({
+      text: phrase,
+      language: language!,
+      generationId,
+      reading: readingHint,
+      context: contextText,
+    }),
     enabled: Boolean(language && phrase),
     retry: false,
     staleTime: 30_000,
   });
   const lookup = lookupQuery.data?.lookup || null;
+  const choices: LocalGlossaryGloss[] = lookup?.gloss
+    ? [lookup.gloss, ...(lookup.alternatives || [])]
+    : [];
+  const activeGloss = choices[choiceIndex] || lookup?.gloss || null;
 
   useEffect(() => {
     setEditMode('none');
     setDraftGloss('');
     setProposal(null);
-  }, [phrase, language]);
+    setChoiceIndex(0);
+  }, [phrase, language, readingHint, contextText]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey });
     setEditMode('none');
     setProposal(null);
+    setChoiceIndex(0);
   };
 
   const manualMutation = useMutation({
@@ -61,6 +85,7 @@ export function SelectionGlossaryInline({
       language: language!,
       canonicalForm: phrase,
       zhGloss: draftGloss,
+      senseKey: readingHint ? `reading:${readingHint}` : 'default',
     }),
     onSuccess: async () => {
       await refresh();
@@ -69,8 +94,8 @@ export function SelectionGlossaryInline({
     onError: () => onToast('本地释义保存失败，请重试'),
   });
   const editMutation = useMutation({
-    mutationFn: () => localGlossaryApi.updateEntry(Number(lookup?.gloss?.id), {
-      expectedVersion: Number(lookup?.gloss?.version),
+    mutationFn: () => localGlossaryApi.updateEntry(Number(activeGloss?.id), {
+      expectedVersion: Number(activeGloss?.version),
       canonicalForm: phrase,
       zhGloss: draftGloss,
     }),
@@ -85,7 +110,7 @@ export function SelectionGlossaryInline({
       requestKey: crypto.randomUUID(),
       text: phrase,
       language: language!,
-      contextLabel,
+      contextLabel: [contextLabel, contextText].filter(Boolean).join(' · ').slice(0, 200),
     }),
     onSuccess: ({ proposal: next }) => {
       setProposal(next);
@@ -167,35 +192,73 @@ export function SelectionGlossaryInline({
     );
   }
 
-  if (lookup?.gloss) {
+  if (activeGloss) {
     const editable = Boolean(
-      lookup.gloss.id
-      && lookup.gloss.version
-      && ['manual', 'llm-confirmed', 'imported'].includes(lookup.gloss.sourceKind)
+      activeGloss.id
+      && activeGloss.version
+      && ['manual', 'llm-confirmed', 'imported'].includes(activeGloss.sourceKind)
     );
+    const correctable = activeGloss.sourceKind === 'dictionary' && activeGloss.confidence !== 'high';
+    const source = activeGloss.sourceDetail || SOURCE_LABEL[activeGloss.sourceKind];
     return (
-      <span className="csa-gloss" title={`来源：${SOURCE_LABEL[lookup.gloss.sourceKind]}`}>
+      <span
+        className="csa-gloss"
+        title={`来源：${source}；可信度：${CONFIDENCE_LABEL[activeGloss.confidence]}`}
+      >
         <Languages aria-hidden="true" />
         <span className="csa-gloss-copy">
           <span className="csa-gloss-line">
             <span>中译</span>
-            <strong>{lookup.gloss.zhGloss}</strong>
+            <strong>{activeGloss.zhGloss}</strong>
           </span>
-          {(lookup.gloss.reading || lookup.gloss.partOfSpeech) && (
+          {(activeGloss.reading || activeGloss.partOfSpeech) && (
             <small className="csa-gloss-meta">
-              {[lookup.gloss.reading, lookup.gloss.partOfSpeech].filter(Boolean).join(' · ')}
+              {[activeGloss.reading, activeGloss.partOfSpeech].filter(Boolean).join(' · ')}
             </small>
           )}
         </span>
-        <small className="csa-gloss-source">{SOURCE_LABEL[lookup.gloss.sourceKind]}</small>
-        {editable && (
+        <small className="csa-gloss-source">{source}</small>
+        <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
+          {CONFIDENCE_LABEL[activeGloss.confidence]}
+        </small>
+        {choices.length > 1 && (
+          <DropdownMenu.Root modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="csa-gloss-alternatives" aria-label="选择其他义项">
+                义项 {choiceIndex + 1}/{choices.length}<ChevronDown aria-hidden="true" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="csa-gloss-menu" sideOffset={5} align="start">
+                {choices.map((choice, index) => (
+                  <DropdownMenu.Item
+                    key={`${choice.id || 'local'}-${choice.senseKey || index}-${choice.zhGloss}`}
+                    className="csa-gloss-choice"
+                    onSelect={() => setChoiceIndex(index)}
+                  >
+                    <span>{choice.zhGloss}</span>
+                    <small>
+                      {[
+                        choice.reading,
+                        choice.partOfSpeech,
+                        choice.sourceDetail || SOURCE_LABEL[choice.sourceKind],
+                        CONFIDENCE_LABEL[choice.confidence],
+                      ].filter(Boolean).join(' · ')}
+                    </small>
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        )}
+        {(editable || correctable) && (
           <button
             type="button"
-            aria-label="编辑本地释义"
-            title="编辑本地释义"
+            aria-label={editable ? '编辑本地释义' : '更正本地释义'}
+            title={editable ? '编辑本地释义' : '更正本地释义'}
             onClick={() => {
-              setDraftGloss(lookup.gloss?.zhGloss || '');
-              setEditMode('edit');
+              setDraftGloss(activeGloss.zhGloss);
+              setEditMode(editable ? 'edit' : 'manual');
             }}
           >
             <Pencil aria-hidden="true" />

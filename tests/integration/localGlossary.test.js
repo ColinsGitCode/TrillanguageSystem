@@ -55,6 +55,25 @@ test('looks up a Japanese term with local reading and part of speech', async () 
   assert.equal(response.body.lookup.gloss.zhGloss, '考勤表；工作时间表');
 });
 
+test('uses context and reading hints to disambiguate local dictionary senses', async () => {
+  const publicWord = await api(
+    'GET',
+    `/api/local-glossary/lookup?language=en&text=public&context=${encodeURIComponent('the public schedule')}`
+  );
+  assert.equal(publicWord.status, 200);
+  assert.equal(publicWord.body.lookup.gloss.zhGloss, '公共的；公开的');
+  assert.equal(publicWord.body.lookup.gloss.matchReason, 'context');
+  assert.ok(publicWord.body.lookup.alternatives.length >= 1);
+
+  const book = await api(
+    'GET',
+    `/api/local-glossary/lookup?language=ja&text=${encodeURIComponent('本')}&reading=${encodeURIComponent('ほん')}`
+  );
+  assert.equal(book.status, 200);
+  assert.equal(book.body.lookup.gloss.zhGloss, '书；书本');
+  assert.equal(book.body.lookup.gloss.matchReason, 'reading');
+});
+
 test('supports manual glossary create, normalized lookup, edit and archive', async () => {
   const created = await api('POST', '/api/local-glossary/entries', {
     body: { language: 'en', canonicalForm: 'timesheet', zhGloss: '考勤表' },

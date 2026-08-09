@@ -667,7 +667,12 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.route('**/api/local-glossary/lookup*', async (route) => {
       const url = new URL(route.request().url());
       const language = url.searchParams.get('language');
-      lookups.push({ language, text: url.searchParams.get('text') });
+      lookups.push({
+        language,
+        text: url.searchParams.get('text'),
+        reading: url.searchParams.get('reading'),
+        context: url.searchParams.get('context'),
+      });
       await route.fulfill({
         json: {
           success: true,
@@ -689,6 +694,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
     await selectVisibleText(page, 'deterministic');
     await expect(page.locator('.csa-gloss')).toContainText('英语本地释义');
+    await expect(page.locator('.csa-gloss')).toContainText('高可信');
 
     await page.getByTestId('react-card-modal-close').click();
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
@@ -696,7 +702,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await japaneseToken.dispatchEvent('dblclick');
     await expect(page.locator('.csa-gloss')).toContainText('日语本地释义');
     expect(lookups.some((item) => item.language === 'en')).toBeTruthy();
-    expect(lookups.some((item) => item.language === 'ja')).toBeTruthy();
+    expect(lookups.some((item) => item.language === 'en' && item.context?.includes('deterministic'))).toBeTruthy();
+    expect(lookups.some((item) => item.language === 'ja' && item.reading)).toBeTruthy();
     expect(proposalCalls).toBe(0);
   });
 

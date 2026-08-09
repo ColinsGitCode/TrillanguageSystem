@@ -1,6 +1,6 @@
 # 英日统一选区与本地中文释义
 
-状态：Implemented · 2026-08-09 扩展本地词典
+状态：Implemented · 2026-08-09 上下文消歧与多义词候选
 
 ## 1. 目标
 
@@ -42,13 +42,21 @@
 
 本地词典是独立的只读事实层，不与人工词库混用。词典命中可以返回简短中文释义、日语读音、词性、辞书形和词典版本；用户不能直接编辑词典行，只能通过人工词库覆盖某个词条。查询过程不写入词典表。
 
+本地词典不得把“数据库中最早的一条”当成唯一答案。选区查询同时携带所在语义区块（最多 400 个 code point）和日语 pronunciation token 的已确认读音：
+
+- 日语优先匹配相同读音，用于区分 `本（ほん）` 与 `本（もと）`；
+- 英语可使用相邻词做保守词性提示，例如 `public schedule` 优先形容词义；
+- 多个不同义项同时存在时返回最多 4 个候选，工具条显示当前义项、来源和可信度，并允许用户切换；日语候选优先保留至少一个不同读音，避免同读义项挤掉同形异读词；
+- JMdict 经英文释义再匹配 ECDICT 中文的结果属于桥接候选，固定显示为“低可信”，不能冒充确定答案；
+- 启动词典与读音/上下文精确匹配可显示“高可信”；其余本地词典结果默认“需核对”。
+
 ## 4. 本地规范化
 
 - 英文使用 NFKC、大小写归一和保守的复数/时态候选别名。
 - 日文复用现有 Kuromoji 分析器，保守提取辞书形；例如 `食べた` 可查询 `食べる`。
 - 分析器不可用时自动降级为表面文本完全匹配。
 - 分析结果只是查询候选，不自动写入词典，也不改变 pronunciation token。
-- 不确定义项使用 `sense_key` 隔离；v1 默认 `default`，不自动拆分义项。
+- 不确定义项使用 `sense_key` 隔离；人工更正日语词时可按 `reading:<假名>` 保存，避免一个读音的更正覆盖同形异读词。
 
 ## 5. 人工词条
 
@@ -65,7 +73,7 @@
 
 DeepSeek 不参与普通查询。只有用户点击“AI 候选”时才调用：
 
-1. 服务端只发送选区、语言和最多 200 字符的页面标题用于消歧；
+1. 服务端只发送选区、语言以及页面标题与当前语义区块拼成的最多 200 字符上下文用于消歧；
 2. 不发送整张卡片正文；
 3. 返回值先写入 `local_glossary_proposals`，状态为 `pending`；
 4. 用户可编辑中文释义；
@@ -82,7 +90,7 @@ Migration `013_local_glossary.sql` 新增：
 - `local_glossary_entries`：人工确认后的活动/归档词条；
 - `local_glossary_proposals`：DeepSeek 候选与人工裁决审计。
 
-Migration `014_local_dictionary.sql` 新增 `local_dictionary_entries`。仓库内的 `services/localGlossary/dictionaries/local-en-ja-zh-v1.json` 是一份原创简明启动词典，不包含第三方词典内容。
+Migration `014_local_dictionary.sql` 新增 `local_dictionary_entries`。仓库内的 `services/localGlossary/dictionaries/local-en-ja-zh-v2.json` 是一份原创简明启动词典，不包含第三方词典内容；新启动版本写入后会把同一来源的旧版本标为 `retired`。
 
 授权的第三方词典通过 `npm run dictionary:import:open` 导入，默认先 dry-run：
 
@@ -93,7 +101,7 @@ npm run dictionary:import:open -- \
   --source=jmdict --file=/path/jmdict.json --ecdict-file=/path/ecdict.csv
 ```
 
-确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的首个中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。日语的中文释义经过英语桥接，页面标记为“中可信度”；英语 ECDICT 释义标记为“高可信度”。
+确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的首个中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。日语的中文释义经过英语桥接，页面固定标记为“低可信度”；ECDICT 结果默认“需核对”，只有被上下文词性明确命中或由精选启动词典覆盖时才可升为“高可信”。
 
 外部原始文件不进入 Git，也不复制进应用镜像；每条导入记录把 `source_id`、输入文件 SHA-256、来源 URL、许可和 `dictionary_version` 写入词典表，便于审计、升级和重建。更新时导入新的版本，同一来源的旧版本会标记为 `retired`，保留审计记录但不再参与查询；查询仍按现有的人工词条优先、本地词典兜底规则执行。
 
@@ -104,8 +112,9 @@ npm run dictionary:import:open -- \
 
 HTTP contract：
 
-- `GET /api/local-glossary/lookup`；
-- `GET /api/local-glossary/lookup` 返回 `sourceKind=dictionary` 时，同时提供 `reading`、`partOfSpeech`、`lemma` 和 `dictionaryVersion`；
+- `GET /api/local-glossary/lookup?text=&language=&generationId=&reading=&context=`，其中 `reading` 与 `context` 可选；
+- `GET /api/local-glossary/lookup` 返回 `sourceKind=dictionary` 时，同时提供 `reading`、`partOfSpeech`、`lemma`、`senseKey`、`sourceDetail`、`matchReason`、`confidence` 和 `dictionaryVersion`；
+- 多义词通过 `alternatives` 返回最多 4 个同结构候选，查询仍然保持只读；
 - `GET /api/local-glossary/entries`；
 - `POST /api/local-glossary/entries`；
 - `PATCH /api/local-glossary/entries/:id`；
@@ -136,7 +145,7 @@ HTTP contract：
 ## 9. 测试门禁
 
 - 单元测试覆盖英文别名、日语辞书形、当前卡只读命中、人工 CRUD、proposal 确认和关闭开关；
-- 单元和集成测试覆盖本地词典英文短语、日语读音/词性、日语辞书形候选以及查询零写入；
+- 单元和集成测试覆盖本地词典英文短语、上下文词性、日语读音消歧、日语辞书形候选、多义词列表、桥接低可信以及查询零写入；
 - 集成测试覆盖真实 Express contract、零写入查询和禁用时 fail-closed；
 - Cards Factory E2E 覆盖英文/日文共用工具条、本地中文释义、零自动 proposal、纯汉字日语上下文识别和视口不溢出；
 - lint、React typecheck、unit、integration、architecture、build、smoke 和 Compose health 必须通过。

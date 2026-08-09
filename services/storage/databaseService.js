@@ -898,15 +898,28 @@ class DatabaseService {
         senseKey: entry.senseKey || 'default',
         sourceId: catalog.sourceId,
         dictionaryVersion: catalog.version,
-        sourceRefJson: JSON.stringify({ license: catalog.license, catalog: catalog.version }),
+        sourceRefJson: JSON.stringify({
+          ...(entry.sourceRef || {}),
+          license: catalog.license,
+          catalog: catalog.version,
+        }),
         createdAtUtc: now,
       }));
+      localDictionaryDomain.retirePreviousVersions(this.db, {
+        sourceId: catalog.sourceId,
+        dictionaryVersion: catalog.version,
+        updatedAtUtc: now,
+      });
     });
     insert();
   }
 
   findLocalDictionaryEntry(language, normalizedForms = []) {
     return localDictionaryDomain.findEntry(this.db, language, normalizedForms);
+  }
+
+  findLocalDictionaryEntries(language, normalizedForms = [], options = {}) {
+    return localDictionaryDomain.findEntries(this.db, language, normalizedForms, options);
   }
 
   upsertLocalDictionaryEntry(payload) {

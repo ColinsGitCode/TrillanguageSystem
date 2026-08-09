@@ -16,7 +16,12 @@ function extractRubyBaseText(rubyEl: Element): string {
   return normalizeSelectionPhrase(buildVisibleTextProjection(rubyEl).rawText);
 }
 
-export type SelectionCandidate = { rawText: string; normalized: string; range: Range };
+export type SelectionCandidate = {
+  rawText: string;
+  normalized: string;
+  contextText: string;
+  range: Range;
+};
 
 function caretRangeFromPoint(document: Document, clientX: number, clientY: number): Range | null {
   const chromiumDocument = document as Document & {
@@ -106,5 +111,9 @@ export function buildSelectionCandidate(container: HTMLElement): SelectionCandid
 
   if (!normalized) return null;
   if (Array.from(normalized).length > 200) return null;
-  return { rawText, normalized, range };
+  const semanticBlock = selectionSemanticBlock(container, range.startContainer);
+  const contextText = Array.from(buildVisibleTextProjection(semanticBlock).text)
+    .slice(0, 400)
+    .join('');
+  return { rawText, normalized, contextText, range };
 }

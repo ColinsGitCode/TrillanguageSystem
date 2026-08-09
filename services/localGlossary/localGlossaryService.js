@@ -7,6 +7,8 @@ const { normalizeSurface, normalizeTerm } = require('./localGlossaryNormalizer')
 
 const PROMPT_VERSION = 'local-glossary-zh-v1';
 const MAX_TEXT_CODEPOINTS = 300;
+const MAX_CONTEXT_CODEPOINTS = 400;
+const MAX_READING_CODEPOINTS = 80;
 const MAX_GLOSS_CODEPOINTS = 120;
 const VALID_LANGUAGES = new Set(['en', 'ja']);
 const VALID_CONFIDENCE = new Set(['high', 'medium', 'low']);
@@ -42,6 +44,17 @@ function validateDisplayText(value, field = 'text', max = MAX_GLOSS_CODEPOINTS) 
   const length = Array.from(text).length;
   if (!text || length > max) throw httpError(400, 'LOCAL_GLOSSARY_TEXT_INVALID', `${field} must contain 1-${max} characters`);
   return text;
+}
+
+function optionalHint(value, max) {
+  const text = String(value || '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  return Array.from(text).slice(0, max).join('');
+}
+
+function normalizeReading(value) {
+  return optionalHint(value, MAX_READING_CODEPOINTS).replace(/[ァ-ヶ]/gu, (character) => (
+    String.fromCodePoint(character.codePointAt(0) - 0x60)
+  ));
 }
 
 function plainText(value) {
@@ -131,7 +144,145 @@ function mapGloss(pair) {
     reading: pair.reading || null,
     partOfSpeech: pair.partOfSpeech || null,
     dictionaryVersion: pair.dictionaryVersion || null,
+    senseKey: pair.senseKey || null,
+    sourceDetail: pair.sourceDetail || null,
+    matchReason: pair.matchReason || null,
   };
+}
+
+function isDictionaryBridge(entry) {
+  return entry.sourceRef?.translationPath === 'jmdict-simplified-eng-to-ecdict-zh';
+}
+
+function dictionarySourceDetail(entry) {
+  if (entry.sourceId === 'three-lans-curated-starter') return '精选本地词典';
+  if (isDictionaryBridge(entry)) return 'JMdict · 英中桥接';
+  if (entry.sourceId === 'ecdict') return 'ECDICT';
+  return entry.sourceId || '本地词典';
+}
+
+function partOfSpeechMatches(partOfSpeech, hint) {
+  const value = String(partOfSpeech || '').toLocaleLowerCase('en-US');
+  if (hint === 'adjective') return /(^|[\s,])(?:adj\.?|adjective)(?=$|[\s,])|形容词/u.test(value);
+  if (hint === 'noun') return /(^|[\s,])(?:n\.?|noun)(?=$|[\s,])|名词/u.test(value);
+  return false;
+}
+
+function inferEnglishPartOfSpeech(context, surface) {
+  const normalizedContext = String(context || '').normalize('NFKC').toLocaleLowerCase('en-US');
+  const normalizedSurface = String(surface || '').normalize('NFKC').toLocaleLowerCase('en-US');
+  if (!normalizedContext || !normalizedSurface || normalizedSurface.includes(' ')) return null;
+  const index = normalizedContext.indexOf(normalizedSurface);
+  if (index < 0) return null;
+  const before = normalizedContext.slice(0, index);
+  const after = normalizedContext.slice(index + normalizedSurface.length);
+  const previous = /([a-z][a-z'-]*)\W*$/u.exec(before)?.[1] || '';
+  const next = /^\W*([a-z][a-z'-]*)/u.exec(after)?.[1] || '';
+  const functionWords = new Set([
+    'am', 'are', 'be', 'been', 'being', 'can', 'could', 'did', 'do', 'does', 'had', 'has',
+    'have', 'is', 'may', 'might', 'must', 'shall', 'should', 'was', 'were', 'will', 'would',
+  ]);
+  if (next && !functionWords.has(next)) return 'adjective';
+  if (['a', 'an', 'the'].includes(previous)) return 'noun';
+  if (!next || functionWords.has(next)) return 'noun';
+  return null;
+}
+
+function rankDictionaryEntries(entries, options) {
+  const readingHint = normalizeReading(options.reading);
+  const contextPartOfSpeech = options.language === 'en'
+    ? inferEnglishPartOfSpeech(options.context, options.text)
+    : null;
+  const formOrder = new Map(options.forms.map((form, index) => [form, index]));
+  const ranked = entries.map((entry) => {
+    const entryReading = normalizeReading(entry.reading);
+    const readingMatched = Boolean(readingHint && entryReading && readingHint === entryReading);
+    const readingMismatched = Boolean(readingHint && entryReading && readingHint !== entryReading);
+    const contextMatched = Boolean(
+      contextPartOfSpeech && partOfSpeechMatches(entry.partOfSpeech, contextPartOfSpeech)
+    );
+    const curated = entry.sourceId === 'three-lans-curated-starter';
+    const bridge = isDictionaryBridge(entry);
+    const formRank = formOrder.get(entry.normalizedForm) ?? 99;
+    const score = (1000 - formRank * 100)
+      + (readingMatched ? 500 : 0)
+      - (readingMismatched ? 180 : 0)
+      + (contextMatched ? 140 : 0)
+      + (curated ? 100 : 0)
+      - (bridge ? 120 : 0);
+    let confidence = curated ? 'high' : 'medium';
+    if (bridge) confidence = 'low';
+    else if (entry.language === 'en' && contextMatched) confidence = 'high';
+    const matchReason = readingMatched
+      ? 'reading'
+      : contextMatched
+        ? 'context'
+        : formRank === 0
+          ? 'exact-form'
+          : 'normalized-form';
+    return {
+      entry,
+      score,
+      readingMatched,
+      contextMatched,
+      confidence,
+      matchReason,
+    };
+  }).sort((left, right) => right.score - left.score || left.entry.id - right.entry.id);
+
+  const distinct = [];
+  const seen = new Set();
+  for (const candidate of ranked) {
+    const key = [
+      normalizeReading(candidate.entry.reading),
+      candidate.entry.partOfSpeech || '',
+      candidate.entry.zhGloss,
+    ].join('\u0000');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    distinct.push(candidate);
+  }
+  const ambiguous = distinct.length > 1;
+  return distinct.map((candidate) => {
+    let confidence = candidate.confidence;
+    if (
+      confidence === 'high'
+      && ambiguous
+      && !candidate.readingMatched
+      && !candidate.contextMatched
+    ) confidence = 'medium';
+    return mapGloss({
+      ...candidate.entry,
+      sourceKind: 'dictionary',
+      sourceId: candidate.entry.id,
+      sourceDetail: dictionarySourceDetail(candidate.entry),
+      confidence,
+      matchReason: candidate.matchReason,
+    });
+  });
+}
+
+function selectDictionaryAlternatives(primary, ranked, limit = 4) {
+  const alternatives = ranked.slice(1);
+  if (!primary || alternatives.length <= limit) return alternatives.slice(0, limit);
+
+  const selected = [];
+  const selectedKeys = new Set();
+  const primaryReading = normalizeReading(primary.reading);
+  const add = (candidate) => {
+    if (!candidate || selected.length >= limit) return;
+    const key = [candidate.id || '', candidate.senseKey || '', candidate.zhGloss].join('\u0000');
+    if (selectedKeys.has(key)) return;
+    selectedKeys.add(key);
+    selected.push(candidate);
+  };
+
+  // Preserve at least one alternative pronunciation before same-reading senses fill the menu.
+  add(alternatives.find((candidate) => (
+    normalizeReading(candidate.reading) !== primaryReading
+  )));
+  alternatives.forEach(add);
+  return selected;
 }
 
 class LocalGlossaryService {
@@ -147,6 +298,8 @@ class LocalGlossaryService {
     const text = validateText(payload.text);
     const term = await normalizeTerm(text, language);
     const generationId = Number(payload.generationId) || null;
+    const reading = normalizeReading(payload.reading);
+    const context = optionalHint(payload.context, MAX_CONTEXT_CODEPOINTS);
 
     if (generationId) {
       const generation = this.database.getGenerationById(generationId);
@@ -171,37 +324,46 @@ class LocalGlossaryService {
     const textbook = await findPair(textbookPairs, language, term);
     if (textbook) return this.buildLookup('exact', text, language, term, mapGloss(textbook));
 
+    const manualSenseKeys = reading ? [`reading:${reading}`, 'default'] : ['default'];
     for (const alias of term.aliases) {
       const normalizedAlias = language === 'en' ? alias.toLocaleLowerCase('en-US') : alias;
-      const entry = this.database.findLocalGlossaryEntry(language, normalizedAlias);
-      if (entry) {
-        return this.buildLookup(alias === term.normalizedForm ? 'exact' : 'candidate', text, language, term, {
-          id: entry.id,
-          zhGloss: entry.zhGloss,
-          sourceKind: entry.sourceKind,
-          sourceId: entry.id,
-          confidence: entry.confidence,
-          version: entry.version,
-        });
+      for (const senseKey of manualSenseKeys) {
+        const entry = this.database.findLocalGlossaryEntry(language, normalizedAlias, senseKey);
+        if (entry) {
+          return this.buildLookup(alias === term.normalizedForm ? 'exact' : 'candidate', text, language, term, {
+            id: entry.id,
+            zhGloss: entry.zhGloss,
+            sourceKind: entry.sourceKind,
+            sourceId: entry.id,
+            confidence: entry.confidence,
+            version: entry.version,
+            senseKey: entry.senseKey,
+          });
+        }
       }
     }
 
     const dictionaryForms = term.aliases.map((alias) => (
       language === 'en' ? alias.toLocaleLowerCase('en-US') : alias
     ));
-    const dictionaryEntry = this.database.findLocalDictionaryEntry(language, dictionaryForms);
-    if (dictionaryEntry) {
+    const dictionaryEntries = this.database.findLocalDictionaryEntries(language, dictionaryForms);
+    const rankedDictionaryGlosses = rankDictionaryEntries(dictionaryEntries, {
+      language,
+      text,
+      forms: dictionaryForms,
+      reading,
+      context,
+    });
+    if (rankedDictionaryGlosses.length) {
+      const [dictionaryGloss] = rankedDictionaryGlosses;
+      const alternatives = selectDictionaryAlternatives(dictionaryGloss, rankedDictionaryGlosses);
       return this.buildLookup(
-        dictionaryEntry.normalizedForm === dictionaryForms[0] ? 'exact' : 'candidate',
+        alternatives.length || dictionaryGloss.matchReason === 'normalized-form' ? 'candidate' : 'exact',
         text,
         language,
         term,
-        mapGloss({
-          ...dictionaryEntry,
-          sourceKind: 'dictionary',
-          sourceId: dictionaryEntry.id,
-          confidence: dictionaryEntry.language === 'ja' ? 'medium' : 'high',
-        }),
+        dictionaryGloss,
+        alternatives,
       );
     }
 
@@ -222,12 +384,12 @@ class LocalGlossaryService {
     return this.buildLookup('missing', text, language, term, null);
   }
 
-  buildLookup(status, text, language, term, gloss) {
+  buildLookup(status, text, language, term, gloss, alternatives = []) {
     return {
       status,
       query: { text, language, canonicalForm: term.canonicalForm, normalizedForm: term.normalizedForm },
       gloss,
-      alternatives: [],
+      alternatives,
     };
   }
 

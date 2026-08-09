@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const CATALOG_PATH = path.join(__dirname, 'dictionaries/local-en-ja-zh-v1.json');
+const CATALOG_PATH = path.join(__dirname, 'dictionaries/local-en-ja-zh-v2.json');
 
 function readCatalog(filePath = CATALOG_PATH) {
   const payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));

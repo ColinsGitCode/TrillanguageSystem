@@ -28,6 +28,22 @@ export type LocalGlossaryProposal = {
   acceptedEntryId: number | null;
 };
 
+export type LocalGlossaryGloss = {
+  id: number | null;
+  zhGloss: string;
+  sourceKind: 'current-card' | 'textbook' | 'manual' | 'llm-confirmed' | 'imported' | 'history-card' | 'dictionary';
+  sourceId: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  version: number | null;
+  lemma: string | null;
+  reading: string | null;
+  partOfSpeech: string | null;
+  dictionaryVersion: string | null;
+  senseKey: string | null;
+  sourceDetail: string | null;
+  matchReason: 'reading' | 'context' | 'exact-form' | 'normalized-form' | null;
+};
+
 export type LocalGlossaryLookup = {
   status: 'exact' | 'candidate' | 'missing';
   query: {
@@ -36,28 +52,30 @@ export type LocalGlossaryLookup = {
     canonicalForm: string;
     normalizedForm: string;
   };
-  gloss: null | {
-    id: number | null;
-    zhGloss: string;
-    sourceKind: 'current-card' | 'textbook' | 'manual' | 'llm-confirmed' | 'imported' | 'history-card' | 'dictionary';
-    sourceId: number | null;
-    confidence: 'high' | 'medium' | 'low';
-    version: number | null;
-    lemma: string | null;
-    reading: string | null;
-    partOfSpeech: string | null;
-    dictionaryVersion: string | null;
-  };
-  alternatives: Array<unknown>;
+  gloss: LocalGlossaryGloss | null;
+  alternatives: LocalGlossaryGloss[];
 };
 
 export const localGlossaryApi = {
-  lookup: (payload: { text: string; language: CardLookupLanguage; generationId?: number | null }) => {
+  lookup: (payload: {
+    text: string;
+    language: CardLookupLanguage;
+    generationId?: number | null;
+    reading?: string | null;
+    context?: string;
+  }) => {
     const params = new URLSearchParams({ text: payload.text, language: payload.language });
     if (payload.generationId) params.set('generationId', String(payload.generationId));
+    if (payload.reading) params.set('reading', payload.reading);
+    if (payload.context) params.set('context', payload.context);
     return requestJson<{ success: true; lookup: LocalGlossaryLookup }>(`/api/local-glossary/lookup?${params}`);
   },
-  createEntry: (payload: { language: CardLookupLanguage; canonicalForm: string; zhGloss: string }) =>
+  createEntry: (payload: {
+    language: CardLookupLanguage;
+    canonicalForm: string;
+    zhGloss: string;
+    senseKey?: string;
+  }) =>
     requestJson<{ success: true; entry: LocalGlossaryEntry }>('/api/local-glossary/entries', {
       method: 'POST',
       body: JSON.stringify(payload),

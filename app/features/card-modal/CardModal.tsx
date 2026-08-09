@@ -127,6 +127,7 @@ type SelectionToolbarState = {
   annotationId: string | null;
   language: CardLookupLanguage | null;
   pronunciationToken: PronunciationToken | null;
+  contextText: string;
 };
 
 function lookupErrorMessage(error: unknown): string {
@@ -601,6 +602,7 @@ export function CardModal({
       annotationId,
       language: inferLookupLanguage(annotation.selector.textQuote.exact),
       pronunciationToken: null,
+      contextText: annotation.selector.textQuote.exact,
     });
     setGenMenuOpen(false);
     setColorMenuOpen(false);
@@ -663,6 +665,7 @@ export function CardModal({
       annotationId: null,
       language: isJapaneseProjection ? 'ja' : inferLookupLanguage(candidate.normalized),
       pronunciationToken,
+      contextText: candidate.contextText,
     });
     setGenMenuOpen(false);
     setColorMenuOpen(false);
@@ -1037,6 +1040,8 @@ export function CardModal({
                 language={toolbar.language}
                 generationId={generationId ? Number(generationId) : null}
                 contextLabel={displayTitle}
+                contextText={toolbar.contextText}
+                readingHint={toolbar.pronunciationToken?.readingHiragana || null}
                 onToast={showToast}
               />
             </Suspense>

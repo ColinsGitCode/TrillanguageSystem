@@ -19,21 +19,27 @@ function mapEntry(row) {
   };
 }
 
-function findEntry(db, language, normalizedForms = []) {
+function findEntries(db, language, normalizedForms = [], options = {}) {
   const forms = [...new Set(normalizedForms.map((value) => String(value || '').trim()).filter(Boolean))];
-  if (!forms.length) return null;
+  if (!forms.length) return [];
   const placeholders = forms.map(() => '?').join(', ');
-  const row = db.prepare(`
+  const limit = Math.max(1, Math.min(Number(options.limit) || 40, 100));
+  const rows = db.prepare(`
     SELECT * FROM local_dictionary_entries
     WHERE language = ? AND status = 'active' AND normalized_form IN (${placeholders})
     ORDER BY CASE normalized_form ${forms.map(() => 'WHEN ? THEN ?').join(' ')} ELSE 999 END, id ASC
-    LIMIT 1
-  `).get(
+    LIMIT ?
+  `).all(
     language,
     ...forms,
     ...forms.flatMap((form, index) => [form, index]),
+    limit,
   );
-  return mapEntry(row);
+  return rows.map(mapEntry);
+}
+
+function findEntry(db, language, normalizedForms = []) {
+  return findEntries(db, language, normalizedForms, { limit: 1 })[0] || null;
 }
 
 function findEntryByIdentity(db, payload) {
@@ -92,6 +98,7 @@ function countEntries(db, dictionaryVersion) {
 
 module.exports = {
   findEntry,
+  findEntries,
   findEntryByIdentity,
   countEntries,
   mapEntry,

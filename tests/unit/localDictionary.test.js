@@ -52,6 +52,73 @@ test('uses the Japanese dictionary form as a conservative candidate', async () =
   }
 });
 
+test('uses sentence context to prefer the adjectival sense of an English homograph', async () => {
+  const database = new DatabaseService(':memory:');
+  try {
+    const service = new LocalGlossaryService({ database, llmEnabled: false });
+    const result = await service.lookup({
+      language: 'en',
+      text: 'public',
+      context: 'Add the team meeting to the public schedule.',
+    });
+    assert.equal(result.gloss.zhGloss, '公共的；公开的');
+    assert.equal(result.gloss.partOfSpeech, 'adjective');
+    assert.equal(result.gloss.matchReason, 'context');
+    assert.equal(result.gloss.confidence, 'high');
+    assert.ok(result.alternatives.some((entry) => entry.zhGloss === '公众；民众'));
+  } finally {
+    database.close();
+  }
+});
+
+test('uses a pronunciation reading to distinguish Japanese homographs', async () => {
+  const database = new DatabaseService(':memory:');
+  try {
+    const service = new LocalGlossaryService({ database, llmEnabled: false });
+    const book = await service.lookup({ language: 'ja', text: '本', reading: 'ほん' });
+    const origin = await service.lookup({ language: 'ja', text: '本', reading: 'もと' });
+    assert.equal(book.gloss.zhGloss, '书；书本');
+    assert.equal(book.gloss.matchReason, 'reading');
+    assert.equal(origin.gloss.zhGloss, '根源；基础');
+    assert.equal(origin.gloss.matchReason, 'reading');
+    assert.ok(book.alternatives.some((entry) => entry.reading === 'もと'));
+  } finally {
+    database.close();
+  }
+});
+
+test('keeps an alternative Japanese reading visible when one reading has many senses', async () => {
+  const database = new DatabaseService(':memory:');
+  try {
+    const base = {
+      language: 'ja',
+      surfaceForm: '本',
+      normalizedForm: '本',
+      lemma: '本',
+      partOfSpeech: '名词',
+      sourceId: 'jmdict-simplified',
+      sourceRefJson: JSON.stringify({ translationPath: 'jmdict-simplified-eng-to-ecdict-zh' }),
+      dictionaryVersion: 'jmdict-test',
+      createdAtUtc: '2026-08-09T00:00:00.000Z',
+    };
+    ['书籍', '卷册', '正本', '书本', '著作'].forEach((zhGloss, index) => {
+      localDictionaryDomain.upsertEntry(database.db, {
+        ...base,
+        reading: 'ほん',
+        zhGloss,
+        senseKey: `hon-${index}`,
+      });
+    });
+    const service = new LocalGlossaryService({ database, llmEnabled: false });
+    const result = await service.lookup({ language: 'ja', text: '本', reading: 'ほん' });
+    assert.equal(result.gloss.zhGloss, '书；书本');
+    assert.equal(result.alternatives.length, 4);
+    assert.ok(result.alternatives.some((entry) => entry.reading === 'もと'));
+  } finally {
+    database.close();
+  }
+});
+
 test('retires prior open-dictionary versions and returns the exact upserted row', () => {
   const database = new DatabaseService(':memory:');
   try {
@@ -95,7 +162,7 @@ test('retires prior open-dictionary versions and returns the exact upserted row'
   }
 });
 
-test('marks Japanese English-bridge dictionary glosses as medium confidence', async () => {
+test('marks Japanese English-bridge dictionary glosses as low confidence', async () => {
   const database = new DatabaseService(':memory:');
   try {
     localDictionaryDomain.upsertEntry(database.db, {
@@ -114,8 +181,9 @@ test('marks Japanese English-bridge dictionary glosses as medium confidence', as
     });
     const service = new LocalGlossaryService({ database, llmEnabled: false });
     const result = await service.lookup({ language: 'ja', text: '手紙' });
-    assert.equal(result.gloss.confidence, 'medium');
+    assert.equal(result.gloss.confidence, 'low');
     assert.equal(result.gloss.zhGloss, '信');
+    assert.equal(result.gloss.sourceDetail, 'JMdict · 英中桥接');
   } finally {
     database.close();
   }
