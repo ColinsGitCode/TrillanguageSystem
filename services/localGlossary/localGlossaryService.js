@@ -156,6 +156,7 @@ function isDictionaryBridge(entry) {
 
 function dictionarySourceDetail(entry) {
   if (entry.sourceId === 'three-lans-curated-starter') return '精选本地词典';
+  if (entry.sourceId === 'zhwiktionary-ja-direct') return '中文维基词典 · 直接日中';
   if (isDictionaryBridge(entry)) return 'JMdict · 英中桥接';
   if (entry.sourceId === 'ecdict') return 'ECDICT';
   return entry.sourceId || '本地词典';
@@ -202,6 +203,7 @@ function rankDictionaryEntries(entries, options) {
       contextPartOfSpeech && partOfSpeechMatches(entry.partOfSpeech, contextPartOfSpeech)
     );
     const curated = entry.sourceId === 'three-lans-curated-starter';
+    const directJapaneseChinese = entry.sourceId === 'zhwiktionary-ja-direct';
     const bridge = isDictionaryBridge(entry);
     const formRank = formOrder.get(entry.normalizedForm) ?? 99;
     const score = (1000 - formRank * 100)
@@ -209,6 +211,7 @@ function rankDictionaryEntries(entries, options) {
       - (readingMismatched ? 180 : 0)
       + (contextMatched ? 140 : 0)
       + (curated ? 100 : 0)
+      + (directJapaneseChinese ? 80 : 0)
       - (bridge ? 120 : 0);
     let confidence = curated ? 'high' : 'medium';
     if (bridge) confidence = 'low';
@@ -403,6 +406,13 @@ class LocalGlossaryService {
     });
   }
 
+  catalog() {
+    return {
+      manual: this.database.getLocalGlossaryEntryStats(),
+      dictionaries: this.database.listLocalDictionarySourceStats(),
+    };
+  }
+
   async createEntry(payload = {}) {
     const language = validateLanguage(payload.language);
     const canonicalForm = validateText(payload.canonicalForm || payload.text, 'canonicalForm');
@@ -462,6 +472,24 @@ class LocalGlossaryService {
     const archived = this.database.archiveLocalGlossaryEntry(current.id, expectedVersion, this.now());
     if (!archived) throw httpError(409, 'LOCAL_GLOSSARY_VERSION_CONFLICT', 'Glossary entry has changed');
     return archived;
+  }
+
+  restoreEntry(id, payload = {}) {
+    const current = this.database.getLocalGlossaryEntry(Number(id));
+    if (!current) throw httpError(404, 'LOCAL_GLOSSARY_ENTRY_NOT_FOUND', 'Glossary entry not found');
+    const expectedVersion = Number(payload.expectedVersion);
+    if (expectedVersion !== current.version) throw httpError(409, 'LOCAL_GLOSSARY_VERSION_CONFLICT', 'Glossary entry has changed');
+    if (current.status !== 'archived') return current;
+    try {
+      const restored = this.database.restoreLocalGlossaryEntry(current.id, expectedVersion, this.now());
+      if (!restored) throw httpError(409, 'LOCAL_GLOSSARY_VERSION_CONFLICT', 'Glossary entry has changed');
+      return restored;
+    } catch (error) {
+      if (String(error.message).includes('UNIQUE constraint failed')) {
+        throw httpError(409, 'LOCAL_GLOSSARY_ENTRY_CONFLICT', 'An active glossary entry already exists');
+      }
+      throw error;
+    }
   }
 
   async propose(payload = {}) {

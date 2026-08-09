@@ -7,6 +7,7 @@ const {
   compactChineseGloss,
   readEcdictEntries,
   readJmdictEntries,
+  readZhwiktionaryEntry,
 } = require('../../services/localGlossary/openDictionaryImport');
 
 test('compacts ECDICT literal newline markers and part-of-speech prefixes', () => {
@@ -80,4 +81,44 @@ test('maps JMdict English glosses to Chinese only when ECDICT has a match', () =
   assert.equal(kanjiEntry.reading, 'よていひょう');
   assert.equal(kanjiEntry.zhGloss, '日程');
   assert.equal(kanaEntry.reading, 'よていひょう');
+});
+
+test('parses direct Japanese to Chinese Wiktionary senses with a whole-word reading', () => {
+  const entries = readZhwiktionaryEntry({
+    word: '手紙',
+    lang_code: 'ja',
+    pos: 'noun',
+    pos_title: '名詞',
+    forms: [{ form: '手紙', tags: ['canonical'], ruby: [['手', 'て'], ['紙', 'がみ']] }],
+    senses: [
+      { id: 'zh-test-1', glosses: ['信，信件。'] },
+      { id: 'zh-test-2', glosses: ['箋'], tags: ['archaic'] },
+    ],
+  });
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].reading, 'てがみ');
+  assert.equal(entries[0].zhGloss, '信，信件');
+  assert.equal(entries[0].sourceRef.directTranslation, true);
+  assert.equal(entries[0].sourceRef.chineseNormalization, 'opencc-js-t-to-cn-v1');
+});
+
+test('normalizes direct Wiktionary glosses to Simplified Chinese during import', () => {
+  const [entry] = readZhwiktionaryEntry({
+    word: '会議',
+    lang_code: 'ja',
+    pos_title: '名詞',
+    senses: [{ id: 'zh-test-4', glosses: ['可供參考的會議資料。'] }],
+  });
+  assert.equal(entry.zhGloss, '可供参考的会议资料');
+});
+
+test('keeps kana outside ruby bases when deriving mixed-script readings', () => {
+  const [entry] = readZhwiktionaryEntry({
+    word: '食べる',
+    lang_code: 'ja',
+    pos: 'verb',
+    forms: [{ form: '食べる', tags: ['canonical'], ruby: [['食', 'た']] }],
+    senses: [{ id: 'zh-test-3', glosses: ['吃'] }],
+  });
+  assert.equal(entry.reading, 'たべる');
 });

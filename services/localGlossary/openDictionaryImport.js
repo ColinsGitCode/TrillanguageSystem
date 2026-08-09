@@ -1,8 +1,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const OpenCC = require('opencc-js');
 
 const ECDICT_REQUIRED_HEADERS = ['word', 'translation'];
+const traditionalToSimplified = OpenCC.Converter({ from: 't', to: 'cn' });
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -219,6 +221,94 @@ function buildSourceRef(entry, source) {
   });
 }
 
+function katakanaToHiragana(value) {
+  return String(value || '').replace(/[ァ-ヶ]/gu, (character) => (
+    String.fromCodePoint(character.codePointAt(0) - 0x60)
+  ));
+}
+
+function readingFromRuby(surface, ruby = []) {
+  if (!surface || !Array.isArray(ruby) || !ruby.length) return null;
+  const replacements = ruby
+    .filter((pair) => Array.isArray(pair) && pair.length >= 2 && pair[0] && pair[1])
+    .map(([base, reading]) => ({ base: String(base), reading: String(reading) }));
+  let cursor = 0;
+  let output = '';
+  while (cursor < surface.length) {
+    const match = replacements.find((entry) => surface.startsWith(entry.base, cursor));
+    if (match) {
+      output += match.reading;
+      cursor += match.base.length;
+      continue;
+    }
+    const character = surface[cursor];
+    if (/\p{Script=Hiragana}|\p{Script=Katakana}|ー/u.test(character)) output += character;
+    else if (/\p{Script=Han}/u.test(character)) return null;
+    cursor += 1;
+  }
+  return katakanaToHiragana(output) || null;
+}
+
+function zhwiktionaryReading(payload) {
+  const forms = Array.isArray(payload.forms) ? payload.forms : [];
+  const canonical = forms.find((form) => Array.isArray(form.tags) && form.tags.includes('canonical'));
+  if (canonical?.hiragana) return katakanaToHiragana(canonical.hiragana);
+  const rubyReading = readingFromRuby(payload.word, canonical?.ruby);
+  if (rubyReading) return rubyReading;
+  const kanaForm = forms.find((form) => (
+    form?.form && /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(form.form)
+  ));
+  return kanaForm ? katakanaToHiragana(kanaForm.form) : null;
+}
+
+function compactDirectChineseGloss(value) {
+  const compact = String(value || '')
+    .normalize('NFKC')
+    .replace(/(?<=\p{Script=Han}),(?=\p{Script=Han})/gu, '，')
+    .replace(/^[（(][^）)]*[）)]\s*/u, '')
+    .replace(/[。；;]\s*$/u, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return traditionalToSimplified(compact).slice(0, 120);
+}
+
+function readZhwiktionaryEntry(payload) {
+  if (!payload || payload.lang_code !== 'ja') return [];
+  const surfaceForm = String(payload.word || '').normalize('NFKC').trim();
+  if (!surfaceForm || Array.from(surfaceForm).length > 300) return [];
+  const reading = zhwiktionaryReading(payload);
+  const partOfSpeech = String(payload.pos_title || payload.pos || '').trim() || null;
+  const entries = [];
+  const seen = new Set();
+  for (const [index, sense] of (Array.isArray(payload.senses) ? payload.senses : []).entries()) {
+    const zhGloss = compactDirectChineseGloss(sense?.glosses?.[0]);
+    if (!zhGloss || !/\p{Script=Han}/u.test(zhGloss)) continue;
+    const identity = `${reading || ''}\u0000${partOfSpeech || ''}\u0000${zhGloss}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    const rawSenseId = String(sense.id || `sense-${index}`).replace(/[^A-Za-z0-9_.~-]/gu, '-');
+    entries.push({
+      language: 'ja',
+      surfaceForm,
+      normalizedForm: surfaceForm,
+      lemma: surfaceForm,
+      reading,
+      partOfSpeech,
+      zhGloss,
+      senseKey: `zhwik:${rawSenseId}`.slice(0, 80),
+      sourceRef: {
+        directTranslation: true,
+        chineseNormalization: 'opencc-js-t-to-cn-v1',
+        sourcePage: `https://zh.wiktionary.org/wiki/${encodeURIComponent(surfaceForm)}`,
+        senseId: sense.id || null,
+        tags: sense.tags || [],
+        rawTags: sense.raw_tags || [],
+      },
+    });
+  }
+  return entries;
+}
+
 module.exports = {
   buildEnglishGlossMap,
   buildSourceRef,
@@ -227,5 +317,7 @@ module.exports = {
   parseCsvRows,
   readEcdictEntries,
   readJmdictEntries,
+  readZhwiktionaryEntry,
+  readingFromRuby,
   sha256,
 };

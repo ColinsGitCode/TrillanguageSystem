@@ -3,12 +3,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const readline = require('node:readline');
 const localDictionaryDomain = require('../../services/storage/db/localDictionary');
 const {
   buildEnglishGlossMap,
   buildSourceRef,
   readEcdictEntries,
   readJmdictEntries,
+  readZhwiktionaryEntry,
   sha256,
 } = require('../../services/localGlossary/openDictionaryImport');
 
@@ -37,12 +39,18 @@ const SOURCES = {
     license: 'EDRDG JMdict license / CC BY-SA 4.0',
     sourceUrl: 'https://github.com/scriptin/jmdict-simplified',
   },
+  zhwiktionary: {
+    sourceId: 'zhwiktionary-ja-direct',
+    license: 'CC BY-SA 4.0 / GFDL',
+    sourceUrl: 'https://kaikki.org/zhwiktionary/日語/index.html',
+  },
 };
 
 function usage(message) {
   if (message) console.error(message);
   console.error('用法: npm run dictionary:import:open -- --source=ecdict --file=/tmp/ecdict.csv [--scope=common|all] [--apply]');
   console.error('或:   npm run dictionary:import:open -- --source=jmdict --file=/tmp/jmdict.json --ecdict-file=/tmp/ecdict.csv [--apply]');
+  console.error('或:   npm run dictionary:import:open -- --source=zhwiktionary --file=/path/kaikki-ja.jsonl [--apply]');
   process.exitCode = 1;
 }
 
@@ -82,8 +90,77 @@ function loadEntries() {
   };
 }
 
-function main() {
+async function importZhwiktionary() {
+  const input = readInput(filePath, '--file');
+  const inputSha256 = sha256(input);
+  const sourceInfo = { ...SOURCES.zhwiktionary, inputSha256 };
+  const version = `zhwiktionary-ja-${inputSha256.slice(0, 12)}`;
+  const database = apply ? new (require('../../services/storage/databaseService').DatabaseService)(dbPath) : null;
+  const now = new Date().toISOString();
+  let parsedLines = 0;
+  let entryCount = 0;
+  let batch = [];
+  const writeBatch = database?.db.transaction((entries) => {
+    for (const entry of entries) {
+      localDictionaryDomain.upsertEntry(database.db, {
+        language: entry.language,
+        surfaceForm: entry.surfaceForm,
+        normalizedForm: entry.normalizedForm,
+        lemma: entry.lemma,
+        reading: entry.reading,
+        partOfSpeech: entry.partOfSpeech,
+        zhGloss: entry.zhGloss,
+        senseKey: entry.senseKey,
+        sourceId: sourceInfo.sourceId,
+        dictionaryVersion: version,
+        sourceRefJson: buildSourceRef(entry, sourceInfo),
+        createdAtUtc: now,
+      });
+    }
+  });
+  try {
+    if (database) {
+      localDictionaryDomain.retirePreviousVersions(database.db, {
+        sourceId: sourceInfo.sourceId,
+        dictionaryVersion: version,
+        updatedAtUtc: now,
+      });
+    }
+    const lines = readline.createInterface({
+      input: fs.createReadStream(filePath, { encoding: 'utf8' }),
+      crlfDelay: Infinity,
+    });
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+      parsedLines += 1;
+      const entries = readZhwiktionaryEntry(JSON.parse(line));
+      for (const entry of entries) {
+        if (maxEntries > 0 && entryCount >= maxEntries) break;
+        entryCount += 1;
+        if (database) batch.push(entry);
+      }
+      if (database && batch.length >= 1000) {
+        writeBatch(batch);
+        batch = [];
+      }
+      if (maxEntries > 0 && entryCount >= maxEntries) break;
+    }
+    if (database && batch.length) writeBatch(batch);
+    if (!entryCount) throw new Error('没有解析出可导入的直接日中词条');
+    console.log(`词典来源: ${sourceInfo.sourceId}`);
+    console.log(`词典版本: ${version}`);
+    console.log(`许可: ${sourceInfo.license}`);
+    console.log(`输入词条: ${parsedLines}; 可用释义: ${entryCount}`);
+    console.log(`模式: ${apply ? 'APPLY' : 'DRY-RUN'}`);
+    if (!apply) console.log('提示: 加 --apply 才会写入 SQLite。外部词典原文件不会写入仓库。');
+  } finally {
+    database?.close();
+  }
+}
+
+async function main() {
   if (!source || !filePath) return usage('必须提供 --source 和 --file');
+  if (source === 'zhwiktionary') return importZhwiktionary();
   const { entries, sourceInfo } = loadEntries();
   if (!entries.length) throw new Error('没有解析出可导入的词典条目，请检查文件、表头和中文释义覆盖范围');
   const version = source === 'ecdict'
@@ -138,9 +215,7 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(`导入失败: ${error.message}`);
   process.exitCode = 1;
-}
+});

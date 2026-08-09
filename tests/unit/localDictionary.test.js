@@ -188,3 +188,44 @@ test('marks Japanese English-bridge dictionary glosses as low confidence', async
     database.close();
   }
 });
+
+test('prefers a direct Japanese-Chinese entry over the English bridge fallback', async () => {
+  const database = new DatabaseService(':memory:');
+  try {
+    const base = {
+      language: 'ja', surfaceForm: '手紙', normalizedForm: '手紙', lemma: '手紙',
+      reading: 'てがみ', partOfSpeech: '名詞', createdAtUtc: '2026-08-09T00:00:00.000Z',
+    };
+    localDictionaryDomain.upsertEntry(database.db, {
+      ...base,
+      zhGloss: '信', senseKey: 'bridge', sourceId: 'jmdict-simplified',
+      dictionaryVersion: 'jmdict-test',
+      sourceRefJson: JSON.stringify({ translationPath: 'jmdict-simplified-eng-to-ecdict-zh' }),
+    });
+    localDictionaryDomain.upsertEntry(database.db, {
+      ...base,
+      zhGloss: '信，信件', senseKey: 'direct', sourceId: 'zhwiktionary-ja-direct',
+      dictionaryVersion: 'zhwiktionary-test',
+      sourceRefJson: JSON.stringify({ directTranslation: true }),
+    });
+    const service = new LocalGlossaryService({ database, llmEnabled: false });
+    const result = await service.lookup({ language: 'ja', text: '手紙', reading: 'てがみ' });
+    assert.equal(result.gloss.zhGloss, '信，信件');
+    assert.equal(result.gloss.sourceDetail, '中文维基词典 · 直接日中');
+    assert.equal(result.gloss.confidence, 'medium');
+    assert.ok(result.alternatives.some((entry) => entry.sourceDetail === 'JMdict · 英中桥接'));
+  } finally {
+    database.close();
+  }
+});
+
+test('reports active and retired dictionary source versions for the management page', () => {
+  const database = new DatabaseService(':memory:');
+  try {
+    const stats = database.listLocalDictionarySourceStats();
+    assert.ok(stats.some((entry) => entry.sourceId === 'three-lans-curated-starter'));
+    assert.ok(stats.every((entry) => Number.isInteger(entry.entryCount) && entry.entryCount > 0));
+  } finally {
+    database.close();
+  }
+});

@@ -23,6 +23,7 @@ const PAGE_BOUNDARY: Record<ProductArea, string> = {
   history: '学习记录只统计已提交评分，不用卡片创建数量代替学习进度。',
   textbooks: '教材英日原文与官方音频来自用户提供；中文提示和单句语音属于派生内容。',
   knowledge: '待确认候选不会进入正式知识点或学习队列。',
+  dictionary: '开放词典保持只读；人工词条以独立覆盖层保存，升级词典不会改写人工内容。',
 };
 
 function serviceList(health?: HealthResponse): HealthService[] {

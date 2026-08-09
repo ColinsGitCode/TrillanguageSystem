@@ -8,4 +8,5 @@ export default [
   route('learn/session', 'routes/learn-session.tsx'),
   route('textbooks', 'routes/textbooks.tsx'),
   route('knowledge', 'routes/knowledge.tsx'),
+  route('dictionary', 'routes/dictionary.tsx'),
 ] satisfies RouteConfig;

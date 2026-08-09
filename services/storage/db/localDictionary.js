@@ -96,12 +96,27 @@ function countEntries(db, dictionaryVersion) {
   ).get(dictionaryVersion).count);
 }
 
+function listSourceStats(db) {
+  return db.prepare(`
+    SELECT source_id AS sourceId,
+      dictionary_version AS dictionaryVersion,
+      language,
+      status,
+      COUNT(*) AS entryCount,
+      MAX(updated_at_utc) AS updatedAtUtc
+    FROM local_dictionary_entries
+    GROUP BY source_id, dictionary_version, language, status
+    ORDER BY status = 'active' DESC, source_id, dictionary_version DESC, language
+  `).all().map((row) => ({ ...row, entryCount: Number(row.entryCount) }));
+}
+
 module.exports = {
   findEntry,
   findEntries,
   findEntryByIdentity,
   countEntries,
   mapEntry,
+  listSourceStats,
   retirePreviousVersions,
   upsertEntry,
 };

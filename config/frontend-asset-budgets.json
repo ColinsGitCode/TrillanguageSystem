@@ -36,6 +36,11 @@
       "label": "知识点查找",
       "maxInitialRawBytes": 523000,
       "maxInitialGzipBytes": 170000
+    },
+    "routes/dictionary": {
+      "label": "本地词典",
+      "maxInitialRawBytes": 510000,
+      "maxInitialGzipBytes": 165000
     }
   },
   "deferredModules": {

@@ -926,6 +926,10 @@ class DatabaseService {
     return this.withBusyRetry(() => localDictionaryDomain.upsertEntry(this.db, payload));
   }
 
+  listLocalDictionarySourceStats() {
+    return localDictionaryDomain.listSourceStats(this.db);
+  }
+
   getLocalGlossaryEntry(id) {
     return localGlossaryDomain.getEntry(this.db, id);
   }
@@ -952,6 +956,16 @@ class DatabaseService {
     return this.withBusyRetry(() => localGlossaryDomain.archiveEntry(
       this.db, id, expectedVersion, updatedAtUtc
     ));
+  }
+
+  restoreLocalGlossaryEntry(id, expectedVersion, updatedAtUtc) {
+    return this.withBusyRetry(() => localGlossaryDomain.restoreEntry(
+      this.db, id, expectedVersion, updatedAtUtc
+    ));
+  }
+
+  getLocalGlossaryEntryStats() {
+    return localGlossaryDomain.getEntryStats(this.db);
   }
 
   getLocalGlossaryProposal(id) {

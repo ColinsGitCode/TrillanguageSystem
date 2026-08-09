@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarCheck2,
+  BookType,
   Factory,
   FlaskConical,
   History,
@@ -43,7 +44,7 @@ import {
 } from './shell';
 import { Link, useLocation } from 'react-router';
 
-export type ProductArea = 'factory' | 'today' | 'plan' | 'history' | 'textbooks' | 'knowledge';
+export type ProductArea = 'factory' | 'today' | 'plan' | 'history' | 'textbooks' | 'knowledge' | 'dictionary';
 type ActivitySource = NonNullable<ShellActivityCommand['source']>;
 
 type Props = {
@@ -114,6 +115,7 @@ const ACTIVITY_SOURCE_BY_AREA: Record<ProductArea, ActivitySource> = {
   history: 'learning',
   textbooks: 'textbooks',
   knowledge: 'knowledge',
+  dictionary: 'browser',
 };
 
 export function ProductShell({ active, title, children, focusMode = false, workspaceLayout }: Props) {
@@ -350,7 +352,7 @@ export function ProductShell({ active, title, children, focusMode = false, works
       <aside ref={mobileNavRef} id="react-sidebar" className={`react-sidebar${mobileNav ? ' open' : ''}`}>
         <div className="brand-block">
           <span className="brand-bars"><i /><i /><i /></span>
-          <div><strong>Three LANS</strong><small>{active === 'factory' ? 'Cards Factory' : active === 'textbooks' ? 'Textbook Courses' : active === 'knowledge' ? 'Knowledge Points' : 'Learning Workbench'}</small></div>
+          <div><strong>Three LANS</strong><small>{active === 'factory' ? 'Cards Factory' : active === 'textbooks' ? 'Textbook Courses' : active === 'knowledge' ? 'Knowledge Points' : active === 'dictionary' ? 'Local Dictionary' : 'Learning Workbench'}</small></div>
         </div>
         <div
           className={`workspace-mode-chip${workspace?.mode === 'sandbox' ? ' is-sandbox' : ''}${readOnlySandbox ? ' is-read-only' : ''}`}
@@ -389,6 +391,9 @@ export function ProductShell({ active, title, children, focusMode = false, works
           </Link>
           <Link className={active === 'knowledge' ? 'active' : ''} to="/knowledge" aria-current={active === 'knowledge' ? 'page' : undefined} title={sidebarCompact ? '知识点查找' : undefined}>
             <SearchCheck aria-hidden="true" /><span className="sidebar-nav-label">知识点查找</span>
+          </Link>
+          <Link className={active === 'dictionary' ? 'active' : ''} to="/dictionary" aria-current={active === 'dictionary' ? 'page' : undefined} title={sidebarCompact ? '本地词典' : undefined}>
+            <BookType aria-hidden="true" /><span className="sidebar-nav-label">本地词典</span>
           </Link>
           <p className="sidebar-production-label">创建</p>
           <Link className={active === 'factory' ? 'active' : ''} to="/" aria-current={active === 'factory' ? 'page' : undefined} title={sidebarCompact ? 'Cards Factory' : undefined}>

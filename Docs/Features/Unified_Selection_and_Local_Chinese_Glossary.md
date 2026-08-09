@@ -34,7 +34,7 @@
 1. 当前卡片中的英文/日文例句及其中文译文；
 2. 已确认的教材表达及其中文提示；
 3. `local_glossary_entries` 中的人工确认词条；
-4. `local_dictionary_entries` 中的本地英日简明词典；
+4. `local_dictionary_entries` 中的版本化本地词典，其中直接日中/英中来源优先，JMdict→ECDICT 英中桥接只作低可信兜底；
 5. 最近 200 张历史卡片中的完全一致表达；
 6. 未命中。
 
@@ -47,6 +47,7 @@
 - 日语优先匹配相同读音，用于区分 `本（ほん）` 与 `本（もと）`；
 - 英语可使用相邻词做保守词性提示，例如 `public schedule` 优先形容词义；
 - 多个不同义项同时存在时返回最多 4 个候选，工具条显示当前义项、来源和可信度，并允许用户切换；日语候选优先保留至少一个不同读音，避免同读义项挤掉同形异读词；
+- 中文维基词典日语导出的直接中文释义优先于 JMdict 英文桥接，默认显示“需核对”，保留读音、词性、义项 ID 和来源页面；
 - JMdict 经英文释义再匹配 ECDICT 中文的结果属于桥接候选，固定显示为“低可信”，不能冒充确定答案；
 - 启动词典与读音/上下文精确匹配可显示“高可信”；其余本地词典结果默认“需核对”。
 
@@ -99,9 +100,11 @@ npm run dictionary:import:open -- \
   --source=ecdict --file=/path/ecdict.csv --scope=common
 npm run dictionary:import:open -- \
   --source=jmdict --file=/path/jmdict.json --ecdict-file=/path/ecdict.csv
+npm run dictionary:import:open -- \
+  --source=zhwiktionary --file=/path/kaikki.org-dictionary-日本語.jsonl
 ```
 
-确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；JMdict-Simplified 提供日语表记、读音和词性，但本系统只保留能与 ECDICT 英文释义**精确对应**的首个中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。日语的中文释义经过英语桥接，页面固定标记为“低可信度”；ECDICT 结果默认“需核对”，只有被上下文词性明确命中或由精选启动词典覆盖时才可升为“高可信”。
+确认条目数量、许可和版本后，增加 `--apply` 才写入 SQLite。ECDICT 提供英语词条、词性和中文翻译；中文维基词典日语导出提供直接的日语表记、读音、词性和中文义项，不经过英语中转。导入时使用 `opencc-js` 把繁体释义转换为简体，并把转换规则写入来源元数据；页面标记为“中文维基词典 · 直接日中”且默认“需核对”。JMdict-Simplified 只保留能与 ECDICT 英文释义**精确对应**的首个中文简释。没有可靠中文对应的日语词条直接跳过，不把英文释义冒充中文。经英语桥接的日语结果固定标记为“低可信度”；ECDICT 结果默认“需核对”，只有被上下文词性明确命中或由精选启动词典覆盖时才可升为“高可信”。
 
 外部原始文件不进入 Git，也不复制进应用镜像；每条导入记录把 `source_id`、输入文件 SHA-256、来源 URL、许可和 `dictionary_version` 写入词典表，便于审计、升级和重建。更新时导入新的版本，同一来源的旧版本会标记为 `retired`，保留审计记录但不再参与查询；查询仍按现有的人工词条优先、本地词典兜底规则执行。
 
@@ -109,6 +112,7 @@ npm run dictionary:import:open -- \
 
 - ECDICT：[upstream repository](https://github.com/skywind3000/ECDICT)，仓库声明 MIT；由于其数据来自多个上游，重新分发前仍需保留并复核上游 notices。
 - JMdict：[EDRDG license](https://www.edrdg.org/edrdg/licence.html) 与 [JMdict documentation](https://www.edrdg.org/jmdict/edict_doc_depr.html)；采用 CC BY-SA 4.0 / EDRDG 条款，更新时保留署名和许可信息。
+- 中文维基词典日语导出：[Kaikki Japanese extraction](https://kaikki.org/zhwiktionary/日語/index.html)；文本继承中文维基词典的 CC BY-SA 4.0 / GFDL。导入记录必须保留 Kaikki URL、中文维基词典词条 URL、文件 SHA-256 和许可，不把原始 JSONL 提交到 Git。
 
 HTTP contract：
 
@@ -116,9 +120,11 @@ HTTP contract：
 - `GET /api/local-glossary/lookup` 返回 `sourceKind=dictionary` 时，同时提供 `reading`、`partOfSpeech`、`lemma`、`senseKey`、`sourceDetail`、`matchReason`、`confidence` 和 `dictionaryVersion`；
 - 多义词通过 `alternatives` 返回最多 4 个同结构候选，查询仍然保持只读；
 - `GET /api/local-glossary/entries`；
+- `GET /api/local-glossary/catalog`：返回人工词条状态计数和只读词典来源/版本/条目数；
 - `POST /api/local-glossary/entries`；
 - `PATCH /api/local-glossary/entries/:id`；
 - `DELETE /api/local-glossary/entries/:id`；
+- `POST /api/local-glossary/entries/:id/restore`；
 - `POST /api/local-glossary/proposals`；
 - `POST /api/local-glossary/proposals/:id/accept`；
 - `POST /api/local-glossary/proposals/:id/reject`。
@@ -154,7 +160,7 @@ HTTP contract：
 
 ## 10. 后续扩展
 
-- 增加独立的本地词库管理页面，用于批量检索、义项拆分、导入和归档恢复；
+- `/dictionary` 已提供独立的本地词典管理页面，用于检索、新建/编辑人工覆盖、软归档/恢复，并只读展示导入来源；外部大词典的实际导入仍由受控 CLI 完成；
 - 将教材人工确认结果批量导入为 `imported` 词条；
 - 基于真实使用数据评估是否需要更完整的英语词形分析器；
 - 中文释义可作为未来学习提示信号，但不得直接成为 FSRS 调度事实。

@@ -116,6 +116,24 @@ function archiveEntry(db, id, expectedVersion, updatedAtUtc) {
   return result.changes ? getEntry(db, id) : null;
 }
 
+function restoreEntry(db, id, expectedVersion, updatedAtUtc) {
+  const result = db.prepare(`
+    UPDATE local_glossary_entries
+    SET status = 'active', version = version + 1, updated_at_utc = ?
+    WHERE id = ? AND status = 'archived' AND version = ?
+  `).run(updatedAtUtc, id, expectedVersion);
+  return result.changes ? getEntry(db, id) : null;
+}
+
+function getEntryStats(db) {
+  const rows = db.prepare(`
+    SELECT language, status, COUNT(*) AS entryCount
+    FROM local_glossary_entries
+    GROUP BY language, status
+  `).all();
+  return rows.map((row) => ({ ...row, entryCount: Number(row.entryCount) }));
+}
+
 function getProposal(db, id) {
   return mapProposal(db.prepare('SELECT * FROM local_glossary_proposals WHERE id = ?').get(id));
 }
@@ -156,9 +174,11 @@ module.exports = {
   findActiveEntry,
   findProposalByKey,
   getEntry,
+  getEntryStats,
   getProposal,
   listEntries,
   mapEntry,
   mapProposal,
+  restoreEntry,
   updateEntry,
 };

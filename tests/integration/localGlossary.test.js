@@ -95,6 +95,27 @@ test('supports manual glossary create, normalized lookup, edit and archive', asy
   });
   assert.equal(archived.status, 200);
   assert.equal(archived.body.entry.status, 'archived');
+
+  const restored = await api('POST', `/api/local-glossary/entries/${created.body.entry.id}/restore`, {
+    body: { expectedVersion: 3 },
+  });
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.entry.status, 'active');
+  assert.equal(restored.body.entry.version, 4);
+});
+
+test('returns manual entry and imported dictionary catalog statistics', async () => {
+  await api('POST', '/api/local-glossary/entries', {
+    body: { language: 'ja', canonicalForm: '手帳', zhGloss: '记事本' },
+  });
+  const response = await api('GET', '/api/local-glossary/catalog');
+  assert.equal(response.status, 200);
+  assert.ok(response.body.catalog.manual.some((item) => (
+    item.language === 'ja' && item.status === 'active' && item.entryCount === 1
+  )));
+  assert.ok(response.body.catalog.dictionaries.some((item) => (
+    item.sourceId === 'three-lans-curated-starter' && item.status === 'active'
+  )));
 });
 
 test('keeps DeepSeek proposal generation fail-closed in the integration harness', async () => {

@@ -18,8 +18,8 @@ test.describe('React page smoke', () => {
       }),
     }));
     await page.goto('/');
-    await expect(page.locator('.react-alert')).toContainText('生成服务当前不可用');
-    await expect(page.getByRole('button', { name: '刷新' })).toBeVisible();
+    await expect(page.locator('.react-alert')).toContainText('生成服务不可用，请检查 DeepSeek API。');
+    await expect(page.getByRole('button', { name: '重新检查生成服务' })).toBeVisible();
     await page.getByTestId('react-phrase-input').fill('blocked while offline');
     await expect(page.getByTestId('react-generate-button')).toBeDisabled();
   });

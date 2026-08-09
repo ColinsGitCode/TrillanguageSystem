@@ -32,6 +32,12 @@ router.get('/api/local-glossary/entries', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+router.get('/api/local-glossary/catalog', (req, res, next) => {
+  try {
+    return res.json({ success: true, catalog: service.catalog() });
+  } catch (error) { return next(error); }
+});
+
 router.post('/api/local-glossary/entries', async (req, res, next) => {
   try {
     const entry = await service.createEntry({ ...req.body, sourceKind: 'manual' });
@@ -49,6 +55,13 @@ router.patch('/api/local-glossary/entries/:id', async (req, res, next) => {
 router.delete('/api/local-glossary/entries/:id', (req, res, next) => {
   try {
     const entry = service.archiveEntry(req.params.id, req.body || {});
+    return res.json({ success: true, entry });
+  } catch (error) { return next(error); }
+});
+
+router.post('/api/local-glossary/entries/:id/restore', (req, res, next) => {
+  try {
+    const entry = service.restoreEntry(req.params.id, req.body || {});
     return res.json({ success: true, entry });
   } catch (error) { return next(error); }
 });
