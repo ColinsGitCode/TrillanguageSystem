@@ -399,7 +399,7 @@ A2 追加退出门禁：
 |---|---|---|
 | JLM-P0 | 固定样本、JSON schema、定位算法、第二次调用成本/延迟 POC | **已完成 2026-08-10**，见 [JLM-P0 干跑报告](../TestReports/Language_Metadata_JLM_P0_DryRun_20260810.md)：合同 16/16、单元 24/24、零库写入；实测同输入三次运行候选覆盖率 64%–76%、服务端零拒绝、出现 2/8 次 120s 超时 |
 | JLM-D1 | AI 候选、人工确认、冲突和失败状态桌面原型 | **原型已交付 2026-08-10**（[jlm-d1-foreign-origin-review.html](prototypes/jlm-d1-foreign-origin-review.html)，S1–S12）；**退出门禁仍为用户逐状态确认，未确认前不进入 D2** |
-| JLM-D2 | job/proposal/accepted 投影、API、幂等与回滚 ADR | 架构门禁确认 |
+| JLM-D2 | job/proposal/accepted 投影、API、幂等与回滚 ADR | **ADR 已提交 2026-08-10**（[JLM-D2 ADR](../Architecture/Language_Metadata_Proposal_ADR.md)，状态 Proposed）；**退出门禁仍为架构门禁确认，未确认前不进入 A0** |
 | JLM-A0 | Shadow 提取，默认不展示 | 主 Markdown 零变化、失败不影响生成 |
 | JLM-A1 | CardModal 人工裁决与可见观察 | 准确率、拒绝率和操作体验通过 |
 | JLM-A2 | 新卡移除 Markdown 外来语标注 | 新卡冒烟、hash 与历史兼容门禁通过，且 §6.2 表列 12 处消费方在“有块 / 无块”两种正文上均通过、CR v3 parity 不分叉 |

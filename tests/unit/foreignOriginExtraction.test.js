@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const {
   REJECTION,
@@ -133,6 +134,42 @@ test.describe('JLM-P0 proposal key', () => {
     const second = run('accept-basic').accepted.map((item) => item.proposalKey);
     assert.deepEqual(first, second);
     assert.equal(new Set(first).size, first.length, 'distinct positions must not collide');
+  });
+
+  test.it('is NUL-separated, not space-separated', () => {
+    // The separator is invisible in source and was once mis-transcribed as a
+    // space in the JLM-D2 ADR. NUL cannot occur inside any field, so it is the
+    // only separator that cannot produce an ambiguous key.
+    const fields = {
+      targetKind: 'generation',
+      targetId: 9001,
+      sourceContentHash: 'a'.repeat(64),
+      metadataKind: 'foreign-origin',
+      startCodePoint: 0,
+      endCodePoint: 3,
+      extractionVersion: 'jlm-extract-v1',
+    };
+    const join = (separator) => crypto.createHash('sha256').update([
+      fields.targetKind, fields.targetId, fields.sourceContentHash, fields.metadataKind,
+      fields.startCodePoint, fields.endCodePoint, fields.extractionVersion,
+    ].join(separator)).digest('hex');
+    assert.equal(buildProposalKey(fields), join(String.fromCharCode(0)));
+    assert.notEqual(buildProposalKey(fields), join(' '));
+  });
+
+  test.it('cannot be forged by moving a separator into a field value', () => {
+    // A space separator would let "generation 9001" collide with a crafted
+    // targetKind; NUL makes that impossible.
+    const base = {
+      targetKind: 'generation',
+      targetId: 9001,
+      sourceContentHash: 'a'.repeat(64),
+      startCodePoint: 0,
+      endCodePoint: 3,
+      extractionVersion: 'v1',
+    };
+    const shifted = { ...base, targetKind: 'generation 9001', targetId: '' };
+    assert.notEqual(buildProposalKey(base), buildProposalKey(shifted));
   });
 
   test.it('changes when the body version changes, so candidates cannot carry over', () => {
