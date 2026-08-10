@@ -12,10 +12,12 @@ import {
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
 import {
+  ORIGIN_TIER_LABEL,
   isKatakanaLoanwordCandidate,
   pronunciationBasicForm,
   pronunciationForeignOrigin,
 } from './pronunciation-token-details';
+import { languageMetadataApi } from './language-metadata';
 
 type Props = {
   html: string;
@@ -24,11 +26,13 @@ type Props = {
   testId?: string;
   tagName?: 'div' | 'h3';
   language?: 'en' | 'ja';
+  /** Called after a foreign-origin candidate is judged so the caller can refetch. */
+  onOriginDecided?: () => void;
 };
 
 const PRONUNCIATION_TOOLTIP_DELAY_MS = 250;
 
-export function PronunciationText({ html, tokens, className = '', testId, tagName = 'div', language }: Props) {
+export function PronunciationText({ html, tokens, className = '', testId, tagName = 'div', language, onOriginDecided }: Props) {
   const audio = useExclusiveAudio();
   const [overlay, setOverlay] = useState<{ token: PronunciationToken; left: number; top: number; tooltip: boolean } | null>(null);
   const [ttsState, setTtsState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
@@ -42,6 +46,20 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
   const overlayBasicForm = overlay ? pronunciationBasicForm(overlay.token) : null;
   const overlayForeignOrigin = overlay ? pronunciationForeignOrigin(overlay.token) : null;
   const overlayNeedsOrigin = Boolean(overlay && isKatakanaLoanwordCandidate(overlay.token) && !overlayForeignOrigin);
+  const [adjudicating, setAdjudicating] = useState(false);
+
+  // Adjudication is a domain write and must not silently mutate the reading
+  // projection: on success the caller refetches rather than patching state.
+  const decideOrigin = async (proposalId: number, decision: 'accept' | 'reject') => {
+    setAdjudicating(true);
+    try {
+      await languageMetadataApi.decide(proposalId, decision);
+      setOverlay(null);
+      onOriginDecided?.();
+    } catch {
+      setAdjudicating(false);
+    }
+  };
 
   useEffect(() => () => {
     controllerRef.current?.abort();
@@ -202,9 +220,43 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
           {(overlayBasicForm || overlayForeignOrigin || overlayNeedsOrigin) && (
             <dl className="pronunciation-token-details">
               {overlayBasicForm && <><dt>辞书形</dt><dd>{overlayBasicForm}</dd></>}
-              {overlayForeignOrigin && <><dt>{overlayForeignOrigin.language}来源</dt><dd>{overlayForeignOrigin.term}</dd></>}
+              {overlayForeignOrigin && (
+                <>
+                  {/* A pending candidate is labelled "AI 候选" rather than
+                      "<语言>来源", so an unreviewed guess never reads as a
+                      confirmed fact. */}
+                  <dt>{overlayForeignOrigin.tier === 'pending'
+                    ? 'AI 候选'
+                    : `${overlayForeignOrigin.language}来源`}</dt>
+                  <dd>
+                    {overlayForeignOrigin.term}
+                    <small
+                      className="pronunciation-origin-tier"
+                      data-tier={overlayForeignOrigin.tier}
+                    >{ORIGIN_TIER_LABEL[overlayForeignOrigin.tier]}</small>
+                  </dd>
+                </>
+              )}
               {overlayNeedsOrigin && <><dt>外语来源</dt><dd className="is-unresolved">待确认</dd></>}
             </dl>
+          )}
+          {!overlay.tooltip && overlayForeignOrigin && overlayForeignOrigin.tier === 'pending'
+            && overlayForeignOrigin.proposalId !== null && (
+            <div className="pronunciation-popover-actions is-adjudication">
+              <button
+                type="button"
+                className="is-primary"
+                data-testid="origin-accept"
+                disabled={adjudicating}
+                onClick={() => void decideOrigin(overlayForeignOrigin.proposalId as number, 'accept')}
+              >接受来源</button>
+              <button
+                type="button"
+                data-testid="origin-reject"
+                disabled={adjudicating}
+                onClick={() => void decideOrigin(overlayForeignOrigin.proposalId as number, 'reject')}
+              >不对</button>
+            </div>
           )}
           {overlay.tooltip ? (
             <p className="pronunciation-tooltip-meta">{overlay.token.unitKind === 'word' ? '词语读音' : '汉字读音'} · 悬停不记录查询</p>

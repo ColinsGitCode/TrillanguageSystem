@@ -56,3 +56,16 @@ test('metadata tables exist after migration and are cleared by the test reset', 
   assert.equal(reset.status, 200);
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS c FROM language_metadata_jobs').get().c, 0);
 });
+
+test('adjudication endpoints stay disabled by default', async () => {
+  for (const [method, url] of [
+    ['POST', '/api/language-metadata/proposals/1/accept'],
+    ['POST', '/api/language-metadata/proposals/1/reject'],
+    ['POST', '/api/language-metadata/corrections'],
+  ]) {
+    const response = await api(method, url, { body: {} });
+    assert.equal(response.status, 404, `${url} must be 404 while the flag is off`);
+    assert.equal(response.body.code, 'LANGUAGE_METADATA_DISABLED');
+  }
+  assert.equal(dbService.db.prepare('SELECT COUNT(*) AS c FROM language_metadata_proposals').get().c, 0);
+});

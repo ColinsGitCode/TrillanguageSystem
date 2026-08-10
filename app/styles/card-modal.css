@@ -861,3 +861,35 @@
   font-size: 11px;
   line-height: 1.35;
 }
+
+/* JLM-A1: an unreviewed AI candidate must be visually distinct from a
+   confirmed source, and not by colour alone. */
+.pronunciation-origin-tier {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-badge);
+  font-weight: 700;
+}
+.pronunciation-origin-tier[data-tier="pending"] {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  color: var(--color-warning);
+}
+.pronunciation-origin-tier[data-tier="human"],
+.pronunciation-origin-tier[data-tier="accepted"] {
+  border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
+  color: var(--color-success);
+}
+.pronunciation-popover-actions.is-adjudication {
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+}
+.pronunciation-popover-actions.is-adjudication .is-primary {
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}

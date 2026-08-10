@@ -417,9 +417,68 @@ function createPronunciationService({
     .filter((entry) => entry.foreignOrigin?.term)
     .map((entry) => [entry.surface, entry.foreignOrigin]));
 
-  function enrichVisibleTokens(tokens) {
+  // JLM-A1 consumption order (D0 §3.1):
+  //   human correction > curated dictionary > accepted LLM > pending LLM > none
+  // Only proposals bound to the body version being read take part; anything on
+  // an older hash is stale and must never be shown as current.
+  const ORIGIN_TIER_RANK = { human: 4, curated: 3, accepted: 2, pending: 1 };
+
+  function proposalTier(proposal) {
+    if (proposal.status === 'accepted') return proposal.origin === 'human' ? 'human' : 'accepted';
+    if (proposal.status === 'pending') return 'pending';
+    return null;
+  }
+
+  function readForeignOriginByRange(target) {
+    if (!target || typeof dbService.listLanguageMetadataProposals !== 'function') return new Map();
+    const winners = new Map();
+    for (const proposal of dbService.listLanguageMetadataProposals({
+      targetKind: target.targetKind,
+      targetId: target.targetId,
+      sourceContentHash: target.sourceContentHash,
+    })) {
+      const tier = proposalTier(proposal);
+      if (!tier || proposal.metadataKind !== 'foreign-origin') continue;
+      const key = `${proposal.startCodePoint}:${proposal.endCodePoint}`;
+      const current = winners.get(key);
+      if (current && ORIGIN_TIER_RANK[current.tier] >= ORIGIN_TIER_RANK[tier]) continue;
+      winners.set(key, {
+        tier,
+        proposalId: proposal.id,
+        language: proposal.value?.originLanguage || 'en',
+        term: proposal.value?.originTerm || '',
+        confidence: proposal.confidence,
+      });
+    }
+    return winners;
+  }
+
+  function enrichVisibleTokens(tokens, target = null) {
+    const byRange = readForeignOriginByRange(target);
     return tokens.map((token) => {
-      const foreignOrigin = acceptedOrigins.get(token.surface);
+      const proposal = byRange.get(`${token.startCodePoint}:${token.endCodePoint}`);
+      const curated = acceptedOrigins.get(token.surface);
+      // A curated entry outranks an accepted or pending LLM candidate, but a
+      // human correction outranks curated - that is what makes the top of the
+      // priority ladder reachable at all.
+      const useProposal = proposal
+        && (!curated || ORIGIN_TIER_RANK[proposal.tier] > ORIGIN_TIER_RANK.curated);
+      if (useProposal) {
+        return {
+          ...token,
+          evidence: {
+            ...(token.evidence || {}),
+            foreignOrigin: {
+              language: proposal.language,
+              term: proposal.term,
+              source: proposal.tier,
+              proposalId: proposal.proposalId,
+              confidence: proposal.confidence,
+            },
+          },
+        };
+      }
+      const foreignOrigin = curated;
       if (!foreignOrigin || token.evidence?.foreignOrigin) return token;
       return {
         ...token,
@@ -482,7 +541,11 @@ function createPronunciationService({
     if (existing && !options.refresh) {
       return {
         document: existing,
-        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id), {
+          targetKind: 'generation',
+          targetId: record.id,
+          sourceContentHash: record.content_hash,
+        }),
         plainText: stripMarkdownToJapaneseText(record.markdown_content),
       };
     }
@@ -496,7 +559,11 @@ function createPronunciationService({
     if (existing && !options.force) {
       return {
         document: existing,
-        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id), {
+          targetKind: 'generation',
+          targetId: record.id,
+          sourceContentHash: record.content_hash,
+        }),
         plainText: stripMarkdownToJapaneseText(record.markdown_content),
       };
     }

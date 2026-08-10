@@ -970,6 +970,14 @@ class DatabaseService {
     return languageMetadataDomain.listProposals(this.db, options);
   }
 
+  getLanguageMetadataProposal(id) {
+    return languageMetadataDomain.getProposal(this.db, id);
+  }
+
+  decideLanguageMetadataProposal(payload) {
+    return this.withBusyRetry(() => languageMetadataDomain.decideProposal(this.db, payload));
+  }
+
   markLanguageMetadataProposalsStale(options = {}) {
     return this.withBusyRetry(() => languageMetadataDomain.markStaleForOtherHashes(this.db, options));
   }

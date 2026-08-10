@@ -172,7 +172,27 @@ function markStaleForOtherHashes(db, { targetKind, targetId, sourceContentHash, 
   `).run({ targetKind, targetId, sourceContentHash, nowUtc }).changes;
 }
 
+function getProposal(db, id) {
+  return mapProposal(db.prepare('SELECT * FROM language_metadata_proposals WHERE id = ?').get(Number(id)));
+}
+
+/**
+ * Records a human decision on a candidate. Optimistic on the current status so
+ * two reviewers cannot silently overwrite each other; the caller turns a false
+ * return into a 409 rather than retrying.
+ */
+function decideProposal(db, { id, expectedStatus, status, decidedBy, nowUtc }) {
+  const changes = db.prepare(`
+    UPDATE language_metadata_proposals
+    SET status = @status, decided_by = @decidedBy, decided_at_utc = @nowUtc, updated_at_utc = @nowUtc
+    WHERE id = @id AND status = @expectedStatus
+  `).run({ id: Number(id), expectedStatus, status, decidedBy: decidedBy || 'user', nowUtc }).changes;
+  return changes ? getProposal(db, id) : null;
+}
+
 module.exports = {
+  decideProposal,
+  getProposal,
   ensureJob,
   finishJob,
   getJobByKey,

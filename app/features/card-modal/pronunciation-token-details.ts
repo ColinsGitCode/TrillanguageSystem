@@ -1,9 +1,24 @@
 import type { PronunciationToken } from './pronunciation-overlay';
 
+// JLM-A1 tiers. `pending` is an unreviewed AI candidate and must never be
+// presented with the same wording as a confirmed source.
+export type PronunciationOriginTier = 'human' | 'curated' | 'accepted' | 'pending';
+
 export type PronunciationForeignOrigin = {
   language: string;
   term: string;
   source: string;
+  tier: PronunciationOriginTier;
+  proposalId: number | null;
+};
+
+const ORIGIN_TIERS: PronunciationOriginTier[] = ['human', 'curated', 'accepted', 'pending'];
+
+export const ORIGIN_TIER_LABEL: Record<PronunciationOriginTier, string> = {
+  human: '人工确认',
+  curated: '精选词典',
+  accepted: '已确认',
+  pending: 'AI 候选',
 };
 
 const KATAKANA_WORD = /^[\p{Script=Katakana}ー・]+$/u;
@@ -27,12 +42,20 @@ export function pronunciationForeignOrigin(token: PronunciationToken): Pronuncia
   const candidate = value as Record<string, unknown>;
   const term = typeof candidate.term === 'string' ? candidate.term.trim() : '';
   if (!term) return null;
+  const source = typeof candidate.source === 'string' ? candidate.source.trim() : '';
+  // Anything the server did not tag with a known tier is treated as curated,
+  // which is the pre-JLM behaviour for the shipped dictionary.
+  const tier = (ORIGIN_TIERS as string[]).includes(source)
+    ? (source as PronunciationOriginTier)
+    : 'curated';
   return {
     language: typeof candidate.language === 'string' && candidate.language.trim()
       ? candidate.language.trim()
       : '外语',
     term,
-    source: typeof candidate.source === 'string' ? candidate.source.trim() : '',
+    source,
+    tier,
+    proposalId: typeof candidate.proposalId === 'number' ? candidate.proposalId : null,
   };
 }
 
