@@ -248,7 +248,7 @@ export function SelectionGlossaryInline({
     return (
       <span
         className="csa-gloss"
-        title={`来源：${source}；可信度：${CONFIDENCE_LABEL[activeGloss.confidence]}`}
+        title={`${activeGloss.zhGloss}；来源：${source}；可信度：${CONFIDENCE_LABEL[activeGloss.confidence]}`}
       >
         <Languages aria-hidden="true" />
         <span className="csa-gloss-copy">
@@ -262,19 +262,22 @@ export function SelectionGlossaryInline({
             </small>
           )}
         </span>
-        <small className="csa-gloss-source">{source}</small>
-        <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
-          {CONFIDENCE_LABEL[activeGloss.confidence]}
-        </small>
-        {choices.length > 1 && (
+        <span className="csa-gloss-summary" aria-label={`来源 ${source}，${CONFIDENCE_LABEL[activeGloss.confidence]}`}>
+          <small className="csa-gloss-source">{source}</small>
+          <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
+            {CONFIDENCE_LABEL[activeGloss.confidence]}
+          </small>
+        </span>
+        {(choices.length > 1 || editable || correctable) && (
           <DropdownMenu.Root modal={false}>
             <DropdownMenu.Trigger asChild>
-              <button type="button" className="csa-gloss-alternatives" aria-label="选择其他义项">
-                义项 {choiceIndex + 1}/{choices.length}<ChevronDown aria-hidden="true" />
+              <button type="button" className="csa-gloss-menu-trigger" aria-label="打开释义选项">
+                释义{choices.length > 1 ? ` ${choiceIndex + 1}/${choices.length}` : ''}
+                <ChevronDown aria-hidden="true" />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className="csa-gloss-menu" sideOffset={5} align="start">
+              <DropdownMenu.Content className="csa-gloss-menu" sideOffset={5} align="end">
                 {choices.map((choice, index) => (
                   <DropdownMenu.Item
                     key={`${choice.id || 'local'}-${choice.senseKey || index}-${choice.zhGloss}`}
@@ -286,68 +289,64 @@ export function SelectionGlossaryInline({
                       if (index !== choiceIndex) recordFeedback(activeGloss, 'switched', index, choices.length);
                     }}
                   >
-                    <span>{choice.zhGloss}</span>
-                    <small>
-                      {[
-                        choice.reading,
-                        choice.partOfSpeech,
-                        choice.sourceDetail || SOURCE_LABEL[choice.sourceKind],
-                        CONFIDENCE_LABEL[choice.confidence],
-                      ].filter(Boolean).join(' · ')}
-                    </small>
+                    <span className="csa-gloss-choice-copy">
+                      <span>{choice.zhGloss}</span>
+                      <small>
+                        {[
+                          choice.reading,
+                          choice.partOfSpeech,
+                          choice.sourceDetail || SOURCE_LABEL[choice.sourceKind],
+                          CONFIDENCE_LABEL[choice.confidence],
+                        ].filter(Boolean).join(' · ')}
+                      </small>
+                    </span>
+                    {index === choiceIndex && <Check aria-label="当前义项" />}
                   </DropdownMenu.Item>
                 ))}
+                {(correctable || editable) && <DropdownMenu.Separator className="csa-menu-separator" />}
+                {correctable && !rejected && (
+                  <DropdownMenu.Item
+                    className="csa-gloss-menu-action"
+                    data-testid="gloss-reject"
+                    onSelect={() => {
+                      setRejected(true);
+                      recordFeedback(activeGloss, 'rejected', choiceIndex, choices.length);
+                      onToast(choices.length > 1 ? '可以换一个义项，或自己填写' : '请填写正确的中文释义');
+                      if (choices.length <= 1) {
+                        setDraftGloss('');
+                        setEditMode('manual');
+                      }
+                    }}
+                  >
+                    <ThumbsDown aria-hidden="true" />释义不合适
+                  </DropdownMenu.Item>
+                )}
+                {correctable && rejected && choices.length > 1 && (
+                  <DropdownMenu.Item
+                    className="csa-gloss-menu-action is-active"
+                    data-testid="gloss-reject-write"
+                    onSelect={() => {
+                      setDraftGloss('');
+                      setEditMode('manual');
+                    }}
+                  >
+                    <Pencil aria-hidden="true" />自己填写正确释义
+                  </DropdownMenu.Item>
+                )}
+                {(editable || (correctable && !rejected)) && (
+                  <DropdownMenu.Item
+                    className="csa-gloss-menu-action"
+                    onSelect={() => {
+                      setDraftGloss(activeGloss.zhGloss);
+                      setEditMode(editable ? 'edit' : 'manual');
+                    }}
+                  >
+                    <Pencil aria-hidden="true" />{editable ? '编辑本地释义' : '更正本地释义'}
+                  </DropdownMenu.Item>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
-        )}
-        {correctable && !rejected && (
-          <button
-            type="button"
-            className="csa-gloss-reject"
-            data-testid="gloss-reject"
-            aria-label="释义不合适"
-            title="释义不合适：换一个义项或自己填写"
-            onClick={() => {
-              setRejected(true);
-              recordFeedback(activeGloss, 'rejected', choiceIndex, choices.length);
-              onToast(choices.length > 1 ? '可以换一个义项，或自己填写' : '请填写正确的中文释义');
-              if (choices.length <= 1) {
-                setDraftGloss('');
-                setEditMode('manual');
-              }
-            }}
-          >
-            <ThumbsDown aria-hidden="true" />释义不合适
-          </button>
-        )}
-        {correctable && rejected && choices.length > 1 && (
-          <button
-            type="button"
-            className="csa-gloss-reject is-active"
-            data-testid="gloss-reject-write"
-            aria-label="自己填写正确释义"
-            title="自己填写正确释义"
-            onClick={() => {
-              setDraftGloss('');
-              setEditMode('manual');
-            }}
-          >
-            <Pencil aria-hidden="true" />自己填写
-          </button>
-        )}
-        {(editable || (correctable && !rejected)) && (
-          <button
-            type="button"
-            aria-label={editable ? '编辑本地释义' : '更正本地释义'}
-            title={editable ? '编辑本地释义' : '更正本地释义'}
-            onClick={() => {
-              setDraftGloss(activeGloss.zhGloss);
-              setEditMode(editable ? 'edit' : 'manual');
-            }}
-          >
-            <Pencil aria-hidden="true" />
-          </button>
         )}
       </span>
     );

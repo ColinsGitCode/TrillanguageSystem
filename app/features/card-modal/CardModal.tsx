@@ -1026,139 +1026,147 @@ export function CardModal({
             onMouseDown={preserveSelectionOutsideActions}
             onKeyDown={handleToolbarKeyDown}
           >
-            <output
-              className="csa-selection-preview"
-              data-testid="card-selection-preview"
-              title={toolbar.phrase}
-            >
-              <span>已选</span>
-              <strong>{toolbar.phrase}</strong>
-            </output>
-            <Suspense fallback={<span className="csa-gloss is-muted" role="status">正在载入本地释义…</span>}>
-              <DeferredSelectionGlossaryInline
-                phrase={toolbar.phrase}
-                language={toolbar.language}
-                generationId={generationId ? Number(generationId) : null}
-                contextLabel={displayTitle}
-                contextText={toolbar.contextText}
-                readingHint={toolbar.pronunciationToken?.readingHiragana || null}
-                onToast={showToast}
-              />
-            </Suspense>
-            <span className="csa-sep" aria-hidden="true" />
-            {!readOnly && <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  ref={toolbarFirstActionRef}
-                  type="button"
-                  className="csa-highlight"
-                  disabled={annotationMode !== 'annotations' || isSavingAnnotation}
-                  aria-label={toolbar.annotationId ? '更改标记颜色' : '标记选区'}
-                >
-                  {toolbar.annotationId ? <Palette aria-hidden="true" /> : <Highlighter aria-hidden="true" />}
-                  {isSavingAnnotation ? '保存中…' : toolbar.annotationId ? '改色' : '标记'}
-                  <ChevronDown aria-hidden="true" className="csa-caret" />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="csa-gen-menu csa-color-menu"
-                  sideOffset={5}
-                  align="start"
-                >
-                  {HIGHLIGHT_COLORS.map((color) => (
-                    <DropdownMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
-                      <button
-                        type="button"
-                        disabled={isSavingAnnotation}
-                        onClick={() => void saveHighlight(color.value)}
-                      >
-                        <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
-                        {color.label}
-                      </button>
-                    </DropdownMenu.Item>
-                  ))}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>}
-            {!readOnly && toolbar.annotationId && (
-              <button
-                type="button"
-                className="csa-icon-action csa-remove-highlight"
-                aria-label="取消标记"
-                title="取消标记"
-                disabled={isSavingAnnotation}
-                onClick={() => void removeHighlight()}
+            <div className="csa-context-row" data-testid="card-selection-context-row">
+              <output
+                className="csa-selection-preview"
+                data-testid="card-selection-preview"
+                title={toolbar.phrase}
               >
-                <Eraser aria-hidden="true" />
-              </button>
-            )}
-            <button
-              type="button"
-              className="csa-icon-action"
-              aria-label="复制选区"
-              title="复制选区"
-              onClick={() => void copySelectedText()}
-            >
-              <Copy aria-hidden="true" />
-            </button>
-            <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
-              <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
-            </Suspense>
-            {toolbar.pronunciationToken && (
-              <button
-                type="button"
-                className="csa-icon-action"
-                aria-label="查看日语读音详情"
-                title="查看日语读音详情"
-                onClick={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)}
-              >
-                <BookOpen aria-hidden="true" />
-              </button>
-            )}
-            <button
-              ref={lookupTriggerRef}
-              type="button"
-              className="csa-knowledge"
-              onClick={openKnowledgeLookup}
-            >
-              <Search aria-hidden="true" /> 查知识点
-            </button>
-            <span className="csa-sep" aria-hidden="true" />
-            <div className="csa-generate-wrap">
-              <DropdownMenu.Root open={genMenuOpen} onOpenChange={setGenMenuOpen} modal={false}>
-                <DropdownMenu.Trigger asChild>
+                <span>已选</span>
+                <strong>{toolbar.phrase}</strong>
+              </output>
+              <div className="csa-gloss-slot">
+                <Suspense fallback={<span className="csa-gloss is-muted" role="status">正在载入本地释义…</span>}>
+                  <DeferredSelectionGlossaryInline
+                    phrase={toolbar.phrase}
+                    language={toolbar.language}
+                    generationId={generationId ? Number(generationId) : null}
+                    contextLabel={displayTitle}
+                    contextText={toolbar.contextText}
+                    readingHint={toolbar.pronunciationToken?.readingHiragana || null}
+                    onToast={showToast}
+                  />
+                </Suspense>
+              </div>
+            </div>
+            <div className="csa-action-row" data-testid="card-selection-action-row">
+              <div className="csa-action-tabs">
+                {!readOnly && <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      ref={toolbarFirstActionRef}
+                      type="button"
+                      className="csa-highlight csa-command-tab"
+                      disabled={annotationMode !== 'annotations' || isSavingAnnotation}
+                      aria-label={toolbar.annotationId ? '更改标记颜色' : '标记选区'}
+                    >
+                      {toolbar.annotationId ? <Palette aria-hidden="true" /> : <Highlighter aria-hidden="true" />}
+                      {isSavingAnnotation ? '保存中…' : toolbar.annotationId ? '改色' : '标记'}
+                      <ChevronDown aria-hidden="true" className="csa-caret" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      className="csa-gen-menu csa-color-menu"
+                      sideOffset={5}
+                      align="start"
+                    >
+                      {HIGHLIGHT_COLORS.map((color) => (
+                        <DropdownMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
+                          <button
+                            type="button"
+                            disabled={isSavingAnnotation}
+                            onClick={() => void saveHighlight(color.value)}
+                          >
+                            <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
+                            {color.label}
+                          </button>
+                        </DropdownMenu.Item>
+                      ))}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>}
+                {!readOnly && toolbar.annotationId && (
                   <button
-                    ref={generateTriggerRef}
                     type="button"
-                    className="csa-generate"
-                    disabled={generateMutation.isPending}
+                    className="csa-icon-action csa-remove-highlight"
+                    aria-label="取消标记"
+                    title="取消标记"
+                    disabled={isSavingAnnotation}
+                    onClick={() => void removeHighlight()}
                   >
-                    <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
-                    <ChevronDown aria-hidden="true" className="csa-caret" />
+                    <Eraser aria-hidden="true" />
                   </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    className="csa-gen-menu"
-                    sideOffset={5}
-                    align="end"
-                    onCloseAutoFocus={restoreGenerateTriggerFocus}
+                )}
+                <button
+                  type="button"
+                  className="csa-icon-action"
+                  aria-label="复制选区"
+                  title="复制选区"
+                  onClick={() => void copySelectedText()}
+                >
+                  <Copy aria-hidden="true" />
+                </button>
+                <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
+                  <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
+                </Suspense>
+                {toolbar.pronunciationToken && (
+                  <button
+                    type="button"
+                    className="csa-icon-action"
+                    aria-label="查看日语读音详情"
+                    title="查看日语读音详情"
+                    onClick={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)}
                   >
-                    {SELECTION_CARD_TYPES.map((type) => (
-                      <DropdownMenu.Item key={type} asChild disabled={generateMutation.isPending}>
-                        <button
-                          type="button"
-                          disabled={generateMutation.isPending}
-                          onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
-                        >
-                          {CARD_TYPE_LABEL[type]}
-                        </button>
-                      </DropdownMenu.Item>
-                    ))}
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+                    <BookOpen aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  ref={lookupTriggerRef}
+                  type="button"
+                  className="csa-knowledge csa-command-tab"
+                  onClick={openKnowledgeLookup}
+                >
+                  <Search aria-hidden="true" /> 查知识点
+                </button>
+              </div>
+              <div className="csa-primary-actions">
+                <div className="csa-generate-wrap">
+                  <DropdownMenu.Root open={genMenuOpen} onOpenChange={setGenMenuOpen} modal={false}>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        ref={generateTriggerRef}
+                        type="button"
+                        className="csa-generate csa-command-tab"
+                        disabled={generateMutation.isPending}
+                      >
+                        <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
+                        <ChevronDown aria-hidden="true" className="csa-caret" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="csa-gen-menu"
+                        sideOffset={5}
+                        align="end"
+                        onCloseAutoFocus={restoreGenerateTriggerFocus}
+                      >
+                        {SELECTION_CARD_TYPES.map((type) => (
+                          <DropdownMenu.Item key={type} asChild disabled={generateMutation.isPending}>
+                            <button
+                              type="button"
+                              disabled={generateMutation.isPending}
+                              onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
+                            >
+                              {CARD_TYPE_LABEL[type]}
+                            </button>
+                          </DropdownMenu.Item>
+                        ))}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                </div>
+              </div>
             </div>
           </div>
         )}

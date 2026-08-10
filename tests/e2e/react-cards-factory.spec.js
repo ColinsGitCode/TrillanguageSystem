@@ -704,9 +704,10 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await selectVisibleText(page, 'deterministic');
     await expect(page.locator('.csa-gloss')).toContainText('英语错误义项');
     await expect(page.locator('.csa-gloss')).toContainText('高可信');
-    await page.getByRole('button', { name: '释义不合适' }).click();
-    await expect(page.getByRole('button', { name: '自己填写正确释义' })).toBeVisible();
-    await page.getByRole('button', { name: '选择其他义项' }).click();
+    await page.getByRole('button', { name: '打开释义选项' }).click();
+    await page.getByRole('menuitem', { name: '释义不合适' }).click();
+    await page.getByRole('button', { name: '打开释义选项' }).click();
+    await expect(page.getByRole('menuitem', { name: '自己填写正确释义' })).toBeVisible();
     await page.getByRole('menuitem').filter({ hasText: '英语正确义项' }).click();
     await expect(page.locator('.csa-gloss')).toContainText('英语正确义项');
 
@@ -901,14 +902,74 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('P4 keeps the selection toolbar inside the desktop viewport', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
+    await page.route('**/api/local-glossary/lookup*', async (route) => {
+      const url = new URL(route.request().url());
+      await route.fulfill({
+        json: {
+          success: true,
+          lookup: {
+            status: 'exact',
+            query: {
+              text: url.searchParams.get('text'),
+              language: url.searchParams.get('language'),
+              canonicalForm: url.searchParams.get('text'),
+              normalizedForm: url.searchParams.get('text'),
+            },
+            gloss: {
+              id: 21,
+              zhGloss: '用于验证较长中文释义不会和标记、朗读、知识点查询以及生成卡片操作发生重叠',
+              sourceKind: 'dictionary',
+              sourceId: 21,
+              sourceDetail: 'ECDICT local dictionary',
+              confidence: 'medium',
+              version: null,
+              senseKey: 'layout-regression',
+            },
+            alternatives: [{
+              id: 22,
+              zhGloss: '备用释义',
+              sourceKind: 'dictionary',
+              sourceId: 22,
+              sourceDetail: 'ECDICT',
+              confidence: 'low',
+              version: null,
+              senseKey: 'layout-alternative',
+            }],
+          },
+        },
+      });
+    });
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
     await waitForPronunciationContent(page);
     await selectVisibleText(page, 'react');
+    await expect(page.locator('.csa-gloss')).toContainText('用于验证较长中文释义');
 
-    const box = await page.locator('.card-selection-toolbar').boundingBox();
-    expect(box.x).toBeGreaterThanOrEqual(8);
-    expect(box.x + box.width).toBeLessThanOrEqual(1272);
+    const layout = await page.locator('.card-selection-toolbar').evaluate((toolbar) => {
+      const rect = (selector) => toolbar.querySelector(selector).getBoundingClientRect();
+      const element = (selector) => toolbar.querySelector(selector);
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const contextRect = rect('[data-testid="card-selection-context-row"]');
+      const actionRect = rect('[data-testid="card-selection-action-row"]');
+      const previewRect = rect('[data-testid="card-selection-preview"]');
+      const glossRect = rect('.csa-gloss-slot');
+      const actionElement = element('[data-testid="card-selection-action-row"]');
+      const glossElement = element('.csa-gloss-slot');
+      return {
+        toolbar: { left: toolbarRect.left, right: toolbarRect.right },
+        context: { right: contextRect.right, bottom: contextRect.bottom },
+        action: { top: actionRect.top, scrollWidth: actionElement.scrollWidth, clientWidth: actionElement.clientWidth },
+        previewRight: previewRect.right,
+        gloss: { left: glossRect.left, right: glossRect.right, scrollWidth: glossElement.scrollWidth, clientWidth: glossElement.clientWidth },
+      };
+    });
+    expect(layout.toolbar.left).toBeGreaterThanOrEqual(8);
+    expect(layout.toolbar.right).toBeLessThanOrEqual(1272);
+    expect(layout.context.bottom).toBeLessThanOrEqual(layout.action.top + 1);
+    expect(layout.previewRight).toBeLessThanOrEqual(layout.gloss.left + 1);
+    expect(layout.gloss.right).toBeLessThanOrEqual(layout.context.right + 1);
+    expect(layout.gloss.scrollWidth).toBeLessThanOrEqual(layout.gloss.clientWidth);
+    expect(layout.action.scrollWidth).toBeLessThanOrEqual(layout.action.clientWidth);
   });
 
   test('ST-P2 reads an English selection with speed control and exclusive playback', async ({ page }) => {
