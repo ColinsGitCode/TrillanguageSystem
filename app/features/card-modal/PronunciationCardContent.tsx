@@ -16,7 +16,9 @@ import {
   isKatakanaLoanwordCandidate,
   pronunciationBasicForm,
   pronunciationForeignOrigin,
+  ORIGIN_TIER_LABEL,
 } from './pronunciation-token-details';
+import { languageMetadataApi } from './language-metadata';
 import type { CardDocument } from './card-document';
 import type { CardAnnotation } from '../factory/factory-api';
 import type { CardType } from '../factory/types';
@@ -95,6 +97,8 @@ export function PronunciationCardContent({
   const closeTimerRef = useRef<number | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [correctionReading, setCorrectionReading] = useState('');
+  const [originTerm, setOriginTerm] = useState('');
+  const [originBusy, setOriginBusy] = useState(false);
   const [correctionBusy, setCorrectionBusy] = useState(false);
 
   useEffect(() => {
@@ -182,6 +186,42 @@ export function PronunciationCardContent({
     if (element) openOverlay(element, 'popover');
     onDetailRequestHandled();
   }, [requestedDetailTokenKey, tokens.length]);
+
+  // JLM-A1 adjudication. Refetches rather than patching local state so the
+  // resolved tier always comes from the server's priority order.
+  const decideOrigin = async (proposalId: number, decision: 'accept' | 'reject') => {
+    setOriginBusy(true);
+    try {
+      await languageMetadataApi.decide(proposalId, decision);
+      setOverlay(null);
+      await pronunciationQuery.refetch();
+    } finally {
+      setOriginBusy(false);
+    }
+  };
+
+  const saveOriginCorrection = async () => {
+    const token = overlay?.token;
+    const hash = pronunciationQuery.data?.document?.sourceContentHash;
+    if (!token || !generationId || !hash || !originTerm.trim() || originBusy) return;
+    setOriginBusy(true);
+    try {
+      await languageMetadataApi.correct({
+        targetKind: 'generation',
+        targetId: generationId,
+        sourceContentHash: hash,
+        surface: token.surface,
+        startCodePoint: token.startCodePoint,
+        endCodePoint: token.endCodePoint,
+        originTerm: originTerm.trim(),
+      });
+      setOriginTerm('');
+      setOverlay(null);
+      await pronunciationQuery.refetch();
+    } finally {
+      setOriginBusy(false);
+    }
+  };
 
   const saveCorrection = async () => {
     const token = overlay?.token;
@@ -298,9 +338,67 @@ export function PronunciationCardContent({
           {(overlayBasicForm || overlayForeignOrigin || overlayNeedsOrigin) && (
             <dl className="pronunciation-token-details">
               {overlayBasicForm && <><dt>辞书形</dt><dd>{overlayBasicForm}</dd></>}
-              {overlayForeignOrigin && <><dt>{overlayForeignOrigin.language}来源</dt><dd>{overlayForeignOrigin.term}</dd></>}
+              {overlayForeignOrigin && (
+                <>
+                  {/* A pending candidate is never worded like a confirmed
+                      source; the tier badge carries that distinction. */}
+                  <dt>{overlayForeignOrigin.tier === 'pending' ? 'AI 候选' : `${overlayForeignOrigin.language}来源`}</dt>
+                  <dd>
+                    {overlayForeignOrigin.term}
+                    <small className="pronunciation-origin-tier" data-tier={overlayForeignOrigin.tier}>
+                      {ORIGIN_TIER_LABEL[overlayForeignOrigin.tier]}
+                    </small>
+                  </dd>
+                </>
+              )}
               {overlayNeedsOrigin && <><dt>外语来源</dt><dd className="is-unresolved">待确认</dd></>}
             </dl>
+          )}
+          {overlay.mode !== 'tooltip' && !readOnly && (overlayForeignOrigin || overlayNeedsOrigin) && (
+            <div className="pronunciation-origin-review" data-testid="pronunciation-origin-review">
+              {overlayForeignOrigin?.tier === 'pending' && overlayForeignOrigin.proposalId !== null && (
+                <div className="pronunciation-popover-actions is-adjudication">
+                  <button
+                    type="button"
+                    className="is-primary"
+                    data-testid="origin-accept"
+                    disabled={originBusy}
+                    onClick={() => void decideOrigin(overlayForeignOrigin.proposalId as number, 'accept')}
+                  >接受</button>
+                  <button
+                    type="button"
+                    data-testid="origin-reject"
+                    disabled={originBusy}
+                    onClick={() => void decideOrigin(overlayForeignOrigin.proposalId as number, 'reject')}
+                  >不对</button>
+                </div>
+              )}
+              {/* Available for every tier, including curated: without it the top
+                  of the priority ladder would be unreachable and a wrong curated
+                  entry could never be overridden. */}
+              <div className="pronunciation-correction">
+                <label htmlFor="pronunciation-origin-term">
+                  {overlayForeignOrigin ? '更正外语原词' : '补充外语原词'}
+                </label>
+                <div>
+                  <input
+                    id="pronunciation-origin-term"
+                    data-testid="origin-term-input"
+                    value={originTerm}
+                    onChange={(event) => setOriginTerm(event.target.value)}
+                    placeholder={overlayForeignOrigin?.term || '例如：software'}
+                    disabled={originBusy}
+                  />
+                  <button
+                    type="button"
+                    data-testid="origin-correct"
+                    disabled={originBusy || !originTerm.trim()}
+                    onClick={() => void saveOriginCorrection()}
+                  >{originBusy ? '保存中…' : '保存'}</button>
+                </div>
+                <small>人工确认的来源优先于精选词典，且不改写卡片正文。</small>
+              </div>
+            </div>
           )}
           {overlay.mode === 'tooltip' ? (
             <p className="pronunciation-tooltip-meta">{overlay.token.unitKind === 'word' ? '词语读音' : '汉字读音'} · {overlay.token.source === 'manual' ? '人工确认' : '系统分析'}</p>
