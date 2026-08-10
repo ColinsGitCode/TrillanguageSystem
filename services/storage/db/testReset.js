@@ -11,6 +11,10 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // JLM-A0 metadata: proposals reference jobs, so children first.
+  'language_metadata_proposals',
+  'language_metadata_jobs',
+
   // DIC-R2 usage facts: independent of the entries below, cleared first.
   'local_glossary_lookup_events',
 

@@ -26,6 +26,7 @@ const pronunciationDomain = require('./db/pronunciation');
 const localGlossaryDomain = require('./db/localGlossary');
 const localDictionaryDomain = require('./db/localDictionary');
 const localGlossaryFeedbackDomain = require('./db/localGlossaryFeedback');
+const languageMetadataDomain = require('./db/languageMetadata');
 const { readCatalog } = require('../localGlossary/localDictionaryCatalog');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
@@ -941,6 +942,36 @@ class DatabaseService {
 
   getLocalGlossaryOutcomeStats(options = {}) {
     return localGlossaryFeedbackDomain.getOutcomeStats(this.db, options);
+  }
+
+  // ========== Language metadata (JLM-A0 shadow) ==========
+
+  ensureLanguageMetadataJob(payload) {
+    return this.withBusyRetry(() => languageMetadataDomain.ensureJob(this.db, payload));
+  }
+
+  markLanguageMetadataJobRunning(jobId, nowUtc) {
+    return this.withBusyRetry(() => languageMetadataDomain.markJobRunning(this.db, jobId, nowUtc));
+  }
+
+  finishLanguageMetadataJob(jobId, payload) {
+    return this.withBusyRetry(() => languageMetadataDomain.finishJob(this.db, jobId, payload));
+  }
+
+  insertLanguageMetadataProposal(payload) {
+    return this.withBusyRetry(() => languageMetadataDomain.insertProposal(this.db, payload));
+  }
+
+  listLanguageMetadataJobs(options = {}) {
+    return languageMetadataDomain.listJobs(this.db, options);
+  }
+
+  listLanguageMetadataProposals(options = {}) {
+    return languageMetadataDomain.listProposals(this.db, options);
+  }
+
+  markLanguageMetadataProposalsStale(options = {}) {
+    return this.withBusyRetry(() => languageMetadataDomain.markStaleForOtherHashes(this.db, options));
   }
 
   getLocalGlossaryEntry(id) {

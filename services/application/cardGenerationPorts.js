@@ -12,7 +12,33 @@ const {
 const { generateAudioBatch } = require('../generation/ttsService');
 const { generateWithProvider } = require('../generation/cardGenerationService');
 const dbService = require('../storage/databaseService');
-const { createPronunciationService } = require('../pronunciation/pronunciationService');
+const {
+  createPronunciationService,
+  locateJapaneseSegments,
+  stripMarkdownToJapaneseText,
+} = require('../pronunciation/pronunciationService');
+const {
+  createLanguageMetadataExtractionService,
+} = require('../languageMetadata/application/extractionService');
+const deepseekService = require('../llm/deepseekService');
+const {
+  LANGUAGE_METADATA_ENABLED,
+  LANGUAGE_METADATA_EXTRACTION_ENABLED,
+} = require('../../lib/serverConfig');
+
+// JLM-A0: shadow only. Both flags default off, so by default this service is
+// constructed but never issues a call and never writes a row.
+const languageMetadataExtractionService = createLanguageMetadataExtractionService({
+  dbService,
+  llm: deepseekService,
+  locateSegments: (markdown) => locateJapaneseSegments(
+    markdown,
+    stripMarkdownToJapaneseText(markdown)
+  ),
+  log: require('../../lib/logger').child({ module: 'svc/language-metadata' }),
+  enabled: LANGUAGE_METADATA_ENABLED,
+  extractionEnabled: LANGUAGE_METADATA_EXTRACTION_ENABLED,
+});
 const { prepareInsertData } = require('../storage/databaseHelpers');
 const { buildE2EGenerateResult } = require('../../lib/e2eFixtures');
 const { buildAdmissionTags } = require('../dataPreparation/cardTagging');
@@ -70,6 +96,8 @@ const cardGenerationPorts = {
   prepareInsertData,
   insertGeneration: (data) => dbService.insertGeneration(data),
   persistPronunciation: (generationId) => pronunciationService.ensureGeneration(generationId),
+  extractLanguageMetadata: (generationId) => languageMetadataExtractionService
+    .extractForGeneration(generationId),
   deleteGeneration: (generationId) => dbService.deleteGeneration(generationId),
   getGenerationById: (generationId) => dbService.getGenerationById(generationId),
   listCardTags: (generationId) => dbService.listCardTags(generationId, { includeSuppressed: true }),

@@ -92,6 +92,11 @@ const LOCAL_GLOSSARY_FEEDBACK_TABLES = Object.freeze([
   'local_glossary_lookup_events',
 ]);
 
+const LANGUAGE_METADATA_TABLES = Object.freeze([
+  'language_metadata_jobs',
+  'language_metadata_proposals',
+]);
+
 const SUPPORTED_DIRECTIVES = new Set(['foreign-keys-off']);
 
 function sha256(value) {
@@ -230,6 +235,14 @@ function assertLocalGlossaryFeedbackPostconditions(db) {
   if (missing.length) throw new Error(`Local glossary feedback migration missing tables: ${missing.join(', ')}`);
 }
 
+function assertLanguageMetadataPostconditions(db) {
+  const existing = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
+  );
+  const missing = LANGUAGE_METADATA_TABLES.filter((table) => !existing.has(table));
+  if (missing.length) throw new Error(`Language metadata migration missing tables: ${missing.join(', ')}`);
+}
+
 function parseMigrationDirectives(migration) {
   const lines = String(migration.sql || '').split(/\r?\n/u);
   const directives = new Set();
@@ -337,6 +350,7 @@ function runMigrations(db, options = {}) {
   assertLocalGlossaryPostconditions(db);
   assertLocalDictionaryPostconditions(db);
   assertLocalGlossaryFeedbackPostconditions(db);
+  assertLanguageMetadataPostconditions(db);
   return { applied, skipped, baselineRegistered };
 }
 
@@ -348,6 +362,7 @@ module.exports = {
   LOCAL_GLOSSARY_TABLES,
   LOCAL_DICTIONARY_TABLES,
   LOCAL_GLOSSARY_FEEDBACK_TABLES,
+  LANGUAGE_METADATA_TABLES,
   MANUAL_TAG_TABLES,
   DEFAULT_MIGRATIONS_DIR,
   KG_P1_TABLES,
@@ -362,6 +377,7 @@ module.exports = {
   assertLocalGlossaryPostconditions,
   assertLocalDictionaryPostconditions,
   assertLocalGlossaryFeedbackPostconditions,
+  assertLanguageMetadataPostconditions,
   assertManualTagPostconditions,
   assertLearningP0Postconditions,
   assertKnowledgeGraphP1Postconditions,

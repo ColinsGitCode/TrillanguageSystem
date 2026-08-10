@@ -226,6 +226,27 @@ function createCardGenerationUseCase(customPorts = {}) {
             }
           }
         }
+        if (typeof ports.extractLanguageMetadata === 'function') {
+          // JLM-A0 shadow. Deliberately outside the card's success path: the
+          // service already swallows its own errors, and this guard makes the
+          // "metadata failure never fails a card" contract explicit at the call
+          // site rather than relying on the callee.
+          //
+          // The outcome is intentionally NOT added to the returned envelope:
+          // routes/generate.js sends that object straight to the client, and a
+          // shadow stage that displays nothing must not change a public API
+          // shape. Results are inspected via GET /api/language-metadata.
+          try {
+            await ports.extractLanguageMetadata(generationId);
+          } catch (metadataError) {
+            if (typeof ports.log.warn === 'function') {
+              ports.log.warn(
+                { generationId, code: metadataError.code || 'LANGUAGE_METADATA_FAILED' },
+                'language metadata extraction deferred'
+              );
+            }
+          }
+        }
       } catch (dbError) {
         ports.log.error({ err: dbError }, 'database insert failed');
         throw dbError;

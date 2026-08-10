@@ -306,3 +306,50 @@ test.describe('executeCardGeneration application use case', () => {
     assert.equal(calls.insertedErrors.length, 0);
   });
 });
+
+test.describe('JLM-A0 shadow stage cannot affect the card', () => {
+  // Exit gate condition 1: byte-identical output with the shadow stage present
+  // versus absent, under the same fixed provider.
+  test.it('produces identical Markdown and content hash with and without extraction', async () => {
+    const withoutStage = createHarness();
+    const baseline = await withoutStage.execute({ phrase: 'shadow parity', cardType: 'trilingual' });
+
+    const withStage = createHarness({
+      extractLanguageMetadata: async () => ({ status: 'succeeded', created: 3 }),
+    });
+    const shadowed = await withStage.execute({ phrase: 'shadow parity', cardType: 'trilingual' });
+
+    assert.equal(
+      withStage.calls.insertData.content.markdown_content,
+      withoutStage.calls.insertData.content.markdown_content,
+      'Markdown must be byte-identical'
+    );
+    assert.equal(
+      shadowed.admission.contentHash,
+      baseline.admission.contentHash,
+      'content_hash must be unchanged'
+    );
+    assert.deepEqual(Object.keys(shadowed), Object.keys(baseline), 'result envelope must not change');
+  });
+
+  // Exit gate condition 2: extraction failure must not fail the card.
+  test.it('still succeeds when the shadow stage throws', async () => {
+    const harness = createHarness({
+      extractLanguageMetadata: async () => {
+        const error = new Error('provider exploded');
+        error.code = 'LLM_TIMEOUT';
+        throw error;
+      },
+    });
+    const result = await harness.execute({ phrase: 'shadow failure', cardType: 'trilingual' });
+    assert.equal(result.success, true);
+    assert.equal(result.generationId, 42);
+    assert.deepEqual(harness.calls.deletedGenerations, [], 'a metadata failure must not roll the card back');
+  });
+
+  test.it('still succeeds when the shadow stage hangs up on a rejected promise', async () => {
+    const harness = createHarness({ extractLanguageMetadata: () => Promise.reject(new Error('nope')) });
+    const result = await harness.execute({ phrase: 'shadow rejection', cardType: 'trilingual' });
+    assert.equal(result.success, true);
+  });
+});
