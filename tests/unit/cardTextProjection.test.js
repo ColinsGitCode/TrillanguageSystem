@@ -32,3 +32,15 @@ test('visible text projection normalizes Unicode and CJK whitespace consistently
   assert.equal(normalizeProjectionText('（ 食 べ る ）'), '(食べる)');
   dom.window.close();
 });
+
+test('legacy loanword blocks and A2 omission produce the same selectable text', async () => {
+  const { buildVisibleTextProjection } = await import(projectionUrl);
+  const dom = new JSDOM('<div></div>');
+  const oldRoot = dom.window.document.createElement('div');
+  const newRoot = dom.window.document.createElement('div');
+  oldRoot.innerHTML = '<p>スケジュールを確認します。</p><div class="loanword-block">schedule → スケジュール</div>';
+  newRoot.innerHTML = '<p>スケジュールを確認します。</p>';
+
+  assert.equal(buildVisibleTextProjection(oldRoot).text, buildVisibleTextProjection(newRoot).text);
+  dom.window.close();
+});

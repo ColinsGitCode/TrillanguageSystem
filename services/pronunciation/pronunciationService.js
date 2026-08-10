@@ -441,7 +441,10 @@ function createPronunciationService({
       if (!tier || proposal.metadataKind !== 'foreign-origin') continue;
       const key = `${proposal.startCodePoint}:${proposal.endCodePoint}`;
       const current = winners.get(key);
-      if (current && ORIGIN_TIER_RANK[current.tier] >= ORIGIN_TIER_RANK[tier]) continue;
+      // Proposals are ordered oldest first. Higher authority wins; at the same
+      // authority, the latest proposal wins so a second human correction
+      // actually replaces the displayed value while preserving both facts.
+      if (current && ORIGIN_TIER_RANK[current.tier] > ORIGIN_TIER_RANK[tier]) continue;
       winners.set(key, {
         tier,
         proposalId: proposal.id,

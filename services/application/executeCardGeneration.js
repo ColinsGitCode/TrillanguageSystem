@@ -58,6 +58,24 @@ function recordExecutionError(ports, command, error) {
   }
 }
 
+function recordMetadataEnqueueError(ports, command, generationId, error) {
+  try {
+    ports.insertError({
+      phrase: command?.phrase || 'unknown',
+      llmProvider: command?.requestedProvider || ports.activeProvider,
+      requestId: `language-metadata:${generationId}`,
+      errorType: 'LANGUAGE_METADATA_JOB_NOT_CREATED',
+      errorMessage: error.message || 'language metadata job could not be created',
+      errorStack: error.stack || null,
+      prompt: null,
+      llmResponse: null,
+      validationErrors: null,
+    });
+  } catch (dbError) {
+    ports.log.error({ err: dbError, generationId }, 'language metadata enqueue error insert failed');
+  }
+}
+
 function createCardGenerationUseCase(customPorts = {}) {
   const ports = { ...cardGenerationPorts, ...customPorts };
 
@@ -226,25 +244,32 @@ function createCardGenerationUseCase(customPorts = {}) {
             }
           }
         }
-        if (typeof ports.extractLanguageMetadata === 'function') {
-          // JLM-A0 shadow. Deliberately outside the card's success path: the
-          // service already swallows its own errors, and this guard makes the
-          // "metadata failure never fails a card" contract explicit at the call
-          // site rather than relying on the callee.
+        if (typeof ports.enqueueLanguageMetadata === 'function') {
+          // JLM-A0 shadow. This call performs only a synchronous durable hand-off;
+          // DeepSeek is invoked later by the language-metadata worker. The queue
+          // result stays out of the public generation response envelope.
           //
           // The outcome is intentionally NOT added to the returned envelope:
           // routes/generate.js sends that object straight to the client, and a
           // shadow stage that displays nothing must not change a public API
           // shape. Results are inspected via GET /api/language-metadata.
           try {
-            await ports.extractLanguageMetadata(generationId);
-          } catch (metadataError) {
-            if (typeof ports.log.warn === 'function') {
-              ports.log.warn(
-                { generationId, code: metadataError.code || 'LANGUAGE_METADATA_FAILED' },
-                'language metadata extraction deferred'
-              );
+            const enqueueResult = ports.enqueueLanguageMetadata(generationId);
+            if (enqueueResult && typeof enqueueResult.then === 'function') {
+              Promise.resolve(enqueueResult).catch((metadataError) => {
+                recordMetadataEnqueueError(ports, normalizedCommand, generationId, metadataError);
+                (ports.log.warn || ports.log.error).call(ports.log,
+                  { generationId, code: metadataError.code || 'LANGUAGE_METADATA_JOB_NOT_CREATED' },
+                  'language metadata enqueue failed'
+                );
+              });
             }
+          } catch (metadataError) {
+            recordMetadataEnqueueError(ports, normalizedCommand, generationId, metadataError);
+            (ports.log.warn || ports.log.error).call(ports.log,
+              { generationId, code: metadataError.code || 'LANGUAGE_METADATA_JOB_NOT_CREATED' },
+              'language metadata enqueue failed'
+            );
           }
         }
       } catch (dbError) {

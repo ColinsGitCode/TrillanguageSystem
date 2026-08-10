@@ -21,6 +21,7 @@ const { TokenCounter, QualityChecker, PromptParser } = require('../observability
 const {
   DEFAULT_DEEPSEEK_MODEL,
   DEFAULT_DEEPSEEK_TIMEOUT_MS,
+  LANGUAGE_METADATA_A2_ENABLED,
   normalizeCardType,
   normalizeSourceMode,
   resolveDeepSeekModel,
@@ -42,7 +43,12 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
   const baseName = buildBaseName(phrase, targetDir);
   const model = resolveDeepSeekModel(options.modelOverride || DEFAULT_DEEPSEEK_MODEL);
   const timeoutMs = options.timeoutMs || DEFAULT_DEEPSEEK_TIMEOUT_MS;
-  const prompt = buildMarkdownPrompt({ phrase, filenameBase: baseName, cardType });
+  const prompt = buildMarkdownPrompt({
+    phrase,
+    filenameBase: baseName,
+    cardType,
+    omitInlineLoanwordAnnotations: LANGUAGE_METADATA_A2_ENABLED,
+  });
 
   perf.mark('llmCall');
   const response = await deepseekService.generateMarkdown(prompt, { model, timeoutMs });

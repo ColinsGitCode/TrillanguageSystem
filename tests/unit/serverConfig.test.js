@@ -7,6 +7,9 @@ delete process.env.KG_ENABLED;
 delete process.env.KG_PLANNING_ENABLED;
 delete process.env.KG_LLM_ENRICHMENT_ENABLED;
 delete process.env.CARD_ANNOTATIONS_ENABLED;
+delete process.env.LANGUAGE_METADATA_ENABLED;
+delete process.env.LANGUAGE_METADATA_EXTRACTION_ENABLED;
+delete process.env.LANGUAGE_METADATA_A2_ENABLED;
 
 const cfg = require('../../lib/serverConfig');
 
@@ -18,6 +21,12 @@ test('KG feature flags are disabled by default', () => {
 
 test('card annotations are the default runtime path', () => {
   assert.equal(cfg.CARD_ANNOTATIONS_ENABLED, true);
+});
+
+test('JLM metadata and A2 cutover are disabled by default', () => {
+  assert.equal(cfg.LANGUAGE_METADATA_ENABLED, false);
+  assert.equal(cfg.LANGUAGE_METADATA_EXTRACTION_ENABLED, false);
+  assert.equal(cfg.LANGUAGE_METADATA_A2_ENABLED, false);
 });
 
 test.describe('serverConfig.toNumberOr', () => {

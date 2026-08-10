@@ -123,7 +123,7 @@ test.describe('Learning plan scope and queue policy', () => {
       2,
       20,
       0,
-      createDefaultPlanningSignalProvider(),
+      createDefaultPlanningSignalProvider({ clock: () => 0 }),
       new Map()
     );
     assert.deepEqual(result.entries.map((entry) => entry.studyItemId), [2, 1]);
@@ -150,7 +150,7 @@ test.describe('Learning plan scope and queue policy', () => {
     ];
     const disabled = buildQueueCandidates(
       ...args,
-      createDefaultPlanningSignalProvider(),
+      createDefaultPlanningSignalProvider({ clock: () => 0 }),
       new Map()
     );
     let reads = 0;
@@ -165,6 +165,7 @@ test.describe('Learning plan scope and queue policy', () => {
               : null;
           },
         },
+        clock: () => 0,
       }),
       new Map()
     );

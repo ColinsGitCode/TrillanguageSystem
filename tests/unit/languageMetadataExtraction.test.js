@@ -32,6 +32,9 @@ function createDbService(db, generation) {
     db,
     getGenerationById: () => generation,
     ensureLanguageMetadataJob: (payload) => domain.ensureJob(db, payload),
+    claimLanguageMetadataJob: (id, nowUtc) => domain.markJobRunning(db, id, nowUtc),
+    claimNextLanguageMetadataJob: (nowUtc) => domain.claimNextJob(db, nowUtc),
+    recoverRunningLanguageMetadataJobs: (nowUtc) => domain.recoverRunningJobs(db, nowUtc),
     markLanguageMetadataJobRunning: (id, nowUtc) => domain.markJobRunning(db, id, nowUtc),
     finishLanguageMetadataJob: (id, payload) => domain.finishJob(db, id, payload),
     insertLanguageMetadataProposal: (payload) => domain.insertProposal(db, payload),
@@ -93,7 +96,16 @@ test.describe('JLM-A0 shadow extraction', () => {
 
   test.it('stores located proposals as pending, never accepted', async () => {
     const db = createDb();
-    const service = createService(db, { llm: { generateJson: async () => goodResponse } });
+    let providerOptions;
+    const service = createLanguageMetadataExtractionService({
+      dbService: createDbService(db, { id: 7, content_hash: HASH_A, markdown_content: MARKDOWN }),
+      llm: { generateJson: async (_prompt, options) => { providerOptions = options; return goodResponse; } },
+      locateSegments: () => segments,
+      enabled: true,
+      extractionEnabled: true,
+      timeoutMs: 4321,
+      now: () => '2026-08-10T00:00:00.000Z',
+    });
     const result = await service.extractForGeneration(7);
     assert.equal(result.status, 'succeeded');
     assert.equal(result.created, 2);
@@ -105,6 +117,7 @@ test.describe('JLM-A0 shadow extraction', () => {
     assert.deepEqual(proposals[0].value, { originTerm: 'data', originLanguage: 'en' });
     assert.equal(proposals[0].startCodePoint, 0);
     assert.equal(proposals[0].endCodePoint, 3);
+    assert.deepEqual(providerOptions, { thinking: 'disabled', timeoutMs: 4321 });
   });
 
   test.it('is idempotent when the same body version is extracted twice', async () => {

@@ -16,6 +16,38 @@ test.describe('promptEngine trilingual language contract', () => {
       assert.match(prompt, /完整中文释义统一放在“## 3\. 中文”中/);
     }
   });
+
+  test.it('A2 removes inline loanword requirements while keeping the language contract', () => {
+    for (const prompt of [
+      buildMarkdownPrompt({
+        phrase: 'public schedule',
+        cardType: 'trilingual',
+        omitInlineLoanwordAnnotations: true,
+      }),
+      buildPrompt({
+        phrase: 'public schedule',
+        filenameBase: 'public-schedule',
+        cardType: 'trilingual',
+        omitInlineLoanwordAnnotations: true,
+      }),
+    ]) {
+      assert.doesNotMatch(prompt, /^\s*-\s*外来语标注[:：]/m);
+      assert.doesNotMatch(prompt, /每条外来语标注必须/);
+      assert.match(prompt, /A2 正文合同/);
+      assert.match(prompt, /入库后的独立元数据任务/);
+      assert.match(prompt, /英文例句下方的缩进译文保留中文/);
+    }
+  });
+
+  test.it('keeps the legacy prompt contract when the A2 cutover is disabled', () => {
+    const prompt = buildMarkdownPrompt({
+      phrase: 'public schedule',
+      cardType: 'trilingual',
+      omitInlineLoanwordAnnotations: false,
+    });
+    assert.match(prompt, /^\s*-\s*外来语标注[:：]/m);
+    assert.doesNotMatch(prompt, /A2 正文合同/);
+  });
 });
 
 test.describe('promptEngine scenario_phrase routing', () => {
@@ -47,5 +79,17 @@ test.describe('promptEngine scenario_phrase routing', () => {
     assert.match(prompt, /_en_20/);
     assert.match(prompt, /_ja_20/);
     assert.doesNotMatch(prompt, /^# 保育园早上送孩子，说明昨晚有点咳嗽$/m);
+  });
+
+  test.it('applies the A2 no-inline-metadata contract to every card type', () => {
+    for (const cardType of ['trilingual', 'grammar_ja', 'scenario_phrase']) {
+      const prompt = buildMarkdownPrompt({
+        phrase: 'リモートワークの効率',
+        cardType,
+        omitInlineLoanwordAnnotations: true,
+      });
+      assert.match(prompt, /A2 正文合同/);
+      assert.doesNotMatch(prompt, /^\s*-\s*外来语标注[:：]/m);
+    }
   });
 });

@@ -259,6 +259,29 @@ function relocateLoanwordAnnotations(markdown) {
   return output.join('\n');
 }
 
+function stripGeneratedLoanwordAnnotations(markdown) {
+  if (!markdown) return markdown;
+  const withoutBlocks = String(markdown).replace(
+    /^\s*<div\s+class=["']loanword-block["'][^>]*>[\s\S]*?<\/div>\s*$/gim,
+    ''
+  );
+  const output = [];
+
+  for (const line of withoutBlocks.split(/\r?\n/)) {
+    if (LEGACY_LOANWORD_LINE_REGEX.test(line)) continue;
+
+    const inlineMatch = line.match(INLINE_LOANWORD_SPLIT_REGEX);
+    if (inlineMatch) {
+      output.push(inlineMatch[1].trimEnd());
+      continue;
+    }
+
+    output.push(line.replace(LOANWORD_PAREN_REGEX, '$1'));
+  }
+
+  return output.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
 function dedupeTechSection(markdown) {
   if (!markdown) return markdown;
   const lines = String(markdown).split(/\r?\n/);
@@ -340,10 +363,12 @@ function markExplanationLines(markdown) {
   );
 }
 
-function postProcessGeneratedContent(content) {
+function postProcessGeneratedContent(content, options = {}) {
   if (!content || typeof content !== 'object') return content;
   let markdown = content.markdown_content || '';
-  markdown = relocateLoanwordAnnotations(markdown);
+  markdown = options.removeInlineLoanwordAnnotations
+    ? stripGeneratedLoanwordAnnotations(markdown)
+    : relocateLoanwordAnnotations(markdown);
   markdown = stripJapaneseExplicitReadings(markdown);
   markdown = stripLoanwordReadingsInJapanese(markdown);
   markdown = cleanJapaneseTranslations(markdown);
@@ -358,4 +383,5 @@ function postProcessGeneratedContent(content) {
 
 module.exports = {
   postProcessGeneratedContent,
+  stripGeneratedLoanwordAnnotations,
 };

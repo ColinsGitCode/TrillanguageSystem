@@ -280,6 +280,7 @@ export function CardModal({
         // focus-restoration contract run before considering the dialog close.
         if (target?.closest('.csa-gen-menu')) return;
         if (target?.closest('.manual-tag-dialog')) return;
+        if (target?.closest('.pronunciation-popover')) return;
         if (target?.closest('.card-knowledge-inspector')) {
           event.preventDefault();
           setKnowledgeDraft(null);

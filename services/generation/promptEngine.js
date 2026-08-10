@@ -15,6 +15,20 @@ function buildScenarioAudioTaskExample() {
     return JSON.stringify(tasks, null, 4);
 }
 
+function applyA2NewCardContract(prompt, enabled) {
+    if (!enabled) return prompt;
+
+    const withoutLegacyRequirements = String(prompt || '')
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*-\s*外来语标注[:：]/i.test(line))
+        .join('\n')
+        .replace(/；英文说明只允许出现在“外来语标注”行。/g, '。')
+        .replace(/；?每条外来语标注必须同时给出中文、English 原词和片假名，(?:严格使用|格式固定为)“中文 = English = 片假名”[。]?/g, '。')
+        .replace(/。{2,}/g, '。');
+
+    return `${withoutLegacyRequirements.trimEnd()}\n\nA2 正文合同：不要在 Markdown 正文中输出“外来语标注”、外语原词来源行或 loanword-block；外来语来源由卡片入库后的独立元数据任务提取。`;
+}
+
 // ========== 提示词构建函数（优化版：~1500 tokens） ==========
 
 /**
@@ -30,9 +44,10 @@ function buildPrompt(args) {
     const phrase = args.phrase || '';
     const filenameBase = args.filenameBase || '';
     const cardType = String(args.cardType || 'trilingual').toLowerCase();
+    const omitInlineLoanwordAnnotations = Boolean(args.omitInlineLoanwordAnnotations);
 
     if (cardType === 'scenario_phrase') {
-        return `你是场景表达卡生成器。
+        return applyA2NewCardContract(`你是场景表达卡生成器。
 输入场景: "${phrase}"
 文件名基础: "${filenameBase}"
 
@@ -68,11 +83,11 @@ JSON 结构:
 {
   "markdown_content": "...",
   "audio_tasks": ${buildScenarioAudioTaskExample()}
-}`;
+}`, omitInlineLoanwordAnnotations);
     }
 
     if (cardType === 'grammar_ja') {
-        return `你是日语语法学习卡片生成器。
+        return applyA2NewCardContract(`你是日语语法学习卡片生成器。
 输入内容: "${phrase}"
 文件名基础: "${filenameBase}"
 
@@ -111,7 +126,7 @@ JSON 结构:
     { "text": "...", "lang": "ja", "filename_suffix": "_ja_2" },
     { "text": "...", "lang": "ja", "filename_suffix": "_ja_3" }
   ]
-}`;
+}`, omitInlineLoanwordAnnotations);
     }
 
     const strictCompactPrompt = `你是中英日三语学习卡片生成器。
@@ -160,12 +175,13 @@ JSON 结构:
   ]
 }`;
 
-    return strictCompactPrompt;
+    return applyA2NewCardContract(strictCompactPrompt, omitInlineLoanwordAnnotations);
 }
 
 function buildMarkdownPrompt(args) {
     const phrase = args.phrase || '';
     const cardType = String(args.cardType || 'trilingual').toLowerCase();
+    const omitInlineLoanwordAnnotations = Boolean(args.omitInlineLoanwordAnnotations);
     let templatePath;
     if (cardType === 'scenario_phrase') {
         templatePath = process.env.SCENARIO_MARKDOWN_PROMPT_PATH || path.join(__dirname, '..', '..', 'prompts', 'phrase_scenario_expressions_markdown.md');
@@ -189,7 +205,10 @@ function buildMarkdownPrompt(args) {
         }
     }
 
-    return template.replace(/\{\{\s*phrase\s*\}\}/g, phrase);
+    return applyA2NewCardContract(
+        template.replace(/\{\{\s*phrase\s*\}\}/g, phrase),
+        omitInlineLoanwordAnnotations
+    );
 }
 
-module.exports = { buildPrompt, buildMarkdownPrompt };
+module.exports = { applyA2NewCardContract, buildPrompt, buildMarkdownPrompt };

@@ -47,6 +47,9 @@ function mapProposal(row) {
     model: row.model,
     promptVersion: row.prompt_version,
     responseHash: row.response_hash,
+    supersedesProposalId: row.supersedes_proposal_id === null
+      ? null
+      : Number(row.supersedes_proposal_id),
     decidedBy: row.decided_by,
     decidedAtUtc: row.decided_at_utc,
     createdAtUtc: row.created_at_utc,
@@ -71,12 +74,43 @@ function ensureJob(db, payload) {
 }
 
 function markJobRunning(db, jobId, nowUtc) {
-  db.prepare(`
+  const changes = db.prepare(`
     UPDATE language_metadata_jobs
     SET status = 'running', attempts = attempts + 1, updated_at_utc = @nowUtc
     WHERE id = @jobId
-  `).run({ jobId, nowUtc });
-  return mapJob(db.prepare('SELECT * FROM language_metadata_jobs WHERE id = ?').get(jobId));
+      AND status IN ('queued', 'failed')
+      AND attempts < max_attempts
+  `).run({ jobId, nowUtc }).changes;
+  return changes ? getJob(db, jobId) : null;
+}
+
+function getJob(db, jobId) {
+  return mapJob(db.prepare('SELECT * FROM language_metadata_jobs WHERE id = ?').get(Number(jobId)));
+}
+
+function claimNextJob(db, nowUtc) {
+  const transaction = db.transaction(() => {
+    const row = db.prepare(`
+      SELECT id
+      FROM language_metadata_jobs
+      WHERE status IN ('queued', 'failed')
+        AND attempts < max_attempts
+      ORDER BY CASE status WHEN 'queued' THEN 0 ELSE 1 END, updated_at_utc ASC, id ASC
+      LIMIT 1
+    `).get();
+    return row ? markJobRunning(db, row.id, nowUtc) : null;
+  });
+  return transaction();
+}
+
+function recoverRunningJobs(db, nowUtc) {
+  return db.prepare(`
+    UPDATE language_metadata_jobs
+    SET status = CASE WHEN attempts >= max_attempts THEN 'abandoned' ELSE 'failed' END,
+        last_error_code = COALESCE(last_error_code, 'WORKER_RESTARTED'),
+        updated_at_utc = @nowUtc
+    WHERE status = 'running'
+  `).run({ nowUtc }).changes;
 }
 
 function finishJob(db, jobId, payload) {
@@ -128,15 +162,15 @@ function insertProposal(db, payload) {
     INSERT INTO language_metadata_proposals(
       proposal_key, job_id, target_kind, target_id, source_content_hash, metadata_kind,
       surface, start_codepoint, end_codepoint, value_json, confidence, origin, status,
-      model, prompt_version, response_hash, created_at_utc, updated_at_utc
+      model, prompt_version, response_hash, supersedes_proposal_id, created_at_utc, updated_at_utc
     ) VALUES (
       @proposalKey, @jobId, @targetKind, @targetId, @sourceContentHash, @metadataKind,
       @surface, @startCodePoint, @endCodePoint, @valueJson, @confidence, @origin, @status,
-      @model, @promptVersion, @responseHash, @nowUtc, @nowUtc
+      @model, @promptVersion, @responseHash, @supersedesProposalId, @nowUtc, @nowUtc
     )
   `).run({
     jobId: null, model: null, promptVersion: null, responseHash: null,
-    origin: 'llm', status: 'pending', ...payload,
+    supersedesProposalId: null, origin: 'llm', status: 'pending', ...payload,
   });
   return {
     proposal: mapProposal(db.prepare('SELECT * FROM language_metadata_proposals WHERE id = ?').get(result.lastInsertRowid)),
@@ -191,7 +225,9 @@ function decideProposal(db, { id, expectedStatus, status, decidedBy, nowUtc }) {
 }
 
 module.exports = {
+  claimNextJob,
   decideProposal,
+  getJob,
   getProposal,
   ensureJob,
   finishJob,
@@ -203,4 +239,5 @@ module.exports = {
   mapProposal,
   markJobRunning,
   markStaleForOtherHashes,
+  recoverRunningJobs,
 };

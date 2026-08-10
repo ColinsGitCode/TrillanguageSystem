@@ -114,6 +114,28 @@ test('keeps visible loanword metadata in CardDocument but outside the selector p
   assert.equal(compareCardReaders(markdown).parity, true);
 });
 
+test('keeps v2/v3 parity for long-lived legacy and A2 Markdown shapes', async () => {
+  const { compareCardReaders } = await import('../../services/cardReader/cardReaderShadow.mjs');
+  const base = [
+    '# A2 dual shape',
+    '## 1. 英文:',
+    '- **例句1**: Check the public schedule.',
+    '## 2. 日本語:',
+    '- **例句1**: パブリックスケジュールを確認します。',
+    '## 3. 中文:',
+    '- 请确认公共日程。',
+  ].join('\n');
+  const legacy = `${base}\n<div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line">schedule → スケジュール</span></div>`;
+
+  const legacyReport = compareCardReaders(legacy, { generationId: 1, cardType: 'trilingual' });
+  const a2Report = compareCardReaders(base, { generationId: 2, cardType: 'trilingual' });
+
+  assert.equal(legacyReport.parity, true);
+  assert.equal(a2Report.parity, true);
+  assert.equal(legacyReport.hashes.v2VisibleText, a2Report.hashes.v2VisibleText);
+  assert.equal(legacyReport.hashes.v3VisibleText, a2Report.hashes.v3VisibleText);
+});
+
 test('keeps controlled inline roles and drops unsafe or protocol-relative links', async () => {
   const { parseCardDocument } = await import('../../services/cardReader/cardDocument.mjs');
   const document = parseCardDocument(`${SAMPLE}\n\n<span class="explanation-text">compact explanation</span> [unsafe](javascript:alert(1)) [external](//example.com/x)`);

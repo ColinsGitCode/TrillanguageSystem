@@ -103,6 +103,15 @@ test.describe('JLM-A1 foreign origin priority', () => {
     assert.equal(origins[CURATED_SURFACE].term, 'corrected');
   });
 
+  test.it('uses the newest human correction at the same position', async () => {
+    const { db, service } = setup();
+    addProposal(db, { surface: CURATED_SURFACE, start: 0, end: 3, term: 'first', origin: 'human', status: 'accepted' });
+    addProposal(db, { surface: CURATED_SURFACE, start: 0, end: 3, term: 'second', origin: 'human', status: 'accepted' });
+    const origins = await originsFor(service);
+    assert.equal(origins[CURATED_SURFACE].source, 'human');
+    assert.equal(origins[CURATED_SURFACE].term, 'second');
+  });
+
   test.it('prefers accepted over pending at the same position', async () => {
     const { db, service } = setup();
     addProposal(db, { surface: UNCURATED_SURFACE, start: 4, end: 9, term: 'guess', origin: 'llm', status: 'pending' });

@@ -8,11 +8,11 @@ const { postProcessGeneratedContent } = require('../../services/generation/conte
 // Drive the pipeline through its single public entry point. Each test seeds a
 // minimal `content` and asserts on one specific transformation.
 
-function run(markdown, audioTasks = []) {
+function run(markdown, audioTasks = [], options = {}) {
   return postProcessGeneratedContent({
     markdown_content: markdown,
     audio_tasks: audioTasks,
-  });
+  }, options);
 }
 
 test.describe('postProcessGeneratedContent', () => {
@@ -135,4 +135,22 @@ test('renders new loanword annotations in Chinese, English, Japanese order while
 
   assert.match(result.markdown_content, /数据 · data · データ/u);
   assert.match(result.markdown_content, /file → ファイル/u);
+});
+
+test('A2 strips leaked inline loanword metadata while preserving study text', () => {
+  const result = run([
+    '## 2. 日本語:',
+    '- **例句1**: データ(data)を確認します。',
+    '  - 请确认数据。 - 外来语标注: 数据 = data = データ',
+    '  - 外来语标注: 数据 = data = データ',
+    '  <div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line">file → ファイル</span></div>',
+    '- **例句2**: ファイルを開きます。',
+    '  - 打开文件。',
+  ].join('\n'), [], { removeInlineLoanwordAnnotations: true });
+
+  assert.match(result.markdown_content, /データを確認します/u);
+  assert.match(result.markdown_content, /请确认数据/u);
+  assert.match(result.markdown_content, /ファイルを開きます/u);
+  assert.match(result.markdown_content, /打开文件/u);
+  assert.doesNotMatch(result.markdown_content, /外来语标注|loanword-block|data = データ|file →/u);
 });

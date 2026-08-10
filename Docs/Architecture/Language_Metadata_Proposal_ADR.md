@@ -1,6 +1,6 @@
 # 日语语言学元数据提案领域与数据 ADR（JLM-D2）
 
-> 状态：**Proposed · 待架构门禁确认。本 ADR 不授权实施。**
+> 状态：**Accepted · 迁移 016 与 JLM-A0-A2 已实施；A1 人工观察继续**
 >
 > 日期：2026-08-10
 >
@@ -132,7 +132,7 @@ sha256( target_kind ␀ target_id ␀ source_content_hash ␀ metadata_kind ␀
 | `POST /api/language-metadata/jobs` | 显式入队一次提取（幂等于 `job_key`） | 仅 jobs |
 | `POST /api/language-metadata/proposals/:id/accept` | 接受候选 | 该 proposal |
 | `POST /api/language-metadata/proposals/:id/reject` | 拒绝候选 | 该 proposal |
-| `POST /api/language-metadata/corrections` | 人工修正（含覆盖 curated） | 新增 `origin='human'` 的 accepted |
+| `POST /api/language-metadata/corrections` | 人工修正（含覆盖 curated）；服务端重读目标、hash、码点范围与 surface | 新增 `origin='human'` 的 accepted，并以 `supersedes_proposal_id` 串联更正版本 |
 
 约束：
 
@@ -187,26 +187,35 @@ sha256( target_kind ␀ target_id ␀ source_content_hash ␀ metadata_kind ␀
 
 - `LANGUAGE_METADATA_ENABLED`：默认 **false**。关闭时 `GET` 返回空投影，
   入队与裁决接口返回 404，UI 回落到 curated + “待确认”，与今天行为一致；
-- `LANGUAGE_METADATA_EXTRACTION_ENABLED`：默认 **false**，单独控制是否真的发起第二次
-  LLM 调用。可只读展示已有候选而不产生新调用；
+- `LANGUAGE_METADATA_EXTRACTION_ENABLED`：默认 **false**，单独控制后台 worker 是否发起第二次
+  LLM 调用。可只读展示已有候选而不产生新调用；主卡请求只做 SQLite 入队，绝不等待 provider；
+- `LANGUAGE_METADATA_A2_ENABLED`：默认 **false**，且只有前两个开关同时开启时才生效。
+  开启后仅改变新卡合同：prompt 不再要求正文外来语标注，后处理器也会清除模型泄漏的
+  legacy 标注；关闭后恢复旧版新卡合同，不改写任何已存在 generation；
+- 单次 provider 调用受 `LANGUAGE_METADATA_TIMEOUT_MS` 约束（默认 20 秒），失败任务最多重试
+  3 次；进程重启时把遗留 `running` 恢复为可重试或 `abandoned`；
 - **回滚**：停用 flag 即恢复现状；彻底回滚为 `DROP TABLE` 两张表，
   不触及任何既有表、正文或学习数据。
 
 ## 9. 架构门禁清单（本 ADR 的退出条件）
 
-1. 迁移 016 同时更新 `database/schema.sql` 与 `database/migrations/`，并在
+1. [x] 迁移 016 同时更新 `database/schema.sql` 与 `database/migrations/`，并在
    `migrationRunner` 增加 postcondition；
-2. 两张新表加入 `testReset` 清单，`testResetCoverage` 测试通过；
-3. `GET` 零写入有集成测试证明（对照 `local-glossary/lookup` 的既有做法）；
-4. 优先级链五级有单元与集成测试，含“人工修正压过 curated”；
-5. 失败矩阵每一行有测试，特别是**任务创建失败不静默丢数据**；
-6. `proposal_key` 与 P0 已测实现保持一致，不出现第二套算法；
-7. 两个 flag 默认关闭，关闭时行为与今天逐字节一致；
-8. `npm run test:acceptance` 全绿。
+2. [x] 两张新表加入 `testReset` 清单，`testResetCoverage` 测试通过；
+3. [x] `GET` 零写入有集成测试证明（对照 `local-glossary/lookup` 的既有做法）；
+4. [x] 优先级链五级有单元与集成测试，含“人工修正压过 curated”和同级最新更正胜出；
+5. [x] 失败矩阵有自动化覆盖；任务创建失败写入 `generation_errors`，并可通过
+   `POST /api/language-metadata/jobs` 幂等补偿；
+6. [x] `proposal_key` 与 P0 已测实现保持一致，不出现第二套算法；
+7. [x] 两个 flag 默认关闭，关闭时行为与今天逐字节一致；
+8. [x] `npm run test:acceptance` 在本次修复后重新全绿；结果记录于
+   `Docs/TestReports/Language_Metadata_JLM_A0_A1_Remediation_20260811.md`。
 
-## 10. 本 ADR 不授权的事
+## 10. 原始边界与 A2 增补
 
-- 不授权修改主卡 prompt 或删除正文外来语标注（那是 JLM-A2，另有门禁）；
+- 本 ADR 初版不授权修改主卡 prompt 或删除正文外来语标注；2026-08-11 经用户明确授权、
+  双形态兼容测试与三类真实新卡验证后，A2 增补**仅授权新卡**停止写入正文外来语标注；
+- A2 不授权改写历史 Markdown/hash，不授权删除 legacy reader，也不把旁路元数据写入正文；
 - 不授权对历史卡片批量补齐；
 - 不授权方案 B（词性/辞书形）落库，本 ADR 只保证表结构未来可复用；
 - 不授权方案 C（LLM 读音）以任何形式进入 accepted；
@@ -214,5 +223,7 @@ sha256( target_kind ␀ target_id ␀ source_content_hash ␀ metadata_kind ␀
 
 ## 11. 当前状态
 
-Proposed。JLM-P0 已提供合同、定位算法与成本实测；JLM-D1 原型 12 状态已确认。
-本 ADR 通过架构门禁后方可进入 JLM-A0（Shadow 提取，默认不展示）。
+Accepted。JLM-P0 已提供合同、定位算法与成本实测；JLM-D1 原型 12 状态已确认；
+迁移 016、A0 持久后台任务、A1 CardModal 裁决与 A2 新卡正文切换均已实施。
+A1 的真实准确率与操作体验观察继续；用户于 2026-08-11 明确授权 A2 提前进入本机运行，
+该授权不应被解释为 A1 长期观察指标已经自然达标。A2 的仓库默认值仍为关闭。

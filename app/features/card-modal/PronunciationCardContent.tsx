@@ -99,6 +99,7 @@ export function PronunciationCardContent({
   const [correctionReading, setCorrectionReading] = useState('');
   const [originTerm, setOriginTerm] = useState('');
   const [originBusy, setOriginBusy] = useState(false);
+  const [originError, setOriginError] = useState('');
   const [correctionBusy, setCorrectionBusy] = useState(false);
 
   useEffect(() => {
@@ -168,6 +169,8 @@ export function PronunciationCardContent({
     cancelClose();
     const open = () => {
       setOverlay({ token, left, top, mode });
+      setOriginTerm('');
+      setOriginError('');
       if (mode === 'popover') {
         setCorrectionReading(token.readingHiragana || '');
       }
@@ -191,10 +194,15 @@ export function PronunciationCardContent({
   // resolved tier always comes from the server's priority order.
   const decideOrigin = async (proposalId: number, decision: 'accept' | 'reject') => {
     setOriginBusy(true);
+    setOriginError('');
     try {
       await languageMetadataApi.decide(proposalId, decision);
       setOverlay(null);
       await pronunciationQuery.refetch();
+    } catch (error) {
+      setOriginError(error instanceof ApiError && error.status === 409
+        ? '这个候选已在其它页面处理，请重新打开。'
+        : '外语来源处理失败，请重试。');
     } finally {
       setOriginBusy(false);
     }
@@ -205,6 +213,7 @@ export function PronunciationCardContent({
     const hash = pronunciationQuery.data?.document?.sourceContentHash;
     if (!token || !generationId || !hash || !originTerm.trim() || originBusy) return;
     setOriginBusy(true);
+    setOriginError('');
     try {
       await languageMetadataApi.correct({
         targetKind: 'generation',
@@ -218,6 +227,10 @@ export function PronunciationCardContent({
       setOriginTerm('');
       setOverlay(null);
       await pronunciationQuery.refetch();
+    } catch (error) {
+      setOriginError(error instanceof ApiError && error.status === 409
+        ? '卡片内容或来源已变化，请重新打开后再更正。'
+        : '外语原词保存失败，请检查输入后重试。');
     } finally {
       setOriginBusy(false);
     }
@@ -327,6 +340,7 @@ export function PronunciationCardContent({
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               event.preventDefault();
+              event.stopPropagation();
               setOverlay(null);
             }
           }}
@@ -398,6 +412,11 @@ export function PronunciationCardContent({
                 </div>
                 <small>人工确认的来源优先于精选词典，且不改写卡片正文。</small>
               </div>
+              {originError && (
+                <p className="pronunciation-origin-error" role="alert" data-testid="origin-error">
+                  {originError}
+                </p>
+              )}
             </div>
           )}
           {overlay.mode === 'tooltip' ? (

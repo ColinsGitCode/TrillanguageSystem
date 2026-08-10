@@ -950,6 +950,22 @@ class DatabaseService {
     return this.withBusyRetry(() => languageMetadataDomain.ensureJob(this.db, payload));
   }
 
+  getLanguageMetadataJob(jobId) {
+    return languageMetadataDomain.getJob(this.db, jobId);
+  }
+
+  claimLanguageMetadataJob(jobId, nowUtc) {
+    return this.withBusyRetry(() => languageMetadataDomain.markJobRunning(this.db, jobId, nowUtc));
+  }
+
+  claimNextLanguageMetadataJob(nowUtc) {
+    return this.withBusyRetry(() => languageMetadataDomain.claimNextJob(this.db, nowUtc));
+  }
+
+  recoverRunningLanguageMetadataJobs(nowUtc) {
+    return this.withBusyRetry(() => languageMetadataDomain.recoverRunningJobs(this.db, nowUtc));
+  }
+
   markLanguageMetadataJobRunning(jobId, nowUtc) {
     return this.withBusyRetry(() => languageMetadataDomain.markJobRunning(this.db, jobId, nowUtc));
   }

@@ -524,6 +524,54 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(tooltip).toContainText('使う');
   });
 
+  test('shows a retryable JLM adjudication error and clears correction input between popovers', async ({ page }) => {
+    await page.route('**/api/pronunciation?*', async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      let injected = false;
+      payload.tokens = (payload.tokens || []).map((token) => {
+        if (!injected && token.surface === 'テスト') {
+          injected = true;
+          return {
+            ...token,
+            evidence: {
+              ...(token.evidence || {}),
+              foreignOrigin: {
+                language: 'en', term: 'test', source: 'pending', proposalId: 77, confidence: 'medium',
+              },
+            },
+          };
+        }
+        return token;
+      });
+      await route.fulfill({ response, json: payload });
+    });
+    await page.route('**/api/language-metadata/proposals/77/accept', (route) => route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'already decided', code: 'LANGUAGE_METADATA_PROPOSAL_CONFLICT' }),
+    }));
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const token = page.getByTestId('react-card-content')
+      .locator('.pronunciation-token[data-pronunciation-surface="テスト"]').first();
+    await token.focus();
+    await token.press('Enter');
+    const dialog = page.getByRole('dialog', { name: '读音详情' });
+    await expect(dialog).toBeVisible();
+    const originInput = dialog.getByTestId('origin-term-input');
+    await originInput.fill('temporary');
+    await dialog.getByTestId('origin-accept').click();
+    await expect(dialog.getByTestId('origin-error')).toContainText('其它页面处理');
+
+    await originInput.press('Escape');
+    await expect(dialog).toBeHidden();
+    await token.focus();
+    await token.press('Enter');
+    await expect(page.getByRole('dialog', { name: '读音详情' }).getByTestId('origin-term-input')).toHaveValue('');
+  });
+
   test('keeps one pronunciation token interactive when an annotation splits it across DOM nodes', async ({ page, request }) => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();

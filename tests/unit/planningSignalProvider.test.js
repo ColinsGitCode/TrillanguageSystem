@@ -83,7 +83,7 @@ test.describe('PlanningSignalProvider contract', () => {
   });
 
   test.it('uses tags and review evidence without requiring a graph signal', () => {
-    const provider = createDefaultPlanningSignalProvider();
+    const provider = createDefaultPlanningSignalProvider({ clock: () => 0 });
     const result = provider.evaluate({
       studyItemId: 7,
       unitKind: 'trilingual_ja',
@@ -124,6 +124,7 @@ test.describe('PlanningSignalProvider contract', () => {
           }],
         }),
       },
+      clock: () => 0,
     });
     const result = provider.evaluate({
       studyItemId: 7,
@@ -158,6 +159,7 @@ test.describe('PlanningSignalProvider contract', () => {
           }],
         }),
       },
+      clock: () => 0,
     });
     const result = provider.evaluate({
       studyItemId: 7,

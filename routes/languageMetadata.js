@@ -1,19 +1,18 @@
 'use strict';
 
-// JLM-A0 read-only inspection of shadow extraction output.
-//
-// Shadow output is worthless if it cannot be looked at, but A0 displays nothing
-// in the product UI. This route is therefore strictly read-only and gated by
+// JLM proposal inspection and human adjudication, gated by
 // LANGUAGE_METADATA_ENABLED, which defaults to off.
-//
-// Accept/reject/correction endpoints belong to JLM-A1 and are deliberately
-// absent here: A0 must not be able to promote a candidate.
 
 const express = require('express');
 const dbService = require('../services/storage/databaseService');
 const { LANGUAGE_METADATA_ENABLED } = require('../lib/serverConfig');
+const languageMetadataRuntime = require('../services/languageMetadata/runtime');
+const {
+  createLanguageMetadataCorrectionService,
+} = require('../services/languageMetadata/application/correctionService');
 
 const router = express.Router();
+const correctionService = createLanguageMetadataCorrectionService({ dbService });
 
 function enabled(req, res, next) {
   if (!LANGUAGE_METADATA_ENABLED) {
@@ -67,59 +66,31 @@ function decide(status) {
 router.post('/api/language-metadata/proposals/:id/accept', enabled, decide('accepted'));
 router.post('/api/language-metadata/proposals/:id/reject', enabled, decide('rejected'));
 
+// Manual compensation for the rare case where the original post-persist hand-
+// off could not create a job. The operation is idempotent on the generation's
+// content hash and never invokes the provider inside this request.
+router.post('/api/language-metadata/jobs', enabled, (req, res, next) => {
+  try {
+    const generationId = Number(req.body?.generationId);
+    if (!Number.isSafeInteger(generationId) || generationId <= 0) {
+      return res.status(400).json({
+        error: 'generationId is required',
+        code: 'LANGUAGE_METADATA_TARGET_INVALID',
+      });
+    }
+    const result = languageMetadataRuntime.enqueueGeneration(generationId);
+    const status = result.status === 'queued' ? 202 : 200;
+    return res.status(status).json({ success: true, ...result });
+  } catch (error) { return next(error); }
+});
+
 // A human correction is an accepted proposal with origin='human'. That is what
 // puts it above the curated dictionary in the read order, and it is why a wrong
 // curated entry can be overridden without editing the shipped dictionary file.
 router.post('/api/language-metadata/corrections', enabled, (req, res, next) => {
   try {
-    const body = req.body || {};
-    const targetKind = String(body.targetKind || 'generation');
-    const targetId = Number(body.targetId);
-    const sourceContentHash = String(body.sourceContentHash || '');
-    const surface = String(body.surface || '').trim();
-    const originTerm = String(body.originTerm || '').trim();
-    const originLanguage = String(body.originLanguage || 'en').trim().toLowerCase();
-    const startCodePoint = Number(body.startCodePoint);
-    const endCodePoint = Number(body.endCodePoint);
-
-    if (!['generation', 'textbook_expression'].includes(targetKind)
-      || !Number.isSafeInteger(targetId) || targetId <= 0
-      || sourceContentHash.length !== 64
-      || !surface || surface.length > 80
-      || !originTerm || originTerm.length > 80
-      || !/^[a-z]{2}$/u.test(originLanguage)
-      || !Number.isSafeInteger(startCodePoint) || startCodePoint < 0
-      || !Number.isSafeInteger(endCodePoint) || endCodePoint <= startCodePoint) {
-      return res.status(400).json({ error: 'invalid correction', code: 'LANGUAGE_METADATA_CORRECTION_INVALID' });
-    }
-
-    const nowUtc = new Date().toISOString();
-    const result = dbService.insertLanguageMetadataProposal({
-      proposalKey: `human:${targetKind}:${targetId}:${sourceContentHash}:${startCodePoint}:${endCodePoint}`,
-      targetKind,
-      targetId,
-      sourceContentHash,
-      metadataKind: 'foreign-origin',
-      surface,
-      startCodePoint,
-      endCodePoint,
-      valueJson: JSON.stringify({ originTerm, originLanguage }),
-      confidence: 'high',
-      origin: 'human',
-      status: 'accepted',
-      nowUtc,
-    });
-    if (!result.created) {
-      const updated = dbService.decideLanguageMetadataProposal({
-        id: result.proposal.id,
-        expectedStatus: result.proposal.status,
-        status: 'accepted',
-        decidedBy: 'user',
-        nowUtc,
-      });
-      return res.json({ success: true, proposal: updated || result.proposal, replaced: true });
-    }
-    return res.status(201).json({ success: true, proposal: result.proposal });
+    const result = correctionService.correct(req.body || {});
+    return res.status(result.created ? 201 : 200).json({ success: true, ...result });
   } catch (error) { return next(error); }
 });
 

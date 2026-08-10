@@ -1,6 +1,6 @@
 # 日语语言学元数据的 LLM 生成方案（JLM-D0）
 
-> 状态：**Draft · §11 决策已于 2026-08-10 全部确认，JLM-P0 进行中；仍不代表当前运行基线**
+> 状态：**Accepted · JLM-D0/D1/D2、P0、A0-A2 已完成；JLM-A1 人工观察继续**
 >
 > 日期：2026-08-10（第二轮修订、决策确认同日）
 >
@@ -12,8 +12,8 @@
 > [统一选区与本地中文释义](Unified_Selection_and_Local_Chinese_Glossary.md)、
 > 根 `CLAUDE.md` 的 Markdown-first、历史正文不原地改写、`content_hash` 可追溯与领域所有权边界。
 >
-> 文档角色：本文评估“把日语词性、辞书形与片假名外语来源交给 LLM 提案”的产品和
-> 架构方向。本文在 Accepted 前**不授权修改 prompt、schema、`content_hash` 或现有注音数据**。
+> 文档角色：本文是“把日语词性、辞书形与片假名外语来源交给 LLM 提案”的产品基线。
+> 当前已批准并实施方案 A（外来语来源）的 A0-A2；方案 B 和方案 C 仍需独立门禁。
 
 ## 0. 决策摘要
 
@@ -398,11 +398,11 @@ A2 追加退出门禁：
 | 阶段 | 内容 | 退出门禁 |
 |---|---|---|
 | JLM-P0 | 固定样本、JSON schema、定位算法、第二次调用成本/延迟 POC | **已完成 2026-08-10**，见 [JLM-P0 干跑报告](../TestReports/Language_Metadata_JLM_P0_DryRun_20260810.md)：合同 16/16、单元 24/24、零库写入；实测同输入三次运行候选覆盖率 64%–76%、服务端零拒绝、出现 2/8 次 120s 超时 |
-| JLM-D1 | AI 候选、人工确认、冲突和失败状态桌面原型 | **原型已交付 2026-08-10**（[jlm-d1-foreign-origin-review.html](prototypes/jlm-d1-foreign-origin-review.html)，S1–S12）；**退出门禁仍为用户逐状态确认，未确认前不进入 D2** |
-| JLM-D2 | job/proposal/accepted 投影、API、幂等与回滚 ADR | **ADR 已提交 2026-08-10**（[JLM-D2 ADR](../Architecture/Language_Metadata_Proposal_ADR.md)，状态 Proposed）；**退出门禁仍为架构门禁确认，未确认前不进入 A0** |
-| JLM-A0 | Shadow 提取，默认不展示 | 主 Markdown 零变化、失败不影响生成 |
-| JLM-A1 | CardModal 人工裁决与可见观察 | 准确率、拒绝率和操作体验通过 |
-| JLM-A2 | 新卡移除 Markdown 外来语标注 | 新卡冒烟、hash 与历史兼容门禁通过，且 §6.2 表列 12 处消费方在“有块 / 无块”两种正文上均通过、CR v3 parity 不分叉 |
+| JLM-D1 | AI 候选、人工确认、冲突和失败状态桌面原型 | **已确认 2026-08-10**（[jlm-d1-foreign-origin-review.html](prototypes/jlm-d1-foreign-origin-review.html)，S1–S12） |
+| JLM-D2 | job/proposal/accepted 投影、API、幂等与回滚 ADR | **Accepted 并已实施**（[JLM-D2 ADR](../Architecture/Language_Metadata_Proposal_ADR.md)，迁移 016） |
+| JLM-A0 | Shadow 提取，默认不展示 | **已完成**：持久任务、独立 worker、20 秒单次超时、最多 3 次重试；主请求只入队，不等待 LLM |
+| JLM-A1 | CardModal 人工裁决与可见观察 | **已实施、观察中**：服务端重验正文/hash/码点，人工修正可版本化覆盖；准确率、拒绝率与操作体验仍待真实使用确认 |
+| JLM-A2 | 新卡移除 Markdown 外来语标注 | **已完成 2026-08-11**：双形态消费、注解锚点、CR v3 parity、hash、三类真实生成、Compose、smoke 与桌面 E2E 均通过；见 [A2 新卡切换报告](../TestReports/Language_Metadata_JLM_A2_New_Card_Cutover_20260811.md) |
 | JLM-B0 | 动词词性与辞书形 range proposal POC | 独立评审后决定是否实施 |
 
 方案 C 不排期。
@@ -418,7 +418,8 @@ A2 追加退出门禁：
 5. 人工修正 > curated > accepted LLM > pending 的优先级有单元和集成测试，
    且**存在可用的 curated 纠错入口**（§3.1），该入口不修改 `ja-pronunciation-v2.json`；
 6. 修改、接受或拒绝元数据不会改变 generation Markdown 与 `content_hash`；
-7. A2 前不删除新卡 prompt 中的 legacy 外来语要求；A2 不改历史卡；
+7. A2 只在第三个独立开关开启时删除新卡 prompt 中的 legacy 外来语要求；A2 不改历史卡，
+   关闭开关可恢复旧版新卡合同；
 8. `npm run test:architecture` 的注音门禁保持通过；
 9. 提供候选覆盖率、确认覆盖率、准确率抽样、拒绝率和无结果率；
    覆盖率必须同时报告分母（含日语卡总数与已有 pronunciation projection 的卡数），
@@ -451,8 +452,13 @@ A2 追加退出门禁：
 
 ## 12. 状态
 
-本文为第二轮评审后的修订稿，仍为 **Draft**。在 §11 决策确认和 JLM-P0 完成前，
-不修改 prompt、schema、`content_hash` 或任何运行代码。
+本文已经作为 **Accepted 产品基线**实施到 JLM-A2。2026-08-11，用户在 A0/A1 可靠性修复、
+双形态兼容评审和本机观察可用的基础上，明确授权进入 A2；这是一次有记录的产品决策，
+**不表示 A1 的长期准确率、拒绝率与操作体验已经自然达到原观察样本门槛**。A1 观察继续，
+但不再阻塞新卡正文切换。
+
+A2 仅改变开关开启后新生成卡片的正文合同：外来语来源由旁路元数据承担，不再写入 Markdown。
+历史卡片、历史 `content_hash` 与 legacy reader 均不改写、不删除；两种正文形态长期共存。
 
 第二轮评审补入的内容（均为 2026-08-10 实测支撑）：
 

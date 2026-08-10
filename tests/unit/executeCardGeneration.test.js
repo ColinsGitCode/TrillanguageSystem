@@ -315,7 +315,7 @@ test.describe('JLM-A0 shadow stage cannot affect the card', () => {
     const baseline = await withoutStage.execute({ phrase: 'shadow parity', cardType: 'trilingual' });
 
     const withStage = createHarness({
-      extractLanguageMetadata: async () => ({ status: 'succeeded', created: 3 }),
+      enqueueLanguageMetadata: () => ({ status: 'queued', jobId: 7 }),
     });
     const shadowed = await withStage.execute({ phrase: 'shadow parity', cardType: 'trilingual' });
 
@@ -335,7 +335,7 @@ test.describe('JLM-A0 shadow stage cannot affect the card', () => {
   // Exit gate condition 2: extraction failure must not fail the card.
   test.it('still succeeds when the shadow stage throws', async () => {
     const harness = createHarness({
-      extractLanguageMetadata: async () => {
+      enqueueLanguageMetadata: () => {
         const error = new Error('provider exploded');
         error.code = 'LLM_TIMEOUT';
         throw error;
@@ -345,11 +345,15 @@ test.describe('JLM-A0 shadow stage cannot affect the card', () => {
     assert.equal(result.success, true);
     assert.equal(result.generationId, 42);
     assert.deepEqual(harness.calls.deletedGenerations, [], 'a metadata failure must not roll the card back');
+    assert.equal(harness.calls.insertedErrors.at(-1).errorType, 'LANGUAGE_METADATA_JOB_NOT_CREATED');
   });
 
-  test.it('still succeeds when the shadow stage hangs up on a rejected promise', async () => {
-    const harness = createHarness({ extractLanguageMetadata: () => Promise.reject(new Error('nope')) });
+  test.it('returns the card without waiting for an asynchronous queue adapter', async () => {
+    let resolveQueue;
+    const pending = new Promise((resolve) => { resolveQueue = resolve; });
+    const harness = createHarness({ enqueueLanguageMetadata: () => pending });
     const result = await harness.execute({ phrase: 'shadow rejection', cardType: 'trilingual' });
     assert.equal(result.success, true);
+    resolveQueue({ status: 'queued' });
   });
 });

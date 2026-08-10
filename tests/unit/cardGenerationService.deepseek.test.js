@@ -34,8 +34,8 @@ async function captureDeepSeekCall(
   delete require.cache[servicePath];
   restoreFns.push(installStub('../../services/generation/promptEngine', {
     buildPrompt: () => { throw new Error('unexpected json prompt'); },
-    buildMarkdownPrompt: ({ phrase, filenameBase, cardType }) => {
-      captured.promptArgs = { phrase, filenameBase, cardType };
+    buildMarkdownPrompt: ({ phrase, filenameBase, cardType, omitInlineLoanwordAnnotations }) => {
+      captured.promptArgs = { phrase, filenameBase, cardType, omitInlineLoanwordAnnotations };
       return 'markdown prompt';
     },
   }));
@@ -111,6 +111,7 @@ test.describe('cardGenerationService DeepSeek provider wiring', () => {
       phrase: 'hello',
       filenameBase: 'base',
       cardType: 'trilingual',
+      omitInlineLoanwordAnnotations: false,
     });
     assert.deepEqual(captured.options, {
       model: 'deepseek-v4-pro',

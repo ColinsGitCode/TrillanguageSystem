@@ -31,3 +31,38 @@ test('card annotation anchors use DOM-compatible UTF-16 offsets', async () => {
     dom.window.close();
   }
 });
+
+test('legacy loanword blocks do not change anchors used by A2 cards', async () => {
+  const { createAnchor, resolveAnchor } = await import(
+    '../../app/features/card-modal/annotation-anchor.mjs'
+  );
+  const dom = new JSDOM('<div></div>');
+  try {
+    function buildRoot(withLegacyBlock) {
+      const root = dom.window.document.createElement('div');
+      root.innerHTML = `<p>スケジュールを確認します。</p>${withLegacyBlock
+        ? '<div class="loanword-block">schedule → スケジュール</div>'
+        : ''}`;
+      return root;
+    }
+
+    function selectSchedule(root) {
+      const textNode = root.querySelector('p').firstChild;
+      const range = dom.window.document.createRange();
+      range.setStart(textNode, 0);
+      range.setEnd(textNode, 'スケジュール'.length);
+      return range;
+    }
+
+    const legacyRoot = buildRoot(true);
+    const a2Root = buildRoot(false);
+    const legacyAnchor = createAnchor(legacyRoot, selectSchedule(legacyRoot));
+    const a2Anchor = createAnchor(a2Root, selectSchedule(a2Root));
+
+    assert.deepEqual(legacyAnchor, a2Anchor);
+    assert.equal(resolveAnchor(a2Root, legacyAnchor).range.toString(), 'スケジュール');
+    assert.equal(resolveAnchor(legacyRoot, a2Anchor).range.toString(), 'スケジュール');
+  } finally {
+    dom.window.close();
+  }
+});

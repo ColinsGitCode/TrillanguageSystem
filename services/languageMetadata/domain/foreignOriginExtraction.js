@@ -79,6 +79,31 @@ function normalizeOriginTerm(value) {
   return String(value == null ? '' : value).normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
+function validateHumanCorrectionValue({ surface, originTerm, originLanguage }) {
+  const normalizedSurface = String(surface || '').normalize('NFKC').trim();
+  const normalizedTerm = normalizeOriginTerm(originTerm);
+  const normalizedLanguage = String(originLanguage || '').trim().toLowerCase();
+  if (!normalizedSurface
+    || !KATAKANA_SURFACE.test(normalizedSurface)
+    || codePointLength(normalizedSurface) < MIN_KATAKANA_CODEPOINTS) {
+    return { ok: false, reason: REJECTION.SURFACE_NOT_KATAKANA };
+  }
+  if (!normalizedTerm
+    || codePointLength(normalizedTerm) > MAX_ORIGIN_TERM_CODEPOINTS
+    || !ORIGIN_TERM_ALLOWED.test(normalizedTerm)) {
+    return { ok: false, reason: REJECTION.ORIGIN_TERM_INVALID };
+  }
+  if (!ORIGIN_LANGUAGES.has(normalizedLanguage)) {
+    return { ok: false, reason: REJECTION.ORIGIN_LANGUAGE_UNKNOWN };
+  }
+  return {
+    ok: true,
+    surface: normalizedSurface,
+    originTerm: normalizedTerm,
+    originLanguage: normalizedLanguage,
+  };
+}
+
 // Deterministic idempotency key (JLM-D0 §3.2). Binding the content hash means a
 // regenerated body produces different keys, so candidates can never silently
 // carry over to a new version of the text.
@@ -301,4 +326,5 @@ module.exports = {
   buildProposalKey,
   evaluateExtraction,
   katakanaCandidates,
+  validateHumanCorrectionValue,
 };

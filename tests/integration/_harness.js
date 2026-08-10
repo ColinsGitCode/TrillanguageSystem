@@ -32,6 +32,11 @@ process.env.LOG_SILENT = '1';
 process.env.TTS_EN_ENDPOINT = process.env.TTS_EN_ENDPOINT || '';
 process.env.TTS_JA_ENDPOINT = process.env.TTS_JA_ENDPOINT || '';
 process.env.RECORDS_PATH = tmpRecords;
+// Never inherit a developer's local JLM Canary flags into deterministic route
+// tests. A test file must opt in explicitly through the TEST_* variables before
+// requiring this harness.
+process.env.LANGUAGE_METADATA_ENABLED = process.env.TEST_LANGUAGE_METADATA_ENABLED || '0';
+process.env.LANGUAGE_METADATA_EXTRACTION_ENABLED = process.env.TEST_LANGUAGE_METADATA_EXTRACTION_ENABLED || '0';
 
 // Require AFTER env is pinned. server.js calls app.listen(PORT, cb)
 // synchronously; the bound port is only known once 'listening' fires.
