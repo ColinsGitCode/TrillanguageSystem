@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>JLM-D1 · 外来语来源候选与人工确认原型</title>
+<style>
+  :root { color-scheme: light; --ink:#172033; --muted:#647084; --line:#d8e0eb; --surface:#fff; --canvas:#f5f7fb; --blue:#2563eb; --blue-soft:#eaf1ff; --purple:#6d3bd6; --purple-soft:#f0ebfd; --green:#067a67; --green-soft:#e6f5f1; --amber:#a85d08; --amber-soft:#fdf3e3; --danger:#b42318; --danger-soft:#fdecea; --shadow:0 18px 42px rgba(23,32,51,.12); }
+  * { box-sizing:border-box; }
+  body { margin:0; min-width:1120px; color:var(--ink); background:var(--canvas); font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  button,input { font:inherit; } button { cursor:pointer; }
+  main { padding:20px 28px 60px; max-width:1440px; margin:0 auto; }
+  .topbar,.reading-card,.notes { background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 3px 12px rgba(23,32,51,.04); }
+  .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; padding:20px 24px; margin-bottom:14px; }
+  .eyebrow { margin:0 0 4px; color:#6b7280; font-size:11px; font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+  h1,h2,h3,p { margin-top:0; } h1 { margin-bottom:4px; font-size:24px; } h2 { font-size:18px; margin-bottom:6px; } h3 { font-size:15px; margin-bottom:8px; }
+  .sub { color:var(--muted); margin-bottom:0; }
+  .ladder { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .ladder b { padding:3px 8px; border-radius:999px; font-weight:700; }
+  .tier-manual { background:var(--green-soft); color:var(--green); }
+  .tier-curated { background:var(--blue-soft); color:var(--blue); }
+  .tier-accepted { background:var(--purple-soft); color:var(--purple); }
+  .tier-pending { background:var(--amber-soft); color:var(--amber); }
+  .tier-none { background:#eef1f6; color:var(--muted); }
+  .state-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+  .state-tabs button { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:8px; padding:7px 11px; font-size:12px; }
+  .state-tabs button.active { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:700; }
+  .state { display:none; } .state.active { display:block; }
+  .workspace { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr); gap:16px; align-items:start; }
+  .reading-card { padding:20px 22px; } .notes { padding:18px 20px; }
+  .reading-card header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; }
+  .meta { display:block; margin-top:3px; color:var(--muted); font-size:12px; }
+  .jp { font-size:17px; line-height:2.4; margin:0 0 4px; }
+  .zh { color:var(--muted); margin:0 0 14px; }
+  .kw { position:relative; padding:1px 2px; border-bottom:2px dotted #b9c4d4; cursor:default; }
+  .kw.has-manual { border-bottom-color:var(--green); background:var(--green-soft); }
+  .kw.has-curated { border-bottom-color:var(--blue); background:var(--blue-soft); }
+  .kw.has-accepted { border-bottom-color:var(--purple); background:var(--purple-soft); }
+  .kw.has-pending { border-bottom-style:dashed; border-bottom-color:var(--amber); background:var(--amber-soft); }
+  .kw.is-focus { outline:2px solid var(--blue); outline-offset:2px; }
+  .pop { margin-top:12px; border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); background:#fff; overflow:hidden; max-width:520px; }
+  .pop-head { display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--line); }
+  .pop-head strong { font-size:16px; } .pop-head small { color:var(--muted); }
+  .chip { margin-left:auto; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:750; }
+  .pop-body { padding:12px 13px; } .pop-body p { margin:0 0 6px; } .pop-body p:last-child { margin-bottom:0; }
+  .kv { display:grid; grid-template-columns:76px minmax(0,1fr); gap:4px 10px; font-size:13px; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; }
+  .pop-actions { display:flex; flex-wrap:wrap; gap:6px; padding:11px 13px; border-top:1px solid var(--line); background:#fafbfd; }
+  .pop-actions button { border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 11px; font-size:13px; }
+  .pop-actions .primary { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:650; }
+  .pop-actions .danger { color:var(--danger); border-color:#f0c8c4; }
+  .field { display:grid; gap:5px; margin-bottom:9px; }
+  .field label { font-size:12px; color:var(--muted); font-weight:650; }
+  .field input { border:1px solid var(--line); border-radius:7px; padding:8px 10px; }
+  .hint { margin-top:12px; padding:9px 11px; border-left:3px solid var(--blue); background:var(--blue-soft); border-radius:0 7px 7px 0; font-size:13px; }
+  .hint.warn { border-left-color:var(--amber); background:var(--amber-soft); }
+  .hint.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .hint.good { border-left-color:var(--green); background:var(--green-soft); }
+  .status-list { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; font-size:13px; }
+  .status-list li { display:flex; justify-content:space-between; gap:10px; padding:6px 9px; background:#f7f9fc; border-radius:7px; }
+  .ok { color:var(--green); font-weight:700; } .warn { color:var(--amber); font-weight:700; } .bad { color:var(--danger); font-weight:700; }
+  .notes p { color:var(--muted); font-size:13px; }
+  .state-nav { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; margin-top:20px; }
+  .state-nav button { width:38px; border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:7px; padding:6px 0; font-size:12px; }
+  .state-nav button.active { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:700; }
+  .spin { display:inline-block; width:11px; height:11px; border:2px solid #d9e2f0; border-top-color:var(--blue); border-radius:50%; animation:sp .8s linear infinite; vertical-align:-1px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { .spin { animation:none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <div>
+      <p class="eyebrow">JLM-D1 · DESKTOP PROTOTYPE</p>
+      <h1>外来语来源：AI 候选与人工确认</h1>
+      <p class="sub">全部为合成内容，不是真实卡片。本原型是交互参考，<strong>不替代逐状态确认</strong>。</p>
+    </div>
+    <div>
+      <p class="eyebrow">消费优先级（JLM-D0 §3.1）</p>
+      <div class="ladder">
+        <b class="tier-manual">人工修正</b>›<b class="tier-curated">精选词典</b>›<b class="tier-accepted">已确认 AI</b>›<b class="tier-pending">AI 候选</b>›<b class="tier-none">待确认</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="state-tabs" id="tabs"></div>
+
+  <!-- S1 -->
+  <section class="state active" id="s1" data-title="默认：待确认">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S1 · DEFAULT</p><h2>没有来源时明确说“待确认”</h2><span class="meta">不猜测 · 不留空 · 不伪装成已知</span></div><span class="chip tier-none">待确认</span></header>
+        <p class="jp">この<span class="kw is-focus">インターフェース</span>は分かりやすい。</p>
+        <p class="zh">这个界面很好懂。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>インターフェース</strong><small>いんたーふぇーす</small><span class="chip tier-none">外语来源 待确认</span></div>
+          <div class="pop-body"><p>系统没有该词的已确认外语来源。</p></div>
+          <div class="pop-actions"><button>🔊 朗读</button><button>我来填写来源</button></div>
+        </div>
+        <div class="hint">这是当前线上的真实状态：实测 26 个片假名词中有 22 个落在这里。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Contract</p><h3>空状态必须诚实</h3><p>没有来源就显示“待确认”，不填英文猜测、不隐藏该行。用户可以随时自己补。</p>
+        <ul class="status-list"><li><span>猜测来源</span><b class="ok">禁止</b></li><li><span>人工补录入口</span><b class="ok">常驻</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S2 -->
+  <section class="state" id="s2" data-title="精选词典">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S2 · CURATED</p><h2>精选词典是权威来源</h2><span class="meta">随代码发布 · 只读种子 · 普通标签，不加“AI”字样</span></div><span class="chip tier-curated">精选词典</span></header>
+        <p class="jp"><span class="kw has-curated is-focus">データ</span>を再読み込みする。</p>
+        <p class="zh">重新加载数据。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>データ</strong><small>でーた</small><span class="chip tier-curated">英语来源</span></div>
+          <div class="pop-body"><dl class="kv"><dt>外语原词</dt><dd><strong>data</strong>（英语）</dd><dt>来源</dt><dd>精选本地词典 ja-pronunciation-v2</dd></dl></div>
+          <div class="pop-actions"><button>🔊 朗读</button><button class="danger">来源不对</button></div>
+        </div>
+        <div class="hint">精选来源用普通“英语来源”标签，与 AI 候选在视觉上必须可区分。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Contract</p><h3>权威也要能纠错</h3><p>“来源不对”对 curated 同样可用——否则优先级链最上层的“人工修正”是空的（§3.1）。</p>
+        <ul class="status-list"><li><span>标签措辞</span><b class="ok">不含 AI</b></li><li><span>纠错入口</span><b class="ok">有</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S3 -->
+  <section class="state" id="s3" data-title="AI 候选 pending">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S3 · PENDING PROPOSAL</p><h2>AI 候选必须自称是候选</h2><span class="meta">未经确认 · 不可伪装成权威</span></div><span class="chip tier-pending">AI 候选</span></header>
+        <p class="jp">毎朝の<span class="kw has-pending is-focus">スケジュール</span>を確認する。</p>
+        <p class="zh">确认每天早上的日程。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>スケジュール</strong><small>すけじゅーる</small><span class="chip tier-pending">AI 候选 · 待确认</span></div>
+          <div class="pop-body"><dl class="kv"><dt>AI 认为</dt><dd><strong>schedule</strong>（英语）</dd><dt>模型自报</dt><dd>置信度 medium（仅供参考，不参与排序）</dd></dl></div>
+          <div class="pop-actions"><button class="primary">接受</button><button>修改后接受</button><button class="danger">拒绝</button><button>🔊 朗读</button></div>
+        </div>
+        <div class="hint warn">实测同一批卡片连跑三次，候选覆盖率在 64%–76% 之间摆动 —— 所以默认 pending 不是保守，是必需。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Contract</p><h3>三个出口，缺一不可</h3><p>接受、修改后接受、拒绝。只给“接受”会诱导用户点确认，等于把 LLM 输出洗成事实。</p>
+        <ul class="status-list"><li><span>视觉区分</span><b class="ok">虚线 + 琥珀</b></li><li><span>置信度参与排序</span><b class="ok">否</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S4 -->
+  <section class="state" id="s4" data-title="接受后">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S4 · ACCEPTED</p><h2>接受后转为已确认</h2><span class="meta">保留“来自 AI 候选”的出处，不抹掉裁决痕迹</span></div><span class="chip tier-accepted">已确认</span></header>
+        <p class="jp">毎朝の<span class="kw has-accepted is-focus">スケジュール</span>を確認する。</p>
+        <p class="zh">确认每天早上的日程。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>スケジュール</strong><small>すけじゅーる</small><span class="chip tier-accepted">英语来源 · 已确认</span></div>
+          <div class="pop-body"><dl class="kv"><dt>外语原词</dt><dd><strong>schedule</strong>（英语）</dd><dt>确认方式</dt><dd>人工接受了 AI 候选 · 2026-08-10</dd></dl></div>
+          <div class="pop-actions"><button>🔊 朗读</button><button class="danger">来源不对</button></div>
+        </div>
+        <div class="hint good">已确认后不再显示“AI 候选”字样，但出处仍可追溯到那一次提取（model / prompt version / response hash）。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Audit</p><h3>裁决是事实，不是覆盖</h3><p>接受写入裁决记录，不删除原候选，可回滚。</p>
+        <ul class="status-list"><li><span>改动正文</span><b class="ok">否</b></li><li><span>改动 content_hash</span><b class="ok">否</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S5 -->
+  <section class="state" id="s5" data-title="修改后接受">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S5 · HUMAN CORRECTION</p><h2>修改后接受 = 人工修正</h2><span class="meta">优先级最高，压过精选词典</span></div><span class="chip tier-manual">人工修正</span></header>
+        <p class="jp">この<span class="kw has-manual is-focus">ソフト</span>は使いやすい。</p>
+        <p class="zh">这个软件很好用。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>ソフト</strong><small>そふと</small><span class="chip tier-pending">AI 候选：soft</span></div>
+          <div class="pop-body">
+            <div class="field"><label for="term">外语原词</label><input id="term" value="software"></div>
+            <div class="field"><label for="lang">来源语言</label><input id="lang" value="英语 (en)"></div>
+            <p style="color:var(--muted);font-size:12px">AI 给的是 <code>soft</code>；此处实际是 <code>software</code> 的截短形。</p>
+          </div>
+          <div class="pop-actions"><button class="primary">保存为人工修正</button><button>取消</button></div>
+        </div>
+        <div class="hint">保存后该词的来源由人工拥有，之后任何 AI 候选或词典条目都不会覆盖它。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Priority</p><h3>人工在最上层</h3><p>这正是 S2 的“来源不对”最终落地的地方：人工修正写入 accepted 记录并高于 curated。</p>
+        <ul class="status-list"><li><span>改词典文件</span><b class="ok">否</b></li><li><span>可回滚</span><b class="ok">是</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S6 -->
+  <section class="state" id="s6" data-title="拒绝后">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S6 · REJECTED</p><h2>拒绝后不再反复打扰</h2><span class="meta">回到“待确认”，但记住这个候选已被否掉</span></div><span class="chip tier-none">待确认</span></header>
+        <p class="jp">その<span class="kw is-focus">シーン</span>が印象に残った。</p>
+        <p class="zh">那个场景让人印象深刻。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>シーン</strong><small>しーん</small><span class="chip tier-none">外语来源 待确认</span></div>
+          <div class="pop-body"><p>已拒绝一个 AI 候选（scene · 2026-08-10）。</p><p style="color:var(--muted);font-size:12px">同一正文版本下不会再次提示相同候选。</p></div>
+          <div class="pop-actions"><button>我来填写来源</button><button>查看被拒候选</button></div>
+        </div>
+        <div class="hint">拒绝不等于“这个词没有外语来源”，只是这一次的候选不对。区别要在文案上说清楚。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Contract</p><h3>否决要有记忆</h3><p>拒绝写入裁决事实；重复提取遇到同一候选不再打扰，但换了候选仍可提示。</p></aside>
+    </div>
+  </section>
+
+  <!-- S7 -->
+  <section class="state" id="s7" data-title="纠正精选词典">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S7 · OVERRIDE CURATED</p><h2>纠正一条错误的精选条目</h2><span class="meta">不修改随代码发布的词典文件</span></div><span class="chip tier-manual">人工修正</span></header>
+        <p class="jp"><span class="kw has-manual is-focus">マシン</span>の調子が悪い。</p>
+        <p class="zh">机器状态不好。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>マシン</strong><small>ましん</small><span class="chip tier-manual">已被人工覆盖</span></div>
+          <div class="pop-body"><dl class="kv"><dt>当前生效</dt><dd><strong>machine</strong>（英语）· 人工修正</dd><dt>精选词典</dt><dd style="color:var(--muted);text-decoration:line-through">machin（法语）</dd></dl><p style="font-size:12px;color:var(--muted);margin-top:6px">两者都保留在证据中，读取端稳定选择人工修正。</p></div>
+          <div class="pop-actions"><button>撤销人工修正</button><button>🔊 朗读</button></div>
+        </div>
+        <div class="hint good">运行期纠正一律走裁决事实，因此可审计、可回滚，且不会被下次发版覆盖掉。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Contract</p><h3>只读种子 + 运行期覆盖</h3><p>ja-pronunciation-v2.json 永不原地改写；覆盖关系在数据里表达，不在文件里表达。</p></aside>
+    </div>
+  </section>
+
+  <!-- S8 -->
+  <section class="state" id="s8" data-title="四态共存">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S8 · MIXED</p><h2>同一张卡上四种状态共存</h2><span class="meta">用户一眼要能分辨哪个可信</span></div></header>
+        <p class="jp"><span class="kw has-curated">データ</span>を<span class="kw has-accepted">リフレッシュ</span>して、<span class="kw has-pending">プロジェクト</span>の<span class="kw">フィードバック</span>を確認する。</p>
+        <p class="zh">刷新数据，确认项目的反馈。</p>
+        <ul class="status-list" style="max-width:520px">
+          <li><span><span class="chip tier-curated">精选</span> データ → data</span><b class="ok">可信</b></li>
+          <li><span><span class="chip tier-accepted">已确认</span> リフレッシュ → refresh</span><b class="ok">可信</b></li>
+          <li><span><span class="chip tier-pending">AI 候选</span> プロジェクト → project</span><b class="warn">待裁决</b></li>
+          <li><span><span class="chip tier-none">待确认</span> フィードバック</span><b>—</b></li>
+        </ul>
+        <div class="hint">四种状态有各自的下划线样式与配色，不依赖单一颜色区分（色觉友好）。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Legibility</p><h3>可信度必须外显</h3><p>混合状态是常态，不是边界情况：提取覆盖不到 100%，且人工确认永远滞后于提取。</p></aside>
+    </div>
+  </section>
+
+  <!-- S9 -->
+  <section class="state" id="s9" data-title="提取进行中">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S9 · EXTRACTION RUNNING</p><h2>第二段提取尚未完成</h2><span class="meta">卡片已可正常使用</span></div><span class="chip tier-none"><span class="spin"></span> 提取中</span></header>
+        <p class="jp">この<span class="kw is-focus">アカウント</span>でログインする。</p>
+        <p class="zh">用这个账号登录。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>アカウント</strong><small>あかうんと</small><span class="chip tier-none">外语来源 提取中</span></div>
+          <div class="pop-body"><p><span class="spin"></span> 正在后台提取外来语来源…</p><p style="font-size:12px;color:var(--muted)">卡片正文、朗读、标记和学习不受影响。</p></div>
+          <div class="pop-actions"><button>🔊 朗读</button><button>我来填写来源</button></div>
+        </div>
+        <div class="hint">主卡生成与元数据提取解耦：提取还没回来时，卡片已经完全可用。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Decoupling</p><h3>不阻塞阅读</h3><p>提取是第二次 best-effort 调用，实测成功延迟中位约 1.5 秒。</p>
+        <ul class="status-list"><li><span>阻塞卡片</span><b class="ok">否</b></li><li><span>手动补录</span><b class="ok">仍可用</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S10 -->
+  <section class="state" id="s10" data-title="提取失败">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S10 · EXTRACTION FAILED</p><h2>“提取失败”不能显示成“没有外来语”</h2><span class="meta">这是 JLM-D0 §7 的核心要求</span></div><span class="chip tier-none" style="background:var(--danger-soft);color:var(--danger)">提取失败</span></header>
+        <p class="jp"><span class="kw is-focus">セキュリティ</span>の設定を見直す。</p>
+        <p class="zh">重新检查安全设置。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>セキュリティ</strong><small>せきゅりてぃ</small><span class="chip" style="background:var(--danger-soft);color:var(--danger)">提取未完成</span></div>
+          <div class="pop-body"><p>后台提取超时，本卡尚未产出候选。</p><p style="font-size:12px;color:var(--muted)">这不代表该词没有外语来源。</p></div>
+          <div class="pop-actions"><button class="primary">重试提取</button><button>我来填写来源</button></div>
+        </div>
+        <div class="hint bad">实测出现过 2/8 次 120 秒超时。若没有任务记录，这 25% 会被误读成“这些卡没有外来语”。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Failure semantics</p><h3>三种“没有”要分开</h3>
+        <ul class="status-list"><li><span>没有外来语</span><b class="ok">正常空</b></li><li><span>提取未完成</span><b class="warn">可重试</b></li><li><span>候选被校验拒绝</span><b class="warn">见 S11</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S11 -->
+  <section class="state" id="s11" data-title="候选被拒">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S11 · SERVER REJECTED</p><h2>模型给了，但服务端定位不到</h2><span class="meta">不落库、不展示，但要可见原因</span></div><span class="chip tier-none">待确认</span></header>
+        <p class="jp"><span class="kw is-focus">カレンダー</span>に予定を入れる。</p>
+        <p class="zh">把安排写进日历。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>カレンダー</strong><small>かれんだー</small><span class="chip tier-none">外语来源 待确认</span></div>
+          <div class="pop-body"><p>本次提取产出的候选未通过服务端校验。</p>
+            <dl class="kv" style="margin-top:6px"><dt>拒绝原因</dt><dd><code>surface-not-found</code>（模型给的词形不在正文中）</dd></dl></div>
+          <div class="pop-actions"><button>重试提取</button><button>我来填写来源</button></div>
+        </div>
+        <div class="hint warn">服务端拒绝的候选一律不入库、不显示。这里只暴露“为什么没有结果”，不暴露被拒的内容本身。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Validation</p><h3>幻觉不进产品</h3><p>P0 实测共 12 种拒绝原因；成功运行中服务端零拒绝，说明校验层可靠。</p>
+        <ul class="status-list"><li><span>被拒候选入库</span><b class="ok">否</b></li><li><span>原因可见</span><b class="ok">是</b></li></ul></aside>
+    </div>
+  </section>
+
+  <!-- S12 -->
+  <section class="state" id="s12" data-title="正文改版 stale">
+    <div class="workspace">
+      <article class="reading-card">
+        <header><div><p class="eyebrow">S12 · STALE</p><h2>正文版本变了，旧候选自动失效</h2><span class="meta">绑定 source_content_hash · 不跨版本复用</span></div><span class="chip tier-none">候选已失效</span></header>
+        <p class="jp">この<span class="kw is-focus">グループ</span>で共有する。</p>
+        <p class="zh">在这个小组里共享。</p>
+        <div class="pop">
+          <div class="pop-head"><strong>グループ</strong><small>ぐるーぷ</small><span class="chip tier-none">stale</span></div>
+          <div class="pop-body"><p>此候选基于旧版正文产生，正文已更新。</p>
+            <dl class="kv" style="margin-top:6px"><dt>候选绑定</dt><dd><code>content_hash 3f2a…</code></dd><dt>当前正文</dt><dd><code>content_hash 91c4…</code></dd></dl></div>
+          <div class="pop-actions"><button class="primary">按新正文重新提取</button><button>我来填写来源</button></div>
+        </div>
+        <div class="hint">位置是按码点范围记录的，正文一变旧范围就可能指向别的字，所以宁可作废也不复用。</div>
+      </article>
+      <aside class="notes"><p class="eyebrow">Integrity</p><h3>不跨版本漂移</h3><p>已人工确认的记录同样绑定版本；失效后需要重新确认，而不是静默沿用。</p>
+        <ul class="status-list"><li><span>跨版本复用</span><b class="ok">禁止</b></li><li><span>历史正文改写</span><b class="ok">从不</b></li></ul></aside>
+    </div>
+  </section>
+
+  <div class="state-nav" id="nav" aria-label="状态切换"></div>
+</main>
+<script>
+  const states = [...document.querySelectorAll('.state')];
+  const tabs = document.getElementById('tabs');
+  const nav = document.getElementById('nav');
+  states.forEach((section, index) => {
+    const id = section.id;
+    const label = `S${index + 1} ${section.dataset.title}`;
+    const tab = document.createElement('button');
+    tab.textContent = label; tab.dataset.state = id;
+    tabs.appendChild(tab);
+    const dot = document.createElement('button');
+    dot.textContent = `S${index + 1}`; dot.dataset.state = id; dot.title = section.dataset.title;
+    nav.appendChild(dot);
+  });
+  function show(id) {
+    states.forEach((section) => section.classList.toggle('active', section.id === id));
+    [...document.querySelectorAll('[data-state]')].forEach((button) => {
+      button.classList.toggle('active', button.dataset.state === id);
+    });
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  }
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-state]');
+    if (button) show(button.dataset.state);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const current = states.findIndex((section) => section.classList.contains('active'));
+    const next = event.key === 'ArrowRight'
+      ? Math.min(current + 1, states.length - 1)
+      : Math.max(current - 1, 0);
+    show(states[next].id);
+  });
+  show('s1');
+</script>
+</body>
+</html>
