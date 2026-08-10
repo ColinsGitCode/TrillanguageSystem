@@ -131,6 +131,9 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         selectionTtsCache.js
         selectionTtsErrors.js
         selectionTtsService.js
+      languageMetadata/
+        domain/
+          foreignOriginExtraction.js
       localGlossary/
         localGlossaryNormalizer.js
         localGlossaryService.js
@@ -200,6 +203,7 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - DIC-R2 disambiguation is deterministic and LLM-free. Context ranking infers a part of speech from English cue words (infinitive/modal/pronoun to verb, linking verb and degree adverb to adjective, determiner and preposition to noun, determiner plus a following non-verb to attributive adjective) and from the Japanese particle after the term (`する` to verb, `な` to adjective, case particles to noun); when no cue is confident it returns null and the deterministic order is preserved. Part-of-speech tags are compared as tokenized tag sets so ECDICT `n.`/`vt.`, JMdict `n, vs, vt`/`adj-i` and traditional `名詞`/`動詞` all match. A context match may raise confidence, but an English-pivoted JMdict bridge gloss stays low confidence regardless.
 - `local_glossary_lookup_events` records DIC-R2 usage facts and is append-only, enforced by update/delete-blocking triggers. It stores the selected short term because the problem-term list needs it, but has no surrounding context, snippet, or sentence column; source details, match reasons and sense keys are server-allowlisted instead of copied from arbitrary client text. `GET /api/local-glossary/lookup` stays write-free; only an explicit `POST /api/local-glossary/feedback` records a `shown`/`rejected`/`switched`/`corrected` outcome, and each resolved selection reports `shown` once. Statistics report action-level interventions rather than a misleading query-level error rate. `GET /api/local-glossary/feedback/stats` is a read-only projection that ranks terms the user had to fix; it must not become an analytics pipeline.
 - `scripts/maintenance/dicR2Observation.js` is the read-only before/after accuracy gate over `scripts/maintenance/fixtures/dicR2EvaluationCases.json`; see `Docs/TestReports/Local_Dictionary_DIC_R2_Observation_20260810.md`.
+- `services/languageMetadata/` is JLM-P0 POC code only. It is not wired into any route, worker or generation path, and holds the pure `jlm-foreign-origin-v1` validator that re-locates an LLM-proposed katakana surface by segment plus occurrence and rejects anything it cannot locate. `scripts/poc/jlmP0DryRun.js` runs it offline by default; `--db` adds read-only card enumeration and `--live` measures the real second DeepSeek call. Every mode is SQLite-write-free and must never modify Markdown, `content_hash` or create proposals — proposal storage belongs to JLM-D2. See `Docs/Features/LLM_Generated_Japanese_Linguistic_Metadata_Design.md` and `Docs/TestReports/Language_Metadata_JLM_P0_DryRun_20260810.md`.
 - `/dictionary` is the desktop management surface. It edits only `local_glossary_entries`; imported `local_dictionary_entries` stay read-only and are shown only as source/version/count metadata. Archive/restore uses optimistic versions, and an imported dictionary upgrade must not rewrite manual overrides.
 
 Provider errors use structured Error.code, Error.status, and Error.payload. Do not classify by matching message text.

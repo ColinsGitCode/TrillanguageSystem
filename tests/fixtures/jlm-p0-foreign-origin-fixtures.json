@@ -1,0 +1,182 @@
+{
+  "version": "jlm-p0-foreign-origin-v1",
+  "note": "Fixed sample for JLM-P0. Japanese segments are synthetic sentences written for this fixture, not card content, so the fixture is safe to keep in Git. Every rejection branch in JLM-D0 §2.3 has at least one case. Segment indexes are 1-based.",
+  "segments": [
+    { "text": "データをリフレッシュしてからスケジュールを確認する。", "startCodePoint": 0, "endCodePoint": 26 },
+    { "text": "プロジェクトのフィードバックをプロジェクトに反映する。", "startCodePoint": 40, "endCodePoint": 67 }
+  ],
+  "context": {
+    "targetKind": "generation",
+    "targetId": 9001,
+    "sourceContentHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "extractionVersion": "jlm-extract-v1"
+  },
+  "cases": [
+    {
+      "id": "accept-basic",
+      "expect": "accepted",
+      "note": "Three real loanwords, each located by segment + surface + occurrence.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "en", "confidence": "high" },
+          { "segment_index": 1, "surface": "リフレッシュ", "occurrence": 1, "origin_term": "refresh", "origin_language": "en", "confidence": "medium" },
+          { "segment_index": 2, "surface": "フィードバック", "occurrence": 1, "origin_term": "feedback", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "accept-second-occurrence",
+      "expect": "accepted",
+      "note": "プロジェクト appears twice in segment 2; occurrence 2 must resolve to the later position.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 2, "surface": "プロジェクト", "occurrence": 2, "origin_term": "project", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "accept-duplicate-collapses",
+      "expect": "accepted",
+      "note": "Identical repeats at one position collapse to a single proposal rather than conflicting.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "en", "confidence": "high" },
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "Data", "origin_language": "en", "confidence": "low" }
+        ]
+      }
+    },
+    {
+      "id": "reject-envelope",
+      "expect": "envelope-invalid",
+      "note": "Correct schema version but items is not an array.",
+      "payload": { "schema_version": "jlm-foreign-origin-v1", "items": "not-an-array" }
+    },
+    {
+      "id": "reject-occurrence-invalid",
+      "expect": "occurrence-invalid",
+      "note": "Occurrence is 1-based; 0 must be rejected rather than treated as the first match.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 0, "origin_term": "data", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-schema-version",
+      "expect": "schema-version-unknown",
+      "payload": { "schema_version": "jlm-foreign-origin-v2", "items": [] }
+    },
+    {
+      "id": "reject-segment-index",
+      "expect": "segment-index-invalid",
+      "note": "Segment 7 does not exist; 1-based indexing means 0 is invalid too.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 7, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-hallucinated-surface",
+      "expect": "surface-not-found",
+      "note": "カレンダー never appears in these segments.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "カレンダー", "occurrence": 1, "origin_term": "calendar", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-occurrence-overflow",
+      "expect": "occurrence-out-of-range",
+      "note": "データ occurs once; asking for the third must not silently fall back to the first.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 3, "origin_term": "data", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-non-katakana",
+      "expect": "surface-not-katakana",
+      "note": "Kanji is not a loanword candidate.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "確認", "occurrence": 1, "origin_term": "confirm", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-separator-dot",
+      "expect": "surface-not-katakana",
+      "note": "A standalone separator is punctuation, not a word; this is the bug that inflated an earlier katakana count.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "・", "occurrence": 1, "origin_term": "dot", "origin_language": "en", "confidence": "low" }
+        ]
+      }
+    },
+    {
+      "id": "reject-empty-origin-term",
+      "expect": "origin-term-invalid",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "   ", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-markup-origin-term",
+      "expect": "origin-term-invalid",
+      "note": "Model output must never carry markup into a stored value.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "<b>data</b>", "origin_language": "en", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-unknown-language",
+      "expect": "origin-language-unknown",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "klingon", "confidence": "high" }
+        ]
+      }
+    },
+    {
+      "id": "reject-unknown-confidence",
+      "expect": "confidence-unknown",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "en", "confidence": "very-sure" }
+        ]
+      }
+    },
+    {
+      "id": "reject-conflicting",
+      "expect": "conflicting-candidate",
+      "note": "Two different origins for one position: reject both rather than pick a winner.",
+      "payload": {
+        "schema_version": "jlm-foreign-origin-v1",
+        "items": [
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "data", "origin_language": "en", "confidence": "high" },
+          { "segment_index": 1, "surface": "データ", "occurrence": 1, "origin_term": "dater", "origin_language": "de", "confidence": "high" }
+        ]
+      }
+    }
+  ]
+}
