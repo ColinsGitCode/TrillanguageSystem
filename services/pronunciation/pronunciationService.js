@@ -225,7 +225,7 @@ function mapLegacyTokensToPlainText(tokens, plainText, segments) {
   return mapped;
 }
 
-function chooseDictionaryTokens(text, entries) {
+function chooseDictionaryTokens(text, entries, dictionaryVersion) {
   const selected = [];
   for (const entry of [...entries].sort((a, b) => String(b.surface).length - String(a.surface).length)) {
     for (const span of findAll(text, entry.surface)) {
@@ -238,8 +238,11 @@ function chooseDictionaryTokens(text, entries) {
         unitKind: entry.unitKind || 'word',
         status: 'accepted',
         source: 'dictionary',
-        ruleVersion: 'ja-pronunciation-v1',
-        evidence: { reason: entry.reason || 'dictionary' },
+        ruleVersion: dictionaryVersion,
+        evidence: {
+          reason: entry.reason || 'dictionary',
+          ...(entry.foreignOrigin ? { foreignOrigin: entry.foreignOrigin } : {}),
+        },
         components: [],
       });
     }
@@ -255,7 +258,7 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
   const tokens = [];
   const skippedTokens = [];
   for (const segment of segments) {
-    tokens.push(...chooseDictionaryTokens(segment.text, dictionaryReader.entries())
+    tokens.push(...chooseDictionaryTokens(segment.text, dictionaryReader.entries(), dictionaryReader.version())
       .map((token) => shiftToken(token, segment.startCodePoint)));
     const analyzerTokens = await analyzeJapaneseTokens(segment.text);
     let searchCursor = 0;
@@ -365,6 +368,20 @@ function createPronunciationService({
   legacyReaderEnabled = true,
 } = {}) {
   if (!dbService) throw new TypeError('PronunciationService requires dbService');
+  const acceptedOrigins = new Map(dictionaryReader.entries()
+    .filter((entry) => entry.foreignOrigin?.term)
+    .map((entry) => [entry.surface, entry.foreignOrigin]));
+
+  function enrichVisibleTokens(tokens) {
+    return tokens.map((token) => {
+      const foreignOrigin = acceptedOrigins.get(token.surface);
+      if (!foreignOrigin || token.evidence?.foreignOrigin) return token;
+      return {
+        ...token,
+        evidence: { ...(token.evidence || {}), foreignOrigin },
+      };
+    });
+  }
   function targetNotFound(message) {
     const error = new Error(message);
     error.code = 'PRONUNCIATION_TARGET_NOT_FOUND';
@@ -420,7 +437,7 @@ function createPronunciationService({
     if (existing && !options.refresh) {
       return {
         document: existing,
-        tokens: dbService.listPronunciationTokens(existing.id),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
         plainText: stripMarkdownToJapaneseText(record.markdown_content),
       };
     }
@@ -434,7 +451,7 @@ function createPronunciationService({
     if (existing && !options.force) {
       return {
         document: existing,
-        tokens: dbService.listPronunciationTokens(existing.id),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
         plainText: stripMarkdownToJapaneseText(record.markdown_content),
       };
     }
@@ -490,7 +507,7 @@ function createPronunciationService({
     if (existing && !options.refresh) {
       return {
         document: existing,
-        tokens: dbService.listPronunciationTokens(existing.id),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
         plainText: stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || ''),
       };
     }
@@ -505,7 +522,7 @@ function createPronunciationService({
     if (existing && !options.force) {
       return {
         document: existing,
-        tokens: dbService.listPronunciationTokens(existing.id),
+        tokens: enrichVisibleTokens(dbService.listPronunciationTokens(existing.id)),
         plainText: stripMarkdownToJapaneseText(record.ja_ruby_html || record.official_ja_text || ''),
       };
     }

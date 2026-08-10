@@ -15,3 +15,10 @@ test('card render transforms keep loanword conversion and audio adaptation reusa
   assert.match(adapted, /class="audio-btn"/);
   assert.match(adapted, /data-folder="20260713"/);
 });
+
+test('card render transforms normalize three-language loanword annotations', async () => {
+  const { normalizeLoanwordAnnotations } = await import(transformsUrl);
+  const normalized = normalizeLoanwordAnnotations('- 外来语标注：数据=data=データ');
+
+  assert.match(normalized, /数据 · data · データ/);
+});

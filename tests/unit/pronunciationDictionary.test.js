@@ -9,8 +9,8 @@ test('versioned Japanese pronunciation dictionary has valid unique accepted entr
   const reader = createDictionaryReader();
   const entries = reader.entries();
 
-  assert.equal(reader.version(), 'ja-pronunciation-v1');
-  assert.ok(entries.length >= 5);
+  assert.equal(reader.version(), 'ja-pronunciation-v2');
+  assert.ok(entries.length >= 11);
 
   const surfaces = new Set();
   for (const entry of entries) {
@@ -34,6 +34,11 @@ test('versioned Japanese pronunciation dictionary has valid unique accepted entr
       reason: 'irregular counter reading',
     },
   );
+  assert.deepEqual(entries.find((entry) => entry.surface === 'リフレッシュ')?.foreignOrigin, {
+    language: '英语',
+    term: 'refresh',
+    source: 'curated',
+  });
 });
 
 test('dictionary reader returns defensive entry copies', () => {

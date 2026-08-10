@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 
-const DICTIONARY_PATH = path.join(__dirname, 'dictionaries/ja-pronunciation-v1.json');
+const DICTIONARY_PATH = path.join(__dirname, 'dictionaries/ja-pronunciation-v2.json');
 
 function createDictionaryReader({ filePath = DICTIONARY_PATH, fs = require('node:fs') } = {}) {
   let cached = null;

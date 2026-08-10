@@ -49,8 +49,8 @@
   },
   "chunkBudgets": {
     "CardModal": {
-      "maxRawBytes": 120000,
-      "maxGzipBytes": 40000
+      "maxRawBytes": 121000,
+      "maxGzipBytes": 40500
     },
     "IntelPanel": {
       "maxRawBytes": 3000,

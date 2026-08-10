@@ -9,21 +9,31 @@ function initSection() {
 }
 
 function parseLoanwordLine(text) {
-  // Legacy format: 外来语标注: English = カタカナ
-  const match = text.match(/外来语标注:\s*([^=]+?)\s*=\s*(.+)$/);
-  if (match) return { en: match[1].trim(), ja: match[2].trim() };
-  // New HTML span format: <span class="loanword-tag">English → カタカナ</span>
-  const tagMatch = text.match(/loanword-tag[^>]*>([^→<]+?)\s*→\s*([^<]+)</);
-  if (tagMatch) return { en: tagMatch[1].trim(), ja: tagMatch[2].trim() };
+  const match = text.match(/外来语标注:\s*(.+)$/);
+  if (match) return parseLoanwordContent(match[1]);
+  const tagMatch = text.match(/loanword-tag[^>]*>([^<]+)</);
+  if (tagMatch) return parseLoanwordContent(tagMatch[1]);
+  return null;
+}
+
+function parseLoanwordContent(text) {
+  const dotted = String(text || '').split(/\s*·\s*/u).map((part) => part.trim()).filter(Boolean);
+  if (dotted.length >= 3) return { zh: dotted[0], en: dotted[1], ja: dotted.slice(2).join(' · ') };
+  const equals = String(text || '').split(/\s*=\s*/u).map((part) => part.trim()).filter(Boolean);
+  if (equals.length >= 3) return { zh: equals[0], en: equals[1], ja: equals.slice(2).join(' = ') };
+  const arrow = String(text || '').split(/\s*→\s*/u).map((part) => part.trim()).filter(Boolean);
+  if (arrow.length >= 2) return { en: arrow[0], ja: arrow.slice(1).join(' → ') };
+  if (equals.length >= 2) return { en: equals[0], ja: equals.slice(1).join(' = ') };
   return null;
 }
 
 function parseLoanwordTags(text) {
   const results = [];
-  const re = /loanword-tag[^>]*>([^→<]+?)\s*→\s*([^<]+)</g;
+  const re = /loanword-tag[^>]*>([^<]+)</g;
   let m;
   while ((m = re.exec(text)) !== null) {
-    results.push({ en: m[1].trim(), ja: m[2].trim() });
+    const parsed = parseLoanwordContent(m[1]);
+    if (parsed) results.push(parsed);
   }
   return results;
 }
@@ -69,6 +79,12 @@ function parseTrilingualMarkdown(markdown) {
     }
 
     if (!current) continue;
+
+    const standaloneLoanwords = lastExample ? parseLoanwordTags(line) : [];
+    if (standaloneLoanwords.length > 0) {
+      lastExample.loanwords.push(...standaloneLoanwords);
+      continue;
+    }
 
     const labeledMatch = line.match(/^\s*-\s*\*\*([^*]+)\*\*:\s*(.+)$/);
     if (labeledMatch) {

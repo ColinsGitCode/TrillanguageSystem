@@ -378,7 +378,13 @@ export function CardModal({
       resizeObserver?.disconnect();
       window.removeEventListener('resize', clampToViewport);
     };
-  }, [toolbar?.anchorLeft, toolbar?.phrase]);
+  }, [
+    toolbar?.anchorLeft,
+    toolbar?.left,
+    toolbar?.phrase,
+    toolbar?.placeBelow,
+    toolbar?.top,
+  ]);
 
   useEffect(() => {
     if (!toolbar || !focusToolbarAfterSelectionRef.current) return;
@@ -1019,6 +1025,7 @@ export function CardModal({
           <div
             ref={toolbarRef}
             className="card-selection-toolbar"
+            data-testid="card-selection-toolbar"
             data-placement={toolbar.placeBelow ? 'below' : 'above'}
             style={{ top: toolbar.top, left: toolbar.left }}
             role="toolbar"

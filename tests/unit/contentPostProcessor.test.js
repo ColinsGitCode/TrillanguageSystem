@@ -121,3 +121,18 @@ test.it('removes explicit Japanese parenthetical readings from the active Japane
   assert.doesNotMatch(result.markdown_content, /勤務表\(きんむひょう\)/u);
   assert.match(result.markdown_content, /中文说明保留括号（示例）/u);
 });
+
+test('renders new loanword annotations in Chinese, English, Japanese order while preserving legacy pairs', () => {
+  const result = run([
+    '## 2. 日本語:',
+    '- **例句1**: データを確認します。',
+    '  - 请确认数据。',
+    '  - 外来语标注: 数据 = data = データ',
+    '- **例句2**: ファイルを開きます。',
+    '  - 打开文件。',
+    '  - 外来语标注: file = ファイル',
+  ].join('\n'));
+
+  assert.match(result.markdown_content, /数据 · data · データ/u);
+  assert.match(result.markdown_content, /file → ファイル/u);
+});

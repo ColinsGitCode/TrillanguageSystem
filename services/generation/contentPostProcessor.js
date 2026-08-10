@@ -133,9 +133,11 @@ function relocateLoanwordAnnotations(markdown) {
     if (!items.length) return null;
     const tags = items
       .map((item) => {
+        const zh = String(item.zh || '').trim();
         const en = String(item.en || '').trim();
         const ja = String(item.ja || '').trim();
-        if (!en && !ja) return '';
+        if (!zh && !en && !ja) return '';
+        if (zh && en && ja) return `<span class="loanword-tag">${zh} · ${en} · ${ja}</span>`;
         if (!ja) return `<span class="loanword-tag">${en}</span>`;
         return `<span class="loanword-tag">${en} → ${ja}</span>`;
       })
@@ -153,10 +155,11 @@ function relocateLoanwordAnnotations(markdown) {
       .map((chunk) => chunk.trim())
       .filter(Boolean)
       .map((chunk) => {
-        const match = chunk.match(/^([^=]+?)\s*=\s*(.+)$/);
-        if (!match) return { en: chunk, ja: '' };
-        let left = match[1].trim();
-        let right = match[2].trim();
+        const parts = chunk.split('=').map((part) => part.trim()).filter(Boolean);
+        if (parts.length >= 3) return { zh: parts[0], en: parts[1], ja: parts.slice(2).join(' = ') };
+        if (parts.length < 2) return { en: chunk, ja: '' };
+        let left = parts[0];
+        let right = parts.slice(1).join(' = ');
         if (looksKana(left) && looksLatin(right)) {
           const tmp = left;
           left = right;

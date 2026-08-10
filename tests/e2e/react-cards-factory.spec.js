@@ -483,6 +483,47 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
   });
 
+  test('shows a curated foreign source for loanwords and a dictionary form for inflected verbs', async ({ page }) => {
+    await page.route('**/api/pronunciation?*', async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.tokens = (payload.tokens || []).map((token) => {
+        if (token.surface === 'テスト') {
+          return {
+            ...token,
+            evidence: {
+              ...(token.evidence || {}),
+              foreignOrigin: { language: '英语', term: 'test', source: 'curated' },
+            },
+          };
+        }
+        if (token.surface === '使い') {
+          return {
+            ...token,
+            evidence: { ...(token.evidence || {}), basicForm: '使う' },
+          };
+        }
+        return token;
+      });
+      await route.fulfill({ response, json: payload });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const content = page.getByTestId('react-card-content');
+
+    const loanword = content.locator('.pronunciation-token[data-pronunciation-surface="テスト"]').first();
+    await loanword.hover();
+    const tooltip = page.getByRole('tooltip', { name: '日语读音' });
+    await expect(tooltip).toContainText('英语来源');
+    await expect(tooltip).toContainText('test');
+
+    const inflectedVerb = content.locator('.pronunciation-token[data-pronunciation-surface="使い"]').first();
+    await inflectedVerb.hover();
+    await expect(tooltip).toContainText('辞书形');
+    await expect(tooltip).toContainText('使う');
+  });
+
   test('keeps one pronunciation token interactive when an annotation splits it across DOM nodes', async ({ page, request }) => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
@@ -641,6 +682,18 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await inspector.getByRole('button', { name: '关闭知识点查询' }).click();
 
     await blueMarker.dispatchEvent('click');
+    const annotationToolbar = page.getByTestId('card-selection-toolbar');
+    await expect(annotationToolbar).toBeVisible();
+    const annotationToolbarLayout = await annotationToolbar.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        viewportWidth: window.innerWidth,
+      };
+    });
+    expect(annotationToolbarLayout.left).toBeGreaterThanOrEqual(7);
+    expect(annotationToolbarLayout.right).toBeLessThanOrEqual(annotationToolbarLayout.viewportWidth - 7);
     await page.getByRole('button', { name: '更改标记颜色' }).click();
     const updated = page.waitForResponse((response) => (
       response.request().method() === 'PATCH'
@@ -955,12 +1008,25 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       const glossRect = rect('.csa-gloss-slot');
       const actionElement = element('[data-testid="card-selection-action-row"]');
       const glossElement = element('.csa-gloss-slot');
+      const gloss = element('.csa-gloss');
+      const visibleGlossChildren = Array.from(gloss?.children || [])
+        .map((child) => child.getBoundingClientRect())
+        .filter((child) => child.width > 0 && child.height > 0);
+      const glossChildrenOverlap = visibleGlossChildren.some((current, index) => (
+        visibleGlossChildren.slice(index + 1).some((next) => (
+          current.left < next.right
+          && current.right > next.left
+          && current.top < next.bottom
+          && current.bottom > next.top
+        ))
+      ));
       return {
         toolbar: { left: toolbarRect.left, right: toolbarRect.right },
         context: { right: contextRect.right, bottom: contextRect.bottom },
         action: { top: actionRect.top, scrollWidth: actionElement.scrollWidth, clientWidth: actionElement.clientWidth },
         previewRight: previewRect.right,
         gloss: { left: glossRect.left, right: glossRect.right, scrollWidth: glossElement.scrollWidth, clientWidth: glossElement.clientWidth },
+        glossChildrenOverlap,
       };
     });
     expect(layout.toolbar.left).toBeGreaterThanOrEqual(8);
@@ -969,6 +1035,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(layout.previewRight).toBeLessThanOrEqual(layout.gloss.left + 1);
     expect(layout.gloss.right).toBeLessThanOrEqual(layout.context.right + 1);
     expect(layout.gloss.scrollWidth).toBeLessThanOrEqual(layout.gloss.clientWidth);
+    expect(layout.glossChildrenOverlap).toBe(false);
     expect(layout.action.scrollWidth).toBeLessThanOrEqual(layout.action.clientWidth);
   });
 

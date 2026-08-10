@@ -15,9 +15,11 @@ export function normalizeLoanwordAnnotations(markdown) {
       .map((item) => item.trim())
       .filter(Boolean)
       .map((item) => {
-        const [left, ...rest] = item.split('=');
-        const right = rest.join('=').trim();
-        return `<span class="loanword-tag">${left.trim()}${right ? ` → ${right}` : ''}</span>`;
+        const parts = item.split('=').map((part) => part.trim()).filter(Boolean);
+        if (parts.length >= 3) return `<span class="loanword-tag">${parts[0]} · ${parts[1]} · ${parts.slice(2).join(' = ')}</span>`;
+        const [left = '', ...rest] = parts;
+        const right = rest.join(' = ').trim();
+        return `<span class="loanword-tag">${left}${right ? ` → ${right}` : ''}</span>`;
       })
       .join(' ');
     return `<div class="loanword-block"><span class="loanword-label">外来语标注</span><span>${items}</span></div>`;

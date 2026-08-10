@@ -1,0 +1,101 @@
+{
+  "version": "ja-pronunciation-v2",
+  "entries": [
+    {
+      "surface": "取り扱い説明書",
+      "reading": "とりあつかいせつめいしょ",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "勤務表",
+      "reading": "きんむひょう",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "掲示板",
+      "reading": "けいじばん",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "一人",
+      "reading": "ひとり",
+      "unitKind": "word",
+      "reason": "irregular counter reading"
+    },
+    {
+      "surface": "来月",
+      "reading": "らいげつ",
+      "unitKind": "word",
+      "reason": "common compound noun"
+    },
+    {
+      "surface": "リフレッシュ",
+      "reading": "りふれっしゅ",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "refresh",
+        "source": "curated"
+      }
+    },
+    {
+      "surface": "データ",
+      "reading": "でーた",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "data",
+        "source": "curated"
+      }
+    },
+    {
+      "surface": "ファイル",
+      "reading": "ふぁいる",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "file",
+        "source": "curated"
+      }
+    },
+    {
+      "surface": "スケジュール",
+      "reading": "すけじゅーる",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "schedule",
+        "source": "curated"
+      }
+    },
+    {
+      "surface": "チーム",
+      "reading": "ちーむ",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "team",
+        "source": "curated"
+      }
+    },
+    {
+      "surface": "ミーティング",
+      "reading": "みーてぃんぐ",
+      "unitKind": "word",
+      "reason": "confirmed English loanword",
+      "foreignOrigin": {
+        "language": "英语",
+        "term": "meeting",
+        "source": "curated"
+      }
+    }
+  ]
+}

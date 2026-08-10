@@ -12,6 +12,11 @@ import {
   selectPronunciationToken,
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
+import {
+  isKatakanaLoanwordCandidate,
+  pronunciationBasicForm,
+  pronunciationForeignOrigin,
+} from './pronunciation-token-details';
 import type { CardDocument } from './card-document';
 import type { CardAnnotation } from '../factory/factory-api';
 import type { CardType } from '../factory/types';
@@ -210,6 +215,9 @@ export function PronunciationCardContent({
   const contentHtml = enhancePronunciationHtml(html, tokens);
   const legacySurface = <div dangerouslySetInnerHTML={{ __html: contentHtml }} />;
   const canaryResetKey = `${generationId || 0}:${cardDocument?.version || 'v2'}`;
+  const overlayBasicForm = overlay ? pronunciationBasicForm(overlay.token) : null;
+  const overlayForeignOrigin = overlay ? pronunciationForeignOrigin(overlay.token) : null;
+  const overlayNeedsOrigin = Boolean(overlay && isKatakanaLoanwordCandidate(overlay.token) && !overlayForeignOrigin);
   return (
     <div className="pronunciation-card-content-shell">
       <div
@@ -287,6 +295,13 @@ export function PronunciationCardContent({
             <strong>{overlay.token.surface}</strong>
             <span className={overlay.token.status === 'accepted' ? 'is-accepted' : 'is-unresolved'}>{overlay.token.readingHiragana || '读音待确认'}</span>
           </div>
+          {(overlayBasicForm || overlayForeignOrigin || overlayNeedsOrigin) && (
+            <dl className="pronunciation-token-details">
+              {overlayBasicForm && <><dt>辞书形</dt><dd>{overlayBasicForm}</dd></>}
+              {overlayForeignOrigin && <><dt>{overlayForeignOrigin.language}来源</dt><dd>{overlayForeignOrigin.term}</dd></>}
+              {overlayNeedsOrigin && <><dt>外语来源</dt><dd className="is-unresolved">待确认</dd></>}
+            </dl>
+          )}
           {overlay.mode === 'tooltip' ? (
             <p className="pronunciation-tooltip-meta">{overlay.token.unitKind === 'word' ? '词语读音' : '汉字读音'} · {overlay.token.source === 'manual' ? '人工确认' : '系统分析'}</p>
           ) : (

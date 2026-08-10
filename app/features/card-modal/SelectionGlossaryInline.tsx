@@ -258,20 +258,24 @@ export function SelectionGlossaryInline({
           </span>
           {(activeGloss.reading || activeGloss.partOfSpeech) && (
             <small className="csa-gloss-meta">
-              {[activeGloss.reading, activeGloss.partOfSpeech].filter(Boolean).join(' · ')}
+              {[activeGloss.reading, activeGloss.partOfSpeech, source].filter(Boolean).join(' · ')}
             </small>
           )}
+          {!activeGloss.reading && !activeGloss.partOfSpeech && (
+            <small className="csa-gloss-meta">{source}</small>
+          )}
         </span>
-        <span className="csa-gloss-summary" aria-label={`来源 ${source}，${CONFIDENCE_LABEL[activeGloss.confidence]}`}>
-          <small className="csa-gloss-source">{source}</small>
-          <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
-            {CONFIDENCE_LABEL[activeGloss.confidence]}
-          </small>
-        </span>
-        {(choices.length > 1 || editable || correctable) && (
+        {(choices.length > 1 || editable || correctable) ? (
           <DropdownMenu.Root modal={false}>
             <DropdownMenu.Trigger asChild>
-              <button type="button" className="csa-gloss-menu-trigger" aria-label="打开释义选项">
+              <button
+                type="button"
+                className="csa-gloss-menu-trigger"
+                aria-label={`打开释义选项，来源 ${source}，${CONFIDENCE_LABEL[activeGloss.confidence]}`}
+              >
+                <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
+                  {CONFIDENCE_LABEL[activeGloss.confidence]}
+                </small>
                 释义{choices.length > 1 ? ` ${choiceIndex + 1}/${choices.length}` : ''}
                 <ChevronDown aria-hidden="true" />
               </button>
@@ -347,6 +351,10 @@ export function SelectionGlossaryInline({
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+        ) : (
+          <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
+            {CONFIDENCE_LABEL[activeGloss.confidence]}
+          </small>
         )}
       </span>
     );

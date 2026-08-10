@@ -189,7 +189,6 @@
 }
 .card-selection-toolbar .csa-gloss,
 .card-selection-toolbar .csa-gloss-editor {
-  display: flex;
   flex: 1 1 auto;
   align-items: center;
   gap: 5px;
@@ -200,6 +199,14 @@
   font: 600 12px/1.2 var(--font-sans);
   white-space: nowrap;
 }
+.card-selection-toolbar .csa-gloss {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+}
+.card-selection-toolbar .csa-gloss-editor { display: flex; }
 .card-selection-toolbar .csa-gloss > svg,
 .card-selection-toolbar .csa-gloss-editor > svg {
   width: 15px;
@@ -239,20 +246,6 @@
 .card-selection-toolbar .csa-gloss-source {
   align-self: center;
 }
-.card-selection-toolbar .csa-gloss-summary {
-  display: inline-flex;
-  flex: 0 1 190px;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
-}
-.card-selection-toolbar .csa-gloss-summary .csa-gloss-source {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .card-selection-toolbar .csa-gloss-confidence {
   flex: none;
   padding: 3px 5px;
@@ -275,11 +268,16 @@
 }
 .card-selection-toolbar .csa-gloss-menu-trigger {
   flex: none;
+  width: auto;
   height: 26px;
   padding: 4px 6px;
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--font-size-badge);
+  white-space: nowrap;
+}
+.card-selection-toolbar .csa-gloss-menu-trigger .csa-gloss-confidence {
+  margin-right: 1px;
 }
 .card-selection-toolbar .csa-gloss-menu-trigger svg {
   width: 12px;
@@ -355,7 +353,7 @@
   color: var(--color-primary);
   font-size: var(--font-size-caption);
 }
-.card-selection-toolbar .csa-gloss button[aria-label],
+.card-selection-toolbar .csa-gloss button[aria-label]:not(.csa-gloss-menu-trigger),
 .card-selection-toolbar .csa-gloss-editor button[aria-label] {
   width: 26px;
   justify-content: center;
@@ -772,6 +770,24 @@
   font-size: 12px;
   line-height: 1.4;
 }
+.pronunciation-token-details {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font: 600 12px/1.3 var(--font-sans);
+}
+.pronunciation-token-details dt { color: var(--color-text-tertiary); }
+.pronunciation-token-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+.pronunciation-token-details dd.is-unresolved { color: var(--color-warning); }
 .pronunciation-popover-meta {
   display: flex;
   gap: 8px;

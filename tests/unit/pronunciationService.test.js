@@ -45,6 +45,39 @@ test('dictionary entries override Kuromoji readings and preserve word boundaries
   ]);
 });
 
+test('pronunciation tokens expose accepted loanword origins and inflected verb dictionary forms', async () => {
+  const loanword = await buildTokens('リフレッシュ');
+  assert.deepEqual(loanword.tokens[0].evidence.foreignOrigin, {
+    language: '英语',
+    term: 'refresh',
+    source: 'curated',
+  });
+
+  const inflection = await buildTokens('固まった');
+  const verb = inflection.tokens.find((token) => token.surface === '固まっ');
+  assert.equal(verb.evidence.basicForm, '固まる');
+  assert.equal(verb.evidence.pos, '動詞');
+});
+
+test('persisted pronunciation projections receive current display-only loanword origin evidence', async () => {
+  const dbService = new DatabaseService(':memory:');
+  try {
+    const generationId = insertGeneration(dbService.db, '# sample\n\n## 2. 日本語:\n- **例句1**: リフレッシュします。');
+    const service = createPronunciationService({ dbService });
+    const created = await service.ensureGeneration(generationId);
+    dbService.db.prepare(`
+      UPDATE pronunciation_tokens
+      SET evidence_json = json_remove(evidence_json, '$.foreignOrigin')
+      WHERE document_id = ? AND surface = 'リフレッシュ'
+    `).run(created.document.id);
+
+    const read = await service.readGeneration(generationId);
+    assert.equal(read.tokens.find((token) => token.surface === 'リフレッシュ').evidence.foreignOrigin.term, 'refresh');
+  } finally {
+    dbService.close();
+  }
+});
+
 test('legacy Ruby is read into a plain projection without changing source Markdown', async () => {
   const result = await buildTokens('勤務表を確認します', {
     legacyMarkdown: '## 2. 日本語:\n- <ruby>勤務表<rt>きんむひょう</rt></ruby>を確認します',
