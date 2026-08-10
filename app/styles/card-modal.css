@@ -117,7 +117,11 @@
   z-index: 120;
   display: grid;
   gap: 0;
-  width: min(880px, calc(100vw - 24px));
+  /* Content-driven: a fixed width made the bar span the column regardless of
+     the selection, so the viewport clamp pinned it to the left edge and it
+     covered unrelated lines. Sizing to content keeps it beside the selection. */
+  width: max-content;
+  max-width: min(880px, calc(100vw - 24px));
   min-width: 0;
   box-sizing: border-box;
   padding: 0;
@@ -149,7 +153,6 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   min-height: 38px;
   padding: 4px 5px;
@@ -157,6 +160,9 @@
   background: var(--color-bg-subtle);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
+/* Keeps the primary action at the trailing edge without space-between, which
+   opened a 400px dead gap once the bar stopped being full width. */
+.card-selection-toolbar .csa-primary-actions { margin-left: auto; }
 .card-selection-toolbar .csa-action-tabs,
 .card-selection-toolbar .csa-primary-actions {
   display: inline-flex;

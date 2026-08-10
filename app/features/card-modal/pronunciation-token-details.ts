@@ -9,6 +9,10 @@ export type PronunciationForeignOrigin = {
 const KATAKANA_WORD = /^[\p{Script=Katakana}ー・]+$/u;
 
 export function pronunciationBasicForm(token: PronunciationToken) {
+  // The する half of a compound like 更新した already reports its dictionary form
+  // on the noun, so showing "する" here again would split one word across two
+  // tooltips.
+  if (typeof token.evidence?.suruCompoundOf === 'string') return null;
   const value = token.evidence?.basicForm;
   if (typeof value !== 'string') return null;
   const normalized = value.trim();

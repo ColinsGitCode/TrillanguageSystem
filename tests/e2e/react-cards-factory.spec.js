@@ -1039,6 +1039,67 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(layout.action.scrollWidth).toBeLessThanOrEqual(layout.action.clientWidth);
   });
 
+  test('P4 sizes the selection toolbar to its content and keeps it over the selection', async ({ page }) => {
+    // A fixed-width bar spanned the column regardless of the selection, so the
+    // viewport clamp pinned it to the left edge and it covered unrelated lines.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.route('**/api/local-glossary/lookup*', async (route) => {
+      const url = new URL(route.request().url());
+      await route.fulfill({
+        json: {
+          success: true,
+          lookup: {
+            status: 'exact',
+            query: {
+              text: url.searchParams.get('text'),
+              language: url.searchParams.get('language'),
+              canonicalForm: url.searchParams.get('text'),
+              normalizedForm: url.searchParams.get('text'),
+            },
+            gloss: {
+              id: 31,
+              zhGloss: '短释义',
+              sourceKind: 'dictionary',
+              sourceId: 31,
+              sourceDetail: 'ECDICT',
+              confidence: 'medium',
+              version: null,
+              senseKey: 'width-regression',
+            },
+            alternatives: [],
+          },
+        },
+      });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await waitForPronunciationContent(page);
+    await selectVisibleText(page, 'react');
+    await expect(page.locator('.csa-gloss')).toContainText('短释义');
+
+    const geometry = await page.locator('.card-selection-toolbar').evaluate((toolbar) => {
+      const bar = toolbar.getBoundingClientRect();
+      const selection = window.getSelection().getRangeAt(0).getBoundingClientRect();
+      return {
+        barWidth: bar.width,
+        barCentre: bar.left + (bar.width / 2),
+        selectionCentre: selection.left + (selection.width / 2),
+        viewportWidth: window.innerWidth,
+      };
+    });
+    // Content-driven: a short gloss must not produce a bar that spans the column.
+    expect(geometry.barWidth).toBeLessThan(geometry.viewportWidth * 0.6);
+    // The bar tracks the selection, subject to the viewport clamp: a selection
+    // near an edge may legitimately shift it inward, but no further than the
+    // clamp requires. A fixed-width bar failed this because the clamp dominated.
+    const halfWidth = geometry.barWidth / 2;
+    const expectedCentre = Math.min(
+      Math.max(geometry.selectionCentre, 8 + halfWidth),
+      geometry.viewportWidth - 8 - halfWidth
+    );
+    expect(Math.abs(geometry.barCentre - expectedCentre)).toBeLessThan(2);
+  });
+
   test('ST-P2 reads an English selection with speed control and exclusive playback', async ({ page }) => {
     await page.addInitScript(() => {
       window.__selectionAudio = { created: 0, paused: 0, played: 0 };

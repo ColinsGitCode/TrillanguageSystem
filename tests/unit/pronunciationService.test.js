@@ -59,6 +59,50 @@ test('pronunciation tokens expose accepted loanword origins and inflected verb d
   assert.equal(verb.evidence.pos, '動詞');
 });
 
+test.describe('suru-verb compounds report one dictionary form on the noun', () => {
+  test.it('reports 更新する on the noun and suppresses the する half', async () => {
+    const { tokens } = await buildTokens('最新の情報に更新したり。');
+    const noun = tokens.find((token) => token.surface === '更新');
+    assert.equal(noun.evidence.basicForm, '更新する');
+    // Without suppression the same verb would be explained twice: once as
+    // 更新する on the noun and again as する on the inflection.
+    const inflection = tokens.find((token) => token.surface === 'し');
+    assert.equal(inflection.evidence.suruCompoundOf, '更新');
+  });
+
+  test.it('covers the irregular せ stem', async () => {
+    const { tokens } = await buildTokens('彼は勉強せず出かけた。');
+    assert.equal(tokens.find((token) => token.surface === '勉強').evidence.basicForm, '勉強する');
+    assert.equal(tokens.find((token) => token.surface === 'せ').evidence.suruCompoundOf, '勉強');
+  });
+
+  test.it('still reports the compound when a dictionary token owns the noun', async () => {
+    // リフレッシュ is claimed by the pronunciation dictionary, so the analyzer
+    // branch never builds it; the compound must be attached to the claimed token
+    // or suppressing する would leave リフレッシュする reported nowhere.
+    const { tokens } = await buildTokens('表示をリフレッシュしたりする。');
+    const loanword = tokens.find((token) => token.surface === 'リフレッシュ');
+    assert.equal(loanword.source, 'dictionary');
+    assert.equal(loanword.evidence.basicForm, 'リフレッシュする');
+  });
+
+  test.it('does not attach する to a サ変 noun used as a plain noun', async () => {
+    // 表示 carries the サ変接続 tag even in 表示を, so the following token has to
+    // be a real する before the compound is claimed.
+    const { tokens } = await buildTokens('表示をリフレッシュしたりする。');
+    const noun = tokens.find((token) => token.surface === '表示');
+    assert.equal(noun.evidence.basicForm, '表示');
+    assert.equal(noun.evidence.suruCompoundOf, undefined);
+  });
+
+  test.it('leaves a compound verb that is not サ変 untouched', async () => {
+    const { tokens } = await buildTokens('データを再読み込みしてみて。');
+    const verb = tokens.find((token) => token.surface === '読み込み');
+    assert.equal(verb.evidence.basicForm, '読み込む');
+    assert.equal(verb.evidence.suruCompoundOf, undefined);
+  });
+});
+
 test('persisted pronunciation projections receive current display-only loanword origin evidence', async () => {
   const dbService = new DatabaseService(':memory:');
   try {

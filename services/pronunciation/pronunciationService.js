@@ -250,6 +250,36 @@ function chooseDictionaryTokens(text, entries, dictionaryVersion) {
   return selected;
 }
 
+// A する-verb built on a noun ("更新する") is analysed as two tokens: the noun
+// tagged サ変接続 and a separate する inflection. Reporting the noun's dictionary
+// form as "更新" told the reader nothing, and the compound only showed up on a
+// bare "し". These helpers report the compound once, on the noun.
+//
+// The サ変接続 tag alone is not sufficient: "表示を" carries it while being used
+// as a plain noun, so the following token must really be する.
+function isSuruInflection(analyzed) {
+  return Boolean(analyzed)
+    && analyzed.pos === '動詞'
+    && analyzed.basic_form === 'する';
+}
+
+function suruCompoundBasicForm(analyzerTokens, index, surface) {
+  const analyzed = analyzerTokens[index];
+  if (!analyzed || analyzed.pos !== '名詞' || analyzed.pos_detail_1 !== 'サ変接続') return null;
+  if (!isSuruInflection(analyzerTokens[index + 1])) return null;
+  return `${surface}する`;
+}
+
+// The する fragment itself is now redundant: suppressing its dictionary form
+// keeps the compound reported once instead of on both halves.
+function isMergedSuruInflection(analyzerTokens, index) {
+  const previous = analyzerTokens[index - 1];
+  return isSuruInflection(analyzerTokens[index])
+    && Boolean(previous)
+    && previous.pos === '名詞'
+    && previous.pos_detail_1 === 'サ変接続';
+}
+
 async function buildTokens(text, { dictionaryReader = createDictionaryReader(), legacyMarkdown = null, japaneseSegments = null } = {}) {
   const plainText = String(text || '').trim();
   const segments = japaneseSegments?.length
@@ -262,7 +292,7 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
       .map((token) => shiftToken(token, segment.startCodePoint)));
     const analyzerTokens = await analyzeJapaneseTokens(segment.text);
     let searchCursor = 0;
-    for (const analyzed of analyzerTokens) {
+    for (const [analyzedIndex, analyzed] of analyzerTokens.entries()) {
       const surface = String(analyzed.surface_form || '');
       if (!surface || !JAPANESE_RE.test(surface)) continue;
       const index = segment.text.indexOf(surface, searchCursor);
@@ -281,7 +311,17 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
         });
         continue;
       }
-      if (tokens.some((existing) => overlaps(existing, span))) continue;
+      const overlapping = tokens.find((existing) => overlaps(existing, span));
+      if (overlapping) {
+        // A dictionary token already owns this span (katakana loanwords such as
+        // リフレッシュ). The compound still has to be recorded here, otherwise
+        // suppressing the する half would leave リフレッシュする reported nowhere.
+        const claimedCompound = suruCompoundBasicForm(analyzerTokens, analyzedIndex, surface);
+        if (claimedCompound && !overlapping.evidence?.basicForm) {
+          overlapping.evidence = { ...(overlapping.evidence || {}), basicForm: claimedCompound };
+        }
+        continue;
+      }
       const readingRaw = analyzed.reading && analyzed.reading !== '*' ? analyzed.reading : null;
       tokens.push({
         ...span,
@@ -293,9 +333,14 @@ async function buildTokens(text, { dictionaryReader = createDictionaryReader(), 
         source: 'analyzer',
         ruleVersion: ANALYZER_VERSION,
         evidence: {
-          basicForm: analyzed.basic_form || null,
+          basicForm: suruCompoundBasicForm(analyzerTokens, analyzedIndex, surface)
+            || analyzed.basic_form
+            || null,
           pos: analyzed.pos || null,
           posDetail: analyzed.pos_detail_1 || null,
+          ...(isMergedSuruInflection(analyzerTokens, analyzedIndex)
+            ? { suruCompoundOf: analyzerTokens[analyzedIndex - 1].surface_form }
+            : {}),
         },
         components: [],
       });
