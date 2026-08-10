@@ -13,6 +13,17 @@ const MAX_GLOSS_CODEPOINTS = 120;
 const VALID_LANGUAGES = new Set(['en', 'ja']);
 const VALID_CONFIDENCE = new Set(['high', 'medium', 'low']);
 const VALID_SOURCE_KINDS = new Set(['manual', 'llm-confirmed', 'imported']);
+const VALID_FEEDBACK_OUTCOMES = new Set(['shown', 'rejected', 'switched', 'corrected']);
+const VALID_FEEDBACK_SOURCE_KINDS = new Set([
+  'current-card', 'textbook', 'manual', 'llm-confirmed', 'imported', 'history-card', 'dictionary',
+]);
+const VALID_FEEDBACK_SOURCE_DETAILS = new Set([
+  '本卡片', '教材确认', '本地词库', '人工确认', '本地导入', '历史卡片', '本地词典',
+  '精选本地词典', '中文维基词典 · 直接日中', 'JMdict · 英中桥接', 'ECDICT',
+]);
+const VALID_FEEDBACK_MATCH_REASONS = new Set(['reading', 'context', 'exact-form', 'normalized-form']);
+const MAX_FEEDBACK_TERM_CODEPOINTS = 80;
+const MAX_FEEDBACK_COUNT = 50;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -49,6 +60,35 @@ function validateDisplayText(value, field = 'text', max = MAX_GLOSS_CODEPOINTS) 
 function optionalHint(value, max) {
   const text = String(value || '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
   return Array.from(text).slice(0, max).join('');
+}
+
+function boundedCount(value) {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 0) return 0;
+  return Math.min(Math.floor(count), MAX_FEEDBACK_COUNT);
+}
+
+function validateFeedbackSourceKind(value) {
+  const sourceKind = String(value || '').trim();
+  if (!VALID_FEEDBACK_SOURCE_KINDS.has(sourceKind)) {
+    throw httpError(400, 'LOCAL_GLOSSARY_FEEDBACK_SOURCE_INVALID', 'sourceKind is not recognized');
+  }
+  return sourceKind;
+}
+
+function feedbackSourceDetail(value) {
+  const sourceDetail = String(value || '').normalize('NFKC').trim();
+  return VALID_FEEDBACK_SOURCE_DETAILS.has(sourceDetail) ? sourceDetail : null;
+}
+
+function feedbackSenseKey(value) {
+  const senseKey = String(value || '').normalize('NFKC').trim() || 'default';
+  return /^[\p{L}\p{N}._:-]{1,80}$/u.test(senseKey) ? senseKey : 'default';
+}
+
+function feedbackMatchReason(value) {
+  const matchReason = String(value || '').trim();
+  return VALID_FEEDBACK_MATCH_REASONS.has(matchReason) ? matchReason : null;
 }
 
 function normalizeReading(value) {
@@ -162,13 +202,91 @@ function dictionarySourceDetail(entry) {
   return entry.sourceId || '本地词典';
 }
 
+// Dictionary part-of-speech strings are heterogeneous: ECDICT writes "n." /
+// "vt." / "noun phrase", JMdict writes "n, vs, vt" / "adj-i", and the Chinese
+// Wiktionary extraction writes traditional "名詞" / "動詞". Tokenising and
+// comparing tags beats a single regex, which previously missed "adj-i" and
+// every traditional-Chinese tag.
+function partOfSpeechTags(partOfSpeech) {
+  return String(partOfSpeech || '')
+    .toLocaleLowerCase('en-US')
+    .split(/[\s,/;、]+/u)
+    .map((tag) => tag.replace(/\.+$/u, ''))
+    .filter(Boolean);
+}
+
 function partOfSpeechMatches(partOfSpeech, hint) {
-  const value = String(partOfSpeech || '').toLocaleLowerCase('en-US');
-  if (hint === 'adjective') return /(^|[\s,])(?:adj\.?|adjective)(?=$|[\s,])|形容词/u.test(value);
-  if (hint === 'noun') return /(^|[\s,])(?:n\.?|noun)(?=$|[\s,])|名词/u.test(value);
+  const value = String(partOfSpeech || '');
+  if (!value || !hint) return false;
+  const tags = partOfSpeechTags(value);
+  if (hint === 'adjective') {
+    return tags.some((tag) => tag === 'adj' || tag === 'adjective' || tag.startsWith('adj-'))
+      || /形容詞|形容词/u.test(value);
+  }
+  if (hint === 'noun') {
+    return tags.some((tag) => tag === 'n' || tag === 'noun' || tag === 'pn' || tag.startsWith('n-'))
+      || /名詞|名词/u.test(value);
+  }
+  if (hint === 'verb') {
+    return tags.some((tag) => (
+      ['v', 'vt', 'vi', 'vs', 'vk', 'vz', 'verb'].includes(tag) || /^v[1-5]/u.test(tag)
+    )) || /動詞|动词/u.test(value);
+  }
   return false;
 }
 
+const EN_SUBJECT_PRONOUNS = new Set(['i', 'we', 'you', 'they', 'he', 'she', 'it']);
+const EN_VERB_CUES = new Set([
+  'will', 'would', 'can', 'could', 'shall', 'should', 'may', 'might', 'must',
+  'do', 'does', 'did', "don't", "doesn't", "didn't", 'let', 'lets', "let's", 'please',
+  'to', 'not', 'never', 'also', 'always',
+]);
+const EN_MOTION_VERBS = new Set([
+  'go', 'goes', 'going', 'went', 'gone', 'come', 'comes', 'came', 'walk', 'walked',
+  'drive', 'drove', 'travel', 'travelled', 'traveled', 'return', 'returned', 'back', 'get', 'got',
+]);
+const EN_ADJECTIVE_CUES = new Set([
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+  'look', 'looks', 'looked', 'seem', 'seems', 'seemed', 'feel', 'feels', 'felt',
+  'become', 'becomes', 'became', 'stay', 'stays', 'remain', 'remains',
+  'very', 'quite', 'really', 'so', 'too', 'more', 'most', 'less', 'rather', 'pretty',
+]);
+const EN_DETERMINERS = new Set([
+  'a', 'an', 'the', 'this', 'that', 'these', 'those', 'my', 'your', 'his', 'her',
+  'its', 'our', 'their', 'some', 'any', 'every', 'no', 'each', 'another', 'one',
+]);
+const EN_PREPOSITIONS = new Set([
+  'in', 'on', 'at', 'of', 'for', 'with', 'from', 'by', 'about', 'into', 'during',
+  'after', 'before', 'over', 'under', 'through', 'between', 'against', 'around',
+  'near', 'since', 'until', 'without', 'within',
+]);
+const EN_AUXILIARIES = new Set([
+  'am', 'are', 'be', 'been', 'being', 'can', 'could', 'did', 'do', 'does', 'had',
+  'has', 'have', 'is', 'may', 'might', 'must', 'shall', 'should', 'was', 'were',
+  'will', 'would',
+]);
+// Bounded list of frequent finite verb forms. Used only to tell "the <noun>
+// <verb>" apart from attributive "the <adjective> <noun>"; anything outside the
+// list simply falls back to the attributive reading.
+const EN_COMMON_VERB_FORMS = new Set([
+  ...EN_AUXILIARIES,
+  'fell', 'fall', 'falls', 'went', 'goes', 'go', 'came', 'comes', 'come',
+  'seems', 'seem', 'looks', 'look', 'costs', 'cost', 'works', 'work',
+  'opens', 'open', 'closes', 'close', 'starts', 'start', 'ends', 'end',
+  'arrives', 'arrive', 'happened', 'happens', 'happen', 'began', 'begins', 'begin',
+  'became', 'becomes', 'become', 'gave', 'gives', 'give', 'took', 'takes', 'take',
+  'made', 'makes', 'make', 'said', 'says', 'say', 'told', 'tells', 'tell',
+  'stood', 'stands', 'remains', 'remained', 'stayed', 'stays', 'broke', 'breaks',
+  'ran', 'runs', 'run', 'sat', 'sits', 'rose', 'rises', 'grew', 'grows',
+  'changed', 'changes', 'moved', 'moves', 'stopped', 'stops',
+  'continued', 'continues', 'appeared', 'appears', 'contains', 'contained',
+  'includes', 'included', 'needs', 'need', 'wants', 'want',
+]);
+
+// Picks a dictionary sense, not a syntactic label: in "a spring day" the useful
+// sense of "spring" is still the noun 春天, so determiners resolve to noun.
+// Returns null whenever no cue is confident, because a wrong hint actively
+// reorders the candidate list toward the wrong sense.
 function inferEnglishPartOfSpeech(context, surface) {
   const normalizedContext = String(context || '').normalize('NFKC').toLocaleLowerCase('en-US');
   const normalizedSurface = String(surface || '').normalize('NFKC').toLocaleLowerCase('en-US');
@@ -178,22 +296,58 @@ function inferEnglishPartOfSpeech(context, surface) {
   const before = normalizedContext.slice(0, index);
   const after = normalizedContext.slice(index + normalizedSurface.length);
   const previous = /([a-z][a-z'-]*)\W*$/u.exec(before)?.[1] || '';
+  const beforePrevious = /([a-z][a-z'-]*)\W+[a-z][a-z'-]*\W*$/u.exec(before)?.[1] || '';
   const next = /^\W*([a-z][a-z'-]*)/u.exec(after)?.[1] || '';
-  const functionWords = new Set([
-    'am', 'are', 'be', 'been', 'being', 'can', 'could', 'did', 'do', 'does', 'had', 'has',
-    'have', 'is', 'may', 'might', 'must', 'shall', 'should', 'was', 'were', 'will', 'would',
-  ]);
-  if (next && !functionWords.has(next)) return 'adjective';
-  if (['a', 'an', 'the'].includes(previous)) return 'noun';
-  if (!next || functionWords.has(next)) return 'noun';
+
+  if (previous === 'to') {
+    // "went to school" is a destination noun; "want to book" is an infinitive.
+    return EN_MOTION_VERBS.has(beforePrevious) ? 'noun' : 'verb';
+  }
+  if (EN_VERB_CUES.has(previous)) return 'verb';
+  if (EN_SUBJECT_PRONOUNS.has(previous)) return 'verb';
+  if (EN_ADJECTIVE_CUES.has(previous)) return 'adjective';
+  if (EN_DETERMINERS.has(previous)) {
+    // "the public schedule" is attributive; "the book fell" is a subject noun.
+    return next && !EN_COMMON_VERB_FORMS.has(next) ? 'adjective' : 'noun';
+  }
+  if (EN_PREPOSITIONS.has(previous)) return 'noun';
+  if (!previous) {
+    // Sentence-initial: "Book a room" is imperative, "Spring is coming" is not.
+    if (EN_DETERMINERS.has(next)) return 'verb';
+    if (EN_AUXILIARIES.has(next)) return 'noun';
+    return null;
+  }
+  if (next && EN_AUXILIARIES.has(next)) return 'noun';
   return null;
+}
+
+// Japanese relies on the particle that follows the term rather than word order.
+function inferJapanesePartOfSpeech(context, surface) {
+  const normalizedContext = String(context || '').normalize('NFKC');
+  const normalizedSurface = String(surface || '').normalize('NFKC');
+  if (!normalizedContext || !normalizedSurface) return null;
+  const index = normalizedContext.indexOf(normalizedSurface);
+  if (index < 0) return null;
+  const after = normalizedContext.slice(index + normalizedSurface.length);
+  if (!after) return null;
+  if (/^(?:する|して|した|します|しない|され|でき)/u.test(after)) return 'verb';
+  if (/^な(?:[^\s]|$)/u.test(after)) return 'adjective';
+  if (/^(?:です|だ|である|でした)/u.test(after)) return 'noun';
+  if (/^[をがはもにへとでのやか]/u.test(after)) return 'noun';
+  if (/^(?:から|まで|より)/u.test(after)) return 'noun';
+  return null;
+}
+
+function inferContextPartOfSpeech(language, context, surface) {
+  if (!context) return null;
+  return language === 'en'
+    ? inferEnglishPartOfSpeech(context, surface)
+    : inferJapanesePartOfSpeech(context, surface);
 }
 
 function rankDictionaryEntries(entries, options) {
   const readingHint = normalizeReading(options.reading);
-  const contextPartOfSpeech = options.language === 'en'
-    ? inferEnglishPartOfSpeech(options.context, options.text)
-    : null;
+  const contextPartOfSpeech = inferContextPartOfSpeech(options.language, options.context, options.text);
   const formOrder = new Map(options.forms.map((form, index) => [form, index]));
   const ranked = entries.map((entry) => {
     const entryReading = normalizeReading(entry.reading);
@@ -214,8 +368,10 @@ function rankDictionaryEntries(entries, options) {
       + (directJapaneseChinese ? 80 : 0)
       - (bridge ? 120 : 0);
     let confidence = curated ? 'high' : 'medium';
+    // Bridge glosses are pivoted through English and stay low no matter how well
+    // the context matched; a confirmed context cue lifts any direct source.
     if (bridge) confidence = 'low';
-    else if (entry.language === 'en' && contextMatched) confidence = 'high';
+    else if (contextMatched) confidence = 'high';
     const matchReason = readingMatched
       ? 'reading'
       : contextMatched
@@ -413,6 +569,45 @@ class LocalGlossaryService {
     };
   }
 
+  // DIC-R2. Deliberately separate from lookup(): lookup stays read-only, and
+  // only this explicit client submission writes a usage fact. The selected
+  // short term is stored for the problem-term list; surrounding context is not
+  // accepted, and all descriptive fields are allowlisted instead of copied.
+  async recordFeedback(payload = {}) {
+    const language = validateLanguage(payload.language);
+    const text = validateText(payload.text, 'text', MAX_FEEDBACK_TERM_CODEPOINTS);
+    const outcome = String(payload.outcome || '').trim();
+    if (!VALID_FEEDBACK_OUTCOMES.has(outcome)) {
+      throw httpError(400, 'LOCAL_GLOSSARY_OUTCOME_INVALID', 'outcome must be shown, rejected, switched or corrected');
+    }
+    const term = await normalizeTerm(text, language);
+    const normalizedForm = language === 'en'
+      ? term.normalizedForm.toLocaleLowerCase('en-US')
+      : term.normalizedForm;
+    const event = this.database.recordLocalGlossaryLookupEvent({
+      language,
+      normalizedForm,
+      senseKey: feedbackSenseKey(payload.senseKey),
+      outcome,
+      sourceKind: validateFeedbackSourceKind(payload.sourceKind),
+      sourceDetail: feedbackSourceDetail(payload.sourceDetail),
+      confidence: VALID_CONFIDENCE.has(payload.confidence) ? payload.confidence : 'medium',
+      matchReason: feedbackMatchReason(payload.matchReason),
+      candidateCount: boundedCount(payload.candidateCount),
+      chosenRank: boundedCount(payload.chosenRank),
+      createdAtUtc: this.now(),
+    });
+    return { event };
+  }
+
+  feedbackStats(options = {}) {
+    const language = options.language ? validateLanguage(options.language) : undefined;
+    return {
+      outcomes: this.database.getLocalGlossaryOutcomeStats({ language, since: options.since }),
+      problemTerms: this.database.listLocalGlossaryProblemTerms({ language, limit: options.limit }),
+    };
+  }
+
   async createEntry(payload = {}) {
     const language = validateLanguage(payload.language);
     const canonicalForm = validateText(payload.canonicalForm || payload.text, 'canonicalForm');
@@ -578,4 +773,9 @@ module.exports = {
   PROMPT_VERSION,
   generationGlossPairs,
   httpError,
+  inferContextPartOfSpeech,
+  inferEnglishPartOfSpeech,
+  inferJapanesePartOfSpeech,
+  partOfSpeechMatches,
+  rankDictionaryEntries,
 };

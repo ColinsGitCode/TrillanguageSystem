@@ -56,6 +56,23 @@ export type LocalGlossaryLookup = {
   alternatives: LocalGlossaryGloss[];
 };
 
+export type LocalGlossaryFeedbackOutcome = 'shown' | 'rejected' | 'switched' | 'corrected';
+
+// DIC-R2 usage fact. The selected short term is recorded for the problem-term
+// list; there is deliberately no field for its surrounding sentence/context.
+export type LocalGlossaryFeedback = {
+  text: string;
+  language: CardLookupLanguage;
+  outcome: LocalGlossaryFeedbackOutcome;
+  sourceKind: string;
+  sourceDetail?: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  matchReason?: string | null;
+  senseKey?: string | null;
+  candidateCount?: number;
+  chosenRank?: number;
+};
+
 export const localGlossaryApi = {
   lookup: (payload: {
     text: string;
@@ -70,6 +87,11 @@ export const localGlossaryApi = {
     if (payload.context) params.set('context', payload.context);
     return requestJson<{ success: true; lookup: LocalGlossaryLookup }>(`/api/local-glossary/lookup?${params}`);
   },
+  recordFeedback: (payload: LocalGlossaryFeedback) =>
+    requestJson<{ success: true }>('/api/local-glossary/feedback', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   createEntry: (payload: {
     language: CardLookupLanguage;
     canonicalForm: string;

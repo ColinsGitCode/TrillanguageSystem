@@ -38,6 +38,26 @@ router.get('/api/local-glossary/catalog', (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+// DIC-R2: the only write path for usage facts. GET /lookup stays read-only, so
+// nothing is recorded unless the client explicitly submits an outcome here.
+router.post('/api/local-glossary/feedback', async (req, res, next) => {
+  try {
+    const result = await service.recordFeedback(req.body || {});
+    return res.status(201).json({ success: true, ...result });
+  } catch (error) { return next(error); }
+});
+
+router.get('/api/local-glossary/feedback/stats', (req, res, next) => {
+  try {
+    const stats = service.feedbackStats({
+      language: req.query.language,
+      since: req.query.since,
+      limit: req.query.limit,
+    });
+    return res.json({ success: true, stats });
+  } catch (error) { return next(error); }
+});
+
 router.post('/api/local-glossary/entries', async (req, res, next) => {
   try {
     const entry = await service.createEntry({ ...req.body, sourceKind: 'manual' });

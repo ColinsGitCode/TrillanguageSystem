@@ -34,6 +34,14 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
     fixture = await createTextbookManifestFixture(repoRoot);
   });
 
+  test.beforeEach(async ({ page }) => {
+    // Layout screenshots must not drift with the external DeepSeek health probe.
+    // Degraded health and recovery remain covered by dedicated shell tests.
+    await page.route('**/api/health', (route) => route.fulfill({
+      json: { status: 'healthy', system: { overallStatus: 'online', criticalOnline: true }, services: [] },
+    }));
+  });
+
   test('keeps a course service failure distinct from the first-use empty state', async ({ page }) => {
     await page.route('**/api/textbooks/courses', (route) => route.fulfill({
       status: 503,

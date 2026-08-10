@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, Languages, Pencil, Sparkles, X } from 'lucide-react';
+import { Check, ChevronDown, Languages, Pencil, Sparkles, ThumbsDown, X } from 'lucide-react';
 import { localGlossaryApi } from './local-glossary';
-import type { LocalGlossaryGloss, LocalGlossaryProposal } from './local-glossary';
+import type {
+  LocalGlossaryFeedbackOutcome,
+  LocalGlossaryGloss,
+  LocalGlossaryProposal,
+} from './local-glossary';
 import type { CardLookupLanguage } from './selection-actions';
 
 type Props = {
@@ -46,6 +50,8 @@ export function SelectionGlossaryInline({
   const [draftGloss, setDraftGloss] = useState('');
   const [proposal, setProposal] = useState<LocalGlossaryProposal | null>(null);
   const [choiceIndex, setChoiceIndex] = useState(0);
+  const [rejected, setRejected] = useState(false);
+  const shownRef = useRef('');
   const queryKey = ['local-glossary', language, phrase, generationId, readingHint, contextText];
   const lookupQuery = useQuery({
     queryKey,
@@ -71,13 +77,49 @@ export function SelectionGlossaryInline({
     setDraftGloss('');
     setProposal(null);
     setChoiceIndex(0);
+    setRejected(false);
   }, [phrase, language, readingHint, contextText]);
+
+  // Fire-and-forget usage fact. Never blocks the reader and never carries the
+  // surrounding sentence — only the selected short term and candidate facts.
+  const recordFeedback = useCallback((
+    gloss: LocalGlossaryGloss,
+    outcome: LocalGlossaryFeedbackOutcome,
+    chosenRank: number,
+    candidateCount: number,
+  ) => {
+    if (!language) return;
+    void localGlossaryApi.recordFeedback({
+      text: phrase,
+      language,
+      outcome,
+      sourceKind: gloss.sourceKind,
+      sourceDetail: gloss.sourceDetail,
+      confidence: gloss.confidence,
+      matchReason: gloss.matchReason,
+      senseKey: gloss.senseKey,
+      candidateCount,
+      chosenRank,
+    }).catch(() => {});
+  }, [language, phrase]);
+
+  // Count each resolved term once, so repeated re-renders of the same selection
+  // do not inflate the lookup totals the DIC-R2 report is derived from.
+  useEffect(() => {
+    const gloss = lookup?.gloss;
+    if (!gloss || !language) return;
+    const key = [language, phrase, readingHint || '', contextText || ''].join('\u0000');
+    if (shownRef.current === key) return;
+    shownRef.current = key;
+    recordFeedback(gloss, 'shown', 0, choices.length);
+  }, [lookup, language, phrase, readingHint, contextText, choices.length, recordFeedback]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey });
     setEditMode('none');
     setProposal(null);
     setChoiceIndex(0);
+    setRejected(false);
   };
 
   const manualMutation = useMutation({
@@ -88,8 +130,9 @@ export function SelectionGlossaryInline({
       senseKey: readingHint ? `reading:${readingHint}` : 'default',
     }),
     onSuccess: async () => {
+      if (activeGloss) recordFeedback(activeGloss, 'corrected', choiceIndex, choices.length);
       await refresh();
-      onToast('本地释义已保存');
+      onToast('本地释义已保存，以后优先使用');
     },
     onError: () => onToast('本地释义保存失败，请重试'),
   });
@@ -198,7 +241,9 @@ export function SelectionGlossaryInline({
       && activeGloss.version
       && ['manual', 'llm-confirmed', 'imported'].includes(activeGloss.sourceKind)
     );
-    const correctable = activeGloss.sourceKind === 'dictionary' && activeGloss.confidence !== 'high';
+    // A high-confidence dictionary hit can still be the wrong sense, so the
+    // "wrong gloss" action stays available for every dictionary result.
+    const correctable = activeGloss.sourceKind === 'dictionary';
     const source = activeGloss.sourceDetail || SOURCE_LABEL[activeGloss.sourceKind];
     return (
       <span
@@ -234,7 +279,12 @@ export function SelectionGlossaryInline({
                   <DropdownMenu.Item
                     key={`${choice.id || 'local'}-${choice.senseKey || index}-${choice.zhGloss}`}
                     className="csa-gloss-choice"
-                    onSelect={() => setChoiceIndex(index)}
+                    onSelect={() => {
+                      setChoiceIndex(index);
+                      // Attribute the intervention to the candidate the user
+                      // replaced, not to the better candidate they selected.
+                      if (index !== choiceIndex) recordFeedback(activeGloss, 'switched', index, choices.length);
+                    }}
                   >
                     <span>{choice.zhGloss}</span>
                     <small>
@@ -251,7 +301,42 @@ export function SelectionGlossaryInline({
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         )}
-        {(editable || correctable) && (
+        {correctable && !rejected && (
+          <button
+            type="button"
+            className="csa-gloss-reject"
+            data-testid="gloss-reject"
+            aria-label="释义不合适"
+            title="释义不合适：换一个义项或自己填写"
+            onClick={() => {
+              setRejected(true);
+              recordFeedback(activeGloss, 'rejected', choiceIndex, choices.length);
+              onToast(choices.length > 1 ? '可以换一个义项，或自己填写' : '请填写正确的中文释义');
+              if (choices.length <= 1) {
+                setDraftGloss('');
+                setEditMode('manual');
+              }
+            }}
+          >
+            <ThumbsDown aria-hidden="true" />释义不合适
+          </button>
+        )}
+        {correctable && rejected && choices.length > 1 && (
+          <button
+            type="button"
+            className="csa-gloss-reject is-active"
+            data-testid="gloss-reject-write"
+            aria-label="自己填写正确释义"
+            title="自己填写正确释义"
+            onClick={() => {
+              setDraftGloss('');
+              setEditMode('manual');
+            }}
+          >
+            <Pencil aria-hidden="true" />自己填写
+          </button>
+        )}
+        {(editable || (correctable && !rejected)) && (
           <button
             type="button"
             aria-label={editable ? '编辑本地释义' : '更正本地释义'}

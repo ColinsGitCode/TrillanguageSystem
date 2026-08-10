@@ -9,6 +9,9 @@ const CARD_FIXTURES = [
 
 async function installDeterministicPage(page) {
   await page.route(/https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/, (route) => route.abort('blockedbyclient'));
+  await page.route('**/api/health', (route) => route.fulfill({
+    json: { status: 'healthy', system: { overallStatus: 'online', criticalOnline: true }, services: [] },
+  }));
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'light' });
 }
 
@@ -63,12 +66,15 @@ async function visualMasks(page) {
 
 async function expectPageScreenshot(page, name) {
   await settleVisualPage(page);
-  if (await page.getByTestId('react-card-modal').count()) {
+  const hasCardModal = Boolean(await page.getByTestId('react-card-modal').count());
+  if (hasCardModal) {
     await expect(page.locator('.pronunciation-token').first()).toBeVisible();
     await settleVisualPage(page);
   }
   await expect(page).toHaveScreenshot(name, {
-    fullPage: true,
+    // The modal is fixed to the viewport; the hidden library underneath may be
+    // taller than the viewport and must not change the modal's visual baseline.
+    fullPage: !hasCardModal,
     animations: 'disabled',
     caret: 'hide',
     mask: await visualMasks(page)

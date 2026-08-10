@@ -1,0 +1,24 @@
+{
+  "version": "dic-r2-eval-v1",
+  "note": "Labelled disambiguation cases. expectedPartOfSpeech is what the context implies; every Japanese term here has both a noun-only and a verb-tagged candidate in the imported dictionary, so the expected answer is decidable from stored rows rather than from a translator's judgement. Contexts are short synthetic phrases and contain no card content.",
+  "cases": [
+    { "id": "ja-suru-01", "language": "ja", "text": "一元化", "context": "業務を一元化する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-02", "language": "ja", "text": "一括", "context": "費用を一括して払う", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-03", "language": "ja", "text": "一掃", "context": "在庫を一掃する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-04", "language": "ja", "text": "一覧", "context": "資料を一覧する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-05", "language": "ja", "text": "三振", "context": "打者が三振する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-06", "language": "ja", "text": "上場", "context": "会社が上場する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-suru-07", "language": "ja", "text": "上昇", "context": "気温が上昇する", "expectedPartOfSpeech": "verb" },
+    { "id": "ja-noun-01", "language": "ja", "text": "一覧", "context": "一覧を印刷する", "expectedPartOfSpeech": "noun" },
+    { "id": "ja-noun-02", "language": "ja", "text": "一言", "context": "一言が足りない", "expectedPartOfSpeech": "noun" },
+    { "id": "ja-noun-03", "language": "ja", "text": "上下", "context": "上下の関係", "expectedPartOfSpeech": "noun" },
+    { "id": "ja-noun-04", "language": "ja", "text": "一座", "context": "一座は静かだ", "expectedPartOfSpeech": "noun" },
+    { "id": "ja-noun-05", "language": "ja", "text": "上昇", "context": "上昇が止まった", "expectedPartOfSpeech": "noun" },
+    { "id": "ja-noun-06", "language": "ja", "text": "三振", "context": "三振も悪くない", "expectedPartOfSpeech": "noun" },
+    { "id": "en-noun-01", "language": "en", "text": "spring", "context": "in spring the garden wakes up", "expectedPartOfSpeech": "noun" },
+    { "id": "en-noun-02", "language": "en", "text": "book", "context": "the book fell off the shelf", "expectedPartOfSpeech": "noun" },
+    { "id": "en-noun-03", "language": "en", "text": "watch", "context": "the watch is expensive", "expectedPartOfSpeech": "noun" },
+    { "id": "en-noun-04", "language": "en", "text": "light", "context": "the light was very bright", "expectedPartOfSpeech": "noun" },
+    { "id": "en-noun-05", "language": "en", "text": "schedule", "context": "please check the schedule", "expectedPartOfSpeech": "noun" }
+  ]
+}

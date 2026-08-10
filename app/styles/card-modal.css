@@ -233,6 +233,32 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-badge);
 }
+.card-selection-toolbar .csa-gloss-reject {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-badge);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.card-selection-toolbar .csa-gloss-reject:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+.card-selection-toolbar .csa-gloss-reject.is-active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.card-selection-toolbar .csa-gloss-reject svg {
+  width: 12px;
+  height: 12px;
+}
 .card-selection-toolbar .csa-gloss-alternatives svg {
   width: 12px;
   height: 12px;

@@ -663,6 +663,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('shows a local Chinese gloss for both English and Japanese selections without an automatic LLM call', async ({ page }) => {
     const lookups = [];
+    const feedback = [];
     let proposalCalls = 0;
     await page.route('**/api/local-glossary/lookup*', async (route) => {
       const url = new URL(route.request().url());
@@ -679,11 +680,19 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
           lookup: {
             status: 'exact',
             query: { text: url.searchParams.get('text'), language, canonicalForm: url.searchParams.get('text'), normalizedForm: url.searchParams.get('text') },
-            gloss: { id: null, zhGloss: language === 'ja' ? '日语本地释义' : '英语本地释义', sourceKind: 'current-card', sourceId: 1, confidence: 'high', version: null },
-            alternatives: [],
+            gloss: language === 'ja'
+              ? { id: null, zhGloss: '日语本地释义', sourceKind: 'current-card', sourceId: 1, confidence: 'high', version: null }
+              : { id: 11, zhGloss: '英语错误义项', sourceKind: 'dictionary', sourceId: 11, sourceDetail: 'ECDICT', confidence: 'high', version: null, senseKey: 'noun' },
+            alternatives: language === 'en'
+              ? [{ id: 12, zhGloss: '英语正确义项', sourceKind: 'dictionary', sourceId: 12, sourceDetail: 'ECDICT', confidence: 'medium', version: null, senseKey: 'adjective' }]
+              : [],
           },
         },
       });
+    });
+    await page.route('**/api/local-glossary/feedback', async (route) => {
+      feedback.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, json: { success: true } });
     });
     await page.route('**/api/local-glossary/proposals', async (route) => {
       proposalCalls += 1;
@@ -693,8 +702,13 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
     await selectVisibleText(page, 'deterministic');
-    await expect(page.locator('.csa-gloss')).toContainText('英语本地释义');
+    await expect(page.locator('.csa-gloss')).toContainText('英语错误义项');
     await expect(page.locator('.csa-gloss')).toContainText('高可信');
+    await page.getByRole('button', { name: '释义不合适' }).click();
+    await expect(page.getByRole('button', { name: '自己填写正确释义' })).toBeVisible();
+    await page.getByRole('button', { name: '选择其他义项' }).click();
+    await page.getByRole('menuitem').filter({ hasText: '英语正确义项' }).click();
+    await expect(page.locator('.csa-gloss')).toContainText('英语正确义项');
 
     await page.getByTestId('react-card-modal-close').click();
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
@@ -704,6 +718,12 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(lookups.some((item) => item.language === 'en')).toBeTruthy();
     expect(lookups.some((item) => item.language === 'en' && item.context?.includes('deterministic'))).toBeTruthy();
     expect(lookups.some((item) => item.language === 'ja' && item.reading)).toBeTruthy();
+    await expect.poll(() => feedback.filter((item) => item.language === 'en').map((item) => item.outcome)).toEqual([
+      'shown',
+      'rejected',
+      'switched',
+    ]);
+    expect(feedback.every((item) => !('context' in item) && !('sentence' in item))).toBeTruthy();
     expect(proposalCalls).toBe(0);
   });
 

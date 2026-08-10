@@ -126,3 +126,105 @@ test('keeps DeepSeek proposal generation fail-closed in the integration harness'
   assert.equal(response.body.code, 'LOCAL_GLOSSARY_LLM_DISABLED');
   assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM local_glossary_proposals').get().count, 0);
 });
+
+test('DIC-R2 keeps lookup write-free and only records a fact on explicit feedback', async () => {
+  const countEvents = () => dbService.db
+    .prepare('SELECT COUNT(*) AS count FROM local_glossary_lookup_events').get().count;
+
+  await api('GET', '/api/local-glossary/lookup?language=en&text=public%20schedule');
+  assert.equal(countEvents(), 0, 'reading a gloss must not persist anything');
+
+  const recorded = await api('POST', '/api/local-glossary/feedback', {
+    body: {
+      language: 'en',
+      text: 'Public Schedule',
+      outcome: 'rejected',
+      sourceKind: 'dictionary',
+      sourceDetail: 'ECDICT',
+      confidence: 'medium',
+      matchReason: 'exact-form',
+      candidateCount: 3,
+      chosenRank: 0,
+    },
+  });
+  assert.equal(recorded.status, 201);
+  assert.equal(recorded.body.event.normalizedForm, 'public schedule');
+  assert.equal(recorded.body.event.outcome, 'rejected');
+  assert.equal(countEvents(), 1);
+});
+
+test('DIC-R2 feedback cannot persist surrounding context through descriptive fields', async () => {
+  const privateSentence = 'I checked the schedule before my private appointment.';
+  await api('POST', '/api/local-glossary/feedback', {
+    body: {
+      language: 'en',
+      text: 'schedule',
+      outcome: 'shown',
+      sourceKind: 'dictionary',
+      confidence: 'high',
+      context: privateSentence,
+      sentence: privateSentence,
+      sourceDetail: privateSentence,
+      matchReason: privateSentence,
+      senseKey: privateSentence,
+    },
+  });
+  const rows = dbService.db.prepare('SELECT * FROM local_glossary_lookup_events').all();
+  assert.equal(rows.length, 1);
+  const leaked = Object.values(rows[0]).filter((value) => (
+    typeof value === 'string' && value.includes('private appointment')
+  ));
+  assert.deepEqual(leaked, [], 'no descriptive column may carry the surrounding sentence');
+  assert.equal(rows[0].source_detail, null);
+  assert.equal(rows[0].match_reason, null);
+  assert.equal(rows[0].sense_key, 'default');
+});
+
+test('DIC-R2 rejects an unknown outcome instead of storing it', async () => {
+  const response = await api('POST', '/api/local-glossary/feedback', {
+    body: { language: 'en', text: 'schedule', outcome: 'deleted', sourceKind: 'dictionary', confidence: 'high' },
+  });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, 'LOCAL_GLOSSARY_OUTCOME_INVALID');
+  assert.equal(dbService.db.prepare('SELECT COUNT(*) AS count FROM local_glossary_lookup_events').get().count, 0);
+});
+
+test('DIC-R2 rejects an unknown feedback source and keeps events append-only', async () => {
+  const rejected = await api('POST', '/api/local-glossary/feedback', {
+    body: { language: 'en', text: 'schedule', outcome: 'shown', sourceKind: 'private sentence', confidence: 'high' },
+  });
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.body.code, 'LOCAL_GLOSSARY_FEEDBACK_SOURCE_INVALID');
+
+  await api('POST', '/api/local-glossary/feedback', {
+    body: { language: 'en', text: 'schedule', outcome: 'shown', sourceKind: 'dictionary', confidence: 'high' },
+  });
+  assert.throws(
+    () => dbService.db.prepare('DELETE FROM local_glossary_lookup_events').run(),
+    /immutable/u,
+  );
+});
+
+test('DIC-R2 ranks real problem terms and keeps a manual correction on top', async () => {
+  const post = (outcome) => api('POST', '/api/local-glossary/feedback', {
+    body: { language: 'ja', text: '手紙', outcome, sourceKind: 'dictionary', confidence: 'low' },
+  });
+  await post('shown');
+  await post('rejected');
+  await post('corrected');
+
+  const stats = await api('GET', '/api/local-glossary/feedback/stats?language=ja');
+  assert.equal(stats.status, 200);
+  const term = stats.body.stats.problemTerms.find((item) => item.normalizedForm === '手紙');
+  assert.ok(term, 'a term the user had to fix must surface in the problem list');
+  assert.equal(term.interventions, 2);
+  assert.equal(stats.body.stats.outcomes.totals.shown, 1);
+  assert.equal(stats.body.stats.outcomes.interventions, 2);
+
+  await api('POST', '/api/local-glossary/entries', {
+    body: { language: 'ja', canonicalForm: '手紙', zhGloss: '信件' },
+  });
+  const lookup = await api('GET', '/api/local-glossary/lookup?language=ja&text=%E6%89%8B%E7%B4%99');
+  assert.equal(lookup.body.lookup.gloss.zhGloss, '信件');
+  assert.equal(lookup.body.lookup.gloss.sourceKind, 'manual');
+});

@@ -35,6 +35,7 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Features/Unified_Selection_and_Local_Chinese_Glossary.md：已实施的英日统一选区与本地中文释义基线。CardModal 在同一工具条中完成英文/日文选择、简明中文释义、标记、复制、朗读、知识点查找和派生卡操作；`/dictionary` 管理人工覆盖并只读展示开放词典版本；直接日中词典优先于 JMdict 英中桥接，普通查询只读且不调用 LLM；
 - Operations/Local_Dictionary_Runbook.md：本地开放词典的来源优先级、直接日中/ECDICT/JMdict 导入、许可与哈希登记、DIC-R1 质量观察、版本退役和数据库级回滚手册；
 - TestReports/Local_Dictionary_DIC_R1_Acceptance_20260809.md：本地词典 DIC-R1 验收；记录 54,168 条直接日中词条、40 英语 + 40 日语真实样本、毫秒级命中、直接/桥接来源占比、管理页桌面验收，以及“高命中不等于语境义项准确”的质量边界；
+- TestReports/Local_Dictionary_DIC_R2_Observation_20260810.md：DIC-R2 上下文消歧与真实使用反馈；记录固定用例集上词性判定正确率 27.8% → 88.9%（零回退）、基线两处可复现缺陷、日语助词推断在 1,735 个サ变名词上 23.2% 的改判率、不落库整句的反馈表结构边界，以及 2 条因导入缺词性而未通过的用例；
 - Features/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_Design.md：**Draft，待产品与架构门禁确认**的日语按需注音浮层与 Ruby 退役方案。定义纯日语正文、整词 pronunciation token、轻量 Tooltip、交互式 Popover、人工纠音、与 annotation/TTS/KG/LA/教材的边界，以及历史 generation 不原地改写的受控迁移路线；真实卷审计确认 672/675 张卡含 13,528 个 Ruby 标签，PF-P0 已量化 466 种相邻复合候选并隔离 60 张历史结构破损卡；当前不授权历史 apply 或删除 legacy reader；
 - Architecture/Japanese_Pronunciation_Overlay_and_Ruby_Retirement_ADR.md：注音独立投影、offset、纠音事件、API、feature flag 与消费者边界的实现基线；历史迁移、人工决策、shadow replay、Canary 和 Ruby 退役仍需各自验收；
 - Features/prototypes/pf-d1-pronunciation-overlay.html：PF-D1 桌面原型，包含 S1-S12 状态；当前作为交互参考，不替代用户逐状态确认；

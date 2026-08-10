@@ -25,6 +25,7 @@ const cardEngagementDomain = require('./db/cardEngagement');
 const pronunciationDomain = require('./db/pronunciation');
 const localGlossaryDomain = require('./db/localGlossary');
 const localDictionaryDomain = require('./db/localDictionary');
+const localGlossaryFeedbackDomain = require('./db/localGlossaryFeedback');
 const { readCatalog } = require('../localGlossary/localDictionaryCatalog');
 const migrationRunner = require('./db/migrationRunner');
 const kgSourceSyncJobsDomain = require('./db/kgSourceSyncJobs');
@@ -928,6 +929,18 @@ class DatabaseService {
 
   listLocalDictionarySourceStats() {
     return localDictionaryDomain.listSourceStats(this.db);
+  }
+
+  recordLocalGlossaryLookupEvent(payload) {
+    return this.withBusyRetry(() => localGlossaryFeedbackDomain.recordEvent(this.db, payload));
+  }
+
+  listLocalGlossaryProblemTerms(options = {}) {
+    return localGlossaryFeedbackDomain.listProblemTerms(this.db, options);
+  }
+
+  getLocalGlossaryOutcomeStats(options = {}) {
+    return localGlossaryFeedbackDomain.getOutcomeStats(this.db, options);
   }
 
   getLocalGlossaryEntry(id) {

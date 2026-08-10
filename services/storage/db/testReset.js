@@ -11,6 +11,9 @@
 // statements, add it here (children before parents) and update the unit test.
 
 const TABLES_IN_DELETE_ORDER = [
+  // DIC-R2 usage facts: independent of the entries below, cleared first.
+  'local_glossary_lookup_events',
+
   // LLM proposals before confirmed local glossary entries.
   'local_glossary_proposals',
   'local_glossary_entries',
@@ -102,6 +105,8 @@ function truncateAll(db) {
           'textbook_asset_delete_block',
           'textbook_operation_events_update_block',
           'textbook_operation_events_delete_block',
+          'local_glossary_lookup_events_update_block',
+          'local_glossary_lookup_events_delete_block',
           'card_annotation_migration_events_update_block',
           'card_annotation_migration_events_delete_block',
           'card_engagement_events_update_block',

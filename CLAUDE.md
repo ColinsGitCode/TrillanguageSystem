@@ -92,7 +92,7 @@ Active route modules:
 - routes/uiPerformance.js: bounded, content-free UI performance samples at `POST /api/ui-performance`;
 - routes/ocr.js: /api/ocr;
 - routes/selectionTts.js: `GET/POST /api/tts/selection` config discovery and immediate English/Japanese binary synthesis;
-- routes/localGlossary.js: read-only layered English/Japanese Chinese-gloss lookup, manual local glossary CRUD/restore, imported-provider catalog statistics, and explicit DeepSeek proposal acceptance/rejection;
+- routes/localGlossary.js: read-only layered English/Japanese Chinese-gloss lookup, manual local glossary CRUD/restore, imported-provider catalog statistics, explicit DeepSeek proposal acceptance/rejection, and DIC-R2 sentence-free lookup feedback plus its read-only stats projection;
 - routes/cardReader.js: CR-P1 read-only shadow report plus CR-P2 server-allowlisted CardDocument Canary by generation id;
 - routes/misc.js: delete record by id;
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
@@ -136,6 +136,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         localGlossaryService.js
         localDictionaryCatalog.js
         openDictionaryImport.js
+        dictionaryEvaluation.js
       learning/
         application/
           learningService.js
@@ -158,6 +159,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
           helpers.js
           highlights.js
           localDictionary.js
+          localGlossaryFeedback.js
           textbooks.js
           testReset.js
 
@@ -193,8 +195,11 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - Selection TTS is a desktop-only, on-demand English/Japanese tool. It calls the same Kokoro/VOICEVOX providers through `synthesizeSpeech()` and the shared priority coordinator; interactive work enters before waiting batch work, while a 5-second anti-starvation window preserves batch progress.
 - `GET /api/tts/selection` exposes only controlled client configuration. `POST /api/tts/selection` returns immediate binary audio with provider/cache metadata; it must not create `audio_files`, generations, annotations, KG facts, Study Items, Review Events, or FSRS state.
 - Selection TTS cache is an opaque-hash, TTL-bounded named volume at `three_lans_system_selection_tts_cache`. It is outside SQLite, `RECORDS_PATH`, textbook media, and `express.static`; cache write failure must degrade to `X-TTS-Cache: BYPASS` while still returning successful provider audio.
-- Local Chinese-gloss lookup is read-only and local-first: current-card exact translations, textbook expressions, confirmed local entries, versioned local dictionary entries, then exact recent-card history. Inside the dictionary layer, curated entries and direct Japanese-to-Chinese Wiktionary evidence rank before the JMdict-to-ECDICT English bridge; bridge results remain low-confidence fallbacks. Dictionary lookup receives a bounded semantic-block context and the accepted pronunciation reading when available; it ranks all matching senses instead of taking the first row, and returns bounded alternatives with visible source and confidence. It must never call DeepSeek or persist data during lookup. `LOCAL_GLOSSARY_LLM_ENABLED` controls only the explicit proposal endpoint; proposals remain pending and editable until a user accepts them into `local_glossary_entries`.
+- Local Chinese-gloss lookup is read-only and local-first: current-card exact translations, textbook expressions, confirmed local entries, versioned local dictionary entries, then exact recent-card history. Human-confirmed entries always outrank dictionary results. Inside the dictionary layer, curated entries and direct Japanese-to-Chinese Wiktionary evidence rank before the JMdict-to-ECDICT English bridge; bridge results remain low-confidence fallbacks. Dictionary lookup receives a bounded semantic-block context and the accepted pronunciation reading when available; it ranks all matching senses instead of taking the first row, and returns bounded alternatives with visible source and confidence. It must never call DeepSeek or persist data during lookup. `LOCAL_GLOSSARY_LLM_ENABLED` controls only the explicit proposal endpoint; proposals remain pending and editable until a user accepts them into `local_glossary_entries`.
 - Open local dictionaries are imported only through `scripts/import/importOpenDictionaries.js`. Dry-run is the default; `--apply` is required for SQLite writes. ECDICT provides English-to-Chinese entries. The Chinese Wiktionary Japanese extraction provides direct Japanese-to-Chinese entries; import normalizes its Traditional Chinese glosses to Simplified Chinese with `opencc-js` and records that transform in `source_ref_json`. It must retain its CC BY-SA/GFDL attribution URL and input hash. Japanese JMdict-Simplified entries use only the first exact English-to-ECDICT Chinese mapping, are always shown as low confidence, and retain both JMdict and ECDICT source hashes, URLs, and licenses. Importing a new source version retires previous active versions for that source; it never deletes audit rows or overrides confirmed local entries. The curated starter dictionary follows the same retirement rule when its version changes. External dictionary files stay outside Git and application images.
+- DIC-R2 disambiguation is deterministic and LLM-free. Context ranking infers a part of speech from English cue words (infinitive/modal/pronoun to verb, linking verb and degree adverb to adjective, determiner and preposition to noun, determiner plus a following non-verb to attributive adjective) and from the Japanese particle after the term (`する` to verb, `な` to adjective, case particles to noun); when no cue is confident it returns null and the deterministic order is preserved. Part-of-speech tags are compared as tokenized tag sets so ECDICT `n.`/`vt.`, JMdict `n, vs, vt`/`adj-i` and traditional `名詞`/`動詞` all match. A context match may raise confidence, but an English-pivoted JMdict bridge gloss stays low confidence regardless.
+- `local_glossary_lookup_events` records DIC-R2 usage facts and is append-only, enforced by update/delete-blocking triggers. It stores the selected short term because the problem-term list needs it, but has no surrounding context, snippet, or sentence column; source details, match reasons and sense keys are server-allowlisted instead of copied from arbitrary client text. `GET /api/local-glossary/lookup` stays write-free; only an explicit `POST /api/local-glossary/feedback` records a `shown`/`rejected`/`switched`/`corrected` outcome, and each resolved selection reports `shown` once. Statistics report action-level interventions rather than a misleading query-level error rate. `GET /api/local-glossary/feedback/stats` is a read-only projection that ranks terms the user had to fix; it must not become an analytics pipeline.
+- `scripts/maintenance/dicR2Observation.js` is the read-only before/after accuracy gate over `scripts/maintenance/fixtures/dicR2EvaluationCases.json`; see `Docs/TestReports/Local_Dictionary_DIC_R2_Observation_20260810.md`.
 - `/dictionary` is the desktop management surface. It edits only `local_glossary_entries`; imported `local_dictionary_entries` stay read-only and are shown only as source/version/count metadata. Archive/restore uses optimistic versions, and an imported dictionary upgrade must not rewrite manual overrides.
 
 Provider errors use structured Error.code, Error.status, and Error.payload. Do not classify by matching message text.
@@ -304,6 +309,7 @@ Current tables:
 - local_glossary_entries;
 - local_glossary_proposals;
 - local_dictionary_entries;
+- local_glossary_lookup_events;
 - generations_fts virtual table and triggers.
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
