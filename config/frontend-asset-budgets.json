@@ -53,8 +53,8 @@
       "maxGzipBytes": 40500
     },
     "IntelPanel": {
-      "maxRawBytes": 3000,
-      "maxGzipBytes": 1300
+      "maxRawBytes": 3400,
+      "maxGzipBytes": 1500
     },
     "SelectionKnowledgePanel": {
       "maxRawBytes": 3600,

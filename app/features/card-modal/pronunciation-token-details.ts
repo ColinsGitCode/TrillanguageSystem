@@ -21,7 +21,9 @@ export const ORIGIN_TIER_LABEL: Record<PronunciationOriginTier, string> = {
   pending: 'AI 候选',
 };
 
-const KATAKANA_WORD = /^[\p{Script=Katakana}ー・]+$/u;
+// ー and ・ are script-neutral, so a bare "・" separator used to pass as a
+// katakana word and get offered a foreign-origin panel of its own.
+const KATAKANA_WORD = /^[ー・]*\p{Script=Katakana}[\p{Script=Katakana}ー・]*$/u;
 
 export function pronunciationBasicForm(token: PronunciationToken) {
   // The する half of a compound like 更新した already reports its dictionary form

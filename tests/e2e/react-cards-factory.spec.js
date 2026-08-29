@@ -483,6 +483,102 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
   });
 
+  test('Escape dismisses an open pronunciation overlay before it closes the card', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const modal = page.getByTestId('react-card-modal');
+    await expect(modal).toBeVisible();
+    const token = page.getByTestId('react-card-content')
+      .locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await expect(token).toBeVisible();
+    await token.hover();
+    const tooltip = page.getByRole('tooltip', { name: '日语读音' });
+    await expect(tooltip).toBeVisible();
+    // Hovering never moves focus, so the modal's target-based guard cannot see
+    // the overlay. Escape must still reach the overlay, not the card.
+    await page.keyboard.press('Escape');
+    await expect(tooltip).toBeHidden();
+    await expect(modal).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
+  });
+
+  test('a tab round trip replays one idempotent open event instead of counting a new open', async ({ page }) => {
+    const idempotentFlags = [];
+    page.on('response', async (response) => {
+      if (response.request().method() !== 'POST') return;
+      if (!response.url().includes('/api/card-engagement/events')) return;
+      try {
+        idempotentFlags.push((await response.json()).idempotent);
+      } catch {
+        // A discarded body is not part of this assertion.
+      }
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    await expect(page.locator('.card-study-meta')).toContainText('打开次数');
+    await expect.poll(() => idempotentFlags.length).toBe(1);
+    expect(idempotentFlags[0]).toBe(false);
+    await page.getByRole('tab', { name: '生成信息' }).click();
+    await expect(page.getByTestId('react-card-intel')).toBeVisible();
+    await page.getByRole('tab', { name: '学习内容' }).click();
+    await expect(page.locator('.card-study-meta')).toContainText('打开次数');
+    await expect.poll(() => idempotentFlags.length).toBe(2);
+    expect(idempotentFlags[1]).toBe(true);
+  });
+
+  test('draws quality dimensions against their own maximum and keeps content length out of the bars', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await page.getByRole('tab', { name: '生成信息' }).click();
+    const intel = page.getByTestId('react-card-intel');
+    await expect(intel).toBeVisible();
+    const bars = intel.locator('.intel-bar');
+    await expect(bars).toHaveCount(4);
+    await expect(bars.first()).toContainText('完整性');
+    await expect(bars.first()).toContainText('40 / 40');
+    // The fixture is a perfect 100, so every bar must be full. Raw points read
+    // as percentages used to render this same card as 40/30/20/10.
+    const fills = await intel.locator('.intel-bar i').evaluateAll(
+      (nodes) => nodes.map((node) => node.style.width)
+    );
+    expect(fills).toEqual(['100%', '100%', '100%', '100%']);
+    await expect(intel.locator('.intel-bars')).not.toContainText('contentLength');
+  });
+
+  test('the reading toggle layers furigana without changing the card text', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const content = page.getByTestId('react-card-content');
+    await expect(content.locator('.pronunciation-token').first()).toBeVisible();
+    expect(await content.locator('.pronunciation-token[data-pronunciation-ruby="true"]').count()).toBeGreaterThan(0);
+
+    const toggle = page.getByTestId('card-reading-toggle');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(content).not.toHaveClass(/show-readings/);
+    const textBefore = await content.innerText();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(content).toHaveClass(/show-readings/);
+    // The readings are a ::after layer, so the card's own text must be
+    // untouched: selection, annotation anchors and read-aloud all read it.
+    expect(await content.innerText()).toBe(textBefore);
+    const raised = await content.locator('li:has(.pronunciation-token[data-pronunciation-ruby="true"])').first()
+      .evaluate((node) => getComputedStyle(node).lineHeight);
+    expect(Number.parseFloat(raised)).toBeGreaterThan(40);
+
+    // The preference is per reader, so it survives a reload.
+    await page.reload();
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    await expect(page.getByTestId('card-reading-toggle')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('react-card-content')).toHaveClass(/show-readings/);
+
+    await page.getByTestId('card-reading-toggle').click();
+    await expect(page.getByTestId('react-card-content')).not.toHaveClass(/show-readings/);
+  });
+
   test('shows a curated foreign source for loanwords and a dictionary form for inflected verbs', async ({ page }) => {
     await page.route('**/api/pronunciation?*', async (route) => {
       const response = await route.fetch();

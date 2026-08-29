@@ -31,6 +31,8 @@ type Props = {
   cardType?: CardType;
   generationId: number | null;
   readOnly: boolean;
+  /** Renders every differing reading above its word instead of on demand. */
+  showReadings?: boolean;
   contentRef: RefObject<HTMLDivElement | null>;
   onCaptureSelection: (keyboard: boolean, ignoreAnnotationOverlap?: boolean) => void;
   onContentClick: (event: MouseEvent<HTMLDivElement>) => void;
@@ -77,6 +79,7 @@ export function PronunciationCardContent({
   cardType = 'trilingual',
   generationId,
   readOnly,
+  showReadings = false,
   contentRef,
   onCaptureSelection,
   onContentClick,
@@ -95,6 +98,7 @@ export function PronunciationCardContent({
   const tokens = pronunciationQuery.data?.tokens || [];
   const tokenRef = useRef<PronunciationToken[]>([]);
   const closeTimerRef = useRef<number | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [correctionReading, setCorrectionReading] = useState('');
   const [originTerm, setOriginTerm] = useState('');
@@ -136,11 +140,26 @@ export function PronunciationCardContent({
       if (!target?.closest('.pronunciation-token, .pronunciation-popover')) setOverlay(null);
     };
     const onScroll = () => setOverlay(null);
+    // Escape must dismiss the overlay, never the surrounding card modal. The
+    // modal's own handler guards on event.target, which cannot see a hover
+    // tooltip: hovering never moves focus, so the target stays outside the
+    // popover and the guard misses. Owning Escape here — in capture, before
+    // the modal's document listener — keeps dismissal with the open state.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const trigger = triggerRef.current;
+      setOverlay(null);
+      if (overlay.mode === 'popover' && trigger?.isConnected) trigger.focus({ preventScroll: true });
+    };
     document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onEscape, true);
     window.addEventListener('scroll', onScroll, true);
     reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: 'card-modal', resource: 'listener', outcome: 'start' });
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onEscape, true);
       window.removeEventListener('scroll', onScroll, true);
       reportPronunciationTelemetry({ eventType: 'lifecycle', uiSurface: 'card-modal', resource: 'listener', outcome: 'end' });
     };
@@ -168,6 +187,7 @@ export function PronunciationCardContent({
     const top = Math.min(Math.max(12, rect.bottom + 8), Math.max(12, window.innerHeight - (mode === 'popover' ? 280 : 90)));
     cancelClose();
     const open = () => {
+      triggerRef.current = element instanceof HTMLElement ? element : null;
       setOverlay({ token, left, top, mode });
       setOriginTerm('');
       setOriginError('');
@@ -275,7 +295,7 @@ export function PronunciationCardContent({
     <div className="pronunciation-card-content-shell">
       <div
         ref={(node) => { contentRef.current = node; }}
-        className="react-card-markdown"
+        className={`react-card-markdown${showReadings ? ' show-readings' : ''}`}
         data-testid="react-card-content"
         tabIndex={0}
         aria-label="学习卡片正文，可选择文字后操作"

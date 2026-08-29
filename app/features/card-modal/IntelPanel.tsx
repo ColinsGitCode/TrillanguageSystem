@@ -8,6 +8,22 @@ function parseObject(value: unknown): Record<string, number> {
   return {};
 }
 
+// Mirrors the maxima in services/observability/observabilityService.js. The
+// stored dimensions are raw points, not percentages: completeness 40/40 is a
+// perfect score, so drawing it as a 40% bar reads as a failure. contentLength
+// is a character count the backend explicitly excludes from the total, so it
+// is a fact, not a bar.
+const SCORE_DIMENSIONS: Array<{ key: string; label: string; max: number }> = [
+  { key: 'completeness', label: '完整性', max: 40 },
+  { key: 'accuracy', label: '准确性', max: 30 },
+  { key: 'exampleQuality', label: '例句质量', max: 20 },
+  { key: 'formatting', label: '格式规范', max: 10 },
+];
+
+const EXTRA_DIMENSION_LABELS: Record<string, string> = {
+  contentLength: '正文长度',
+};
+
 function textValue(value: unknown) {
   if (!value) return 'N/A';
   if (typeof value === 'string') return value;
@@ -21,6 +37,14 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
   const metadata = obs?.metadata || {};
   const provider = String(metadata.provider || record?.llm_provider || 'deepseek').toUpperCase();
   const model = String(metadata.model || record?.llm_model || 'unknown');
+  const scored = SCORE_DIMENSIONS
+    .filter((dimension) => dimension.key in dimensions)
+    .map((dimension) => ({ ...dimension, value: Number(dimensions[dimension.key]) || 0 }));
+  // Anything the backend adds later is surfaced as a plain fact rather than a
+  // bar, because its scale is unknown here and a guessed bar would mislead.
+  const extras = Object.entries(dimensions)
+    .filter(([key]) => !SCORE_DIMENSIONS.some((dimension) => dimension.key === key))
+    .map(([key, value]) => ({ key, label: EXTRA_DIMENSION_LABELS[key] || key, value: Number(value) || 0 }));
 
   return (
     <div className="intel-grid" data-testid="react-card-intel">
@@ -41,14 +65,23 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
       </section>
       <section className="intel-panel intel-wide">
         <p className="eyebrow">质量维度</p>
-        <div className="intel-bars">
-          {Object.entries(dimensions).length ? Object.entries(dimensions).map(([label, value]) => (
-            <div className="intel-bar" key={label}>
-              <span>{label}</span><strong>{value}</strong>
-              <div><i style={{ width: `${Math.max(0, Math.min(100, Number(value)))}%` }} /></div>
-            </div>
-          )) : <p className="empty-copy">暂无分项质量数据</p>}
-        </div>
+        {scored.length ? (
+          <div className="intel-bars">
+            {scored.map(({ key, label, max, value }) => (
+              <div className="intel-bar" key={key}>
+                <span>{label}</span><strong>{value}<small> / {max}</small></strong>
+                <div><i style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%` }} /></div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="empty-copy">暂无分项质量数据</p>}
+        {extras.length ? (
+          <dl className="intel-facts intel-dimension-extras">
+            {extras.map(({ key, label, value }) => (
+              <div key={key}><dt>{label}</dt><dd>{value}</dd></div>
+            ))}
+          </dl>
+        ) : null}
       </section>
       <section className="intel-panel intel-wide">
         <p className="eyebrow">生成要求</p>

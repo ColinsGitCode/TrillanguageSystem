@@ -1,3 +1,5 @@
+import { isKatakanaLoanwordCandidate } from './pronunciation-token-details';
+
 export type PronunciationToken = {
   id?: number;
   tokenKey: string;
@@ -18,6 +20,28 @@ const SKIP_SELECTOR = 'button, audio, source, script, style, .audio-btn';
 const BLOCK_TAGS = new Set(['article', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ol', 'p', 'section', 'tr', 'ul']);
 const CJK_RE = /[぀-ヿ㐀-鿿々〆ヵヶ]/u;
 
+function tokenReadingDiffersFromSurface(token: PronunciationToken) {
+  const reading = (token.readingHiragana || '').trim();
+  return Boolean(reading) && reading !== token.surface;
+}
+
+// Every token used to carry the "has a reading" underline, including particles
+// like を and の whose reading is the character itself. Marking all of them
+// marks none of them, so the underline is reserved for tokens that actually
+// reveal something the reader cannot already see on the page.
+function tokenRevealsSomething(token: PronunciationToken) {
+  if (token.status !== 'accepted') return true;
+  if (tokenReadingDiffersFromSurface(token)) return true;
+  const basicForm = token.evidence?.basicForm;
+  if (typeof basicForm === 'string' && basicForm.trim() && basicForm.trim() !== '*' && basicForm.trim() !== token.surface) {
+    return true;
+  }
+  if (token.evidence?.foreignOrigin) return true;
+  // A katakana word with no recorded origin still opens the panel that adds
+  // one, so it keeps the affordance that makes that path discoverable.
+  return isKatakanaLoanwordCandidate(token);
+}
+
 function createTokenSpan(document: Document, token: PronunciationToken, fragmentText = token.surface, fragmentIndex = 0, fragmentCount = 1) {
   const span = document.createElement('span');
   span.className = 'pronunciation-token';
@@ -26,6 +50,10 @@ function createTokenSpan(document: Document, token: PronunciationToken, fragment
   span.dataset.pronunciationReading = token.readingHiragana || '';
   span.dataset.pronunciationStatus = token.status;
   span.dataset.pronunciationSource = token.source;
+  span.dataset.pronunciationInformative = tokenRevealsSomething(token) ? 'true' : 'false';
+  // Drives the optional always-on reading layer. Only words whose reading is
+  // not already the visible text get one; ruby over kana would be noise.
+  span.dataset.pronunciationRuby = tokenReadingDiffersFromSurface(token) ? 'true' : 'false';
   span.dataset.pronunciationFragmentIndex = String(fragmentIndex);
   span.dataset.pronunciationFragmentCount = String(fragmentCount);
   span.tabIndex = fragmentIndex === 0 ? 0 : -1;

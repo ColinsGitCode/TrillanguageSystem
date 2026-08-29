@@ -5,12 +5,14 @@ import type { CardType } from '../factory/types';
 
 type Props = {
   generationId: number | null;
+  /** Stable for one modal open, so a tab switch replays the same idempotent key. */
+  openEventKey: string;
   phrase: string;
   cardType: CardType;
   readOnly: boolean;
 };
 
-export function CardEngagementMeta({ generationId, phrase, cardType, readOnly }: Props) {
+export function CardEngagementMeta({ generationId, openEventKey, phrase, cardType, readOnly }: Props) {
   const queryClient = useQueryClient();
   const recordedRef = useRef<Set<number>>(new Set());
   const statsQuery = useQuery({
@@ -23,7 +25,7 @@ export function CardEngagementMeta({ generationId, phrase, cardType, readOnly }:
     if (!generationId || recordedRef.current.has(generationId)) return;
     recordedRef.current.add(generationId);
     void factoryApi.recordEngagement({
-      eventKey: `card-open:${crypto.randomUUID()}`,
+      eventKey: `${openEventKey}:${generationId}`,
       generationId,
       phrase,
       cardType,
@@ -33,7 +35,7 @@ export function CardEngagementMeta({ generationId, phrase, cardType, readOnly }:
     }).then(() => queryClient.invalidateQueries({
       queryKey: ['card-engagement', 'stats', generationId],
     })).catch(() => {});
-  }, [cardType, generationId, phrase, queryClient, readOnly]);
+  }, [cardType, generationId, openEventKey, phrase, queryClient, readOnly]);
 
   const stats = statsQuery.data?.stats;
   return <>

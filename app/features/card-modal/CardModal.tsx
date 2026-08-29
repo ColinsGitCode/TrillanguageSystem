@@ -13,6 +13,7 @@ import {
   Copy,
   Eraser,
   Highlighter,
+  Languages,
   Palette,
   Search,
   Sparkles,
@@ -130,6 +131,27 @@ type SelectionToolbarState = {
   contextText: string;
 };
 
+const READINGS_STORAGE_KEY = 'three-lans:card-show-readings';
+
+// A per-reader view preference, so it survives card changes and reloads. Any
+// storage failure (private window, blocked site data) simply means the layer
+// starts off; it must never keep the card from rendering.
+function readStoredShowReadings() {
+  try {
+    return window.localStorage.getItem(READINGS_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function storeShowReadings(next: boolean) {
+  try {
+    window.localStorage.setItem(READINGS_STORAGE_KEY, next ? '1' : '0');
+  } catch {
+    // A reader who cannot persist the preference still gets it this session.
+  }
+}
+
 function lookupErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return '知识点查询失败，请重试。';
   const payload = error.payload as { code?: string } | null;
@@ -165,7 +187,16 @@ export function CardModal({
   const focusToolbarAfterSelectionRef = useRef(false);
   const focusKnowledgeAfterMenuRef = useRef(false);
   const keyboardSelectionRef = useRef(false);
+  // One id per modal mount. The "card was opened" fact belongs to the modal,
+  // not to the sidebar that renders it: the sidebar lives inside the content
+  // tab and unmounts whenever the user visits 生成信息, so a key minted there
+  // is new on every return and the server can never dedupe it.
+  const modalOpenIdRef = useRef('');
+  if (!modalOpenIdRef.current) modalOpenIdRef.current = crypto.randomUUID();
   const [tab, setTab] = useState<'content' | 'intel'>('content');
+  const [showReadings, setShowReadings] = useState(
+    () => typeof window !== 'undefined' && readStoredShowReadings()
+  );
   const [renderedHtml, setRenderedHtml] = useState('');
   const [annotationSnapshot, setAnnotationSnapshot] = useState<CardAnnotation[]>([]);
   const [annotationMode, setAnnotationMode] = useState<'pending' | 'annotations' | 'unavailable'>('pending');
@@ -849,6 +880,7 @@ export function CardModal({
         cardType={selection.cardType}
         generationId={generationId ? Number(generationId) : null}
         readOnly={readOnly}
+        showReadings={showReadings}
         contentRef={contentRef}
         onCaptureSelection={captureSelection}
         onContentClick={handleContentClick}
@@ -874,7 +906,7 @@ export function CardModal({
           )}
           <div>
             <h1 id="react-card-title">{displayTitle}</h1>
-            <p>{selection.cardType === 'scenario_phrase' ? 'SCENARIO' : selection.cardType === 'grammar_ja' ? 'GRAMMAR' : 'TRILINGUAL'} · MARKDOWN</p>
+            <p>{CARD_TYPE_LABEL[selection.cardType] || '学习卡'}</p>
           </div>
           <button ref={closeRef} className="icon-button" type="button" aria-label="关闭学习卡片" data-testid="react-card-modal-close" onClick={onClose}>
             <X aria-hidden="true" />
@@ -884,6 +916,22 @@ export function CardModal({
         <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
           <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
+          {tab === 'content' && (
+            <button
+              className="reading-toggle-button"
+              type="button"
+              aria-pressed={showReadings}
+              data-testid="card-reading-toggle"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const next = !showReadings;
+                setShowReadings(next);
+                storeShowReadings(next);
+              }}
+            >
+              <Languages aria-hidden="true" /> {showReadings ? '隐藏注音' : '显示注音'}
+            </button>
+          )}
           {tab === 'content' && !readOnly && (
             <button
               className="highlight-selection-button"
@@ -998,14 +1046,15 @@ export function CardModal({
                 </ContextMenu.Root>
               )}
               <aside className="card-study-meta">
-                <p className="eyebrow">CARD INFO</p>
+                {/* Card type, model and storage format belong to 生成信息: repeating
+                    them here put generation facts inside the study view and gave
+                    the reader three untranslated developer labels up front. */}
+                <p className="eyebrow">学习记录</p>
                 <dl>
-                  <div><dt>Type</dt><dd>{selection.cardType}</dd></div>
-                  <div><dt>Model</dt><dd>{cardQuery.data?.record?.llm_model || 'unknown'}</dd></div>
-                  <div><dt>Source</dt><dd>Markdown</dd></div>
                   <Suspense fallback={null}>
                     <DeferredCardEngagementMeta
                       generationId={generationId}
+                      openEventKey={`card-open:${modalOpenIdRef.current}`}
                       phrase={cardQuery.data?.record?.phrase || selection.title}
                       cardType={selection.cardType}
                       readOnly={readOnly}
