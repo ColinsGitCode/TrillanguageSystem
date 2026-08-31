@@ -1,15 +1,18 @@
 .react-alert { max-width: 1360px; margin: 0 auto 12px; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 12px; color: var(--color-danger); background: var(--color-danger-subtle); border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent); border-radius: var(--radius-md); }
 .react-alert button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; border: 0; background: transparent; cursor: pointer; }
-.product-workspace-layout { width: 100%; max-width: 1360px; margin: 0 auto; min-height: calc(100dvh - 80px); display: grid; grid-template-columns: minmax(0, 4fr) minmax(190px, 1fr); align-items: stretch; gap: 14px; }
-.product-workspace-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.product-workspace-rail { position: sticky; top: 20px; min-width: 0; max-height: calc(100dvh - 80px); padding-top: 44px; display: flex; flex-direction: column; gap: 12px; overflow: auto; scrollbar-width: thin; }
-.product-workspace-rail .shell-recovery-banner { min-height: 0; margin: 0; padding: 10px; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-.product-workspace-rail .shell-recovery-banner > div { min-width: 0; }
-.product-workspace-rail .shell-recovery-banner > div > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.product-workspace-rail .shell-recovery-primary, .product-workspace-rail .shell-recovery-secondary { grid-column: 1 / -1; width: 100%; }
-.factory-control-rail { min-width: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.factory-control-rail .queue-status { margin-top: auto; }
-.factory-content-fill { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* The composer used to hold a permanent 4:1 column. It cost 21% of the
+   workspace width to show a create form and an idle queue, so it moved into an
+   on-demand drawer and the library took the width back. */
+.factory-composer-trigger { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; white-space: nowrap; }
+.factory-composer-trigger svg { width: 16px; height: 16px; }
+.factory-composer-backdrop { position: fixed; inset: 0; z-index: 88; background: color-mix(in srgb, var(--color-overlay) 60%, transparent); }
+.factory-composer-drawer { position: absolute; inset: 0 0 0 auto; width: min(400px, 92vw); padding: 16px; overflow: auto; scrollbar-width: thin; border-left: 1px solid var(--color-border-strong); background: var(--color-bg-elevated); box-shadow: var(--shadow-modal); }
+.factory-control-rail { min-width: 0; min-height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.factory-composer-close { width: 30px; height: 30px; min-height: 30px; flex: 0 0 30px; display: grid; place-items: center; padding: 0; }
+.factory-composer-close svg { width: 16px; height: 16px; }
+.factory-composer > .surface-heading .product-page-header-actions { align-items: center; gap: 8px; }
+/* Keeps the full-height library that the two-column wrapper used to provide. */
+.factory-content-fill { width: 100%; max-width: 1360px; margin: 0 auto; min-height: calc(100dvh - 116px); display: flex; flex-direction: column; flex: 1; }
 .factory-library-grid { width: 100%; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 3fr); align-items: stretch; gap: 14px; }
 .factory-rail-alert { min-height: 0; margin: 0; padding: 9px 10px; gap: 8px; font-size: 12px; }
 .factory-rail-alert button { width: 28px; height: 28px; min-height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0; }
@@ -43,7 +46,8 @@
 .factory-source-tabs svg { width: 14px; height: 14px; }
 .text-input-block, .ocr-block { min-width: 0; display: grid; gap: 6px; }
 .text-input-block > span { color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
-.text-input-block textarea { width: 100%; height: 88px; min-height: 88px; resize: vertical; padding: 9px; color: var(--color-text-primary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); line-height: 1.45; }
+/* The drawer gives the input the room the 196px rail never had. */
+.text-input-block textarea { width: 100%; height: 150px; min-height: 88px; resize: vertical; padding: 9px; color: var(--color-text-primary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); line-height: 1.45; }
 .primary-button { width: 100%; min-width: 0; min-height: 40px; padding: 0 10px; color: var(--color-text-inverse); background: var(--color-primary); border: 1px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer; font-size: 12px; font-weight: 700; }
 .primary-button:disabled { opacity: .5; cursor: not-allowed; }
 .image-drop { min-height: 82px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; color: var(--color-text-tertiary); background: var(--color-bg-subtle); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md); cursor: pointer; overflow: hidden; }
@@ -78,6 +82,16 @@
 .duplicate-card-panel > footer { grid-template-columns: 1fr; border-top: 1px solid var(--color-border); background: var(--color-bg-subtle); }
 .duplicate-card-panel > footer button { color: var(--color-primary); }
 
+/* Header chip form of the queue: a status dot plus one line, capped so a long
+   job phrase cannot push the title row sideways. */
+.factory-queue-chip { max-width: 300px; min-width: 0; min-height: 34px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-full); cursor: pointer; }
+.factory-queue-chip:hover { border-color: var(--color-primary); }
+.factory-queue-chip > i { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-disabled); }
+.factory-queue-chip.queue-status-running > i { background: var(--color-primary); box-shadow: 0 0 0 4px var(--color-primary-subtle); }
+.factory-queue-chip.queue-status-failed > i { background: var(--color-danger); }
+.factory-queue-chip.queue-status-warning > i { background: var(--color-warning); }
+.factory-queue-chip .queue-current { margin: 0; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.factory-queue-chip .queue-current > span { grid-column: auto; }
 .queue-status { width: 100%; min-width: 0; padding: 12px; text-align: left; cursor: pointer; }
 .queue-status:hover { border-color: var(--color-primary); }
 .queue-status .surface-heading h2 { font-size: 16px; }
@@ -202,7 +216,9 @@
 }
 .card-density-control button[aria-pressed="true"] { color: var(--color-primary); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
 .card-density-control svg { width: 15px; height: 15px; }
-.card-file-grid { margin-top: 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+/* One column more than the rail era: the reclaimed 236px is worth more cards
+   per row than wider ones, and this keeps the card at its previous size. */
+.card-file-grid { margin-top: 12px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .file-card { position: relative; min-width: 0; min-height: 84px; padding: 26px 14px 13px; text-align: left; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); cursor: pointer; }
 .file-card:hover { transform: translateY(-1px); border-color: var(--color-border-strong); box-shadow: var(--shadow-md); }
 .file-card > span { position: absolute; top: 8px; right: 8px; padding: 3px 9px; border-radius: var(--radius-full); font-size: 12px; font-weight: 600; }
@@ -212,7 +228,7 @@
 .file-card.type-grammar_ja > span { color: var(--color-card-grammar-text); }
 .file-card.type-scenario_phrase { border-color: var(--color-card-scenario-border); background: var(--color-card-scenario-surface); }
 .file-card.type-scenario_phrase > span { color: var(--color-card-scenario-text); }
-.card-library.density-compact .card-file-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.card-library.density-compact .card-file-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
 .card-library.density-compact .file-card { min-height: 62px; padding: 22px 10px 9px; border-radius: var(--radius-md); box-shadow: none; }
 .card-library.density-compact .file-card > span { top: 6px; right: 6px; padding: 2px 6px; font-size: var(--font-size-badge); }
 .card-library.density-compact .file-card strong { font-size: 12px; }
@@ -248,19 +264,14 @@
 .queue-event p { margin: 6px 0 0; color: var(--color-text-secondary); font: 13px/1.5 var(--font-sans); overflow-wrap: anywhere; }
 
 @media (max-width: 1100px) {
-  .product-workspace-layout { grid-template-columns: minmax(0, 4fr) minmax(184px, 1fr); gap: 10px; }
   .factory-composer > .surface-heading h1 { font-size: 16px; }
-  .card-file-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .card-library.density-compact .card-file-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card-file-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card-library.density-compact .card-file-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
-  .product-workspace-layout { grid-template-columns: 1fr; min-height: auto; align-items: normal; }
-  .product-workspace-main { display: block; }
-  .product-workspace-rail { position: static; max-height: none; padding-top: 0; overflow: visible; display: block; }
-  .factory-control-rail { display: block; flex: none; }
-  .factory-control-rail .queue-status { margin-top: 0; }
-  .factory-content-fill { display: block; flex: none; }
+  .factory-control-rail { display: block; min-height: 0; }
+  .factory-content-fill { min-height: auto; display: block; flex: none; }
   .date-rail { display: block; }
   .card-library { display: block; }
   .empty-library { flex: none; }

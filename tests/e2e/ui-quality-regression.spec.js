@@ -48,10 +48,17 @@ test.describe.serial('React UI quality regression', () => {
     ]) {
       await page.setViewportSize(viewport);
       await page.goto('/');
-      for (const id of ['react-queue-status', 'react-phrase-input', 'react-folder-list', 'react-file-list']) {
+      for (const id of ['factory-composer-trigger', 'react-queue-status', 'react-folder-list', 'react-file-list']) {
         await expect(page.getByTestId(id), `${viewport.name}: ${id}`).toBeVisible();
       }
       await assertNoHorizontalOverflow(page, viewport.name);
+      // The composer drawer must not push the page sideways either.
+      await page.getByTestId('factory-composer-trigger').click();
+      for (const id of ['react-phrase-input']) {
+        await expect(page.getByTestId(id), `${viewport.name}: ${id}`).toBeVisible();
+      }
+      await assertNoHorizontalOverflow(page, `${viewport.name} (composer open)`);
+      await page.keyboard.press('Escape');
     }
   });
 
@@ -62,7 +69,7 @@ test.describe.serial('React UI quality regression', () => {
     });
     page.on('requestfailed', (request) => diagnostics.push(`${request.method()} ${request.url()}`));
     await page.goto('/');
-    await expect(page.getByTestId('react-phrase-input')).toBeVisible();
+    await expect(page.getByTestId('factory-composer-trigger')).toBeVisible();
 
     const assets = await page.evaluate(() => ({
       origin: location.origin,

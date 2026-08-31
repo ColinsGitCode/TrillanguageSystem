@@ -52,7 +52,8 @@ type Props = {
   title: string;
   children: React.ReactNode;
   focusMode?: boolean;
-  workspaceLayout?: (content: React.ReactNode, recovery: React.ReactNode) => React.ReactNode;
+  /** Page-level actions rendered beside the workspace title. */
+  titleActions?: React.ReactNode;
 };
 
 function isHealthUnhealthy(data: Awaited<ReturnType<typeof factoryApi.health>> | undefined, isError: boolean) {
@@ -118,7 +119,7 @@ const ACTIVITY_SOURCE_BY_AREA: Record<ProductArea, ActivitySource> = {
   dictionary: 'browser',
 };
 
-export function ProductShell({ active, title, children, focusMode = false, workspaceLayout }: Props) {
+export function ProductShell({ active, title, children, focusMode = false, titleActions }: Props) {
   const location = useLocation();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mobileNav, setMobileNav] = useState(false);
@@ -312,15 +313,14 @@ export function ProductShell({ active, title, children, focusMode = false, works
   }, [activityQuery.data, localActivities]);
   const activityDegraded = activityQuery.isError
     || Boolean(activityQuery.data?.sources.some((source) => source.status === 'degraded'));
-  const pageOwnsLearningRecovery = location.pathname === '/learn'
-    || location.pathname === '/learn/session';
   const pageOwnsTextbookRecovery = location.pathname.startsWith('/textbooks');
   const pageOwnsKnowledgeRecovery = location.pathname.startsWith('/knowledge');
   const currentActivitySource = ACTIVITY_SOURCE_BY_AREA[active];
   const recoveryItems = activities.filter((item) => {
-    if (item.kind === 'learning-session' && item.status === 'running') {
-      return !pageOwnsLearningRecovery;
-    }
+    // A running session is ongoing work, not something to recover from. The
+    // activity badge and drawer already carry it with the same 继续学习 action,
+    // so a banner on every other page was a second copy of one reminder.
+    if (item.kind === 'learning-session' && item.status === 'running') return false;
     if (['failed', 'partially_failed'].includes(item.status)) return true;
     if (item.status === 'needs_attention' && item.source !== currentActivitySource) return false;
     if (item.kind === 'textbook-review' && pageOwnsTextbookRecovery) return false;
@@ -439,7 +439,10 @@ export function ProductShell({ active, title, children, focusMode = false, works
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>
         </header>
-        <p className="workspace-title">{title}</p>
+        <div className="workspace-header">
+          <p className="workspace-title">{title}</p>
+          {titleActions ? <div className="workspace-header-actions">{titleActions}</div> : null}
+        </div>
         <ShellTools
           activeCount={activities.filter((item) => ['queued', 'running'].includes(item.status)).length}
           attentionCount={activities.filter((item) => ['needs_attention', 'partially_failed', 'failed'].includes(item.status)).length}
@@ -486,7 +489,8 @@ export function ProductShell({ active, title, children, focusMode = false, works
           />
         )}
         <GlobalFeedback items={visibleFeedback} onDismiss={(id) => setFeedback((current) => current.filter((item) => item.id !== id))} />
-        {workspaceLayout ? workspaceLayout(children, recoveryBanner) : <>{recoveryBanner}{children}</>}
+        {recoveryBanner}
+        {children}
       </main>
       <ActivityDrawer
         open={activityOpen}

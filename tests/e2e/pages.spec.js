@@ -18,6 +18,11 @@ test.describe('React page smoke', () => {
       }),
     }));
     await page.goto('/');
+    // The shell banner is what a reader sees on arrival now that the composer
+    // is a drawer; the composer keeps its own copy behind the backdrop.
+    await expect(page.getByTestId('service-degradation-banner'))
+      .toContainText('卡片生成暂不可用');
+    await page.getByTestId('factory-composer-trigger').click();
     await expect(page.locator('.react-alert')).toContainText('生成服务不可用，请检查 DeepSeek API。');
     await expect(page.getByRole('button', { name: '重新检查生成服务' })).toBeVisible();
     await page.getByTestId('react-phrase-input').fill('blocked while offline');
@@ -26,6 +31,7 @@ test.describe('React page smoke', () => {
 
   test('OCR fixture uploads, normalizes and fills the shared input', async ({ page }) => {
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
     await page.getByTestId('react-image-input').setInputFiles(path.resolve(__dirname, 'fixtures/ocr-sample.png'));
     await page.getByTestId('react-ocr-button').click();
     await expect(page.getByTestId('react-phrase-input')).toHaveValue('Queue state キューに追加する persistent highlight');

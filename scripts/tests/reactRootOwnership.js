@@ -69,7 +69,9 @@ async function main() {
   try {
     const baseUrl = 'http://127.0.0.1:' + port;
     await waitFor(baseUrl + '/api/health', child);
-    await assertResponse(baseUrl, '/', 200, '创建学习卡');
+    // 创建学习卡 now lives inside the on-demand composer drawer, so the marker
+    // is the trigger that server-rendered HTML must still carry.
+    await assertResponse(baseUrl, '/', 200, '新建学习卡');
     await assertResponse(baseUrl, '/__rr-poc', 404);
     await assertResponse(baseUrl, '/index.html', 404);
     await assertResponse(baseUrl, '/api/health', 200);

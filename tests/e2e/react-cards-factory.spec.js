@@ -93,24 +93,39 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
   });
 
-  test('desktop composition keeps the 4:1 workspace rail and 1:3 library ratios', async ({ page }) => {
+  test('desktop composition gives the library the full width and opens the composer on demand', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('factory-composer-header')).toContainText('创建学习卡');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
-    const workspaceMain = await page.locator('.product-workspace-main').boundingBox();
-    const controlRail = await page.locator('.product-workspace-rail').boundingBox();
-    const composer = await page.locator('.factory-composer').boundingBox();
-    const queue = await page.getByTestId('react-queue-status').boundingBox();
+    // No permanent composer column: it cost a fifth of the workspace to show a
+    // create form and an idle queue.
+    await expect(page.locator('.product-workspace-rail')).toHaveCount(0);
+    await expect(page.getByTestId('react-phrase-input')).toHaveCount(0);
+    // The queue survives as a header chip: its counts already live in the queue
+    // dialog, so the panel was repeating them.
+    await expect(page.getByTestId('react-queue-status')).toBeVisible();
+    const contentFill = await page.locator('.factory-content-fill').boundingBox();
     const dates = await page.locator('.date-rail').boundingBox();
     const library = await page.locator('.card-library').boundingBox();
-    expect(workspaceMain.width / controlRail.width).toBeGreaterThan(3.85);
-    expect(workspaceMain.width / controlRail.width).toBeLessThan(4.15);
-    expect(composer.width / queue.width).toBeGreaterThan(.98);
-    expect(composer.width / queue.width).toBeLessThan(1.02);
-    expect(composer.x).toBeGreaterThanOrEqual(workspaceMain.x + workspaceMain.width);
     expect(library.width / dates.width).toBeGreaterThan(2.85);
     expect(library.width / dates.width).toBeLessThan(3.15);
+    expect(dates.width + library.width).toBeGreaterThan(contentFill.width * 0.95);
+
+    const trigger = page.getByTestId('factory-composer-trigger');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.click();
+    await expect(page.getByTestId('factory-composer-header')).toContainText('创建学习卡');
+    const drawer = page.locator('.factory-composer-drawer');
+    await expect(drawer).toBeVisible();
+    // The drawer is wider than the 222px rail it replaced, which is what makes
+    // the input and the card-type choices readable.
+    const drawerBox = await drawer.boundingBox();
+    expect(drawerBox.width).toBeGreaterThan(320);
+    await expect(page.getByTestId('react-phrase-input')).toBeFocused();
     await expect(page.getByRole('button', { name: /场景表达/ }).last()).toHaveCSS('background-color', 'rgb(255, 244, 220)');
+
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(trigger).toBeFocused();
   });
 
   test('background queue polling does not move the factory workspace', async ({ page }) => {
@@ -141,24 +156,25 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       });
     });
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
 
     const queue = page.getByTestId('react-queue-status');
-    const controlRail = page.locator('.product-workspace-rail');
+    const drawer = page.locator('.factory-composer-drawer');
     const workspace = page.locator('.factory-library-grid');
     await expect(queue).toContainText('stable queue fixture');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     const beforeQueue = await queue.boundingBox();
-    const beforeControlRail = await controlRail.boundingBox();
+    const beforeDrawer = await drawer.boundingBox();
     const beforeWorkspace = await workspace.boundingBox();
 
     await expect.poll(() => jobsCalls, { timeout: 6_000 }).toBeGreaterThan(2);
     await expect(queue).toHaveAttribute('aria-busy', 'true');
     const duringQueue = await queue.boundingBox();
-    const duringControlRail = await controlRail.boundingBox();
+    const duringDrawer = await drawer.boundingBox();
     const duringWorkspace = await workspace.boundingBox();
 
     expect(duringQueue.height).toBe(beforeQueue.height);
-    expect(duringControlRail.width).toBe(beforeControlRail.width);
+    expect(duringDrawer.width).toBe(beforeDrawer.width);
     expect(duringWorkspace.y).toBe(beforeWorkspace.y);
     await expect(page.getByTestId('factory-queue-refresh-status')).toHaveCount(0);
 
@@ -255,10 +271,13 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('P3 UI enqueues the selected card type and keeps the workspace responsive', async ({ page, request }) => {
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
     await page.getByTestId('react-card-type-scenario_phrase').click();
     await page.getByTestId('react-phrase-input').fill('React 场景入队验证');
     await page.getByTestId('react-generate-button').click();
-    await expect(page.getByRole('status').filter({ hasText: '已加入共享任务队列' })).toBeVisible();
+    // The composer stands down once the job is handed over, so the page-level
+    // feedback is the one a reader can actually see.
+    await expect(page.locator('.factory-composer-drawer')).toHaveCount(0);
     await expect(page.getByTestId('shell-feedback')).toContainText(/生成任务 #\d+ 已加入队列/u);
     await page.getByRole('button', { name: '后台活动' }).click();
     await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('场景表达生成');
@@ -289,6 +308,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('P3 OCR uploads, cleans and fills the shared text input', async ({ page }) => {
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
     const sample = path.resolve(__dirname, 'fixtures/ocr-sample.png');
     await page.getByTestId('react-image-input').setInputFiles(sample);
     await expect(page.getByTestId('react-ocr-button')).toBeEnabled();
@@ -309,6 +329,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const phrase = `historical duplicate fixture ${Date.now()}`;
     await enqueueAndWait(request, phrase, 'trilingual', { targetFolder: '20260714' });
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
     await page.getByTestId('react-phrase-input').fill(phrase);
     await page.getByTestId('react-generate-button').click();
 

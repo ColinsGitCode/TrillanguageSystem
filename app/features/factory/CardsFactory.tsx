@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, CalendarDays, CalendarPlus, ChevronDown, ExternalLink, FileText, Image, Languages, LayoutGrid,
-  List, MessagesSquare, PlusCircle, RefreshCw, Search, Upload, X,
+  List, MessagesSquare, Plus, PlusCircle, RefreshCw, Search, Upload, X,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductShell } from '../../components/ProductShell';
@@ -13,6 +13,7 @@ import {
   readStoredActivities,
   type ShellActivityStatus,
 } from '../../components/shell';
+import { useModalDrawer } from '../../components/shell/useModalDrawer';
 import { ApiError } from '../../lib/api/client';
 import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { factoryApi } from './factory-api';
@@ -99,6 +100,14 @@ export function CardsFactory() {
   const [selectedFolder, setSelectedFolder] = useState('');
   const [selectedCard, setSelectedCard] = useState<CardSelection | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const composerTriggerRef = useRef<HTMLButtonElement>(null);
+  const composerDrawerRef = useModalDrawer({
+    open: composerOpen,
+    onClose: () => setComposerOpen(false),
+    triggerRef: composerTriggerRef,
+    initialFocusSelector: '[data-composer-initial-focus]',
+  });
   const [selectedQueueJobId, setSelectedQueueJobId] = useState<number | null>(null);
   const [libraryMode, setLibraryMode] = useState<'folders' | 'history'>('folders');
   const [expandedDateGroups, setExpandedDateGroups] = useState<Set<string>>(new Set());
@@ -364,7 +373,11 @@ export function CardsFactory() {
       });
       setPhrase('');
       setDuplicateConflict(null);
-      setNotice('已加入共享任务队列');
+      setNotice('');
+      // Shell feedback, the sandbox banner and the queue chip all live on the
+      // page behind this drawer's backdrop, so the drawer stands down once the
+      // job is handed over.
+      setComposerOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
     },
     onError: (error, variables) => {
@@ -375,7 +388,10 @@ export function CardsFactory() {
         return;
       }
       const message = error instanceof ApiError && error.status === 409 ? '相同生成任务正在队列中' : `入队失败：${error.message}`;
-      setNotice(message);
+      setNotice('');
+      // The duplicate panel above is drawn inside the composer and keeps it
+      // open; every other failure is reported at page level instead.
+      setComposerOpen(false);
       publishShellFeedback({ tone: error instanceof ApiError && error.status === 409 ? 'warning' : 'error', message });
     },
   });
@@ -397,7 +413,9 @@ export function CardsFactory() {
         return;
       }
       if (result.activeJob) {
-        setNotice(`相同任务 #${result.activeJob.id} 正在队列中`);
+        setNotice('');
+        publishShellFeedback({ tone: 'warning', message: `相同任务 #${result.activeJob.id} 正在队列中` });
+        setComposerOpen(false);
         setQueueRoute(true, result.activeJob.id);
         return;
       }
@@ -538,6 +556,9 @@ export function CardsFactory() {
     || healthQuery.data?.system?.criticalOnline === false
     || deepSeekOffline;
 
+  // The composer opens on demand instead of holding a permanent column. The
+  // shell's own degradation banner sits behind this drawer's backdrop, so the
+  // generation warning is repeated here where it can still be read.
   const factoryRail = (
     <div className="factory-control-rail" data-testid="factory-control-rail">
       {healthUnhealthy && (
@@ -556,7 +577,19 @@ export function CardsFactory() {
           testId="factory-composer-header"
           eyebrow="Cards Factory"
           title="创建学习卡"
-          actions={<span>DeepSeek V4 Pro</span>}
+          actions={(
+            <>
+              <span>DeepSeek V4 Pro</span>
+              <button
+                className="icon-button factory-composer-close"
+                type="button"
+                aria-label="关闭创建学习卡"
+                onClick={() => setComposerOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </>
+          )}
         />
         <div className="card-type-control" role="radiogroup" aria-label="卡片类型">
           {(Object.entries(CARD_CONFIG) as [CardType, typeof CARD_CONFIG[CardType]][]).map(([type, config]) => {
@@ -615,6 +648,7 @@ export function CardsFactory() {
             <textarea
               value={phrase}
               data-testid="react-phrase-input"
+              data-composer-initial-focus
               placeholder={cardType === 'scenario_phrase' ? '描述一个具体场景…' : '输入短语或句子…'}
               onChange={(event) => setPhrase(event.target.value)}
             />
@@ -691,42 +725,48 @@ export function CardsFactory() {
         )}
       </article>
 
-      <button
-        className={`surface queue-status queue-status-${activeJob?.status || 'idle'}${queueUnavailable || queueRefreshFailed ? ' queue-status-warning' : ''}`}
-        type="button"
-        data-testid="react-queue-status"
-        aria-busy={queueInitialLoading || queueRefreshing}
-        onClick={() => setQueueRoute(true, activeJob?.id)}
-      >
-        <div className="surface-heading"><div><p className="eyebrow">任务队列</p><h2>队列管理</h2></div><span>查看</span></div>
-        <div className="queue-current" role="status" aria-live="polite">
-          <i />
-          <strong>{queueStatusLabel}</strong>
-          <span>{queueStatusDescription}</span>
-        </div>
-        <div className="queue-progress"><i style={{ width: `${jobs.length ? ((Number(summary.success || 0) + Number(summary.failed || 0)) / jobs.length) * 100 : 0}%` }} /></div>
-        <div className="queue-counts">
-          <span>待执行 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.queued || 0}</b></span>
-          <span>运行中 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.running || 0}</b></span>
-          <span>完成 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.success || 0}</b></span>
-          <span>失败 <b>{queueUnavailable || queueInitialLoading ? '--' : summary.failed || 0}</b></span>
-        </div>
-      </button>
     </div>
+  );
+
+  // A header chip rather than a panel: the counts it used to repeat already
+  // live in the queue dialog, and the queue is idle almost all the time.
+  const queueChip = (
+    <button
+      className={`factory-queue-chip queue-status-${activeJob?.status || 'idle'}${queueUnavailable || queueRefreshFailed ? ' queue-status-warning' : ''}`}
+      type="button"
+      data-testid="react-queue-status"
+      aria-busy={queueInitialLoading || queueRefreshing}
+      aria-haspopup="dialog"
+      title={`任务队列 · ${queueStatusLabel}`}
+      onClick={() => setQueueRoute(true, activeJob?.id)}
+    >
+      <i />
+      <span className="queue-current" role="status" aria-live="polite">
+        <strong>{queueStatusLabel}</strong>
+        <span>{queueStatusDescription}</span>
+      </span>
+    </button>
   );
 
   return (
     <ProductShell
       active="factory"
       title="Cards Factory"
-      workspaceLayout={(content, recovery) => (
-        <div className="product-workspace-layout">
-          <div className="product-workspace-main">{content}</div>
-          <aside className="product-workspace-rail" aria-label="Cards Factory 工具栏">
-            {recovery}
-            {factoryRail}
-          </aside>
-        </div>
+      titleActions={(
+        <>
+          {queueChip}
+          <button
+            ref={composerTriggerRef}
+            className="primary factory-composer-trigger"
+            type="button"
+            data-testid="factory-composer-trigger"
+            aria-haspopup="dialog"
+            aria-expanded={composerOpen}
+            onClick={() => setComposerOpen(true)}
+          >
+            <Plus aria-hidden="true" /> 新建学习卡
+          </button>
+        </>
       )}
     >
       <div className="factory-content-fill" data-testid="react-cards-factory">
@@ -960,6 +1000,25 @@ export function CardsFactory() {
             )}
           </article>
         </section>
+
+        {composerOpen && (
+          <div
+            className="factory-composer-backdrop"
+            data-testid="factory-composer-backdrop"
+            onMouseDown={(event) => { if (event.target === event.currentTarget) setComposerOpen(false); }}
+          >
+            <aside
+              ref={composerDrawerRef}
+              className="factory-composer-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-label="创建学习卡"
+              tabIndex={-1}
+            >
+              {factoryRail}
+            </aside>
+          </div>
+        )}
 
         <QueuePanel
           open={queueOpen}

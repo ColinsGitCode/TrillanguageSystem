@@ -386,6 +386,7 @@ test.describe('React root shell', () => {
       });
     });
     await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
     await page.getByTestId('react-phrase-input').fill('quota feedback');
     await page.getByTestId('react-generate-button').click();
     const banner = page.getByTestId('sandbox-limit-banner');
@@ -479,21 +480,21 @@ test.describe('React root shell', () => {
     await expect(activityTrigger).toHaveAttribute('data-activity-tone', 'attention');
     await expect(activityTrigger).toContainText('1');
     const recovery = page.getByTestId('recovery-banner');
-    await expect(recovery).toContainText('有 2 项工作需要处理');
+    // The running session is ongoing work carried by the activity centre, so
+    // only the failed operation is a recovery case.
+    await expect(recovery).toContainText('有一项后台任务需要处理');
     await expect(recovery).toContainText('部分语音生成失败');
     await expect(recovery.getByRole('link', { name: '查看并重试' })).toHaveAttribute(
       'href',
       '/textbooks?track=1&stage=processing&operation=23'
     );
-    await recovery.getByRole('button', { name: '查看全部' }).click();
-    await expect(page.getByRole('dialog', { name: '活动中心' })).toBeVisible();
-    await page.keyboard.press('Escape');
+    await expect(recovery.getByRole('button', { name: '查看全部' })).toHaveCount(0);
     await page.getByRole('button', { name: '后台活动' }).click();
     const drawer = page.getByRole('dialog', { name: '活动中心' });
     await expect(drawer).toContainText('未结束的学习会话');
     await expect(drawer).toContainText('部分状态暂时无法同步');
     await page.reload();
-    await expect(page.getByTestId('recovery-banner')).toContainText('有 2 项工作需要处理');
+    await expect(page.getByTestId('recovery-banner')).toContainText('部分语音生成失败');
     await page.getByRole('button', { name: '后台活动' }).click();
     const restoredDrawer = page.getByRole('dialog', { name: '活动中心' });
     await expect(restoredDrawer).toContainText('本次已完成 2/5');
