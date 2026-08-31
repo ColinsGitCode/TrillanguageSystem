@@ -65,7 +65,10 @@ for path in "${PROBES[@]}"; do
   fi
 done
 
-if ! curl -fsS "http://127.0.0.1:$PORT/" | grep -q "创建学习卡"; then
+# The creation form is an on-demand panel. Probe an always-visible SSR section
+# so the smoke check verifies the React root without requiring UI interaction.
+ROOT_HTML="$TMP_DIR/root.html"
+if ! curl -fsS -o "$ROOT_HTML" "http://127.0.0.1:$PORT/" || ! grep -q "卡片库" "$ROOT_HTML"; then
   echo "SMOKE FAIL: React root marker missing" >&2
   fail=1
 fi

@@ -151,6 +151,51 @@ test('generation projection analyzes Japanese sections without treating Chinese 
   assert.equal(result.tokens.some((token) => token.surface === '查看'), false);
 });
 
+test('generation projection anchors repeated Japanese text to its Markdown source line', () => {
+  const markdown = [
+    '# 運用体制',
+    '## 1. 英文:',
+    '- **翻译**: operational structure',
+    '## 2. 日本語:',
+    '- **翻訳**: 運用体制',
+    '- **例句1**: 新しいシステムの運用体制を整える。',
+    '## 3. 中文:',
+    '- **解释**: 日常运营和管理方式。',
+  ].join('\r\n');
+  const plainText = stripMarkdownToJapaneseText(markdown);
+  const firstOccurrence = plainText.indexOf('運用体制');
+  const translatedOccurrence = plainText.indexOf('運用体制', firstOccurrence + 1);
+  const segments = locateJapaneseSegments(markdown, plainText);
+
+  assert.equal(firstOccurrence, 0);
+  assert.ok(translatedOccurrence > firstOccurrence);
+  assert.equal(segments[0].text, '運用体制');
+  assert.equal(
+    segments[0].startCodePoint,
+    Array.from(plainText.slice(0, translatedOccurrence)).length,
+  );
+  assert.equal(
+    segments[1].startCodePoint,
+    Array.from(plainText.slice(0, plainText.indexOf(segments[1].text, translatedOccurrence + 1))).length,
+  );
+});
+
+test('plain pronunciation projection continues to exclude fenced card content', () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const markdown = [
+    '模型前言。',
+    `${fence}markdown`,
+    '# 持续集成',
+    '## 2. 日本語:',
+    '- **例句1**: 継続的インテグレーションを導入する。',
+    fence,
+  ].join('\n');
+  const plainText = stripMarkdownToJapaneseText(markdown);
+
+  assert.equal(plainText, '模型前言。');
+  assert.doesNotMatch(plainText, /継続的インテグレーション/u);
+});
+
 test('skips Han-only analyzer residue when it has no Japanese reading', async () => {
   const result = await buildTokens('风 语 标 无 勤務表 来月');
   assert.equal(result.tokens.some((token) => ['风', '语', '标', '无'].includes(token.surface)), false);

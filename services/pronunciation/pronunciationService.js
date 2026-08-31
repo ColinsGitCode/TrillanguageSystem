@@ -130,7 +130,8 @@ function codePointToUtf16Index(value, codePointOffset) {
 }
 
 function locateJapaneseSegments(markdown, plainText) {
-  const markupSegments = extractJapaneseMarkup(markdown);
+  const normalizedMarkdown = String(markdown || '').replace(/\r\n?/gu, '\n');
+  const markupSegments = extractJapaneseMarkup(normalizedMarkdown);
   if (!markupSegments.length) {
     return [{ text: plainText, startCodePoint: 0, endCodePoint: codePointLength(plainText) }];
   }
@@ -139,7 +140,13 @@ function locateJapaneseSegments(markdown, plainText) {
   for (const segment of markupSegments) {
     const text = stripJapaneseLine(segment.raw);
     if (!text) continue;
-    const utf16Index = plainText.indexOf(text, searchCursor);
+    // The same Japanese text commonly appears in the card title and again in
+    // the Japanese section. Anchor the lookup to its source line so an earlier
+    // duplicate cannot claim the pronunciation tokens.
+    const sourceCursor = stripMarkdownToJapaneseText(
+      normalizedMarkdown.slice(0, segment.lineStart),
+    ).length;
+    const utf16Index = plainText.indexOf(text, Math.max(searchCursor, sourceCursor));
     if (utf16Index < 0) continue;
     const startCodePoint = codePointLength(plainText.slice(0, utf16Index));
     const endCodePoint = startCodePoint + codePointLength(text);
