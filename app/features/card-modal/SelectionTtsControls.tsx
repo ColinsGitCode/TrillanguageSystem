@@ -171,7 +171,7 @@ export function SelectionTtsControls({
         disabled={state === 'loading'}
         onClick={onMainAction}
       >
-        {icon}
+        {icon}<span>{state === 'playing' ? '停止' : state === 'loading' ? '加载中' : '播放'}</span>
       </button>
       <select
         aria-label="朗读速度"

@@ -16,6 +16,10 @@ function createMarker(document, annotation) {
   const marker = document.createElement('mark');
   marker.className = markerClass(annotation);
   marker.dataset.annotationId = String(annotation.id || '');
+  if (annotation.annotationKind === 'note') {
+    marker.dataset.annotationKind = 'note';
+    marker.title = '查看阅读笔记';
+  }
   return marker;
 }
 
@@ -78,7 +82,7 @@ export function applyAnnotations(root, annotations = []) {
   ));
 
   for (const annotation of ordered) {
-    if (annotation?.status !== 'active' || annotation?.annotationKind !== 'highlight') continue;
+    if (annotation?.status !== 'active' || !['highlight', 'note'].includes(annotation?.annotationKind)) continue;
     const resolved = resolveAnchor(root, annotation.selector);
     const applied = Boolean(resolved.range)
       && applyAnnotationRange(root, resolved.range, annotation);

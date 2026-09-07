@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, Languages, Pencil, Sparkles, ThumbsDown, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Languages, Sparkles } from 'lucide-react';
 import { localGlossaryApi } from './local-glossary';
 import type {
   LocalGlossaryFeedbackOutcome,
@@ -18,6 +18,10 @@ type Props = {
   contextText: string;
   readingHint: string | null;
   onToast: (message: string) => void;
+  detailHost: HTMLDivElement | null;
+  readOnly: boolean;
+  onNote: () => void;
+  onKnowledge: () => void;
 };
 
 const SOURCE_LABEL = {
@@ -33,7 +37,7 @@ const SOURCE_LABEL = {
 const CONFIDENCE_LABEL = {
   high: '高可信',
   medium: '需核对',
-  low: '低可信',
+  low: '待确认',
 } as const;
 
 export function SelectionGlossaryInline({
@@ -44,13 +48,41 @@ export function SelectionGlossaryInline({
   contextText,
   readingHint,
   onToast,
+  detailHost,
+  readOnly,
+  onNote,
+  onKnowledge,
 }: Props) {
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState<'none' | 'manual' | 'proposal' | 'edit'>('none');
   const [draftGloss, setDraftGloss] = useState('');
   const [proposal, setProposal] = useState<LocalGlossaryProposal | null>(null);
   const [choiceIndex, setChoiceIndex] = useState(0);
-  const [rejected, setRejected] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const correctionRef = useRef<HTMLButtonElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const [explanation, setExplanation] = useState('');
+  const [explainBusy, setExplainBusy] = useState(false);
+  const [explainError, setExplainError] = useState('');
+  const capabilityQuery = useQuery({ queryKey: ['glossary-capabilities'], queryFn: localGlossaryApi.capabilities, staleTime: 30_000, retry: false });
+  useEffect(() => () => requestRef.current?.abort(), []);
+  const explain = async () => {
+    if (!language || explainBusy) return;
+    const controller = new AbortController();
+    requestRef.current?.abort();
+    requestRef.current = controller;
+    setExplainBusy(true);
+    setExplainError('');
+    try {
+      const result = await localGlossaryApi.explain({ text: phrase, language, context: contextText }, controller.signal);
+      if (!controller.signal.aborted) setExplanation(result.explanation);
+    } catch {
+      if (!controller.signal.aborted) setExplainError('解释暂不可用，请重试');
+    } finally {
+      if (!controller.signal.aborted) setExplainBusy(false);
+    }
+  };
   const shownRef = useRef('');
   const queryKey = ['local-glossary', language, phrase, generationId, readingHint, contextText];
   const lookupQuery = useQuery({
@@ -77,7 +109,7 @@ export function SelectionGlossaryInline({
     setDraftGloss('');
     setProposal(null);
     setChoiceIndex(0);
-    setRejected(false);
+
   }, [phrase, language, readingHint, contextText]);
 
   // Fire-and-forget usage fact. Never blocks the reader and never carries the
@@ -119,7 +151,7 @@ export function SelectionGlossaryInline({
     setEditMode('none');
     setProposal(null);
     setChoiceIndex(0);
-    setRejected(false);
+
   };
 
   const manualMutation = useMutation({
@@ -179,197 +211,89 @@ export function SelectionGlossaryInline({
     },
   });
 
-  if (!language) {
-    return <span className="csa-gloss is-muted"><Languages aria-hidden="true" />中译：请先确认是英语还是日语</span>;
-  }
-  if (lookupQuery.isPending) {
-    return <span className="csa-gloss is-muted" role="status"><Languages aria-hidden="true" />正在查本地释义…</span>;
-  }
-  if (lookupQuery.isError) {
-    return <span className="csa-gloss is-error" role="status"><Languages aria-hidden="true" />本地释义暂不可用</span>;
-  }
+  const editable = Boolean(activeGloss?.id && activeGloss.version
+    && ['manual', 'llm-confirmed', 'imported'].includes(activeGloss.sourceKind));
+  const busy = manualMutation.isPending || editMutation.isPending || acceptMutation.isPending || rejectMutation.isPending;
+  const source = activeGloss ? activeGloss.sourceDetail || SOURCE_LABEL[activeGloss.sourceKind] : '';
+  const closeDetails = () => {
+    setExpanded(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  };
+  const summary = !language ? '请先确认英语或日语'
+    : lookupQuery.isPending ? '正在查本地释义…'
+      : lookupQuery.isError ? '本地释义暂不可用'
+        : activeGloss?.zhGloss || '暂无本地释义';
 
-  if (editMode !== 'none') {
-    const busy = manualMutation.isPending || editMutation.isPending || acceptMutation.isPending || rejectMutation.isPending;
-    return (
-      <span className="csa-gloss-editor">
-        <Languages aria-hidden="true" />
-        <input
-          aria-label="中文释义"
-          value={draftGloss}
-          onChange={(event) => setDraftGloss(event.target.value)}
-          placeholder="输入简明中文释义"
-          autoFocus
-          maxLength={120}
-          disabled={busy}
-        />
-        <button
-          type="button"
-          aria-label="保存中文释义"
-          title="保存中文释义"
-          disabled={busy || !draftGloss.trim()}
-          onClick={() => {
+  return <>
+    <span className="csa-gloss csa-gloss-compact">
+      <Languages aria-hidden="true" />
+      <strong title={summary}>{summary}</strong>
+      {activeGloss && <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
+        {CONFIDENCE_LABEL[activeGloss.confidence]}
+      </small>}
+      <button ref={triggerRef} type="button" className="csa-gloss-menu-trigger"
+        aria-label="打开释义选项" aria-expanded={expanded} aria-controls="selection-reading-details"
+        onClick={() => setExpanded(!expanded)}>
+        释义详情 <ChevronDown aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
+      </button>
+    </span>
+    {expanded && detailHost && createPortal(
+      <section className="csa-reading-details" id="selection-reading-details" aria-label="释义详情"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault(); event.stopPropagation();
+          if (editMode !== 'none') {
+            if (busy) return;
+            setEditMode('none');
+            correctionRef.current?.focus({ preventScroll: true });
+          }
+          else closeDetails();
+        }}>
+        <header><strong>{phrase}</strong><small>{[activeGloss?.partOfSpeech, source].filter(Boolean).join(' · ')}</small>
+          <button type="button" onClick={closeDetails} aria-label="收起释义详情">收起</button></header>
+        {activeGloss?.confidence === 'low' && <p className="csa-confidence-explanation">
+          {source.includes('桥接') ? '经英文桥接，当前句子中的词义有待确认。' : '此释义可信度较低，请结合当前句子核对。'}
+        </p>}
+        <div className="csa-context-detail"><small>当前语境</small><blockquote>{contextText || phrase}</blockquote>
+          <button type="button" disabled={!language || explainBusy || !capabilityQuery.data?.contextExplanation}
+            onClick={() => void explain()}><Sparkles aria-hidden="true" />{explainBusy ? '正在解释…' : '解释此处用法'}</button>
+          <small>{capabilityQuery.data?.contextExplanation ? 'AI · 点击后生成' : 'AI 解释暂未启用'}</small>
+          {explainError && <p role="alert">{explainError}</p>}
+          {explanation && <p className="csa-context-answer" role="status"><small>AI 解释 · 仅供参考</small>{explanation}</p>}
+        </div>
+        {choices.length > 0 && <fieldset className="csa-candidates"><legend>候选释义</legend>
+          {choices.map((choice, index) => <label key={index} title={choice.sourceDetail || SOURCE_LABEL[choice.sourceKind]}>
+            <input type="radio" name="selection-gloss-choice" checked={choiceIndex === index}
+              onChange={() => {
+                if (activeGloss && index !== choiceIndex) recordFeedback(activeGloss, 'switched', index, choices.length);
+                setChoiceIndex(index);
+              }} />{choice.zhGloss}
+          </label>)}
+        </fieldset>}
+        {editMode !== 'none' && <div className="csa-reading-editor">
+          <label>中文释义<input aria-label="中文释义" autoFocus value={draftGloss} maxLength={120}
+            disabled={busy} onChange={(event) => setDraftGloss(event.target.value)} /></label>
+          <small>保存到本地词库，之后查词优先使用；仅记录此处理解请使用笔记。</small>
+          {proposal && <p>{proposal.explanation}</p>}
+          <button type="button" disabled={busy || !draftGloss.trim()} aria-label="保存中文释义" onClick={() => {
             if (editMode === 'proposal') acceptMutation.mutate();
             else if (editMode === 'edit') editMutation.mutate();
             else manualMutation.mutate();
-          }}
-        >
-          <Check aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          aria-label="取消"
-          title="取消"
-          disabled={busy}
-          onClick={() => {
+          }}>保存释义</button>
+          <button type="button" disabled={busy} onClick={() => {
             if (editMode === 'proposal' && proposal) rejectMutation.mutate();
-            else {
-              setEditMode('none');
-              setDraftGloss('');
-            }
-          }}
-        >
-          <X aria-hidden="true" />
-        </button>
-      </span>
-    );
-  }
-
-  if (activeGloss) {
-    const editable = Boolean(
-      activeGloss.id
-      && activeGloss.version
-      && ['manual', 'llm-confirmed', 'imported'].includes(activeGloss.sourceKind)
-    );
-    // A high-confidence dictionary hit can still be the wrong sense, so the
-    // "wrong gloss" action stays available for every dictionary result.
-    const correctable = activeGloss.sourceKind === 'dictionary';
-    const source = activeGloss.sourceDetail || SOURCE_LABEL[activeGloss.sourceKind];
-    return (
-      <span
-        className="csa-gloss"
-        title={`${activeGloss.zhGloss}；来源：${source}；可信度：${CONFIDENCE_LABEL[activeGloss.confidence]}`}
-      >
-        <Languages aria-hidden="true" />
-        <span className="csa-gloss-copy">
-          <span className="csa-gloss-line">
-            <span>中译</span>
-            <strong>{activeGloss.zhGloss}</strong>
-          </span>
-          {(activeGloss.reading || activeGloss.partOfSpeech) && (
-            <small className="csa-gloss-meta">
-              {[activeGloss.reading, activeGloss.partOfSpeech, source].filter(Boolean).join(' · ')}
-            </small>
-          )}
-          {!activeGloss.reading && !activeGloss.partOfSpeech && (
-            <small className="csa-gloss-meta">{source}</small>
-          )}
-        </span>
-        {(choices.length > 1 || editable || correctable) ? (
-          <DropdownMenu.Root modal={false}>
-            <DropdownMenu.Trigger asChild>
-              <button
-                type="button"
-                className="csa-gloss-menu-trigger"
-                aria-label={`打开释义选项，来源 ${source}，${CONFIDENCE_LABEL[activeGloss.confidence]}`}
-              >
-                <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
-                  {CONFIDENCE_LABEL[activeGloss.confidence]}
-                </small>
-                释义{choices.length > 1 ? ` ${choiceIndex + 1}/${choices.length}` : ''}
-                <ChevronDown aria-hidden="true" />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content className="csa-gloss-menu" sideOffset={5} align="end">
-                {choices.map((choice, index) => (
-                  <DropdownMenu.Item
-                    key={`${choice.id || 'local'}-${choice.senseKey || index}-${choice.zhGloss}`}
-                    className="csa-gloss-choice"
-                    onSelect={() => {
-                      setChoiceIndex(index);
-                      // Attribute the intervention to the candidate the user
-                      // replaced, not to the better candidate they selected.
-                      if (index !== choiceIndex) recordFeedback(activeGloss, 'switched', index, choices.length);
-                    }}
-                  >
-                    <span className="csa-gloss-choice-copy">
-                      <span>{choice.zhGloss}</span>
-                      <small>
-                        {[
-                          choice.reading,
-                          choice.partOfSpeech,
-                          choice.sourceDetail || SOURCE_LABEL[choice.sourceKind],
-                          CONFIDENCE_LABEL[choice.confidence],
-                        ].filter(Boolean).join(' · ')}
-                      </small>
-                    </span>
-                    {index === choiceIndex && <Check aria-label="当前义项" />}
-                  </DropdownMenu.Item>
-                ))}
-                {(correctable || editable) && <DropdownMenu.Separator className="csa-menu-separator" />}
-                {correctable && !rejected && (
-                  <DropdownMenu.Item
-                    className="csa-gloss-menu-action"
-                    data-testid="gloss-reject"
-                    onSelect={() => {
-                      setRejected(true);
-                      recordFeedback(activeGloss, 'rejected', choiceIndex, choices.length);
-                      onToast(choices.length > 1 ? '可以换一个义项，或自己填写' : '请填写正确的中文释义');
-                      if (choices.length <= 1) {
-                        setDraftGloss('');
-                        setEditMode('manual');
-                      }
-                    }}
-                  >
-                    <ThumbsDown aria-hidden="true" />释义不合适
-                  </DropdownMenu.Item>
-                )}
-                {correctable && rejected && choices.length > 1 && (
-                  <DropdownMenu.Item
-                    className="csa-gloss-menu-action is-active"
-                    data-testid="gloss-reject-write"
-                    onSelect={() => {
-                      setDraftGloss('');
-                      setEditMode('manual');
-                    }}
-                  >
-                    <Pencil aria-hidden="true" />自己填写正确释义
-                  </DropdownMenu.Item>
-                )}
-                {(editable || (correctable && !rejected)) && (
-                  <DropdownMenu.Item
-                    className="csa-gloss-menu-action"
-                    onSelect={() => {
-                      setDraftGloss(activeGloss.zhGloss);
-                      setEditMode(editable ? 'edit' : 'manual');
-                    }}
-                  >
-                    <Pencil aria-hidden="true" />{editable ? '编辑本地释义' : '更正本地释义'}
-                  </DropdownMenu.Item>
-                )}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        ) : (
-          <small className="csa-gloss-confidence" data-confidence={activeGloss.confidence}>
-            {CONFIDENCE_LABEL[activeGloss.confidence]}
-          </small>
-        )}
-      </span>
-    );
-  }
-
-  return (
-    <span className="csa-gloss is-missing">
-      <Languages aria-hidden="true" />
-      <span>暂无本地释义</span>
-      <button type="button" onClick={() => { setDraftGloss(''); setEditMode('manual'); }}>
-        <Pencil aria-hidden="true" />手动填写
-      </button>
-      <button type="button" disabled={proposalMutation.isPending} onClick={() => proposalMutation.mutate()}>
-        <Sparkles aria-hidden="true" />{proposalMutation.isPending ? '生成中…' : 'AI 候选'}
-      </button>
-    </span>
-  );
+            else { setEditMode('none'); correctionRef.current?.focus({ preventScroll: true }); }
+          }}>取消</button>
+        </div>}
+        <footer>
+          {!readOnly && language && <button ref={correctionRef} type="button" onClick={() => {
+            setDraftGloss(activeGloss?.zhGloss || ''); setEditMode(editable ? 'edit' : 'manual');
+          }}>纠正释义</button>}
+          {!activeGloss && !readOnly && language && <button type="button" disabled={proposalMutation.isPending || !capabilityQuery.data?.contextExplanation}
+            onClick={() => proposalMutation.mutate()}>AI 释义候选</button>}
+          {!readOnly && <button type="button" onClick={onNote}>记笔记</button>}
+          <button type="button" onClick={onKnowledge}>查知识点</button>
+        </footer>
+      </section>, detailHost)}
+  </>;
 }

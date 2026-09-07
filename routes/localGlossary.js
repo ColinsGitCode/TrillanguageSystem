@@ -7,6 +7,17 @@ const { LocalGlossaryService } = require('../services/localGlossary/localGlossar
 const router = express.Router();
 const service = new LocalGlossaryService({ database: dbService });
 
+router.get('/api/local-glossary/capabilities', (_req, res) => {
+  res.json({ success: true, contextExplanation: service.llmEnabled });
+});
+
+router.post('/api/local-glossary/explain', async (req, res, next) => {
+  try {
+    const result = await service.explainContext(req.body || {});
+    return res.json({ success: true, ...result });
+  } catch (error) { return next(error); }
+});
+
 router.get('/api/local-glossary/lookup', async (req, res, next) => {
   try {
     const lookup = await service.lookup({

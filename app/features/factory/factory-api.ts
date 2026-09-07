@@ -255,7 +255,8 @@ export const factoryApi = {
     targetId: number;
     expectedTargetRevision: string;
     selector: CardAnnotationSelector;
-    annotationKind: 'highlight';
+    annotationKind: 'highlight' | 'note';
+    noteText?: string;
     color: AnnotationColor;
   }) => requestJson<{
     success: true;
@@ -266,7 +267,8 @@ export const factoryApi = {
   }),
   updateAnnotation: (id: string, payload: {
     expectedVersion: number;
-    color: AnnotationColor;
+    color?: AnnotationColor;
+    noteText?: string;
   }) => requestJson<{
     success: true;
     annotation: CardAnnotation;

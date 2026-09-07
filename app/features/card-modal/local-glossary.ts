@@ -74,6 +74,11 @@ export type LocalGlossaryFeedback = {
 };
 
 export const localGlossaryApi = {
+  capabilities: () => requestJson<{ success: true; contextExplanation: boolean }>('/api/local-glossary/capabilities'),
+  explain: (payload: { text: string; language: CardLookupLanguage; context: string }, signal: AbortSignal) =>
+    requestJson<{ success: true; explanation: string; model: string }>('/api/local-glossary/explain', {
+      method: 'POST', body: JSON.stringify(payload), signal,
+    }),
   lookup: (payload: {
     text: string;
     language: CardLookupLanguage;

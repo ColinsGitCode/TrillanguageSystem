@@ -150,3 +150,36 @@ test('does not call DeepSeek when proposal generation is disabled', async () => 
     database.close();
   }
 });
+
+test('context explanation is opt-in, bounded and writes no glossary or proposal rows', async () => {
+  const database = new DatabaseService(':memory:');
+  let calls = 0;
+  const llm = { generateJson: async (prompt) => {
+    calls += 1;
+    assert.match(prompt, /原文数据/);
+    return { text: JSON.stringify({ explanation: '这里表示用户账号。' }), model: 'fixture' };
+  } };
+  try {
+    const disabled = new LocalGlossaryService({ database, llm, llmEnabled: false });
+    await assert.rejects(disabled.explainContext({ text: 'ユーザー', language: 'ja', context: 'ユーザーアカウント' }), { code: 'LOCAL_GLOSSARY_LLM_DISABLED' });
+    assert.equal(calls, 0);
+    const service = new LocalGlossaryService({ database, llm, llmEnabled: true });
+    await assert.rejects(service.explainContext({ text: 'ユーザー', language: 'ja', context: '別の文' }), { code: 'LOCAL_GLOSSARY_CONTEXT_MISMATCH' });
+    await assert.rejects(service.explainContext({ text: 'a', language: 'en', context: 'a'.repeat(401) }), { code: 'LOCAL_GLOSSARY_TEXT_INVALID' });
+    assert.equal(calls, 0);
+    const before = database.db.prepare('SELECT total_changes() AS count').get().count;
+    assert.equal((await service.explainContext({ text: 'ユーザー', language: 'ja', context: 'ユーザーアカウント' })).explanation, '这里表示用户账号。');
+    assert.equal(database.db.prepare('SELECT total_changes() AS count').get().count, before);
+    service.llm = { generateJson: async () => ({ text: '{"explanation":123}' }) };
+    await assert.rejects(service.explainContext({ text: 'user', language: 'en', context: 'user account' }), { code: 'LOCAL_GLOSSARY_LLM_INVALID_RESPONSE' });
+  } finally { database.close(); }
+});
+
+test('context explanation respects sandbox high-cost gates and generation quotas', () => {
+  const { isHighCostRequest, authorizeWorkspaceRequest } = require('../../lib/workspaceAccess');
+  const { classifyQuotaRequest } = require('../../services/sandbox/sandboxQuotaService');
+  const path = '/api/local-glossary/explain';
+  assert.equal(isHighCostRequest('POST', path), true);
+  assert.equal(classifyQuotaRequest('POST', path), 'generation');
+  assert.equal(authorizeWorkspaceRequest({ mode: 'sandbox', sandboxWriteEnabled: true, sandboxHighCostEnabled: false }, { method: 'POST', path }).code, 'WORKSPACE_HIGH_COST_DISABLED');
+});

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const QUOTA_ROUTES = [
+  { category: 'generation', method: 'POST', pattern: /^\/api\/local-glossary\/explain$/u },
   { category: 'generation', method: 'POST', pattern: /^\/api\/generate$/u },
   { category: 'generation', method: 'POST', pattern: /^\/api\/generation-jobs$/u },
   { category: 'generation', method: 'POST', pattern: /^\/api\/generation-jobs\/\d+\/retry$/u },

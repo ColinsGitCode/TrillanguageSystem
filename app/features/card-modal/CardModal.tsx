@@ -7,9 +7,7 @@ import {
   useState,
 } from 'react';
 import {
-  ChevronDown,
   ChevronRight,
-  BookOpen,
   Copy,
   Eraser,
   Highlighter,
@@ -22,7 +20,6 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { knowledgeApi } from '../knowledge/knowledge-api';
 import { factoryApi } from '../factory/factory-api';
 import type {
@@ -34,7 +31,7 @@ import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { markUiInteractionEnd } from '../../lib/performance';
-import { createAnchor } from './annotation-anchor.mjs';
+import { createAnchor, resolveAnchor } from './annotation-anchor.mjs';
 import { applyAnnotations } from './annotation-render.mjs';
 import type { CardAnnotationSelector } from './annotation-render.mjs';
 import {
@@ -63,6 +60,14 @@ import type { PronunciationToken } from './pronunciation-overlay';
 import type { CardLookupLanguage } from './selection-actions';
 import '../../styles/card-modal.css';
 
+const DeferredSelectionMoreActions = lazy(() => import('./SelectionExtraControls').then((m) => ({ default: m.SelectionMoreActions })));
+const DeferredSelectionScopeControls = lazy(() => import('./SelectionExtraControls').then((m) => ({ default: m.SelectionScopeControls })));
+const DeferredSelectionHighlightAction = lazy(() => import('./SelectionMenuActions').then((m) => ({ default: m.SelectionHighlightAction })));
+const DeferredSelectionGenerateAction = lazy(() => import('./SelectionMenuActions').then((m) => ({ default: m.SelectionGenerateAction })));
+const DeferredSelectionNoteEditor = lazy(async () => {
+  const module = await import('./SelectionNoteEditor');
+  return { default: module.SelectionNoteEditor };
+});
 const DeferredIntelPanel = lazy(async () => {
   const module = await import('./IntelPanel');
   return { default: module.IntelPanel };
@@ -122,6 +127,8 @@ type SelectionToolbarState = {
   top: number;
   left: number;
   anchorLeft: number;
+  anchorTop: number;
+  anchorBottom: number;
   placeBelow: boolean;
   phrase: string;
   rawText: string;
@@ -179,6 +186,10 @@ export function CardModal({
   const selectedRangeRef = useRef<Range | null>(null);
   const selectedAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const selectedTextRef = useRef('');
+  const originalScopeAnchorRef = useRef<CardAnnotationSelector | null>(null);
+  const [selectionScope, setSelectionScope] = useState('original');
+  const [detailHost, setDetailHost] = useState<HTMLDivElement | null>(null);
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const lookupSourceRef = useRef<Record<string, unknown>>({});
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarFirstActionRef = useRef<HTMLButtonElement>(null);
@@ -305,6 +316,7 @@ export function CardModal({
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         const target = event.target instanceof Element ? event.target : null;
         // Radix menus are portaled outside the dialog. Let their own Escape and
@@ -332,7 +344,7 @@ export function CardModal({
       if (event.key !== 'Tab') return;
       const dialog = closeRef.current?.closest('[role="dialog"]');
       const focusable = Array.from(dialog?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]'
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
       ) || []).filter((node) => node.offsetParent !== null);
       if (!focusable.length) return;
       const first = focusable[0];
@@ -388,15 +400,19 @@ export function CardModal({
         const left = minimum > maximum
           ? window.innerWidth / 2
           : Math.min(maximum, Math.max(minimum, current.anchorLeft));
-        const minimumTop = current.placeBelow ? 0 : dimensions.height + (viewportPadding * 2);
-        const maximumTop = current.placeBelow
+        const aboveSpace = current.anchorTop - viewportPadding * 2;
+        const belowSpace = window.innerHeight - current.anchorBottom - viewportPadding * 2;
+        const placeBelow = aboveSpace < dimensions.height && belowSpace > aboveSpace;
+        const anchorTop = placeBelow ? current.anchorBottom : current.anchorTop;
+        const minimumTop = placeBelow ? 0 : dimensions.height + (viewportPadding * 2);
+        const maximumTop = placeBelow
           ? window.innerHeight - dimensions.height - (viewportPadding * 2)
           : window.innerHeight - viewportPadding;
         const top = minimumTop > maximumTop
           ? window.innerHeight / 2
-          : Math.min(maximumTop, Math.max(minimumTop, current.top));
-        return Math.abs(current.left - left) > 0.5 || Math.abs(current.top - top) > 0.5
-          ? { ...current, left, top }
+          : Math.min(maximumTop, Math.max(minimumTop, anchorTop));
+        return Math.abs(current.left - left) > 0.5 || Math.abs(current.top - top) > 0.5 || current.placeBelow !== placeBelow
+          ? { ...current, left, top, placeBelow }
           : current;
       });
     };
@@ -420,11 +436,10 @@ export function CardModal({
 
   useEffect(() => {
     if (!toolbar || !focusToolbarAfterSelectionRef.current) return;
-    focusToolbarAfterSelectionRef.current = false;
     window.requestAnimationFrame(() => {
       const firstAction = toolbarFirstActionRef.current
-        || toolbarRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])');
-      firstAction?.focus({ preventScroll: true });
+        || (readOnly ? toolbarRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])') : null);
+      if (firstAction) { focusToolbarAfterSelectionRef.current = false; firstAction.focus({ preventScroll: true }); }
     });
   }, [toolbar?.annotationId, toolbar?.phrase]);
 
@@ -441,6 +456,8 @@ export function CardModal({
       selectedRangeRef.current = null;
       selectedAnchorRef.current = null;
       selectedTextRef.current = '';
+      originalScopeAnchorRef.current = null;
+      setNoteDraft(null);
       setToolbar(null);
       setGenMenuOpen(false);
       setColorMenuOpen(false);
@@ -493,6 +510,8 @@ export function CardModal({
     selectedRangeRef.current = null;
     selectedAnchorRef.current = null;
     selectedTextRef.current = '';
+    originalScopeAnchorRef.current = null;
+    setNoteDraft(null);
     setHasSelection(false);
     setToolbar(null);
     setGenMenuOpen(false);
@@ -572,8 +591,28 @@ export function CardModal({
     }
   };
 
+  const openNote = () => {
+    const existing = annotationStateRef.current?.annotations.find((item) => item.id === toolbar?.annotationId);
+    setNoteDraft(existing?.noteText || '');
+  };
+  const changeSelectionScope = async (scope: 'original' | 'word' | 'phrase' | 'sentence') => {
+    const container = contentRef.current;
+    const original = originalScopeAnchorRef.current;
+    if (!container || !original) return;
+    const { resizeSelectionRange } = await import('./selection-scope.mjs');
+    if (originalScopeAnchorRef.current !== original || !container.isConnected) return;
+    // Re-resolve after the lazy import: a background refresh may replace text nodes.
+    const restored = resolveAnchor(container, original).range;
+    const range = restored && (scope === 'original' ? restored : resizeSelectionRange(container, restored, scope));
+    if (!range) { showToast('无法确定此范围，请手动调整选区'); return; }
+    const selection = window.getSelection();
+    selection?.removeAllRanges(); selection?.addRange(range);
+    captureSelection(false, true, true);
+    setSelectionScope(scope);
+  };
+
   const copySelectedText = async () => {
-    const text = selectedTextRef.current || toolbar?.rawText || toolbar?.phrase || '';
+    const text = toolbar?.phrase || selectedTextRef.current || toolbar?.rawText || '';
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -627,6 +666,7 @@ export function CardModal({
     selectedAnchorRef.current = annotation.selector;
     selectedTextRef.current = annotation.selector.textQuote.exact;
     setHasSelection(false);
+    setNoteDraft(annotation.noteText || null);
     setKnowledgeDraft(null);
     knowledgeMutation.reset();
     focusToolbarAfterSelectionRef.current = focusToolbar;
@@ -634,6 +674,8 @@ export function CardModal({
       top: placeBelow ? bottomEdge : topEdge,
       left: anchorLeft,
       anchorLeft,
+      anchorTop: topEdge,
+      anchorBottom: bottomEdge,
       placeBelow,
       phrase: annotation.selector.textQuote.exact,
       rawText: annotation.selector.textQuote.exact,
@@ -646,7 +688,7 @@ export function CardModal({
     setColorMenuOpen(false);
   };
 
-  const captureSelection = (focusToolbar = false, ignoreAnnotationOverlap = false) => {
+  const captureSelection = (focusToolbar = false, ignoreAnnotationOverlap = false, preserveScope = false) => {
     const container = contentRef.current;
     if (!container) return;
     const candidate = buildSelectionCandidate(container);
@@ -655,6 +697,8 @@ export function CardModal({
       selectedRangeRef.current = null;
       selectedAnchorRef.current = null;
       selectedTextRef.current = '';
+      originalScopeAnchorRef.current = null;
+      setNoteDraft(null);
       setHasSelection(false);
       setToolbar(null);
       setGenMenuOpen(false);
@@ -676,12 +720,17 @@ export function CardModal({
       setToolbar(null);
       return;
     }
+    if (!preserveScope) {
+      setSelectionScope('original');
+    }
+    setNoteDraft(null);
     selectedRangeRef.current = candidate.range.cloneRange();
     try {
       selectedAnchorRef.current = createAnchor(container, candidate.range);
     } catch {
       selectedAnchorRef.current = null;
     }
+    if (!preserveScope) originalScopeAnchorRef.current = selectedAnchorRef.current;
     // Keep highlight recovery aligned with the ruby-free phrase shown in the toolbar.
     selectedTextRef.current = candidate.rawText;
     setHasSelection(true);
@@ -697,6 +746,8 @@ export function CardModal({
       top: placeBelow ? rect.bottom : rect.top,
       left: anchorLeft,
       anchorLeft,
+      anchorTop: rect.top,
+      anchorBottom: rect.bottom,
       placeBelow,
       phrase: candidate.normalized,
       rawText: candidate.rawText,
@@ -791,7 +842,7 @@ export function CardModal({
   };
 
   const handleToolbarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const buttons = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
@@ -852,6 +903,8 @@ export function CardModal({
     selectedRangeRef.current = null;
     selectedAnchorRef.current = null;
     selectedTextRef.current = '';
+    originalScopeAnchorRef.current = null;
+    setNoteDraft(null);
     setHasSelection(false);
     setToolbar(null);
     event.stopPropagation();
@@ -1095,6 +1148,11 @@ export function CardModal({
               <div className="csa-gloss-slot">
                 <Suspense fallback={<span className="csa-gloss is-muted" role="status">正在载入本地释义…</span>}>
                   <DeferredSelectionGlossaryInline
+                    key={[toolbar.phrase, toolbar.contextText, toolbar.language, toolbar.pronunciationToken?.readingHiragana].join('|')}
+                    detailHost={detailHost}
+                    readOnly={readOnly}
+                    onNote={openNote}
+                    onKnowledge={openKnowledgeLookup}
                     phrase={toolbar.phrase}
                     language={toolbar.language}
                     generationId={generationId ? Number(generationId) : null}
@@ -1106,43 +1164,17 @@ export function CardModal({
                 </Suspense>
               </div>
             </div>
-            <div className="csa-action-row" data-testid="card-selection-action-row">
+            <Suspense fallback={<span role="status">正在载入选区操作…</span>}><div className="csa-action-row" data-testid="card-selection-action-row">
               <div className="csa-action-tabs">
-                {!readOnly && <DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      ref={toolbarFirstActionRef}
-                      type="button"
-                      className="csa-highlight csa-command-tab"
-                      disabled={annotationMode !== 'annotations' || isSavingAnnotation}
-                      aria-label={toolbar.annotationId ? '更改标记颜色' : '标记选区'}
-                    >
-                      {toolbar.annotationId ? <Palette aria-hidden="true" /> : <Highlighter aria-hidden="true" />}
-                      {isSavingAnnotation ? '保存中…' : toolbar.annotationId ? '改色' : '标记'}
-                      <ChevronDown aria-hidden="true" className="csa-caret" />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      className="csa-gen-menu csa-color-menu"
-                      sideOffset={5}
-                      align="start"
-                    >
-                      {HIGHLIGHT_COLORS.map((color) => (
-                        <DropdownMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
-                          <button
-                            type="button"
-                            disabled={isSavingAnnotation}
-                            onClick={() => void saveHighlight(color.value)}
-                          >
-                            <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
-                            {color.label}
-                          </button>
-                        </DropdownMenu.Item>
-                      ))}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>}
+                {!readOnly && <DeferredSelectionHighlightAction colorMenuOpen={colorMenuOpen} setColorMenuOpen={setColorMenuOpen}
+                  toolbarFirstActionRef={(node) => {
+                    toolbarFirstActionRef.current = node;
+                    if (node && focusToolbarAfterSelectionRef.current) {
+                      focusToolbarAfterSelectionRef.current = false;
+                      node.focus({ preventScroll: true });
+                    }
+                  }} annotationMode={annotationMode} isSavingAnnotation={isSavingAnnotation}
+                  annotationId={toolbar.annotationId} colors={HIGHLIGHT_COLORS} saveHighlight={saveHighlight} />}
                 {!readOnly && toolbar.annotationId && (
                   <button
                     type="button"
@@ -1162,69 +1194,33 @@ export function CardModal({
                   title="复制选区"
                   onClick={() => void copySelectedText()}
                 >
-                  <Copy aria-hidden="true" />
+                  <Copy aria-hidden="true" />复制
                 </button>
                 <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
                   <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
                 </Suspense>
-                {toolbar.pronunciationToken && (
-                  <button
-                    type="button"
-                    className="csa-icon-action"
-                    aria-label="查看日语读音详情"
-                    title="查看日语读音详情"
-                    onClick={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)}
-                  >
-                    <BookOpen aria-hidden="true" />
-                  </button>
-                )}
-                <button
-                  ref={lookupTriggerRef}
-                  type="button"
-                  className="csa-knowledge csa-command-tab"
-                  onClick={openKnowledgeLookup}
-                >
-                  <Search aria-hidden="true" /> 查知识点
-                </button>
+                <Suspense fallback={null}><DeferredSelectionMoreActions hasPronunciation={Boolean(toolbar.pronunciationToken)} readOnly={readOnly}
+                  triggerRef={lookupTriggerRef} onKnowledge={openKnowledgeLookup} onNote={openNote}
+                  onPronunciation={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)} /></Suspense>
               </div>
               <div className="csa-primary-actions">
-                <div className="csa-generate-wrap">
-                  <DropdownMenu.Root open={genMenuOpen} onOpenChange={setGenMenuOpen} modal={false}>
-                    <DropdownMenu.Trigger asChild>
-                      <button
-                        ref={generateTriggerRef}
-                        type="button"
-                        className="csa-generate csa-command-tab"
-                        disabled={generateMutation.isPending}
-                      >
-                        <Sparkles aria-hidden="true" /> {generateMutation.isPending ? '入队中…' : '生成卡片'}
-                        <ChevronDown aria-hidden="true" className="csa-caret" />
-                      </button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.Content
-                        className="csa-gen-menu"
-                        sideOffset={5}
-                        align="end"
-                        onCloseAutoFocus={restoreGenerateTriggerFocus}
-                      >
-                        {SELECTION_CARD_TYPES.map((type) => (
-                          <DropdownMenu.Item key={type} asChild disabled={generateMutation.isPending}>
-                            <button
-                              type="button"
-                              disabled={generateMutation.isPending}
-                              onClick={() => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })}
-                            >
-                              {CARD_TYPE_LABEL[type]}
-                            </button>
-                          </DropdownMenu.Item>
-                        ))}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
-                </div>
+                <DeferredSelectionGenerateAction genMenuOpen={genMenuOpen} setGenMenuOpen={setGenMenuOpen}
+                  generateTriggerRef={generateTriggerRef} pending={generateMutation.isPending} restoreGenerateTriggerFocus={restoreGenerateTriggerFocus}
+                  types={SELECTION_CARD_TYPES} labels={CARD_TYPE_LABEL} onGenerate={(type) => generateMutation.mutate({ phrase: toolbar.phrase, cardType: type })} />
               </div>
             </div>
+            </Suspense>
+            {!toolbar.annotationId && <Suspense fallback={null}><DeferredSelectionScopeControls value={selectionScope} onChange={(scope) => void changeSelectionScope(scope)} /></Suspense>}
+            <div ref={setDetailHost} />
+            {noteDraft !== null && !readOnly && annotationStateRef.current && selectedAnchorRef.current && generationId &&
+              <Suspense fallback={<span role="status">正在载入笔记…</span>}>
+                <DeferredSelectionNoteEditor key={toolbar.annotationId || toolbar.phrase} initialText={noteDraft}
+                  state={annotationStateRef.current} selector={selectedAnchorRef.current} generationId={Number(generationId)} annotationId={toolbar.annotationId}
+                  onClose={() => { setNoteDraft(null); lookupTriggerRef.current?.focus({ preventScroll: true }); }} onToast={showToast} onSaved={(annotations) => {
+                    replaceAnnotationSnapshot(annotations); setNoteDraft(null); clearSelectionActions();
+                  }} />
+              </Suspense>}
+
           </div>
         )}
 

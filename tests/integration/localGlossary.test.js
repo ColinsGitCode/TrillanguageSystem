@@ -228,3 +228,11 @@ test('DIC-R2 ranks real problem terms and keeps a manual correction on top', asy
   assert.equal(lookup.body.lookup.gloss.zhGloss, '信件');
   assert.equal(lookup.body.lookup.gloss.sourceKind, 'manual');
 });
+
+test('context explanation reports disabled capability and rejects provider work when disabled', async () => {
+  const capabilities = await api('GET', '/api/local-glossary/capabilities');
+  assert.equal(capabilities.status, 200);
+  assert.equal(capabilities.body.contextExplanation, false);
+  const response = await api('POST', '/api/local-glossary/explain', { text: 'user', language: 'en', context: 'user account' });
+  assert.equal(response.status, 404);
+});

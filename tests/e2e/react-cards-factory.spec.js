@@ -8,84 +8,7 @@ const FIXTURES = [
   ['保育园早上送孩子并说明昨晚有点咳嗽', 'scenario_phrase'],
 ];
 
-async function enqueueAndWait(request, phrase, cardType, { targetFolder = '' } = {}) {
-  const created = await request.post('/api/generation-jobs', {
-    data: { phrase, card_type: cardType, source_mode: 'input', target_folder: targetFolder },
-  });
-  expect(created.ok()).toBeTruthy();
-  const body = await created.json();
-  const id = body.job.id;
-  await expect.poll(async () => {
-    const response = await request.get(`/api/generation-jobs/${id}`);
-    return (await response.json()).job.status;
-  }, { timeout: 30_000, intervals: [100, 200, 500] }).toBe('success');
-  return body.job;
-}
-
-async function waitForPronunciationContent(page) {
-  await expect(page.getByTestId('react-card-content').locator('.pronunciation-token').first()).toBeVisible();
-}
-
-async function selectVisibleText(page, text, { keyboard = false } = {}) {
-  const content = page.getByTestId('react-card-content');
-  await waitForPronunciationContent(page);
-  await content.evaluate((container, options) => {
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-    const nodes = [];
-    let node = walker.nextNode();
-    while (node) {
-      nodes.push(node);
-      node = walker.nextNode();
-    }
-    const joined = nodes.map((item) => item.nodeValue || '').join('');
-    const matchStart = joined.indexOf(options.text);
-    if (matchStart < 0) throw new Error(`Unable to find selection text: ${options.text}`);
-    const matchEnd = matchStart + options.text.length;
-    let cursor = 0;
-    let startNode = null;
-    let startOffset = 0;
-    let endNode = null;
-    let endOffset = 0;
-    for (const candidate of nodes) {
-      const length = String(candidate.nodeValue || '').length;
-      if (!startNode && matchStart >= cursor && matchStart <= cursor + length) {
-        startNode = candidate;
-        startOffset = matchStart - cursor;
-      }
-      if (matchEnd >= cursor && matchEnd <= cursor + length) {
-        endNode = candidate;
-        endOffset = matchEnd - cursor;
-        break;
-      }
-      cursor += length;
-    }
-    if (!startNode || !endNode) throw new Error(`Unable to map selection text: ${options.text}`);
-    if (options.keyboard) {
-      container.focus();
-      container.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'ArrowRight',
-        shiftKey: true,
-        bubbles: true,
-      }));
-    }
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    if (options.keyboard) {
-      document.dispatchEvent(new Event('selectionchange'));
-      container.dispatchEvent(new KeyboardEvent('keyup', {
-        key: 'ArrowRight',
-        shiftKey: true,
-        bubbles: true,
-      }));
-    } else {
-      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    }
-  }, { text, keyboard });
-}
+const { enqueueAndWait, waitForPronunciationContent, selectVisibleText } = require('./fixtures/cardSelection');
 
 test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test.beforeAll(async ({ request }) => {
@@ -731,7 +654,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByRole('dialog', { name: '读音详情' })).toHaveCount(0);
     await fragments.last().dispatchEvent('dblclick');
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', candidate.surface);
-    await page.getByRole('button', { name: '查看日语读音详情' }).click();
+    await page.getByRole('button', { name: '更多学习操作' }).click();
+    await page.getByRole('menuitem', { name: '查看日语读音详情' }).click();
     await expect(page.getByRole('dialog', { name: '读音详情' })).toContainText(candidate.surface);
 
     const removed = await request.delete(`/api/annotations/${savedAnnotation.id}`, {
@@ -826,7 +750,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByRole('button', { name: '复制选区' }).click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('deterministic');
 
-    await page.getByRole('button', { name: '查知识点' }).click();
+    await page.getByRole('button', { name: '更多学习操作' }).click();
+    await page.getByRole('menuitem', { name: '查知识点' }).click();
     const inspector = page.getByTestId('card-knowledge-inspector');
     await expect(inspector).toBeVisible();
     await expect(inspector.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
@@ -923,10 +848,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.locator('.csa-gloss')).toContainText('英语错误义项');
     await expect(page.locator('.csa-gloss')).toContainText('高可信');
     await page.getByRole('button', { name: '打开释义选项' }).click();
-    await page.getByRole('menuitem', { name: '释义不合适' }).click();
-    await page.getByRole('button', { name: '打开释义选项' }).click();
-    await expect(page.getByRole('menuitem', { name: '自己填写正确释义' })).toBeVisible();
-    await page.getByRole('menuitem').filter({ hasText: '英语正确义项' }).click();
+    await expect(page.getByRole('button', { name: '纠正释义' })).toBeVisible();
+    await page.getByRole('radio', { name: '英语正确义项' }).check();
     await expect(page.locator('.csa-gloss')).toContainText('英语正确义项');
 
     await page.getByTestId('react-card-modal-close').click();
@@ -939,7 +862,6 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     expect(lookups.some((item) => item.language === 'ja' && item.reading)).toBeTruthy();
     await expect.poll(() => feedback.filter((item) => item.language === 'en').map((item) => item.outcome)).toEqual([
       'shown',
-      'rejected',
       'switched',
     ]);
     expect(feedback.every((item) => !('context' in item) && !('sentence' in item))).toBeTruthy();
@@ -970,7 +892,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       selection?.addRange(range);
       node.closest('[data-testid="react-card-content"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
-    await page.getByRole('button', { name: '查知识点' }).click();
+    await page.getByRole('button', { name: '更多学习操作' }).click();
+    await page.getByRole('menuitem', { name: '查知识点' }).click();
 
     const inspector = page.getByTestId('card-knowledge-inspector');
     await expect(inspector).not.toContainText('汉字选区无法可靠判断');
@@ -1496,4 +1419,74 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       await page.keyboard.press('Escape');
     }
   });
+  test('reading toolbar adjusts scopes, explains on demand and saves a linked note', async ({ page, request }) => {
+    let explainCalls = 0;
+    await page.route('**/api/local-glossary/capabilities', (route) => route.fulfill({ json: { success: true, contextExplanation: true } }));
+    await page.route('**/api/local-glossary/explain', async (route) => {
+      explainCalls += 1;
+      expect(route.request().postDataJSON().context).toContain('deterministic');
+      await route.fulfill({ json: { success: true, explanation: '此处说明测试流程的结果可确定。', model: 'fixture' } });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'deterministic');
+    const preview = page.getByTestId('card-selection-preview');
+    await page.getByRole('button', { name: '整句', exact: true }).click();
+    await expect(preview).not.toHaveAttribute('title', 'deterministic');
+    await expect(preview).toContainText('deterministic');
+    await page.getByRole('button', { name: '词', exact: true }).click();
+    await expect(preview).toHaveAttribute('title', 'deterministic');
+    await page.getByRole('button', { name: '原选', exact: true }).click();
+    await expect(preview).toHaveAttribute('title', 'deterministic');
+    await page.getByRole('button', { name: '打开释义选项' }).click();
+    await expect(page.getByRole('region', { name: '释义详情' })).toBeVisible();
+    expect(explainCalls).toBe(0);
+    await page.getByRole('button', { name: '解释此处用法' }).click();
+    await expect(page.locator('.csa-context-answer')).toContainText('测试流程');
+    expect(explainCalls).toBe(1);
+    await page.getByTestId('card-selection-toolbar').screenshot({ path: 'output/playwright/selection-reading-expanded.png' });
+    await page.getByRole('button', { name: '纠正释义' }).click();
+    await expect(page.getByRole('textbox', { name: '中文释义' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: '中文释义' })).toHaveCount(0);
+    await page.getByRole('button', { name: '收起释义详情' }).focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('region', { name: '释义详情' })).toHaveCount(0);
+    await expect(page.getByTestId('card-selection-toolbar')).toBeVisible();
+    await page.getByRole('button', { name: '更多学习操作' }).click();
+    await page.getByRole('menuitem', { name: '记笔记' }).click();
+    await page.getByRole('textbox', { name: '阅读笔记' }).fill('此处强调结果可确定。');
+    const saved = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/annotations' && response.request().method() === 'POST');
+    await page.getByRole('button', { name: '保存笔记' }).click();
+    const response = await saved;
+    expect(response.status()).toBe(201);
+    const { annotation } = await response.json();
+    expect(annotation.noteText).toBe('此处强调结果可确定。');
+    expect(annotation.selector.textQuote.exact).toBe('deterministic');
+    await page.getByTestId('react-card-content').locator('[data-annotation-id="' + annotation.id + '"]').first().click();
+    await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('此处强调结果可确定。');
+    await request.delete('/api/annotations/' + annotation.id, { data: { expectedVersion: annotation.version } });
+  });
+
+  test('reading details discard an old explanation when selection changes', async ({ page }) => {
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    await page.route('**/api/local-glossary/capabilities', (route) => route.fulfill({ json: { success: true, contextExplanation: true } }));
+    await page.route('**/api/local-glossary/explain', async (route) => {
+      await pending;
+      await route.fulfill({ json: { success: true, explanation: '旧选区解释不应显示', model: 'fixture' } }).catch(() => {});
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await selectVisibleText(page, 'deterministic');
+    await page.getByRole('button', { name: '打开释义选项' }).click();
+    await page.getByRole('button', { name: '解释此处用法' }).click();
+    await selectVisibleText(page, 'react');
+    release();
+    await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', 'react');
+    await page.getByRole('button', { name: '打开释义选项' }).click();
+    await expect(page.locator('.csa-context-answer')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '解释此处用法' })).toBeEnabled();
+  });
+
 });
