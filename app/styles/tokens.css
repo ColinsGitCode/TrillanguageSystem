@@ -5,6 +5,8 @@
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #ffffff;
   --color-bg-subtle: #f1f3f5;
+  --color-bg-page: #f7f8fa;
+  --color-bg-muted: #eef0f3;
   --color-text-primary: #172033;
   --color-text-secondary: #566074;
   --color-text-tertiary: #7a8496;
@@ -18,6 +20,9 @@
 
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
+  /* The interactive/link role. Shares the primary ramp today, but three
+     stylesheets ask for it by this name, so it is a token of its own. */
+  --color-action: #2563eb;
   --color-primary-subtle: #eaf1ff;
   --color-success: #0f8a5f;
   --color-success-subtle: #e7f7f1;
@@ -30,6 +35,7 @@
   --color-data-purple: #7c3aed;
   --color-data-cyan: #0891b2;
   --color-data-orange: #ea580c;
+  --color-data-teal: #0d9488;
 
   --color-lang-en: #2563eb;
   --color-lang-ja: #7c3aed;
@@ -78,6 +84,7 @@
   --duration-normal: 180ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-size-caption: 12px;
   --font-size-badge: 10px;
@@ -92,6 +99,8 @@
   --color-bg-surface: #1d2128;
   --color-bg-elevated: #242932;
   --color-bg-subtle: #292f39;
+  --color-bg-page: #15181d;
+  --color-bg-muted: #232830;
   --color-text-primary: #f2f4f7;
   --color-text-secondary: #c1c8d2;
   --color-text-tertiary: #929cab;
@@ -104,6 +113,7 @@
   --color-skeleton: #303641;
   --color-primary: #78a8ff;
   --color-primary-hover: #9abfff;
+  --color-action: #78a8ff;
   --color-primary-subtle: #23334f;
   --color-success: #5fd1a5;
   --color-success-subtle: #19392f;
@@ -116,6 +126,7 @@
   --color-data-purple: #b99bff;
   --color-data-cyan: #5ec8de;
   --color-data-orange: #ff9d5c;
+  --color-data-teal: #5fd4c7;
   --color-lang-en: #82adff;
   --color-lang-ja: #c0a3ff;
   --color-lang-zh: #5fd4c7;
