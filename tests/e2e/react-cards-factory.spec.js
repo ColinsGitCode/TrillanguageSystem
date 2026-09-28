@@ -242,8 +242,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
   test('P3 exposes searchable history without a second product page', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('tab', { name: '历史' }).click();
-    await page.getByPlaceholder('搜索历史').fill('なくなった');
+    await page.getByRole('tab', { name: '全部卡片' }).click();
+    await page.getByRole('searchbox', { name: '搜索全部卡片' }).fill('なくなった');
     await expect(page.locator('.history-items button')).toHaveCount(1);
     await expect(page.locator('.history-items button')).toContainText('〜なくなった');
   });
@@ -982,7 +982,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     });
     await page.mouse.click(englishPoint.x, englishPoint.y, { button: 'right' });
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', 'deterministic');
-    await expect(page.locator('.csa-context-menu')).toBeVisible();
+    await expect(page.locator('.csa-context-menu')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: '选区操作' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '标记选区' })).toBeFocused();
     await page.keyboard.press('Escape');
 
     const japaneseTokens = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]');
@@ -994,7 +996,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const surface = await japaneseToken.getAttribute('data-pronunciation-surface');
     await japaneseToken.click({ button: 'right' });
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', surface);
-    await expect(page.locator('.csa-context-menu')).toBeVisible();
+    await expect(page.locator('.csa-context-menu')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: '选区操作' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '标记选区' })).toBeFocused();
   });
 
   test('CA-P1 keeps selection actions keyboard-accessible and restores focus after closing a menu', async ({ page }) => {

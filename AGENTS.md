@@ -16,6 +16,7 @@ Use Node.js 22, `npm ci`, and settings from `.env.example`.
 - `npm run dev:react`: development server.
 - `npm run build:react && npm start`: production build/server at `http://127.0.0.1:3010/`.
 - `docker compose up -d --build`: viewer/OCR/TTS deployment, project `three_lans_system`.
+- `npm run deploy:viewer`: rebuild/restart only viewer with baked commit, UTC time, dirty-state and Git-visible source fingerprint; use this for traceable viewer updates.
 - `npm run typecheck:react` / `npm run lint`: TypeScript/ESLint checks.
 - `npm test` / `npm run test:integration` / `npm run test:e2e`: individual suites.
 - `npm run test:acceptance`: typecheck, lint, unit/integration, architecture/asset budgets, smoke, and Playwright gates. Verify Docker runtime separately.

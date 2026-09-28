@@ -317,6 +317,15 @@ export function PronunciationCardContent({
         }}
         onKeyDown={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault();
+            window.requestAnimationFrame(() => {
+              if (token) selectPronunciationToken(token);
+              onCaptureSelection(true, Boolean(token));
+            });
+            setOverlay(null);
+            return;
+          }
           if (!token) return;
           if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
             event.preventDefault();
@@ -335,7 +344,7 @@ export function PronunciationCardContent({
           onCaptureSelection(true, true);
           setOverlay(null);
         }}
-        onContextMenuCapture={onContextMenuCapture}
+        onContextMenuCapture={(event) => { setOverlay(null); onContextMenuCapture(event); }}
       >
         {cardDocument ? (
           <CanaryBoundary fallback={legacySurface} resetKey={canaryResetKey}>

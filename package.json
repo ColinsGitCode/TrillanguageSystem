@@ -8,6 +8,7 @@
     "start:public-sandbox": "NODE_ENV=production node sandbox-gateway.mjs",
     "dev:react": "NODE_ENV=development node server.mjs",
     "build:react": "react-router build && node scripts/build/markReactServerEsm.js",
+    "deploy:viewer": "node scripts/build/rebuildViewer.js",
     "typecheck:react": "react-router typegen && tsc --noEmit",
     "check:frontend-budget": "node scripts/tests/frontendAssetBudget.js",
     "test:frontend-budget": "npm run build:react && npm run check:frontend-budget",

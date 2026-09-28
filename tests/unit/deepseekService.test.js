@@ -52,10 +52,26 @@ function withEnv(values, fn) {
 }
 
 test.describe('deepseekService', () => {
+  test.it('canonicalizes the legacy Flash alias and rejects unknown models before network access', async (t) => {
+    await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
+      const m = mockFetch(() => jsonResponse(200, {
+        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+      }));
+      t.after(() => m.restore());
+      const { generateMarkdown } = loadService();
+      await generateMarkdown('prompt', { model: 'deepseek-v4-flash' });
+      assert.equal(JSON.parse(m.calls[0].opts.body).model, 'deepseek-flash');
+      await assert.rejects(() => generateMarkdown('prompt', { model: 'typo' }), {
+        code: 'DEEPSEEK_MODEL_INVALID', status: 400,
+      });
+      assert.equal(m.calls.length, 1);
+    });
+  });
+
   test.it('generateMarkdown builds a non-stream DeepSeek chat completion request', async (t) => {
     await withEnv({ DEEPSEEK_API_KEY: 'test-key' }, async () => {
       const m = mockFetch(() => jsonResponse(200, {
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         choices: [{ message: { content: '  # Hello\n' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
       }));
@@ -71,7 +87,7 @@ test.describe('deepseekService', () => {
       assert.equal(m.calls[0].opts.headers.Authorization, 'Bearer test-key');
 
       const body = JSON.parse(m.calls[0].opts.body);
-      assert.equal(body.model, 'deepseek-v4-flash');
+      assert.equal(body.model, 'deepseek-flash');
       assert.deepEqual(body.messages[0], { role: 'user', content: 'Write markdown' });
       assert.equal(body.stream, false);
       assert.deepEqual(body.thinking, { type: 'disabled' });
@@ -79,7 +95,7 @@ test.describe('deepseekService', () => {
 
       assert.equal(result.markdown, '  # Hello\n');
       assert.equal(result.rawOutput, '  # Hello\n');
-      assert.equal(result.model, 'deepseek-v4-flash');
+      assert.equal(result.model, 'deepseek-flash');
       assert.deepEqual(result.usage, { input: 11, output: 7, total: 18 });
       assert.equal(result.finishReason, 'stop');
     });

@@ -52,6 +52,8 @@ export type RuntimeDescriptor = {
     version: string;
     commit: string | null;
     builtAtUtc: string | null;
+    dirty?: boolean | null;
+    sourceHash?: string | null;
   };
   support: {
     feedbackUrl: string | null;

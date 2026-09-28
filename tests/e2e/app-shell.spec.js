@@ -147,6 +147,8 @@ test.describe('React root shell', () => {
           version: '2.3.4',
           commit: 'abcdef0123456789abcdef0123456789abcdef01',
           builtAtUtc: '2026-07-30T08:00:00.000Z',
+          dirty: true,
+          sourceHash: '1234567890abcdef'.repeat(4),
         },
         support: { feedbackUrl: 'https://support.example.com/three-lans' },
         serverTimeUtc: '2026-07-30T08:00:00.000Z',
@@ -177,6 +179,9 @@ test.describe('React root shell', () => {
     await expect(drawer).toContainText('日语朗读');
     await expect(drawer).toContainText('2.3.4');
     await expect(drawer).toContainText('abcdef012345');
+    await expect(drawer).toContainText('基线 Commit');
+    await expect(drawer).toContainText('含未提交改动');
+    await expect(drawer).toContainText('1234567890ab');
     await expect(drawer.getByRole('link', { name: /提交问题/ })).toHaveAttribute(
       'href',
       'https://support.example.com/three-lans'

@@ -173,6 +173,7 @@ test('UX07 notes cancel, blank validation, save, reload, edit and delete', async
   await expect(page.getByRole('button', { name: '保存笔记' })).toBeDisabled();
   await page.getByRole('textbox', { name: '阅读笔记' }).fill('临时内容');
   await page.locator('.csa-note-editor').getByRole('button', { name: '取消' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '放弃修改', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveCount(0);
   await note(page);
   await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('');
@@ -308,6 +309,8 @@ test('UX10 note cancel restores focus and arrow keys keep textarea caret editing
   await expect(input).toBeFocused();
   expect(await input.evaluate((el) => el.selectionStart)).toBe(1);
   await input.press('Escape');
+  await expect(page.getByRole('alertdialog', { name: '笔记尚未保存' })).toBeVisible();
+  await page.getByRole('button', { name: '放弃修改', exact: true }).click();
   await expect(page.getByRole('button', { name: '更多学习操作' })).toBeFocused();
 });
 
@@ -325,8 +328,162 @@ for (const theme of ['light', 'dark']) {
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width - 7);
       expect(box.y + box.height).toBeLessThanOrEqual(viewport.height - 7);
       expect(await toolbar(page).evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
-      await toolbar(page).screenshot({ path: 'output/playwright/ux11-' + theme + '-' + viewport.width + '.png' });
+      const noteBox = await page.locator('.card-note-panel').boundingBox();
+      expect(noteBox.x).toBeGreaterThanOrEqual(0); expect(noteBox.y).toBeGreaterThanOrEqual(0);
+      expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(viewport.width);
+      expect(noteBox.y + noteBox.height).toBeLessThanOrEqual(viewport.height);
+      await page.screenshot({ path: 'output/playwright/ux11-' + theme + '-' + viewport.width + '.png' });
       await expect(page.getByRole('button', { name: '保存笔记' })).toBeVisible();
     });
   }
 }
+
+test('UX15 note draft survives scrolling, tabs and a new selection without retargeting its saved anchor', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openSelection(page); await note(page);
+  const input = page.getByRole('textbox', { name: '阅读笔记' });
+  await input.fill('滚动和切换后仍保留');
+  const scroll = await page.locator('.react-card-scroll').boundingBox();
+  await page.mouse.move(scroll.x + 60, scroll.y + scroll.height - 40);
+  await page.mouse.wheel(0, 350);
+  await expect(toolbar(page)).toHaveCount(0);
+  await expect(input).toHaveValue('滚动和切换后仍保留');
+  await page.getByRole('tab', { name: '生成信息' }).click();
+  await expect(input).toHaveValue('滚动和切换后仍保留');
+  await page.getByRole('tab', { name: '学习内容' }).click();
+  await selectVisibleText(page, 'E2E');
+  await note(page);
+  await expect(input).toHaveValue('滚动和切换后仍保留');
+  await expect(page.locator('.csa-note-editor blockquote')).toHaveText('deterministic');
+  await page.screenshot({ path: 'output/playwright/ux15-retained-draft.png' });
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/annotations') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: '保存笔记' }).click();
+  const response = await saved;
+  expect(response.status()).toBe(201);
+  expect(response.request().postDataJSON().selector.textQuote.exact).toBe('deterministic');
+  await expect(input).toHaveCount(0);
+  await expect(page.getByTestId('react-card-content').locator('[data-annotation-kind="note"]').first()).toContainText('deterministic');
+});
+
+test('UX16 dirty note guards close, backdrop, Escape and delete; explicit discard is required', async ({ page }) => {
+  let writes = 0;
+  page.on('request', (r) => { if (r.url().includes('/api/annotations') && r.method() !== 'GET') writes++; });
+  await openSelection(page); await note(page);
+  const input = page.getByRole('textbox', { name: '阅读笔记' });
+  await input.fill('不能静默丢失');
+  const dialog = page.getByRole('alertdialog', { name: '笔记尚未保存' });
+  for (const action of ['close', 'backdrop', 'escape', 'delete']) {
+    if (action === 'close') await page.getByTestId('react-card-modal-close').click();
+    if (action === 'backdrop') await page.getByTestId('react-card-modal').click({ position: { x: 2, y: 2 } });
+    if (action === 'escape') await page.getByTestId('react-card-modal-close').press('Escape');
+    if (action === 'delete') await page.getByRole('button', { name: '删除卡片', exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '继续编辑' })).toBeFocused();
+    if (action === 'close') await page.screenshot({ path: 'output/playwright/ux16-discard-guard.png' });
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: /放弃修改/ })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('不能静默丢失');
+    await expect(page.getByRole('alertdialog', { name: '确认删除卡片' })).toHaveCount(0);
+  }
+  await page.getByTestId('react-card-modal-close').click();
+  await dialog.getByRole('button', { name: '放弃修改并关闭' }).click();
+  await expect(page.getByTestId('react-card-modal')).toHaveCount(0);
+  expect(writes).toBe(0);
+});
+
+test('UX17 note save in flight prevents card close and duplicate submissions', async ({ page }) => {
+  let calls = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  await page.route('**/api/annotations', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    calls++; await gate; return route.continue();
+  });
+  await openSelection(page); await note(page);
+  await page.getByRole('textbox', { name: '阅读笔记' }).fill('保存中的内容');
+  await page.getByRole('button', { name: '保存笔记' }).click();
+  await expect.poll(() => calls).toBe(1);
+  await page.getByTestId('react-card-modal-close').click();
+  await expect(page.getByTestId('react-card-modal')).toBeVisible();
+  await expect(page.getByRole('button', { name: '保存笔记' })).toBeDisabled();
+  await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('保存中的内容');
+  release();
+  await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveCount(0);
+  expect(calls).toBe(1);
+});
+
+test('UX18 expanded preview exposes the complete sentence and preserves clipboard equality', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openSelection(page);
+  await page.getByRole('button', { name: '整句', exact: true }).click();
+  await expect(preview(page)).not.toHaveAttribute('title', 'deterministic');
+  const sentence = await preview(page).getAttribute('title');
+  await page.getByRole('button', { name: '展开选区全文' }).click();
+  const text = preview(page).locator('strong');
+  await expect(text).toHaveText(sentence);
+  expect(await text.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
+  await page.getByRole('button', { name: '复制选区' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(sentence);
+  await page.screenshot({ path: 'output/playwright/ux18-full-preview.png' });
+  await page.getByRole('button', { name: '原选', exact: true }).click();
+  await expect(preview(page)).toHaveAttribute('title', 'deterministic');
+  await expect(page.getByRole('button', { name: '收起全文' })).toHaveCount(0);
+});
+
+test('UX19 keyboard context actions use the same toolbar for selected text and Japanese tokens', async ({ page }) => {
+  await openSelection(page);
+  const content = page.getByTestId('react-card-content');
+  await content.press('Shift+F10');
+  await expect(toolbar(page)).toHaveCount(1);
+  await expect(page.locator('.csa-context-menu')).toHaveCount(0);
+  await expect(preview(page)).toHaveAttribute('title', 'deterministic');
+  await expect(page.getByRole('button', { name: '标记选区' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(toolbar(page)).toHaveCount(0);
+  await expect(content).toBeFocused();
+  const token = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+  const surface = await token.getAttribute('data-pronunciation-surface');
+  await token.press('Shift+F10');
+  await expect(preview(page)).toHaveAttribute('title', surface);
+  await expect(page.getByRole('button', { name: '标记选区' })).toBeFocused();
+  await expect(page.getByRole('tooltip', { name: '日语读音' })).toHaveCount(0);
+  await expect(page.locator('.csa-context-menu')).toHaveCount(0);
+});
+
+test('UX20 browser reload warns about unsaved notes and cancelling preserves the draft', async ({ page }) => {
+  await openSelection(page); await note(page);
+  const input = page.getByRole('textbox', { name: '阅读笔记' });
+  await input.fill('刷新前保护草稿');
+  const warning = page.waitForEvent('dialog');
+  const reload = page.reload({ timeout: 3000 }).catch(() => null);
+  const dialog = await warning;
+  expect(dialog.type()).toBe('beforeunload');
+  await dialog.dismiss();
+  await reload;
+  await expect(input).toHaveValue('刷新前保护草稿');
+  await input.press('Escape');
+  await page.getByRole('button', { name: '放弃修改', exact: true }).click();
+});
+
+test('UX21 adding a note to an existing highlight updates it rather than creating a second annotation', async ({ page }) => {
+  await openSelection(page);
+  await page.getByRole('button', { name: '标记选区' }).click();
+  const created = page.waitForResponse((r) => r.url().endsWith('/api/annotations') && r.request().method() === 'POST');
+  await page.getByRole('menuitem', { name: '红色重点', exact: true }).click();
+  const { annotation } = await (await created).json();
+  const mark = page.getByTestId('react-card-content').locator(`[data-annotation-id="${annotation.id}"]`).first();
+  await mark.click();
+  await note(page);
+  await page.getByRole('textbox', { name: '阅读笔记' }).fill('附加到已有标记');
+  const updated = page.waitForResponse((r) => r.url().endsWith(`/api/annotations/${annotation.id}`) && r.request().method() === 'PATCH');
+  await page.getByRole('button', { name: '保存笔记' }).click();
+  const response = await updated;
+  expect(response.status()).toBe(200);
+  expect((await response.json()).annotation).toMatchObject({ id: annotation.id, noteText: '附加到已有标记', color: 'red' });
+  await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveCount(0);
+  await mark.click();
+  await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('附加到已有标记');
+});

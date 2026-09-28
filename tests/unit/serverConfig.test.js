@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 
 delete process.env.KG_ENABLED;
 delete process.env.KG_PLANNING_ENABLED;
@@ -96,13 +97,14 @@ test.describe('serverConfig.deepseek defaults', () => {
     assert.equal(cfg.normalizeLlmProvider('local'), 'deepseek');
   });
 
-  test.it('defaults to DeepSeek V4 Flash', () => {
-    assert.equal(cfg.DEFAULT_DEEPSEEK_MODEL, 'deepseek-v4-flash');
+  test.it('defaults to DeepSeek Flash', () => {
+    assert.equal(cfg.DEFAULT_DEEPSEEK_MODEL, 'deepseek-flash');
     assert.equal(cfg.DEFAULT_DEEPSEEK_BASE_URL, 'https://api.deepseek.com');
   });
 
   test.it('sanitizes DeepSeek model names and rejects legacy Gemini aliases', () => {
-    assert.equal(cfg.sanitizeDeepSeekModelName('deepseek-v4-flash'), 'deepseek-v4-flash');
+    assert.equal(cfg.sanitizeDeepSeekModelName('deepseek-v4-flash'), 'deepseek-flash');
+    assert.equal(cfg.sanitizeDeepSeekModelName('  deepseek-flash  '), 'deepseek-flash');
     assert.equal(cfg.sanitizeDeepSeekModelName('  deepseek-v4-pro  '), 'deepseek-v4-pro');
     assert.equal(cfg.sanitizeDeepSeekModelName('gemini-cli'), '');
     assert.equal(cfg.sanitizeDeepSeekModelName('gemini-3-flash-preview'), '');
@@ -113,13 +115,26 @@ test.describe('serverConfig.deepseek defaults', () => {
     const saved = process.env.DEEPSEEK_MODEL;
     process.env.DEEPSEEK_MODEL = 'deepseek-v4-pro';
     try {
-      assert.equal(cfg.resolveDeepSeekModel('deepseek-v4-flash'), 'deepseek-v4-flash');
-      assert.equal(cfg.resolveDeepSeekModel('gemini-3-pro'), 'deepseek-v4-pro');
+      assert.equal(cfg.resolveDeepSeekModel('deepseek-v4-flash'), 'deepseek-flash');
+      assert.equal(cfg.resolveDeepSeekModel('deepseek-flash'), 'deepseek-flash');
+      assert.throws(() => cfg.resolveDeepSeekModel('gemini-3-pro'), {
+        code: 'DEEPSEEK_MODEL_INVALID', status: 400,
+      });
       assert.equal(cfg.resolveDeepSeekModel(''), 'deepseek-v4-pro');
+      assert.equal(cfg.resolveDeepSeekModel('   '), 'deepseek-v4-pro');
     } finally {
       if (saved === undefined) delete process.env.DEEPSEEK_MODEL;
       else process.env.DEEPSEEK_MODEL = saved;
     }
+  });
+
+  test.it('rejects invalid environment models at startup instead of silently falling back', () => {
+    const result = spawnSync(process.execPath, ['-e', "require('./lib/serverConfig')"], {
+      cwd: require('node:path').resolve(__dirname, '../..'),
+      env: { ...process.env, DEEPSEEK_MODEL: 'deepseek-typo' }, encoding: 'utf8',
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /DEEPSEEK_MODEL_INVALID/u);
   });
 });
 

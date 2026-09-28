@@ -173,12 +173,16 @@ class HealthCheckService {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        service.status = service.latency > 2000 ? 'degraded' : 'online';
-        service.message = service.latency > 2000 ? 'DeepSeek API 响应偏慢' : 'DeepSeek API 正常';
-
-        if (Array.isArray(data.data)) {
-          service.details.availableModels = data.data.map((entry) => entry.id || entry.name).filter(Boolean);
-        }
+        const models = Array.isArray(data?.data)
+          ? data.data.map((entry) => entry?.id || entry?.name).filter((id) => typeof id === 'string')
+          : [];
+        service.details.availableModels = models;
+        service.details.modelAvailable = models.includes(model);
+        service.details.generationVerified = false;
+        service.status = service.details.modelAvailable && service.latency <= 2000 ? 'online' : 'degraded';
+        service.message = !service.details.modelAvailable
+          ? 'DeepSeek API 可达，但未确认配置模型可用'
+          : service.latency > 2000 ? 'DeepSeek API 响应偏慢' : 'DeepSeek API 与配置模型可用（未执行生成）';
       } else {
         service.status = 'degraded';
         service.message = data?.error?.message || data?.message || `DeepSeek API 响应异常: ${response.status}`;

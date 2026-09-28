@@ -187,7 +187,8 @@
   gap: 3px;
 }
 .card-selection-toolbar .csa-selection-preview {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -206,9 +207,17 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
+.card-selection-toolbar .csa-selection-preview button { grid-column: 2; padding: 2px 0; font-size: 11px; color: var(--color-primary); text-align: left; }
+.card-selection-toolbar .csa-selection-preview.is-expanded { grid-column: 1 / -1; padding: 8px; }
+.card-selection-toolbar .csa-selection-preview.is-expanded strong { display: block; max-height: 140px; overflow: auto; }
+.card-selection-toolbar .csa-selection-preview.is-expanded + .csa-gloss-slot { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--color-border); }
 .card-selection-toolbar .csa-gloss,
 .card-selection-toolbar .csa-gloss-editor {
   flex: 1 1 auto;
@@ -977,7 +986,7 @@
 .card-selection-toolbar .csa-scope button { font-size: 12px; color: var(--color-text-secondary); }
 .card-selection-toolbar .csa-scope button[aria-pressed="true"] { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
 .card-selection-toolbar .csa-reading-details,
-.card-selection-toolbar .csa-note-editor { border-top: 1px solid var(--color-border); padding: 14px; font: 13px/1.6 var(--font-sans); color: var(--color-text-primary); white-space: normal; }
+.csa-note-editor { border-top: 1px solid var(--color-border); padding: 14px; font: 13px/1.6 var(--font-sans); color: var(--color-text-primary); white-space: normal; }
 .csa-reading-details header { display: flex; align-items: center; gap: 10px; }
 .csa-reading-details header strong { overflow-wrap: anywhere; }
 .csa-reading-details header button { margin-left: auto; flex-shrink: 0; }
@@ -993,7 +1002,7 @@
 .csa-candidates label { display: flex; align-items: baseline; gap: 6px; padding: 3px; overflow-wrap: anywhere; }
 .csa-reading-details footer { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--color-border); padding-top: 8px; }
 .card-selection-toolbar .csa-reading-details button,
-.card-selection-toolbar .csa-note-editor button { color: var(--color-primary); font-size: 12px; }
+.csa-note-editor button { color: var(--color-primary); font-size: 12px; }
 .csa-reading-editor label,
 .csa-note-editor label { display: grid; gap: 5px; }
 .csa-reading-editor input,
@@ -1002,3 +1011,11 @@
 .csa-note-editor small,
 .csa-reading-editor small { display: block; margin: 6px 0; }
 .card-annotation-highlight[data-annotation-kind="note"] { text-decoration: underline dotted; text-underline-offset: 4px; cursor: pointer; }
+.card-note-panel { position: fixed; z-index: 280; right: 24px; bottom: 24px; width: 360px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow: auto; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-bg-elevated); box-shadow: var(--shadow-modal); }
+.card-note-panel .csa-note-editor { border-top: 0; }
+.csa-note-editor blockquote { margin: 0 0 12px; padding-left: 10px; border-left: 2px solid var(--color-primary); max-height: 84px; overflow: auto; overflow-wrap: anywhere; color: var(--color-text-secondary); }
+.csa-note-editor button { min-height: 32px; margin-right: 8px; padding: 5px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-bg-surface); }
+.note-exit-backdrop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: var(--color-overlay); }
+.note-exit-confirm { width: min(400px, calc(100vw - 48px)); padding: 24px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); color: var(--color-text-primary); }
+.note-exit-confirm p { color: var(--color-text-secondary); }
+.note-exit-confirm button { min-height: 36px; margin-right: 12px; padding: 6px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-bg-surface); }

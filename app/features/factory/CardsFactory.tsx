@@ -111,7 +111,6 @@ export function CardsFactory() {
   const [selectedQueueJobId, setSelectedQueueJobId] = useState<number | null>(null);
   const [libraryMode, setLibraryMode] = useState<'folders' | 'history'>('folders');
   const [expandedDateGroups, setExpandedDateGroups] = useState<Set<string>>(new Set());
-  const [historySearch, setHistorySearch] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
   const [cardSearch, setCardSearch] = useState('');
   const [cardSort, setCardSort] = useState<CardSort>('newest');
@@ -149,8 +148,8 @@ export function CardsFactory() {
     queryKey: ['queue', 'summary'], queryFn: factoryApi.queueSummary, enabled: hydrated, refetchInterval: 1500,
   });
   const historyQuery = useQuery({
-    queryKey: ['history', historySearch, historyPage],
-    queryFn: () => factoryApi.history(historySearch, historyPage),
+    queryKey: ['history', cardSearch, historyPage],
+    queryFn: () => factoryApi.history(cardSearch, historyPage),
     enabled: hydrated && libraryMode === 'history',
   });
 
@@ -774,84 +773,153 @@ export function CardsFactory() {
           <aside className="surface date-rail">
             <div className="library-tabs" role="tablist">
               <button type="button" role="tab" aria-selected={libraryMode === 'folders'} className={libraryMode === 'folders' ? 'active' : ''} onClick={() => setLibraryMode('folders')}>日期</button>
-              <button type="button" role="tab" aria-selected={libraryMode === 'history'} className={libraryMode === 'history' ? 'active' : ''} onClick={() => setLibraryMode('history')}>历史</button>
+              <button type="button" role="tab" aria-selected={libraryMode === 'history'} className={libraryMode === 'history' ? 'active' : ''} onClick={() => setLibraryMode('history')}>全部卡片</button>
             </div>
-            {libraryMode === 'folders' ? (
-              <div className="date-groups" data-testid="react-folder-list">
-                <div className="rail-heading"><p className="eyebrow">日期归档</p><h2>日期</h2><span>{folders.length}</span></div>
-                {foldersQuery.isLoading && !foldersQuery.data ? (
-                  <PageState variant="loading" title="正在读取日期" description="正在恢复卡片归档。" compact testId="factory-folders-loading" />
-                ) : foldersQuery.isError && !foldersQuery.data ? (
-                  <PageState
-                    variant="error"
-                    title="日期归档无法读取"
-                    description="卡片文件没有被修改。"
-                    actions={<button className="primary" type="button" onClick={() => void foldersQuery.refetch()}>重试</button>}
+            <div className="date-groups" data-testid="react-folder-list">
+              <div className="rail-heading"><p className="eyebrow">日期归档</p><h2>日期</h2><span>{folders.length}</span></div>
+              {foldersQuery.isLoading && !foldersQuery.data ? (
+                <PageState variant="loading" title="正在读取日期" description="正在恢复卡片归档。" compact testId="factory-folders-loading" />
+              ) : foldersQuery.isError && !foldersQuery.data ? (
+                <PageState
+                  variant="error"
+                  title="日期归档无法读取"
+                  description="卡片文件没有被修改。"
+                  actions={<button className="primary" type="button" onClick={() => void foldersQuery.refetch()}>重试</button>}
+                  compact
+                  testId="factory-folders-error"
+                />
+              ) : (
+                <>
+                  <DataRefreshStatus
+                    refreshing={foldersQuery.isFetching && !foldersQuery.isLoading}
+                    failed={foldersQuery.isError && Boolean(foldersQuery.data)}
+                    label="日期归档"
+                    onRetry={() => void foldersQuery.refetch()}
                     compact
-                    testId="factory-folders-error"
                   />
-                ) : (
-                  <>
-                    <DataRefreshStatus
-                      refreshing={foldersQuery.isFetching && !foldersQuery.isLoading}
-                      failed={foldersQuery.isError && Boolean(foldersQuery.data)}
-                      label="日期归档"
-                      onRetry={() => void foldersQuery.refetch()}
-                      compact
-                    />
-                    {groupedFolders.map(([group, items]) => {
-                      const expanded = expandedDateGroups.has(group);
-                      return (
-                        <section key={group} className={expanded ? 'is-expanded' : 'is-collapsed'}>
-                          <h3>
-                            <button
-                              type="button"
-                              className="date-group-toggle"
-                              aria-expanded={expanded}
-                              aria-label={`${expanded ? '收起' : '展开'} ${group}`}
-                              onClick={() => setExpandedDateGroups((current) => {
-                                const next = new Set(current);
-                                if (next.has(group)) next.delete(group);
-                                else next.add(group);
-                                return next;
-                              })}
-                            >
-                              <span>{group}</span>
-                              <small>{items.length}</small>
-                              <ChevronDown aria-hidden="true" />
-                            </button>
-                          </h3>
-                          {expanded && (
-                            <div>
-                              {items.sort((a, b) => b.folder.localeCompare(a.folder)).map((item) => (
-                                <button
-                                  key={item.folder}
-                                  type="button"
-                                  className={selectedFolder === item.folder ? 'active' : ''}
-                                  title={item.title}
-                                  aria-label={`日期 ${item.title}`}
-                                  onClick={() => setSelectedFolder(item.folder)}
-                                >{item.day}</button>
-                              ))}
-                            </div>
-                          )}
-                        </section>
-                      );
-                    })}
-                    {!folders.length && <div className="empty-copy">暂无卡片日期</div>}
-                  </>
+                  {groupedFolders.map(([group, items]) => {
+                    const expanded = expandedDateGroups.has(group);
+                    return (
+                      <section key={group} className={expanded ? 'is-expanded' : 'is-collapsed'}>
+                        <h3>
+                          <button
+                            type="button"
+                            className="date-group-toggle"
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? '收起' : '展开'} ${group}`}
+                            onClick={() => setExpandedDateGroups((current) => {
+                              const next = new Set(current);
+                              if (next.has(group)) next.delete(group);
+                              else next.add(group);
+                              return next;
+                            })}
+                          >
+                            <span>{group}</span>
+                            <small>{items.length}</small>
+                            <ChevronDown aria-hidden="true" />
+                          </button>
+                        </h3>
+                        {expanded && (
+                          <div>
+                            {items.sort((a, b) => b.folder.localeCompare(a.folder)).map((item) => (
+                              <button
+                                key={item.folder}
+                                type="button"
+                                className={libraryMode === 'folders' && selectedFolder === item.folder ? 'active' : ''}
+                                title={item.title}
+                                aria-label={`日期 ${item.title}`}
+                                onClick={() => { setSelectedFolder(item.folder); setLibraryMode('folders'); }}
+                              >{item.day}</button>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                  {!folders.length && <div className="empty-copy">暂无卡片日期</div>}
+                </>
+              )}
+            </div>
+          </aside>
+
+          <article className={`surface card-library density-${cardDensity}`}>
+            <header className="surface-heading">
+              <div><p className="eyebrow">学习卡片</p><h2>卡片库</h2><span id="library-search-scope">{libraryMode === 'history' ? '范围：全部日期 · 按标题搜索' : `范围：${dateParts(selectedFolder).title || '当前日期'} · 按标题或类型搜索`}</span></div>
+              {libraryMode === 'history' ? <b aria-label={historyQuery.data ? `共 ${historyQuery.data.pagination.total} 条` : '正在读取总数'}>{historyQuery.data?.pagination.total ?? '…'}</b> : <b aria-label={cardSearch.trim() ? `${visibleFiles.length} 条匹配，共 ${files.length} 条` : `共 ${files.length} 条`}>
+                {cardSearch.trim() ? `${visibleFiles.length}/${files.length}` : files.length}
+              </b>}
+            </header>
+            <div className="card-library-toolbar" data-testid="factory-library-toolbar">
+              <label className="card-library-search">
+                <Search aria-hidden="true" />
+                <input
+                  type="search"
+                  value={cardSearch}
+                  aria-label={libraryMode === 'history' ? '搜索全部卡片' : '搜索当前日期卡片'}
+                  aria-describedby="library-search-scope"
+                  placeholder={libraryMode === 'history' ? '搜索所有日期的卡片标题' : '搜索当前日期标题或卡片类型'}
+                  onChange={(event) => { setCardSearch(event.target.value); setHistoryPage(1); }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || !cardSearch.trim()) return;
+                    void factoryApi.recordEngagement({
+                      eventKey: createInteractionKey('library-search'),
+                      phrase: cardSearch.trim(),
+                      cardType,
+                      eventKind: 'library_search_submitted',
+                      sourceSurface: 'cards_factory',
+                      metadata: { scope: libraryMode, folder: libraryMode === 'folders' ? selectedFolder : null, resultCount: libraryMode === 'folders' ? visibleFiles.length : historyQuery.data?.pagination.total },
+                    }).catch(() => {});
+                  }}
+                />
+                {cardSearch && (
+                  <button type="button" aria-label="清除卡片搜索" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>
+                    <X aria-hidden="true" />
+                  </button>
                 )}
+              </label>
+              {libraryMode === 'folders' ? <label className="card-library-sort">
+                <span>排序</span>
+                <select
+                  value={cardSort}
+                  aria-label="卡片排序"
+                  onChange={(event) => setCardSort(event.target.value as CardSort)}
+                >
+                  <option value="newest">最近生成</option>
+                  <option value="title">标题</option>
+                  <option value="type">卡片类型</option>
+                </select>
+              </label> : <span className="card-library-order">按最近生成排序</span>}
+              <div className="card-density-control" role="group" aria-label="卡片显示密度">
+                <button
+                  type="button"
+                  aria-label="舒展显示"
+                  aria-pressed={cardDensity === 'comfortable'}
+                  title="舒展显示"
+                  onClick={() => setCardDensity('comfortable')}
+                >
+                  <LayoutGrid aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="紧凑显示"
+                  aria-pressed={cardDensity === 'compact'}
+                  title="紧凑显示"
+                  onClick={() => setCardDensity('compact')}
+                >
+                  <List aria-hidden="true" />
+                </button>
               </div>
-            ) : (
-              <div className="history-rail">
-                <label><Search aria-hidden="true" /><input value={historySearch} placeholder="搜索历史" onChange={(event) => { setHistorySearch(event.target.value); setHistoryPage(1); }} /></label>
-                <div className="history-items">
+            </div>
+
+            {libraryMode === 'history' ? (
+              <div className="history-results" data-testid="factory-history-results">
+                <div className="card-file-grid history-items" data-testid="react-file-list">
                   {historyQuery.isLoading && !historyQuery.data ? (
-                    <PageState variant="loading" title="正在读取历史" description="正在恢复生成记录。" compact />
+                    <PageState variant="loading" title="正在读取全部卡片" description="正在搜索所有日期的卡片标题。" compact />
                   ) : historyQuery.isError && !historyQuery.data ? (
                     <PageState
                       variant="error"
-                      title="历史记录无法读取"
+                      title="全部卡片无法读取"
                       description="现有卡片没有被修改。"
                       actions={<button className="primary" type="button" onClick={() => void historyQuery.refetch()}>重试</button>}
                       compact
@@ -861,21 +929,22 @@ export function CardsFactory() {
                       <DataRefreshStatus
                         refreshing={historyQuery.isFetching && !historyQuery.isLoading}
                         failed={historyQuery.isError && Boolean(historyQuery.data)}
-                        label="历史记录"
+                        label="全部卡片"
                         onRetry={() => void historyQuery.refetch()}
                         compact
                       />
                       {historyQuery.data?.records.map((record) => (
-                        <button key={record.id} type="button" onClick={() => setSelectedCard({
+                        <button key={record.id} type="button" className={`file-card type-${record.card_type || 'trilingual'}`} onClick={() => setSelectedCard({
                           folder: record.folder_name,
                           baseName: record.base_filename,
                           title: record.phrase,
                           cardType: record.card_type || 'trilingual',
+                          generationId: record.id,
                         })}>
-                          <strong>{record.phrase}</strong><small>{record.generation_date || record.folder_name}</small>
+                          <span>{CARD_CONFIG[record.card_type || 'trilingual'].label}</span><strong>{record.phrase}</strong><small>{record.generation_date || record.folder_name}</small>
                         </button>
                       ))}
-                      {!historyQuery.data?.records.length && <div className="empty-copy">没有匹配记录</div>}
+                      {!historyQuery.data?.records.length && <div className="empty-library"><Search aria-hidden="true" /><strong>全部卡片中没有匹配结果</strong><span>当前按标题搜索，请尝试其它关键词。</span>{cardSearch && <button type="button" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>清除搜索</button>}</div>}
                     </>
                   )}
                 </div>
@@ -885,17 +954,7 @@ export function CardsFactory() {
                   <button type="button" disabled={!historyQuery.data?.pagination.hasNext} onClick={() => setHistoryPage((page) => page + 1)}>下一页</button>
                 </div>
               </div>
-            )}
-          </aside>
-
-          <article className={`surface card-library density-${cardDensity}`}>
-            <header className="surface-heading">
-              <div><p className="eyebrow">最近卡片</p><h2>卡片库</h2><span>选择卡片进入学习</span></div>
-              <b aria-label={cardSearch.trim() ? `${visibleFiles.length} 条匹配，共 ${files.length} 条` : `共 ${files.length} 条`}>
-                {cardSearch.trim() ? `${visibleFiles.length}/${files.length}` : files.length}
-              </b>
-            </header>
-            {filesQuery.isLoading && !filesQuery.data ? (
+            ) : filesQuery.isLoading && !filesQuery.data ? (
               <PageState variant="loading" title="正在读取卡片" description="正在恢复所选日期的卡片列表。" compact testId="factory-files-loading" />
             ) : filesQuery.isError && !filesQuery.data ? (
               <PageState
@@ -916,68 +975,6 @@ export function CardsFactory() {
                   compact
                   testId="factory-files-refresh-status"
                 />
-                {files.length > 0 && (
-                  <div className="card-library-toolbar" data-testid="factory-library-toolbar">
-                    <label className="card-library-search">
-                      <Search aria-hidden="true" />
-                      <input
-                        type="search"
-                        value={cardSearch}
-                        aria-label="搜索当前日期卡片"
-                        placeholder="搜索标题或卡片类型"
-                        onChange={(event) => setCardSearch(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' || !cardSearch.trim()) return;
-                          void factoryApi.recordEngagement({
-                            eventKey: createInteractionKey('library-search'),
-                            phrase: cardSearch.trim(),
-                            cardType,
-                            eventKind: 'library_search_submitted',
-                            sourceSurface: 'cards_factory',
-                            metadata: { folder: selectedFolder, resultCount: visibleFiles.length },
-                          }).catch(() => {});
-                        }}
-                      />
-                      {cardSearch && (
-                        <button type="button" aria-label="清除卡片搜索" onClick={() => setCardSearch('')}>
-                          <X aria-hidden="true" />
-                        </button>
-                      )}
-                    </label>
-                    <label className="card-library-sort">
-                      <span>排序</span>
-                      <select
-                        value={cardSort}
-                        aria-label="卡片排序"
-                        onChange={(event) => setCardSort(event.target.value as CardSort)}
-                      >
-                        <option value="newest">最近生成</option>
-                        <option value="title">标题</option>
-                        <option value="type">卡片类型</option>
-                      </select>
-                    </label>
-                    <div className="card-density-control" role="group" aria-label="卡片显示密度">
-                      <button
-                        type="button"
-                        aria-label="舒展显示"
-                        aria-pressed={cardDensity === 'comfortable'}
-                        title="舒展显示"
-                        onClick={() => setCardDensity('comfortable')}
-                      >
-                        <LayoutGrid aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="紧凑显示"
-                        aria-pressed={cardDensity === 'compact'}
-                        title="紧凑显示"
-                        onClick={() => setCardDensity('compact')}
-                      >
-                        <List aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                )}
                 <div className="card-file-grid" data-testid="react-file-list">
                   {visibleFiles.map(({ file, type }) => {
                     return (
@@ -992,8 +989,9 @@ export function CardsFactory() {
                   <div className="empty-library is-filtered">
                     <Search aria-hidden="true" />
                     <strong>没有匹配卡片</strong>
-                    <span>调整搜索词，或清除当前搜索。</span>
-                    <button type="button" onClick={() => setCardSearch('')}>清除搜索</button>
+                    <span>仅搜索 {dateParts(selectedFolder).title}，其它日期可能有匹配卡片。</span>
+                    <button className="primary" type="button" onClick={() => { setLibraryMode('history'); setHistoryPage(1); }}>在全部卡片中搜索</button>
+                    <button type="button" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>清除搜索</button>
                   </div>
                 )}
               </>

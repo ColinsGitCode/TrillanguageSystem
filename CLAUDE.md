@@ -193,7 +193,8 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 ## LLM and TTS
 
 - DeepSeek is the only active card-generation provider.
-- DEEPSEEK_MODEL defaults to deepseek-v4-flash.
+- DEEPSEEK_MODEL defaults to deepseek-flash; deepseek-v4-flash is a compatibility alias. deepseek-v4-pro remains supported. Unknown model names fail explicitly rather than falling back silently.
+- DeepSeek health verifies the configured model appears in the provider catalog; it does not establish generation quality.
 - Legacy provider names normalize to deepseek.
 - localLlmService is only an optional OpenAI-compatible OCR/development adapter.
 - English TTS: Kokoro, MP3.
@@ -344,6 +345,14 @@ Generated files live under RECORDS_PATH. Do not expose RECORDS_PATH through expr
 - HTML responses use CSP.
 - File paths must remain constrained under RECORDS_PATH.
 - Test-only endpoints mount only under E2E_TEST_MODE=1.
+
+## Traceable Viewer Deployment
+
+Use `npm run deploy:viewer` for viewer-only updates. It records the Git baseline commit, UTC build time, dirty state, and a SHA-256 fingerprint of Git-visible source in the image's `build-info.json`. Ignored secrets and runtime data are excluded from that fingerprint; it is not an image digest. A source change during build aborts before restart. OCR/TTS and volumes remain untouched.
+
+Preview metadata without deploying: `npm run deploy:viewer -- --metadata-only`. `/api/runtime` and the help drawer report the baked values; runtime environment overrides cannot relabel an image. Dirty builds identify a baseline, not a clean release. Before rebuilding, retain the running image ID/tag for rollback; restore its Compose image tag and run `docker compose up -d --no-build --no-deps viewer` if needed.
+
+Direct Docker/Compose builds still work, but only the build time is automatic. CI must supply `BUILD_COMMIT`, `BUILD_TIME`, `BUILD_DIRTY`, and `BUILD_SOURCE_HASH` as build arguments to provide full provenance. Missing fields remain unknown rather than inventing a clean commit. Invalid supplied values fail the build.
 
 ## Testing
 

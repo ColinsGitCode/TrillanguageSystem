@@ -3,16 +3,7 @@
 const express = require('express');
 const packageJson = require('../package.json');
 const { publicWorkspaceDescriptor } = require('../lib/workspaceAccess');
-
-function sanitizeCommit(value) {
-  const commit = String(value || '').trim();
-  return /^[a-f0-9]{7,40}$/iu.test(commit) ? commit : null;
-}
-
-function sanitizeBuildTime(value) {
-  const date = new Date(String(value || ''));
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
+const { readBuildInfo, sanitizeCommit, sanitizeBuildTime } = require('../lib/buildInfo');
 
 function sanitizePublicUrl(value) {
   const input = String(value || '').trim();
@@ -51,6 +42,7 @@ function uiPerformanceDescriptor(policy, env = process.env) {
 
 function createRuntimeRouter(policy, options = {}) {
   const { quotaService = null } = options;
+  const buildInfo = readBuildInfo();
   const router = express.Router();
   router.get('/api/runtime', (_req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -64,8 +56,7 @@ function createRuntimeRouter(policy, options = {}) {
       } : null,
       build: {
         version: String(packageJson.version || '0.0.0'),
-        commit: sanitizeCommit(process.env.BUILD_COMMIT),
-        builtAtUtc: sanitizeBuildTime(process.env.BUILD_TIME),
+        ...buildInfo,
       },
       support: {
         feedbackUrl: sanitizePublicUrl(process.env.PUBLIC_FEEDBACK_URL),

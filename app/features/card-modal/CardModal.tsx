@@ -7,19 +7,14 @@ import {
   useState,
 } from 'react';
 import {
-  ChevronRight,
   Copy,
   Eraser,
   Highlighter,
   Languages,
-  Palette,
-  Search,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as ContextMenu from '@radix-ui/react-context-menu';
 import { knowledgeApi } from '../knowledge/knowledge-api';
 import { factoryApi } from '../factory/factory-api';
 import type {
@@ -57,6 +52,7 @@ import {
   selectPronunciationToken,
 } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
+import type { NoteDraft } from './SelectionNoteEditor';
 import type { CardLookupLanguage } from './selection-actions';
 import '../../styles/card-modal.css';
 
@@ -189,14 +185,16 @@ export function CardModal({
   const originalScopeAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const [selectionScope, setSelectionScope] = useState('original');
   const [detailHost, setDetailHost] = useState<HTMLDivElement | null>(null);
-  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteExit, setNoteExit] = useState<'note' | 'card' | 'delete' | null>(null);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const lookupSourceRef = useRef<Record<string, unknown>>({});
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarFirstActionRef = useRef<HTMLButtonElement>(null);
   const generateTriggerRef = useRef<HTMLButtonElement>(null);
   const lookupTriggerRef = useRef<HTMLButtonElement>(null);
   const focusToolbarAfterSelectionRef = useRef(false);
-  const focusKnowledgeAfterMenuRef = useRef(false);
   const keyboardSelectionRef = useRef(false);
   // One id per modal mount. The "card was opened" fact belongs to the modal,
   // not to the sidebar that renders it: the sidebar lives inside the content
@@ -262,9 +260,26 @@ export function CardModal({
     markUiInteractionEnd('card-modal-open');
   }, []);
 
+  useEffect(() => setPreviewExpanded(false), [toolbar?.phrase]);
+
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+    if (!noteExit) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>('.note-exit-confirm button')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [noteExit]);
+
+  useEffect(() => {
+    onCloseRef.current = () => requestNoteExit('card');
+  });
+
+  useEffect(() => {
+    if (!noteDraft || (noteDraft.text === noteDraft.initialText && !noteBusy)) return;
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [noteDraft, noteBusy]);
 
   useEffect(() => {
     const markdown = cardQuery.data?.markdown;
@@ -321,7 +336,7 @@ export function CardModal({
         const target = event.target instanceof Element ? event.target : null;
         // Radix menus are portaled outside the dialog. Let their own Escape and
         // focus-restoration contract run before considering the dialog close.
-        if (target?.closest('.csa-gen-menu')) return;
+        if (target?.closest('.csa-gen-menu, .note-exit-confirm')) return;
         if (target?.closest('.manual-tag-dialog')) return;
         if (target?.closest('.pronunciation-popover')) return;
         if (target?.closest('.card-knowledge-inspector')) {
@@ -457,7 +472,6 @@ export function CardModal({
       selectedAnchorRef.current = null;
       selectedTextRef.current = '';
       originalScopeAnchorRef.current = null;
-      setNoteDraft(null);
       setToolbar(null);
       setGenMenuOpen(false);
       setColorMenuOpen(false);
@@ -511,7 +525,6 @@ export function CardModal({
     selectedAnchorRef.current = null;
     selectedTextRef.current = '';
     originalScopeAnchorRef.current = null;
-    setNoteDraft(null);
     setHasSelection(false);
     setToolbar(null);
     setGenMenuOpen(false);
@@ -573,13 +586,19 @@ export function CardModal({
   const removeHighlight = async () => {
     const state = annotationStateRef.current;
     const currentId = toolbar?.annotationId;
-    if (!state || !currentId || isSavingAnnotation) return;
+    if (!state || !currentId || isSavingAnnotation || noteBusy) return;
+    if (noteDraft?.annotationId === currentId && noteDraft.text !== noteDraft.initialText) {
+      showToast('请先保存或取消此标记的笔记修改');
+      focusNote();
+      return;
+    }
     const current = state.annotations.find((annotation) => annotation.id === currentId);
     if (!current) return;
     setIsSavingAnnotation(true);
     try {
       await factoryApi.deleteAnnotation(current.id, current.version);
       replaceAnnotationSnapshot(state.annotations.filter((annotation) => annotation.id !== current.id));
+      if (noteDraft?.annotationId === currentId) setNoteDraft(null);
       clearSelectionActions();
       showToast('标记已取消');
     } catch (error) {
@@ -591,9 +610,31 @@ export function CardModal({
     }
   };
 
-  const openNote = () => {
-    const existing = annotationStateRef.current?.annotations.find((item) => item.id === toolbar?.annotationId);
-    setNoteDraft(existing?.noteText || '');
+  const focusNote = () => window.requestAnimationFrame(() => {
+    document.querySelector<HTMLTextAreaElement>('.csa-note-editor textarea')?.focus({ preventScroll: true });
+  });
+  const finishNoteExit = (action: 'note' | 'card' | 'delete') => {
+    setNoteDraft(null);
+    setNoteExit(null);
+    if (action === 'card') onClose();
+    else if (action === 'delete') setConfirmDelete(true);
+    else (lookupTriggerRef.current || contentRef.current)?.focus({ preventScroll: true });
+  };
+  const requestNoteExit = (action: 'note' | 'card' | 'delete') => {
+    if (noteBusy) { showToast('正在保存笔记，请稍候'); return; }
+    if (noteDraft && noteDraft.text !== noteDraft.initialText) setNoteExit(action);
+    else finishNoteExit(action);
+  };
+  const openNote = (annotation?: CardAnnotation) => {
+    if (readOnly) return;
+    if (noteDraft) { focusNote(); showToast('请先保存或取消正在编辑的笔记'); return; }
+    const state = annotationStateRef.current;
+    const existing = annotation || state?.annotations.find((item) => item.id === toolbar?.annotationId);
+    const selector = existing?.selector || selectedAnchorRef.current;
+    if (!state || !selector || !generationId) { showToast('当前卡片无法添加笔记，请刷新后重试'); return; }
+    const initialText = existing?.noteText || '';
+    // Freeze the source anchor and version: subsequent selections must never retarget a draft.
+    setNoteDraft({ initialText, text: initialText, state, selector, generationId: Number(generationId), annotationId: existing?.id || null });
   };
   const changeSelectionScope = async (scope: 'original' | 'word' | 'phrase' | 'sentence') => {
     const container = contentRef.current;
@@ -636,7 +677,6 @@ export function CardModal({
       positionEnd: selectedAnchorRef.current?.textPosition.end ?? null,
     };
     knowledgeMutation.reset();
-    focusKnowledgeAfterMenuRef.current = true;
     setKnowledgeDraft({
       phrase,
       language,
@@ -666,7 +706,7 @@ export function CardModal({
     selectedAnchorRef.current = annotation.selector;
     selectedTextRef.current = annotation.selector.textQuote.exact;
     setHasSelection(false);
-    setNoteDraft(annotation.noteText || null);
+    if (annotation.noteText) openNote(annotation);
     setKnowledgeDraft(null);
     knowledgeMutation.reset();
     focusToolbarAfterSelectionRef.current = focusToolbar;
@@ -698,7 +738,6 @@ export function CardModal({
       selectedAnchorRef.current = null;
       selectedTextRef.current = '';
       originalScopeAnchorRef.current = null;
-      setNoteDraft(null);
       setHasSelection(false);
       setToolbar(null);
       setGenMenuOpen(false);
@@ -723,7 +762,6 @@ export function CardModal({
     if (!preserveScope) {
       setSelectionScope('original');
     }
-    setNoteDraft(null);
     selectedRangeRef.current = candidate.range.cloneRange();
     try {
       selectedAnchorRef.current = createAnchor(container, candidate.range);
@@ -829,18 +867,6 @@ export function CardModal({
     generateTriggerRef.current?.focus({ preventScroll: true });
   };
 
-  const restoreReadingFocus = (event: Event) => {
-    event.preventDefault();
-    if (focusKnowledgeAfterMenuRef.current) {
-      focusKnowledgeAfterMenuRef.current = false;
-      window.requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>('.card-knowledge-inspector')?.focus({ preventScroll: true });
-      });
-      return;
-    }
-    contentRef.current?.focus({ preventScroll: true });
-  };
-
   const handleToolbarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -861,17 +887,19 @@ export function CardModal({
   };
 
   const handleContentContextMenuCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
     if (marker?.dataset.annotationId) {
-      activateAnnotation(marker.dataset.annotationId);
+      activateAnnotation(marker.dataset.annotationId, true);
       return;
     }
     const container = contentRef.current;
     if (!container) return;
 
     const current = buildSelectionCandidate(container);
-    if (current && selectionRangeContainsPoint(current.range, event.clientX, event.clientY)) {
-      window.requestAnimationFrame(() => captureSelection(false));
+    if (current && ((event.clientX === 0 && event.clientY === 0) || selectionRangeContainsPoint(current.range, event.clientX, event.clientY))) {
+      window.requestAnimationFrame(() => captureSelection(true));
       return;
     }
 
@@ -880,13 +908,13 @@ export function CardModal({
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(storedRange.cloneRange());
-      window.requestAnimationFrame(() => captureSelection(false));
+      window.requestAnimationFrame(() => captureSelection(true));
       return;
     }
 
     const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
     if (token && selectPronunciationToken(token)) {
-      window.requestAnimationFrame(() => captureSelection(false, true));
+      window.requestAnimationFrame(() => captureSelection(true, true));
       return;
     }
 
@@ -895,7 +923,7 @@ export function CardModal({
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);
-      window.requestAnimationFrame(() => captureSelection(false, true));
+      window.requestAnimationFrame(() => captureSelection(true, true));
       return;
     }
 
@@ -904,7 +932,6 @@ export function CardModal({
     selectedAnchorRef.current = null;
     selectedTextRef.current = '';
     originalScopeAnchorRef.current = null;
-    setNoteDraft(null);
     setHasSelection(false);
     setToolbar(null);
     event.stopPropagation();
@@ -918,6 +945,11 @@ export function CardModal({
       tabIndex={0}
       aria-label="学习卡片正文，可选择文字后操作"
       onMouseUp={() => captureSelection(false)}
+      onKeyDown={(event) => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+          event.preventDefault(); window.requestAnimationFrame(() => captureSelection(true));
+        }
+      }}
       onClick={handleContentClick}
       onContextMenuCapture={handleContentContextMenuCapture}
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
@@ -948,12 +980,12 @@ export function CardModal({
 
   return (
     <div className="card-modal-backdrop" data-testid="react-card-modal" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+      if (event.target === event.currentTarget) { event.preventDefault(); requestNoteExit('card'); }
     }}>
       <section className="react-card-modal" role="dialog" aria-modal="true" aria-labelledby="react-card-title">
         <header className="react-card-head">
           {readOnly ? <span className="card-modal-readonly">READ ONLY</span> : (
-            <button className="icon-button danger" type="button" aria-label="删除卡片" onClick={() => setConfirmDelete(true)}>
+            <button className="icon-button danger" type="button" aria-label="删除卡片" onClick={() => requestNoteExit('delete')}>
               <Trash2 aria-hidden="true" />
             </button>
           )}
@@ -961,7 +993,7 @@ export function CardModal({
             <h1 id="react-card-title">{displayTitle}</h1>
             <p>{CARD_TYPE_LABEL[selection.cardType] || '学习卡'}</p>
           </div>
-          <button ref={closeRef} className="icon-button" type="button" aria-label="关闭学习卡片" data-testid="react-card-modal-close" onClick={onClose}>
+          <button ref={closeRef} className="icon-button" type="button" aria-label="关闭学习卡片" data-testid="react-card-modal-close" onClick={() => requestNoteExit('card')}>
             <X aria-hidden="true" />
           </button>
         </header>
@@ -1015,89 +1047,7 @@ export function CardModal({
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
             <div className="card-content-layout">
-              {readOnly ? cardContent : (
-                <ContextMenu.Root>
-                  <ContextMenu.Trigger asChild>
-                    <div className="card-context-menu-trigger">
-                      {cardContent}
-                    </div>
-                  </ContextMenu.Trigger>
-                  <ContextMenu.Portal>
-                    <ContextMenu.Content
-                      className="csa-gen-menu csa-context-menu"
-                      aria-label="选区操作菜单"
-                      onCloseAutoFocus={restoreReadingFocus}
-                    >
-                      <ContextMenu.Sub>
-                        <ContextMenu.SubTrigger className="csa-menu-subtrigger csa-highlight">
-                          <Palette aria-hidden="true" />
-                          {toolbar?.annotationId ? '更改颜色' : '标记颜色'}
-                          <ChevronRight aria-hidden="true" />
-                        </ContextMenu.SubTrigger>
-                        <ContextMenu.Portal>
-                          <ContextMenu.SubContent className="csa-gen-menu csa-color-menu" aria-label="选择标记颜色">
-                            {HIGHLIGHT_COLORS.map((color) => (
-                              <ContextMenu.Item key={color.value} asChild disabled={isSavingAnnotation}>
-                                <button
-                                  type="button"
-                                  disabled={isSavingAnnotation}
-                                  onClick={() => void saveHighlight(color.value)}
-                                >
-                                  <span className={`csa-color-swatch is-${color.value}`} aria-hidden="true" />
-                                  {color.label}
-                                </button>
-                              </ContextMenu.Item>
-                            ))}
-                          </ContextMenu.SubContent>
-                        </ContextMenu.Portal>
-                      </ContextMenu.Sub>
-                      {toolbar?.annotationId && (
-                        <ContextMenu.Item asChild>
-                          <button
-                            type="button"
-                            className="csa-remove-highlight"
-                            disabled={isSavingAnnotation}
-                            onClick={() => void removeHighlight()}
-                          >
-                            <Eraser aria-hidden="true" /> 取消标记
-                          </button>
-                        </ContextMenu.Item>
-                      )}
-                      <ContextMenu.Item asChild>
-                        <button type="button" onClick={() => void copySelectedText()}>
-                          <Copy aria-hidden="true" /> 复制
-                        </button>
-                      </ContextMenu.Item>
-                      <ContextMenu.Item asChild>
-                        <button type="button" onClick={openKnowledgeLookup}>
-                          <Search aria-hidden="true" /> 查知识点
-                        </button>
-                      </ContextMenu.Item>
-                      <ContextMenu.Separator className="csa-menu-separator" />
-                      <ContextMenu.Sub>
-                        <ContextMenu.SubTrigger className="csa-menu-subtrigger">
-                          <Sparkles aria-hidden="true" /> 生成卡片 <ChevronRight aria-hidden="true" />
-                        </ContextMenu.SubTrigger>
-                        <ContextMenu.Portal>
-                          <ContextMenu.SubContent className="csa-gen-menu" aria-label="选择生成卡型">
-                            {SELECTION_CARD_TYPES.map((type) => (
-                              <ContextMenu.Item key={type} asChild disabled={generateMutation.isPending}>
-                                <button
-                                  type="button"
-                                  disabled={generateMutation.isPending}
-                                  onClick={() => generateMutation.mutate({ phrase: toolbar?.phrase || '', cardType: type })}
-                                >
-                                  {CARD_TYPE_LABEL[type]}
-                                </button>
-                              </ContextMenu.Item>
-                            ))}
-                          </ContextMenu.SubContent>
-                        </ContextMenu.Portal>
-                      </ContextMenu.Sub>
-                    </ContextMenu.Content>
-                  </ContextMenu.Portal>
-                </ContextMenu.Root>
-              )}
+              {cardContent}
               <aside className="card-study-meta">
                 {/* Card type, model and storage format belong to 生成信息: repeating
                     them here put generation facts inside the study view and gave
@@ -1138,12 +1088,14 @@ export function CardModal({
           >
             <div className="csa-context-row" data-testid="card-selection-context-row">
               <output
-                className="csa-selection-preview"
+                className={`csa-selection-preview${previewExpanded ? ' is-expanded' : ''}`}
                 data-testid="card-selection-preview"
                 title={toolbar.phrase}
               >
                 <span>已选</span>
-                <strong>{toolbar.phrase}</strong>
+                <strong tabIndex={previewExpanded ? 0 : undefined}>{toolbar.phrase}</strong>
+                {toolbar.phrase.length > 16 && <button type="button" aria-expanded={previewExpanded}
+                  onClick={() => setPreviewExpanded((value) => !value)}>{previewExpanded ? '收起全文' : '展开选区全文'}</button>}
               </output>
               <div className="csa-gloss-slot">
                 <Suspense fallback={<span className="csa-gloss is-muted" role="status">正在载入本地释义…</span>}>
@@ -1151,7 +1103,7 @@ export function CardModal({
                     key={[toolbar.phrase, toolbar.contextText, toolbar.language, toolbar.pronunciationToken?.readingHiragana].join('|')}
                     detailHost={detailHost}
                     readOnly={readOnly}
-                    onNote={openNote}
+                    onNote={() => openNote()}
                     onKnowledge={openKnowledgeLookup}
                     phrase={toolbar.phrase}
                     language={toolbar.language}
@@ -1200,7 +1152,7 @@ export function CardModal({
                   <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
                 </Suspense>
                 <Suspense fallback={null}><DeferredSelectionMoreActions hasPronunciation={Boolean(toolbar.pronunciationToken)} readOnly={readOnly}
-                  triggerRef={lookupTriggerRef} onKnowledge={openKnowledgeLookup} onNote={openNote}
+                  triggerRef={lookupTriggerRef} onKnowledge={openKnowledgeLookup} onNote={() => openNote()}
                   onPronunciation={() => setPronunciationDetailTokenKey(toolbar.pronunciationToken?.tokenKey || null)} /></Suspense>
               </div>
               <div className="csa-primary-actions">
@@ -1212,15 +1164,39 @@ export function CardModal({
             </Suspense>
             {!toolbar.annotationId && <Suspense fallback={null}><DeferredSelectionScopeControls value={selectionScope} onChange={(scope) => void changeSelectionScope(scope)} /></Suspense>}
             <div ref={setDetailHost} />
-            {noteDraft !== null && !readOnly && annotationStateRef.current && selectedAnchorRef.current && generationId &&
-              <Suspense fallback={<span role="status">正在载入笔记…</span>}>
-                <DeferredSelectionNoteEditor key={toolbar.annotationId || toolbar.phrase} initialText={noteDraft}
-                  state={annotationStateRef.current} selector={selectedAnchorRef.current} generationId={Number(generationId)} annotationId={toolbar.annotationId}
-                  onClose={() => { setNoteDraft(null); lookupTriggerRef.current?.focus({ preventScroll: true }); }} onToast={showToast} onSaved={(annotations) => {
-                    replaceAnnotationSnapshot(annotations); setNoteDraft(null); clearSelectionActions();
-                  }} />
-              </Suspense>}
 
+          </div>
+        )}
+
+        {noteDraft && !readOnly && (
+          <Suspense fallback={<div className="card-note-panel" role="status">正在载入笔记…</div>}>
+            <div className="card-note-panel">
+              <DeferredSelectionNoteEditor draft={noteDraft}
+                onChange={(text) => setNoteDraft((current) => current ? { ...current, text } : null)}
+                onBusyChange={setNoteBusy} onClose={() => requestNoteExit('note')} onToast={showToast}
+                onSaved={(annotation) => {
+                  const latest = annotationStateRef.current?.annotations || [];
+                  replaceAnnotationSnapshot([...latest.filter((item) => item.id !== annotation.id), annotation]);
+                  setNoteDraft(null); clearSelectionActions(); contentRef.current?.focus({ preventScroll: true });
+                }} />
+            </div>
+          </Suspense>
+        )}
+        {noteExit && (
+          <div className="note-exit-backdrop" onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setNoteExit(null); focusNote(); }
+            if (event.key === 'Tab') {
+              event.preventDefault();
+              const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button');
+              (document.activeElement === buttons[0] ? buttons[1] : buttons[0])?.focus();
+            }
+          }}>
+            <div className="note-exit-confirm" role="alertdialog" aria-modal="true" aria-labelledby="note-exit-title" aria-describedby="note-exit-description">
+              <strong id="note-exit-title">笔记尚未保存</strong>
+              <p id="note-exit-description">离开会丢弃这次修改。可以继续编辑并保存。</p>
+              <button type="button" autoFocus onClick={() => { setNoteExit(null); focusNote(); }}>继续编辑</button>
+              <button type="button" className="danger-button" onClick={() => finishNoteExit(noteExit)}>放弃修改{noteExit === 'card' ? '并关闭' : ''}</button>
+            </div>
           </div>
         )}
 

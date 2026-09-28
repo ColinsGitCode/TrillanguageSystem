@@ -34,6 +34,7 @@ Docs/**/*_with_d3.md
 # UI build leftovers
 public/*.bak
 /build/
+/build-info.json
 /.react-router/
 
 # Python bytecode

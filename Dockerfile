@@ -8,7 +8,11 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build:react && npm prune --omit=dev
+ARG BUILD_COMMIT
+ARG BUILD_TIME
+ARG BUILD_DIRTY
+ARG BUILD_SOURCE_HASH
+RUN node scripts/build/writeBuildInfo.js && npm run build:react && npm prune --omit=dev
 
 ENV RECORDS_PATH=/data/trilingual_records
 EXPOSE 3010

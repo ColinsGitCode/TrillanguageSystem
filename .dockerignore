@@ -5,6 +5,7 @@ npm-debug.log*
 .git
 .env
 build
+build-info.json
 data
 logs
 output

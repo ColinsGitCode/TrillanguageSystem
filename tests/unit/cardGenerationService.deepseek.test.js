@@ -126,10 +126,22 @@ test.describe('cardGenerationService DeepSeek provider wiring', () => {
   });
 
   test.it('exports only generateWithProvider', async (t) => {
-    const { service } = await captureDeepSeekCall(t, { provider: 'local', modelOverride: 'gemini-legacy' });
+    const { service } = await captureDeepSeekCall(t, { provider: 'local' });
 
     assert.equal(typeof service.generateWithProvider, 'function');
     assert.equal(service.generateWithAutoFallback, undefined);
+  });
+
+  test.it('rejects unsupported model overrides at the generation boundary', async (t) => {
+    await assert.rejects(() => captureDeepSeekCall(t, { modelOverride: 'gemini-legacy' }), {
+      code: 'DEEPSEEK_MODEL_INVALID', status: 400,
+    });
+  });
+
+  test.it('records the canonical Flash model for a legacy alias override', async (t) => {
+    const { result, captured } = await captureDeepSeekCall(t, { modelOverride: 'deepseek-v4-flash' });
+    assert.equal(captured.options.model, 'deepseek-flash');
+    assert.equal(result.observability.metadata.model, 'deepseek-flash');
   });
 
   test.it('falls back to estimated tokens when DeepSeek reports zero usage', async (t) => {

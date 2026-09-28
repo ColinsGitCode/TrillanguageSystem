@@ -60,6 +60,7 @@ async function visualMasks(page) {
   ];
   if (!await page.getByTestId('react-card-modal').count()) {
     masks.push(page.getByTestId('react-folder-list').locator('button'));
+    masks.push(page.locator('#library-search-scope'));
   }
   return masks;
 }

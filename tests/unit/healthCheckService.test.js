@@ -39,6 +39,33 @@ function withEnv(values, fn) {
 }
 
 test.describe('HealthCheckService DeepSeek health', () => {
+  for (const [label, catalog, status, modelAvailable] of [
+    ['configured model', { data: [{ id: 'deepseek-flash' }] }, 'online', true],
+    ['missing model', { data: [{ id: 'deepseek-v4-pro' }] }, 'degraded', false],
+    ['empty catalog', { data: [] }, 'degraded', false],
+    ['invalid entries', { data: [null, {}, { id: 42 }] }, 'degraded', false],
+    ['invalid shape', { data: {} }, 'degraded', false],
+    ['null payload', null, 'degraded', false],
+  ]) {
+    test.it(`checks model availability rather than just HTTP 200: ${label}`, async (t) => {
+      const originalFetch = global.fetch;
+      t.after(() => { global.fetch = originalFetch; });
+      global.fetch = async (url) => {
+        assert.match(String(url), /\/models$/u);
+        return Response.json(catalog);
+      };
+      await withEnv({
+        E2E_TEST_MODE: undefined, DEEPSEEK_API_KEY: 'test-key', DEEPSEEK_MODEL: 'deepseek-v4-flash',
+      }, async () => {
+        const service = await loadHealthCheckService().checkDeepSeekApi();
+        assert.equal(service.status, status);
+        assert.equal(service.details.model, 'deepseek-flash');
+        assert.equal(service.details.modelAvailable, modelAvailable);
+        assert.equal(service.details.generationVerified, false);
+      });
+    });
+  }
+
   test.it('reports missing DeepSeek key as degraded critical health outside E2E mode', async (t) => {
     const recordsPath = fs.mkdtempSync(path.join(os.tmpdir(), 'health-records-'));
     t.after(() => fs.rmSync(recordsPath, { recursive: true, force: true }));

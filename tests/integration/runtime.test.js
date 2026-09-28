@@ -33,6 +33,34 @@ function close(server) {
 }
 
 test.describe('/api/runtime and workspace access middleware', () => {
+  test.it('reports a fixed sanitized build descriptor without exposing environment secrets', async (t) => {
+    const values = {
+      BUILD_COMMIT: 'f'.repeat(40), BUILD_TIME: '2026-09-26T00:00:00Z',
+      BUILD_DIRTY: 'true', BUILD_SOURCE_HASH: 'a'.repeat(64),
+    };
+    const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, values);
+    t.after(() => {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+    const policy = resolveWorkspacePolicy({});
+    const { server, baseUrl } = await listen(createApp({ workspacePolicy: policy }));
+    t.after(() => close(server));
+    process.env.BUILD_COMMIT = '/private/secret';
+    const response = await fetch(`${baseUrl}/api/runtime`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.build, {
+      version: require('../../package.json').version,
+      commit: values.BUILD_COMMIT, builtAtUtc: '2026-09-26T00:00:00.000Z',
+      dirty: true, sourceHash: values.BUILD_SOURCE_HASH,
+    });
+    assert.equal(JSON.stringify(body).includes('/private/secret'), false);
+  });
+
   test.it('reports the default owner boundary without internal filesystem paths', async () => {
     const policy = resolveWorkspacePolicy({});
     const { server, baseUrl } = await listen(createApp({ workspacePolicy: policy }));

@@ -219,7 +219,13 @@ export function WorkspaceInfoDrawer({
               <div><dt>工作区</dt><dd>{runtime?.workspace.label || '正在确认'}</dd></div>
               <div><dt>访问</dt><dd>{runtime?.workspace.access === 'read-only' ? '只读' : '可读写'}</dd></div>
               <div><dt>版本</dt><dd>{runtime?.build.version || '未提供'}</dd></div>
-              <div><dt>Commit</dt><dd>{runtime?.build.commit?.slice(0, 12) || '未提供'}</dd></div>
+              <div><dt>{runtime?.build.dirty ? '基线 Commit' : 'Commit'}</dt><dd>{runtime?.build.commit?.slice(0, 12) || '未提供'}</dd></div>
+              {runtime?.build.dirty != null && (
+                <div><dt>源码状态</dt><dd>{runtime.build.dirty ? '含未提交改动' : '干净工作树'}</dd></div>
+              )}
+              {runtime?.build.sourceHash && (
+                <div><dt>源码指纹</dt><dd>{runtime.build.sourceHash.slice(0, 12)}</dd></div>
+              )}
               <div><dt>构建时间</dt><dd>{formatBuildTime(runtime?.build.builtAtUtc)}</dd></div>
             </dl>
           </section>
