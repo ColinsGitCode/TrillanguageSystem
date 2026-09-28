@@ -87,7 +87,13 @@ function setRovingTabIndex(root: HTMLElement) {
 function replaceLegacyRuby(root: HTMLElement) {
   const rubyElements = Array.from(root.querySelectorAll<HTMLElement>('ruby'));
   rubyElements.forEach((ruby) => {
-    if (!ruby.isConnected) return;
+    // Skip a nested ruby whose outer ruby was already replaced: it is no longer
+    // inside the root. This used to test `isConnected`, which means "attached to
+    // a document" and is always false in the detached wrapper that
+    // enhancePronunciationHtml builds, so no ruby was ever replaced there. The
+    // leftover <rt> text then shifted every projection offset, and on a legacy
+    // card only one of 64 pronunciation tokens could be placed.
+    if (!root.contains(ruby)) return;
     const base = Array.from(ruby.childNodes)
       .filter((node) => !(node instanceof HTMLElement && ['RT', 'RP'].includes(node.tagName)))
       .map((node) => node.textContent || '')

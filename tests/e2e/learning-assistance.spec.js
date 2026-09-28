@@ -146,6 +146,11 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await expect(readOnlyCard.getByText('READ ONLY')).toBeVisible();
     await expect(readOnlyCard.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
     await expect(readOnlyCard.getByRole('button', { name: '标红选区' })).toHaveCount(0);
+    // The body is first painted by a plain fallback that shares this test id and
+    // is then replaced when the pronunciation layer loads. A selection made
+    // before that swap points into removed nodes and no toolbar appears, which
+    // failed two of three full runs. Select only in the layer that stays.
+    await expect(readOnlyCard.locator('.pronunciation-card-content-shell')).toHaveCount(1);
     await readOnlyCard.getByTestId('react-card-content').evaluate((container) => {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let node = walker.nextNode();

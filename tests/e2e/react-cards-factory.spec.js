@@ -406,9 +406,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
     const content = page.getByTestId('react-card-content');
-    await expect(content.locator('ruby')).toHaveCount(0);
     const token = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
     await expect(token).toBeVisible();
+    await expect(content.locator('ruby')).toHaveCount(0);
     const surface = await token.getAttribute('data-pronunciation-surface');
     expect(surface).toBeTruthy();
     await token.hover();
@@ -1402,8 +1402,12 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').getByRole('button', { name: /hostile/ }).click();
     const content = page.getByTestId('react-card-content');
-    await expect(content.locator('ruby')).toHaveCount(0);
+    // Wait for the body before asserting what is absent from it: asserting
+    // `ruby` count 0 first passed vacuously while the content was still empty,
+    // which hid that legacy ruby was never being replaced at all.
     await expect(content).toContainText('漢字');
+    await expect(content.locator('ruby, rt')).toHaveCount(0);
+    await expect(content).not.toContainText('かんじ');
     await expect(content.locator('script, style')).toHaveCount(0);
     await expect(content.locator('img')).not.toHaveAttribute('onerror');
     expect(await page.evaluate(() => Boolean(window.__pwned || window.__imgPwned))).toBeFalsy();
