@@ -607,6 +607,55 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('react-card-content')).not.toHaveClass(/show-readings/);
   });
 
+  test('older cards with inline ruby open with readings on, and each kind keeps its own choice', async ({ page }) => {
+    await page.route('**/api/card-engagement/today', (route) => route.fulfill({ json: {
+      success: true, learningDay: '2026-06-01', timeZone: 'Asia/Tokyo', cards: [],
+    } }));
+    await page.route('**/api/folders', (route) => route.fulfill({ json: { folders: ['20260601'] } }));
+    await page.route('**/api/folders/20260601/files', (route) => route.fulfill({ json: {
+      files: [
+        { file: 'legacy.html', title: '旧卡片', cardType: 'trilingual' },
+        { file: 'current.html', title: '新卡片', cardType: 'trilingual' },
+      ],
+    } }));
+    // Cards generated before 2026-08 carry the reading inline as <ruby>.
+    await page.route('**/api/folders/20260601/files/legacy.md', (route) => route.fulfill({
+      contentType: 'text/markdown', body: '# 旧卡片\n## 日本語\n<ruby>漢字<rt>かんじ</rt></ruby>を読む',
+    }));
+    await page.route('**/api/folders/20260601/files/current.md', (route) => route.fulfill({
+      contentType: 'text/markdown', body: '# 新卡片\n## 日本語\n漢字を読む',
+    }));
+    await page.route('**/api/records/by-file?*', (route) => route.fulfill({ status: 404, json: { error: 'not found' } }));
+    const toggle = page.getByTestId('card-reading-toggle');
+    const content = page.getByTestId('react-card-content');
+    const open = async (title) => {
+      await page.getByTestId('react-file-list').getByRole('button', { name: new RegExp(title, 'u') }).click();
+      await expect(content).toContainText('漢字');
+    };
+    const close = () => page.getByTestId('react-card-modal-close').click();
+
+    await page.goto('/');
+    await open('旧卡片');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(content).toHaveClass(/show-readings/u);
+    await toggle.click();
+    await expect(content).not.toHaveClass(/show-readings/u);
+    await close();
+
+    await open('新卡片');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await toggle.click();
+    await expect(content).toHaveClass(/show-readings/u);
+    await close();
+
+    await page.reload();
+    await open('旧卡片');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await close();
+    await open('新卡片');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('shows a curated foreign source for loanwords and a dictionary form for inflected verbs', async ({ page }) => {
     await page.route('**/api/pronunciation?*', async (route) => {
       const response = await route.fetch();

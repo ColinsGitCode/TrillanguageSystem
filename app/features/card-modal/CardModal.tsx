@@ -135,21 +135,37 @@ type SelectionToolbarState = {
 };
 
 const READINGS_STORAGE_KEY = 'three-lans:card-show-readings';
+const LEGACY_READINGS_STORAGE_KEY = 'three-lans:card-show-readings:legacy';
+// Cards generated before 2026-08 carry inline <ruby> in their Markdown and were
+// always read with furigana above the kanji, so for them the layer starts on.
+// Newer cards have no inline readings and start off. Each kind keeps its own
+// choice, so turning one off does not change how the other opens.
+const LEGACY_RUBY_PATTERN = /<ruby[\s>]/iu;
+
+type ReadingsPreference = { current: boolean; legacy: boolean };
+const DEFAULT_READINGS: ReadingsPreference = { current: false, legacy: true };
 
 // A per-reader view preference, so it survives card changes and reloads. Any
-// storage failure (private window, blocked site data) simply means the layer
-// starts off; it must never keep the card from rendering.
-function readStoredShowReadings() {
-  try {
-    return window.localStorage.getItem(READINGS_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
+// storage failure (private window, blocked site data) simply means the default
+// applies; it must never keep the card from rendering.
+function readStoredShowReadings(): ReadingsPreference {
+  const read = (key: string, fallback: boolean) => {
+    try {
+      const value = window.localStorage.getItem(key);
+      return value === null ? fallback : value === '1';
+    } catch {
+      return fallback;
+    }
+  };
+  return {
+    current: read(READINGS_STORAGE_KEY, DEFAULT_READINGS.current),
+    legacy: read(LEGACY_READINGS_STORAGE_KEY, DEFAULT_READINGS.legacy),
+  };
 }
 
-function storeShowReadings(next: boolean) {
+function storeShowReadings(legacy: boolean, next: boolean) {
   try {
-    window.localStorage.setItem(READINGS_STORAGE_KEY, next ? '1' : '0');
+    window.localStorage.setItem(legacy ? LEGACY_READINGS_STORAGE_KEY : READINGS_STORAGE_KEY, next ? '1' : '0');
   } catch {
     // A reader who cannot persist the preference still gets it this session.
   }
@@ -203,8 +219,8 @@ export function CardModal({
   const modalOpenIdRef = useRef('');
   if (!modalOpenIdRef.current) modalOpenIdRef.current = crypto.randomUUID();
   const [tab, setTab] = useState<'content' | 'intel'>('content');
-  const [showReadings, setShowReadings] = useState(
-    () => typeof window !== 'undefined' && readStoredShowReadings()
+  const [readingsPreference, setReadingsPreference] = useState<ReadingsPreference>(
+    () => (typeof window === 'undefined' ? DEFAULT_READINGS : readStoredShowReadings())
   );
   const [renderedHtml, setRenderedHtml] = useState('');
   const [annotationSnapshot, setAnnotationSnapshot] = useState<CardAnnotation[]>([]);
@@ -228,6 +244,8 @@ export function CardModal({
     queryFn: () => factoryApi.card(selection),
   });
   const generationId = cardQuery.data?.record?.id || selection.generationId || null;
+  const legacyRubyCard = LEGACY_RUBY_PATTERN.test(cardQuery.data?.markdown || '');
+  const showReadings = legacyRubyCard ? readingsPreference.legacy : readingsPreference.current;
   const cardReaderShadowConfig = useQuery({
     queryKey: ['card-reader-shadow', 'config'],
     queryFn: factoryApi.cardReaderShadowConfig,
@@ -1010,8 +1028,8 @@ export function CardModal({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 const next = !showReadings;
-                setShowReadings(next);
-                storeShowReadings(next);
+                setReadingsPreference((current) => ({ ...current, [legacyRubyCard ? 'legacy' : 'current']: next }));
+                storeShowReadings(legacyRubyCard, next);
               }}
             >
               <Languages aria-hidden="true" /> {showReadings ? '隐藏注音' : '显示注音'}
