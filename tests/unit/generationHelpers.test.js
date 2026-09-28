@@ -436,6 +436,7 @@ test.describe('validateSanitizedCardResponse', () => {
 
   function trilingualCard() {
     return [
+      '# 持续集成',
       '## 1. 英文',
       '- **例句1**: Hello.',
       '- **例句2**: Goodbye.',
@@ -449,6 +450,7 @@ test.describe('validateSanitizedCardResponse', () => {
 
   function grammarCard() {
     return [
+      '# 〜において',
       '## 1. 语法概述',
       '概述内容。',
       '## 2. 日本語',
@@ -468,6 +470,43 @@ test.describe('validateSanitizedCardResponse', () => {
   test.it('rejects markdown containing MCP diagnostic noise', () => {
     const md = `${trilingualCard()}\n\nMCP issues detected — Run /mcp list for status`;
     assert.equal(validateSanitizedCardResponse({ markdown: md }), false);
+  });
+
+  // Each shape below was once stored as a card (2026-09-28 cleanup: 16 rows).
+  test.it('rejects a reply that talks before the card', () => {
+    const markdown = `好的，我将根据您的要求，为“持续集成”生成三语学习卡片。\n\n${trilingualCard()}`;
+    assert.deepEqual(getCardResponseValidationErrors({ markdown }), [
+      'card must begin with its "# " title line, but text comes before it',
+    ]);
+  });
+
+  test.it('rejects a refusal instead of a card', () => {
+    const markdown = '抱歉，我无法完全按照您严格的语言生成和格式要求来完成此任务。';
+    assert.equal(validateSanitizedCardResponse({ markdown }), false);
+    assert.match(getCardResponseValidationErrors({ markdown })[0], /title line/u);
+  });
+
+  test.it('rejects a card wrapped in a code fence or trailed by a stray one', () => {
+    assert.equal(validateSanitizedCardResponse({ markdown: `\`\`\`markdown\n${trilingualCard()}\n\`\`\`` }), false);
+    assert.deepEqual(getCardResponseValidationErrors({ markdown: `${trilingualCard()}\n\`\`\`` }), [
+      'card contains an unclosed ``` code fence',
+    ]);
+  });
+
+  test.it('rejects a reply that repeats the whole card', () => {
+    assert.deepEqual(getCardResponseValidationErrors({ markdown: `${trilingualCard()}\n\n${trilingualCard()}` }), [
+      'card must have exactly one "# " title line, found 2',
+    ]);
+  });
+
+  test.it('keeps a closed code sample, whose "# comment" is not a second title', () => {
+    const markdown = `${trilingualCard()}\n## 4. 技术概念简要说明\n\`\`\`bash\n# run the suite\nnpm test\n\`\`\``;
+    assert.deepEqual(getCardResponseValidationErrors({ markdown }), []);
+  });
+
+  test.it('applies the same structure rules to scenario and grammar cards', () => {
+    assert.equal(validateSanitizedCardResponse({ markdown: `以下是场景卡：\n${scenarioCard()}` }, 'scenario_phrase'), false);
+    assert.equal(validateSanitizedCardResponse({ markdown: `首先，\n${grammarCard()}` }, 'grammar_ja'), false);
   });
 
   test.it('requires the trilingual section trio by default', () => {

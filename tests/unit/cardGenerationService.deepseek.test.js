@@ -45,6 +45,7 @@ async function captureDeepSeekCall(
       captured.options = options;
       return {
         markdown: [
+          '# hello',
           '## 1. 英文',
           '- **例句1**: Hello.',
           '- **例句2**: Goodbye.',
