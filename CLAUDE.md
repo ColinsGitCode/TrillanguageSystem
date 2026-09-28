@@ -83,7 +83,7 @@ The global Activity Center is a read-only projection, not a new domain store. `r
 Active route modules:
 
 - routes/generate.js: POST /api/generate;
-- routes/generationJobs.js: /api/generation-jobs list, summary, detail, events, retry, cancel, clear;
+- routes/generationJobs.js: /api/generation-jobs list, summary, detail, events, retry, cancel, clear, recording preflight, and the write-free `GET /api/generation-jobs/duplicates` lookup the Cards Factory composer calls while the user types;
 - routes/files.js: folders, files, highlights, delete by file;
 - routes/history.js: history, statistics, search, recent, record detail;
 - routes/health.js: /api/health;

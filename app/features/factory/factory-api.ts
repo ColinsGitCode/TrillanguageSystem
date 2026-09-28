@@ -116,6 +116,13 @@ export const factoryApi = {
       document: CardDocument;
     };
   }>(`/api/card-reader/canary?generationId=${encodeURIComponent(String(generationId))}`),
+  /** Read-only: safe to call while the user types. Preflight records a request. */
+  duplicates: (phrase: string, cardType: CardType, signal?: AbortSignal) =>
+    requestJson<{
+      success: true;
+      duplicates: DuplicateCardSummary[];
+      activeJob: GenerationJob | null;
+    }>(`/api/generation-jobs/duplicates?${new URLSearchParams({ phrase, card_type: cardType })}`, { signal }),
   preflight: (payload: { phrase: string; cardType: CardType; interactionKey: string }) =>
     requestJson<{
       success: true;

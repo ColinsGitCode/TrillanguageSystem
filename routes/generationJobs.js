@@ -30,18 +30,44 @@ function duplicateSummary(item, cardType) {
   };
 }
 
+function findExistingWork(phrase, jobType) {
+  const duplicates = dbService.findDuplicateGenerations(phrase, jobType);
+  const activeJob = generationJobService.listJobs(100).find((job) => (
+    (job.status === 'queued' || job.status === 'running')
+    && job.jobType === jobType
+    && job.phraseNormalized.trim() === phrase
+  )) || null;
+  return { duplicates, activeJob };
+}
+
+// Read-only duplicate lookup for the composer to call while the user types.
+// Preflight answers the same question but records a "generation requested"
+// engagement event on every call, so calling it per keystroke would inflate the
+// card's attention score. This route must never write.
+router.get('/api/generation-jobs/duplicates', (req, res, next) => {
+  try {
+    const phrase = String(req.query?.phrase || '').trim();
+    if (!phrase) return res.status(400).json({ error: 'Phrase required' });
+    if ([...phrase].length > 500) return res.status(400).json({ error: 'Phrase too long' });
+    const jobType = normalizeCardType(req.query?.card_type || 'trilingual');
+    const { duplicates, activeJob } = findExistingWork(phrase, jobType);
+    return res.json({
+      success: true,
+      duplicates: duplicates.map((item) => duplicateSummary(item, jobType)),
+      activeJob,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/api/generation-jobs/preflight', (req, res, next) => {
   try {
     const phrase = String(req.body?.phrase || '').trim();
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
     const jobType = normalizeCardType(req.body?.card_type || 'trilingual');
     const key = interactionKey(req.body?.interaction_key);
-    const duplicates = dbService.findDuplicateGenerations(phrase, jobType);
-    const activeJob = generationJobService.listJobs(100).find((job) => (
-      (job.status === 'queued' || job.status === 'running')
-      && job.jobType === jobType
-      && job.phraseNormalized.trim() === phrase
-    )) || null;
+    const { duplicates, activeJob } = findExistingWork(phrase, jobType);
     cardEngagementService.record({
       eventKey: `${key}:requested`,
       phrase,

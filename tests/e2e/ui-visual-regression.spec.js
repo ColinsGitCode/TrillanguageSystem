@@ -105,6 +105,11 @@ test.describe.serial('UI visual regression', () => {
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
       await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
       await expectPageScreenshot(page, `react-factory-${viewport.name}.png`);
+      // The composer docked beside a three-column library.
+      await page.getByTestId('factory-composer-trigger').click();
+      await page.getByTestId('react-phrase-input').fill('take a rain check');
+      await expect(page.locator('.qc-field-foot .qc-lang')).toHaveText('英语');
+      await expectPageScreenshot(page, `react-factory-composer-${viewport.name}.png`);
     }
   });
 
@@ -121,6 +126,11 @@ test.describe.serial('UI visual regression', () => {
       await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
       await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
       await expectPageScreenshot(page, `react-factory-${viewport.name}-dark.png`);
+      // The composer docked beside a three-column library.
+      await page.getByTestId('factory-composer-trigger').click();
+      await page.getByTestId('react-phrase-input').fill('take a rain check');
+      await expect(page.locator('.qc-field-foot .qc-lang')).toHaveText('英语');
+      await expectPageScreenshot(page, `react-factory-composer-${viewport.name}-dark.png`);
     }
   });
 

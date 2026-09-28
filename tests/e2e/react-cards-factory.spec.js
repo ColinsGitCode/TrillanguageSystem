@@ -16,7 +16,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     for (const [phrase, cardType] of FIXTURES) await enqueueAndWait(request, phrase, cardType);
   });
 
-  test('desktop composition gives the library the full width and opens the composer on demand', async ({ page }) => {
+  test('desktop composition gives the library the full width and docks the composer beside it on demand', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
     // No permanent composer column: it cost a fifth of the workspace to show a
@@ -36,19 +36,37 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const trigger = page.getByTestId('factory-composer-trigger');
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
     await trigger.click();
-    await expect(page.getByTestId('factory-composer-header')).toContainText('创建学习卡');
-    const drawer = page.locator('.factory-composer-drawer');
-    await expect(drawer).toBeVisible();
-    // The drawer is wider than the 222px rail it replaced, which is what makes
-    // the input and the card-type choices readable.
-    const drawerBox = await drawer.boundingBox();
-    expect(drawerBox.width).toBeGreaterThan(320);
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('factory-composer-header')).toContainText('新建学习卡');
+    const panel = page.getByTestId('factory-control-rail');
+    await expect(panel).toBeVisible();
     await expect(page.getByTestId('react-phrase-input')).toBeFocused();
-    await expect(page.getByRole('button', { name: /场景表达/ }).last()).toHaveCSS('background-color', 'rgb(255, 244, 220)');
+    // Docked, not modal: no backdrop, and the library it adds cards to stays in
+    // view beside it, narrowed to three columns.
+    await expect(page.locator('.factory-composer-backdrop')).toHaveCount(0);
+    const panelBox = await panel.boundingBox();
+    const narrowed = await page.locator('.card-library').boundingBox();
+    expect(panelBox.width).toBeGreaterThan(320);
+    expect(panelBox.x).toBeGreaterThanOrEqual(narrowed.x + narrowed.width);
+    expect(await page.getByTestId('react-file-list').evaluate(
+      (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    )).toBe(3);
+    const scenario = page.getByTestId('react-card-type-scenario_phrase');
+    await scenario.click();
+    await expect(scenario).toHaveAttribute('aria-checked', 'true');
+    await expect(scenario).toHaveCSS('background-color', 'rgb(255, 244, 220)');
+    await page.getByTestId('react-card-type-trilingual').click();
 
     await page.keyboard.press('Escape');
-    await expect(drawer).toHaveCount(0);
+    await expect(panel).toHaveCount(0);
     await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('react-phrase-input')).toBeFocused();
+    await trigger.click();
+    await expect(panel).toHaveCount(0);
   });
 
   test('background queue polling does not move the factory workspace', async ({ page }) => {
@@ -82,7 +100,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('factory-composer-trigger').click();
 
     const queue = page.getByTestId('react-queue-status');
-    const drawer = page.locator('.factory-composer-drawer');
+    const drawer = page.getByTestId('factory-control-rail');
     const workspace = page.locator('.factory-library-grid');
     await expect(queue).toContainText('stable queue fixture');
     await expect(page.getByTestId('react-file-list').locator('button')).toHaveCount(3);
@@ -198,9 +216,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.getByTestId('react-card-type-scenario_phrase').click();
     await page.getByTestId('react-phrase-input').fill('React 场景入队验证');
     await page.getByTestId('react-generate-button').click();
-    // The composer stands down once the job is handed over, so the page-level
-    // feedback is the one a reader can actually see.
-    await expect(page.locator('.factory-composer-drawer')).toHaveCount(0);
+    // The composer stays open for the next card; the job moves to its tray.
+    await expect(page.getByTestId('factory-composer-tray')).toContainText('React 场景入队验证');
+    await expect(page.getByTestId('react-phrase-input')).toHaveValue('');
     await expect(page.getByTestId('shell-feedback')).toContainText(/生成任务 #\d+ 已加入队列/u);
     await page.getByRole('button', { name: '后台活动' }).click();
     await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('场景表达生成');
@@ -229,6 +247,72 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page).not.toHaveURL(/queue=1/u);
   });
 
+  test('one card per line: existing phrases are skipped and the rest queue in order', async ({ page, request }) => {
+    const stamp = Date.now();
+    const fresh = [`batch alpha ${stamp}`, `batch beta ${stamp}`];
+    await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
+    const input = page.getByTestId('react-phrase-input');
+    await input.fill([fresh[0], 'react trilingual fixture', fresh[1], fresh[0]].join('\n'));
+
+    const plan = page.getByRole('list', { name: '将要生成的卡片' });
+    await expect(plan.getByRole('listitem')).toHaveCount(3);
+    await expect(plan.getByRole('listitem').filter({ hasText: 'react trilingual fixture' })).toContainText('已有，跳过');
+    await expect(page.getByTestId('react-generate-button')).toHaveText(/生成 2 张三语卡/u);
+
+    await input.press('Enter');
+    const tray = page.getByTestId('factory-composer-tray');
+    await expect(tray.getByRole('listitem')).toHaveCount(2);
+    await expect(input).toHaveValue('');
+    // Newest first in the tray; the queue itself keeps the typed order.
+    await expect(tray.getByRole('listitem').first()).toContainText(fresh[1]);
+    const response = await request.get('/api/generation-jobs?limit=30');
+    const jobs = (await response.json()).jobs;
+    const ids = fresh.map((phrase) => jobs.find((job) => job.phraseNormalized === phrase)?.id);
+    expect(ids[0]).toBeLessThan(ids[1]);
+    expect(jobs.filter((job) => job.phraseNormalized === 'react trilingual fixture')).toHaveLength(1);
+
+    await expect(tray.getByRole('button', { name: '打开' })).toHaveCount(2, { timeout: 30_000 });
+    await expect(tray).toContainText('秒完成');
+    await tray.getByRole('listitem').filter({ hasText: fresh[0] }).getByRole('button', { name: '打开' }).click();
+    await expect(page.getByTestId('react-card-content')).toContainText(fresh[0]);
+  });
+
+  test('Enter that confirms an input-method candidate does not submit', async ({ page, request }) => {
+    const phrase = `ime guard ${Date.now()}`;
+    await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
+    const input = page.getByTestId('react-phrase-input');
+    await input.fill(phrase);
+    // dispatchEvent returns false only when the handler claimed the key to submit.
+    const enter = (init) => input.evaluate((node, extra) => node.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true, ...extra,
+    })), init);
+    expect(await enter({ isComposing: true }), 'composition in progress').toBe(true);
+    expect(await enter({ keyCode: 229 }), 'input method still owns the key').toBe(true);
+    await expect(page.getByTestId('factory-composer-tray')).toHaveCount(0);
+
+    // Control: the same dispatch without a composition does submit.
+    expect(await enter({}), 'plain Enter').toBe(false);
+    await expect(page.getByTestId('factory-composer-tray')).toContainText(phrase);
+    const jobs = (await (await request.get('/api/generation-jobs?limit=30')).json()).jobs;
+    expect(jobs.filter((job) => job.phraseNormalized === phrase)).toHaveLength(1);
+  });
+
+  test('remembers the last card type and switches types from the keyboard', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('factory-composer-trigger').click();
+    await page.keyboard.press('Alt+2');
+    await expect(page.getByTestId('react-card-type-grammar_ja')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByTestId('react-phrase-input')).toHaveAttribute('placeholder', /语法点/u);
+
+    await page.reload();
+    await page.getByTestId('factory-composer-trigger').click();
+    await expect(page.getByTestId('react-card-type-grammar_ja')).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Alt+1');
+    await expect(page.getByTestId('react-card-type-trilingual')).toHaveAttribute('aria-checked', 'true');
+  });
+
   test('P3 OCR uploads, cleans and fills the shared text input', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('factory-composer-trigger').click();
@@ -254,21 +338,21 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('factory-composer-trigger').click();
     await page.getByTestId('react-phrase-input').fill(phrase);
-    await page.getByTestId('react-generate-button').click();
 
+    // Found while typing, before anything is submitted, and the generate
+    // button gives way so a second copy cannot be made by accident.
     const duplicatePanel = page.getByTestId('factory-duplicate-card-panel');
-    await expect(duplicatePanel).toContainText('已有相同学习卡');
-    await expect(duplicatePanel).toContainText('这不是搜索历史，而是已经成功生成的卡片');
+    await expect(duplicatePanel).toContainText(`你已经有「${phrase}」的三语卡`);
     await expect(duplicatePanel).toContainText('最初生成于 2026-07-14');
+    await expect(page.getByTestId('react-generate-button')).toHaveCount(0);
 
-    await duplicatePanel.getByRole('button', { name: '打开已有卡' }).click();
+    await duplicatePanel.getByRole('button', { name: '打开这张卡' }).click();
     const modal = page.getByTestId('react-card-modal');
     await expect(modal).toBeVisible();
     await expect(page.getByTestId('react-card-content')).toContainText(phrase);
     await expect(modal).toContainText('打开次数');
     await page.getByTestId('react-card-modal-close').click();
 
-    await page.getByTestId('react-generate-button').click();
     await duplicatePanel.getByRole('button', { name: '加入今日' }).click();
     await expect(page.getByText(/已加入今日卡片/u)).toBeVisible();
     await expect(page.getByTestId('react-file-list')).toContainText('今日再次学习');

@@ -4,6 +4,39 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { api, resetState, closeServer, dbService } = require('./_harness');
 
+function insertExistingCard(phrase) {
+  dbService.insertGeneration({
+    generation: {
+      phrase,
+      phraseLanguage: 'en',
+      cardType: 'trilingual',
+      sourceMode: 'input',
+      llmProvider: 'deepseek',
+      llmModel: 'deepseek-v4-pro',
+      folderName: '20260713',
+      baseFilename: phrase,
+      mdFilePath: '/tmp/existing.md',
+      htmlFilePath: '/tmp/existing.html',
+      metaFilePath: '/tmp/existing.meta.json',
+      markdownContent: `# ${phrase}`,
+      enTranslation: null,
+      jaTranslation: null,
+      zhTranslation: null,
+      generationDate: '2026-07-13',
+      requestId: phrase.replace(/\s+/g, '-'),
+    },
+    observability: {
+      tokensInput: 0, tokensOutput: 0, tokensTotal: 0, tokensCached: 0,
+      costInput: 0, costOutput: 0, costTotal: 0, costCurrency: 'USD',
+      quotaUsed: null, quotaLimit: null, quotaRemaining: null, quotaResetAt: null, quotaPercentage: null,
+      performanceTotalMs: 0, performancePhases: '{}', qualityScore: 0, qualityChecks: '[]',
+      qualityDimensions: '{}', qualityWarnings: '[]', promptFull: '', promptParsed: '{}',
+      llmOutput: '{}', llmFinishReason: 'STOP', metadata: '{}',
+    },
+    audioFiles: [],
+  });
+}
+
 test.before(() => resetState());
 test.after(async () => { await closeServer(); });
 
@@ -62,37 +95,32 @@ test.describe('/api/generation-jobs/*', () => {
     assert.equal(detail.body.job.jobType, 'scenario_phrase');
   });
 
+  test.it('GET /duplicates finds an existing card without recording any engagement', async () => {
+    insertExistingCard('read only lookup');
+    const count = () => dbService.db.prepare('SELECT COUNT(*) AS c FROM card_engagement_events').get().c;
+    const before = count();
+
+    // Called once per pause in typing, so it must be answerable any number of
+    // times without leaving a trace; preflight records an event on every call.
+    for (let i = 0; i < 3; i += 1) {
+      const res = await api('GET', '/api/generation-jobs/duplicates?phrase=READ%20ONLY%20LOOKUP&card_type=trilingual');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.duplicates.length, 1);
+      assert.equal(res.body.duplicates[0].phrase, 'read only lookup');
+      assert.equal(res.body.activeJob, null);
+    }
+    assert.equal(count(), before, 'the lookup must not write engagement events');
+
+    const miss = await api('GET', '/api/generation-jobs/duplicates?phrase=nothing%20here');
+    assert.equal(miss.status, 200);
+    assert.deepEqual(miss.body.duplicates, []);
+
+    const empty = await api('GET', '/api/generation-jobs/duplicates?phrase=');
+    assert.equal(empty.status, 400);
+  });
+
   test.it('preflights historical duplicates and persists an explicit version policy', async () => {
-    dbService.insertGeneration({
-      generation: {
-        phrase: 'existing queue card',
-        phraseLanguage: 'en',
-        cardType: 'trilingual',
-        sourceMode: 'input',
-        llmProvider: 'deepseek',
-        llmModel: 'deepseek-v4-pro',
-        folderName: '20260713',
-        baseFilename: 'existing queue card',
-        mdFilePath: '/tmp/existing.md',
-        htmlFilePath: '/tmp/existing.html',
-        metaFilePath: '/tmp/existing.meta.json',
-        markdownContent: '# existing queue card',
-        enTranslation: null,
-        jaTranslation: null,
-        zhTranslation: null,
-        generationDate: '2026-07-13',
-        requestId: 'existing-queue-card',
-      },
-      observability: {
-        tokensInput: 0, tokensOutput: 0, tokensTotal: 0, tokensCached: 0,
-        costInput: 0, costOutput: 0, costTotal: 0, costCurrency: 'USD',
-        quotaUsed: null, quotaLimit: null, quotaRemaining: null, quotaResetAt: null, quotaPercentage: null,
-        performanceTotalMs: 0, performancePhases: '{}', qualityScore: 0, qualityChecks: '[]',
-        qualityDimensions: '{}', qualityWarnings: '[]', promptFull: '', promptParsed: '{}',
-        llmOutput: '{}', llmFinishReason: 'STOP', metadata: '{}',
-      },
-      audioFiles: [],
-    });
+    insertExistingCard('existing queue card');
 
     const rejected = await api('POST', '/api/generation-jobs', { body: { phrase: 'EXISTING QUEUE CARD' } });
     assert.equal(rejected.status, 409);

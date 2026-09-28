@@ -52,7 +52,7 @@ test.describe.serial('React UI quality regression', () => {
         await expect(page.getByTestId(id), `${viewport.name}: ${id}`).toBeVisible();
       }
       await assertNoHorizontalOverflow(page, viewport.name);
-      // The composer drawer must not push the page sideways either.
+      // The docked composer narrows the library; it must not push the page sideways.
       await page.getByTestId('factory-composer-trigger').click();
       for (const id of ['react-phrase-input']) {
         await expect(page.getByTestId(id), `${viewport.name}: ${id}`).toBeVisible();

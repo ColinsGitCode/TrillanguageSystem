@@ -18,8 +18,8 @@ test.describe('React page smoke', () => {
       }),
     }));
     await page.goto('/');
-    // The shell banner is what a reader sees on arrival now that the composer
-    // is a drawer; the composer keeps its own copy behind the backdrop.
+    // The shell banner is what a reader sees on arrival; the composer, opened
+    // on demand, repeats the warning next to the input it disables.
     await expect(page.getByTestId('service-degradation-banner'))
       .toContainText('卡片生成暂不可用');
     await page.getByTestId('factory-composer-trigger').click();
