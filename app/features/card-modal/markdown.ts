@@ -2,6 +2,7 @@ import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { CardType } from '../factory/types';
 import { extractCardTitle } from './card-title.mjs';
+import { decorateCardRoot } from './card-layout.mjs';
 import {
   adaptAudioToButtons,
   CARD_RENDER_ALLOWED_ATTR,
@@ -23,11 +24,24 @@ function purify(html: string) {
   });
 }
 
-export function renderCardMarkdown(markdown: string, cardType: CardType, folder: string) {
+export function renderCardMarkdown(
+  markdown: string,
+  cardType: CardType,
+  folder: string,
+  options: { readingLayout?: boolean } = {},
+) {
   const parsed = String(marked.parse(normalizeLoanwordAnnotations(markdown || '')));
   const withAudioButtons = adaptAudioToButtons(parsed, folder);
   const safe = purify(withAudioButtons);
-  return `<div class="react-card-renderer card-type-${cardType}" data-card-renderer-version="2" data-card-type="${cardType}">${safe}</div>`;
+  const html = `<div class="react-card-renderer card-type-${cardType}" data-card-renderer-version="2" data-card-type="${cardType}">${safe}</div>`;
+  if (!options.readingLayout || typeof document === 'undefined') return html;
+  // Runs after sanitizing and only adds attributes and wrappers, so the card's
+  // visible text, which highlights are anchored to, is unchanged.
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const root = template.content.firstElementChild;
+  if (root instanceof HTMLElement) decorateCardRoot(root, cardType);
+  return template.innerHTML;
 }
 
 export function sanitizePersistedCardHtml(html: string, cardType: CardType) {

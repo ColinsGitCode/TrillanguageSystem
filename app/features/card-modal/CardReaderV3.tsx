@@ -2,6 +2,7 @@ import { memo, useLayoutEffect, useRef } from 'react';
 import type { CardType } from '../factory/types';
 import type { CardAnnotation } from '../factory/factory-api';
 import { applyAnnotations } from './annotation-render.mjs';
+import { decorateCardRoot } from './card-layout.mjs';
 import { enhancePronunciationRoot } from './pronunciation-overlay';
 import type { PronunciationToken } from './pronunciation-overlay';
 import type { CardBlock, CardDocument, CardInline } from './card-document';
@@ -95,9 +96,10 @@ const DecoratedSurface = memo(function DecoratedSurface({
   useLayoutEffect(() => {
     const surface = surfaceRef.current;
     if (!surface) return;
+    decorateCardRoot(surface, cardType);
     applyAnnotations(surface, annotations);
     enhancePronunciationRoot(surface, pronunciationTokens);
-  }, [annotations, pronunciationTokens]);
+  }, [annotations, cardType, pronunciationTokens]);
 
   return (
     <div

@@ -79,6 +79,26 @@ export function buildWordRangeAtPoint(
   return range;
 }
 
+// A "label: value" item keeps its ": " in the DOM but hides it (card-layout.mjs).
+// A selection that starts at the end of the label, or inside the hidden
+// separator, begins at the value as far as the reader can see, so move it
+// there; otherwise the phrase comes out as ": 昨夜". A selection that really
+// includes the label keeps the separator.
+function trimHiddenFieldSeparators(range: Range, container: HTMLElement) {
+  const document = container.ownerDocument;
+  for (const separator of Array.from(container.querySelectorAll('.card-field-sep'))) {
+    if (!range.intersectsNode(separator)) continue;
+    const before = document.createRange();
+    before.setStart(range.startContainer, range.startOffset);
+    before.setEndBefore(separator);
+    if (!before.toString().trim()) range.setStartAfter(separator);
+    const after = document.createRange();
+    after.setStartAfter(separator);
+    after.setEnd(range.endContainer, range.endOffset);
+    if (!after.toString().trim()) range.setEndBefore(separator);
+  }
+}
+
 export function buildSelectionCandidate(container: HTMLElement): SelectionCandidate | null {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
@@ -86,6 +106,8 @@ export function buildSelectionCandidate(container: HTMLElement): SelectionCandid
   const range = sel.getRangeAt(0);
   if (range.collapsed) return null;
   if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return null;
+  trimHiddenFieldSeparators(range, container);
+  if (range.collapsed) return null;
 
   // 选区动作面向一个词、短语或句子。拒绝跨标题、段落和列表项的大范围误选，
   // 否则一次右键可能沿用浏览器中残留的整页选区。

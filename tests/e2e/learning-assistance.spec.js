@@ -144,8 +144,8 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     expect((await annotationRead).ok()).toBeTruthy();
     const readOnlyCard = page.getByTestId('react-card-modal');
     await expect(readOnlyCard.getByText('READ ONLY')).toBeVisible();
-    await expect(readOnlyCard.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
-    await expect(readOnlyCard.getByRole('button', { name: '标红选区' })).toHaveCount(0);
+    await expect(readOnlyCard.getByRole('button', { name: '更多操作' })).toHaveCount(0);
+    await expect(readOnlyCard.getByRole('button', { name: '标记为高亮' })).toHaveCount(0);
     // The body is first painted by a plain fallback that shares this test id and
     // is then replaced when the pronunciation layer loads. A selection made
     // before that swap points into removed nodes and no toolbar appears, which

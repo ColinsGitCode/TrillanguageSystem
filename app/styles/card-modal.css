@@ -1,21 +1,35 @@
 .card-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 12px; background: var(--color-overlay); }
-.react-card-modal { position: relative; width: min(1600px, 100%); height: calc(100dvh - 24px); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); overflow: hidden; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-modal); box-shadow: var(--shadow-modal); }
-.react-card-head { min-height: 106px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 16px; padding: 12px 18px; border-bottom: 1px solid var(--color-border); }
-.card-modal-readonly { color: var(--color-text-tertiary); font: 600 12px/1.4 var(--font-sans); text-align: center; }
-.react-card-head > div { text-align: center; min-width: 0; }
-.react-card-head h1 { margin: 0; font-size: 42px; line-height: 1.08; overflow-wrap: anywhere; }
-.react-card-head p { margin: 7px 0 0; color: var(--color-text-tertiary); font: 600 12px/1 var(--font-mono); }
-.card-modal-tabs { min-height: 44px; display: flex; align-items: stretch; padding: 0 18px; background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); }
-.card-modal-tabs > button { min-width: 128px; padding: 0 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; font: 600 13px/1 var(--font-sans); }
-.card-modal-tabs > button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.card-modal-tabs .highlight-selection-button { min-width: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--color-danger); }
-.card-modal-tabs .highlight-selection-button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
-.card-modal-tabs .reading-toggle-button { min-width: 0; margin-left: auto; padding-right: 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-secondary); }
-/* Only the first of the two trailing actions may absorb the free space; two
-   auto margins would split it and strand the toggle mid-bar. */
-.card-modal-tabs .reading-toggle-button + .highlight-selection-button { margin-left: 0; }
-.card-modal-tabs .reading-toggle-button[aria-pressed="true"] { color: var(--color-primary); }
-.card-modal-tabs .reading-toggle-button svg { width: 16px; height: 16px; }
+.react-card-modal { position: relative; width: min(1600px, 100%); height: calc(100dvh - 24px); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-modal); box-shadow: var(--shadow-modal); }
+/* One 64px row. The card used to open under 210px of chrome - a 106px title
+   block, a tab bar and a tag bar that was empty on almost every card - which
+   left 69% of a 1280x720 screen for the card itself. */
+.react-card-head { min-height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--color-border); }
+.card-head-title { min-width: 0; flex: 0 1 auto; display: flex; align-items: center; gap: 10px; }
+.card-head-title h1 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 22px; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+.card-type-chip { flex: none; padding: 3px 10px; color: var(--color-card-trilingual-text); background: var(--color-card-trilingual-surface); border-radius: var(--radius-full); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.card-type-chip.type-grammar_ja { color: var(--color-card-grammar-text); background: var(--color-card-grammar-surface); }
+.card-type-chip.type-scenario_phrase { color: var(--color-card-scenario-text); background: var(--color-card-scenario-surface); }
+.card-modal-readonly { flex: none; color: var(--color-text-tertiary); font: 600 12px/1.4 var(--font-sans); }
+.react-card-head .manual-tag-bar.is-inline { flex: none; gap: 6px; padding: 0; border: 0; background: transparent; }
+.react-card-head .manual-tag-bar.is-inline .manual-tag-chips { flex: none; flex-wrap: nowrap; }
+.react-card-head .manual-tag-bar.is-inline .manual-tag-open { min-height: 26px; padding: 0 10px; border-style: dashed; border-color: var(--color-border-strong); border-radius: var(--radius-full); font-size: 12px; font-weight: 500; }
+.react-card-head .manual-tag-bar.is-inline .manual-tag-open svg { width: 13px; height: 13px; }
+.card-modal-tabs { flex: none; margin-left: 8px; padding: 3px; display: flex; gap: 2px; background: var(--color-bg-subtle); border-radius: var(--radius-lg); }
+.card-modal-tabs > button { height: 30px; padding: 0 14px; color: var(--color-text-secondary); border: 0; border-radius: var(--radius-md); background: transparent; cursor: pointer; font: 500 13px/1 var(--font-sans); }
+.card-modal-tabs > button.active { color: var(--color-text-primary); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); font-weight: 600; }
+.card-head-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.card-head-actions .reading-toggle-button,
+.card-head-actions .highlight-selection-button { height: 34px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-primary); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font: 500 13px/1 var(--font-sans); white-space: nowrap; }
+.card-head-actions .reading-toggle-button[aria-pressed="true"] { color: var(--color-primary); background: var(--color-primary-subtle); border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border)); }
+.card-head-actions .highlight-selection-button:disabled { color: var(--color-text-disabled); border-color: var(--color-bg-muted); cursor: not-allowed; }
+.card-head-actions svg { width: 16px; height: 16px; }
+.card-head-actions .icon-button { width: 34px; height: 34px; }
+.card-more-menu { position: relative; }
+.card-more-menu-list { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 200px; padding: 6px; display: grid; gap: 2px; background: var(--color-bg-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.card-more-menu-list button { height: 36px; padding: 0 10px; display: flex; align-items: center; gap: 10px; color: var(--color-text-primary); background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; font: 500 13px/1 var(--font-sans); text-align: left; }
+.card-more-menu-list button:hover, .card-more-menu-list button:focus-visible { background: var(--color-bg-subtle); }
+.card-more-menu-list button.is-danger { color: var(--color-danger); }
+.card-more-menu-list svg { width: 15px; height: 15px; }
 .react-card-scroll { min-height: 0; overflow: auto; }
 .modal-state { min-height: 360px; display: grid; place-items: center; color: var(--color-text-tertiary); }
 .modal-state.error { color: var(--color-danger); }
@@ -23,23 +37,96 @@
    the modal offered, which broke both ways: trilingual cards top out around
    740px and left a third of the column empty, while grammar cards ran to 970px
    and became hard to track back to the line start. */
-.card-content-layout { display: grid; grid-template-columns: minmax(0, 760px) 220px; justify-content: center; align-items: start; gap: 24px; max-width: 1440px; margin: 0 auto; padding: 28px; }
+.card-content-layout { display: grid; grid-template-columns: minmax(0, 800px); justify-content: center; align-items: start; gap: 32px; max-width: 1440px; margin: 0 auto; padding: 24px 28px 48px; }
+.card-content-layout.has-outline { grid-template-columns: 300px minmax(0, 760px); }
+.card-reading-column { min-width: 0; display: flex; flex-direction: column; gap: 26px; }
 .card-context-menu-trigger { min-width: 0; }
 .react-card-markdown { min-width: 0; }
-.card-study-meta { position: sticky; top: 20px; padding: 14px; background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-.card-study-meta dl { margin: 0; }
-.card-study-meta dl > div { padding: 8px 0; border-bottom: 1px solid var(--color-border); }
-.card-study-meta dl > div:last-child { border-bottom: 0; }
-.card-study-meta dt { color: var(--color-text-tertiary); font-size: 12px; letter-spacing: .01em; }
-.card-study-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 600 12px/1.4 var(--font-mono); }
-.card-study-meta dd small { color: var(--color-text-tertiary); font: inherit; }
-.card-study-meta .card-engagement-note dd { color: var(--color-text-tertiary); font: 400 11px/1.45 var(--font-body); }
+
+/* The three ways to say the phrase, which were spread over the first line of
+   three sections with the Chinese one at the bottom of the card. */
+.card-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; background: var(--color-bg-canvas); border: 1px solid var(--color-border); border-radius: var(--radius-modal); }
+.card-summary-cell { min-width: 0; padding: 14px 20px 18px; display: flex; flex-direction: column; gap: 8px; }
+.card-summary-cell + .card-summary-cell { border-left: 1px solid var(--color-border); }
+.card-summary-cell header { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card-summary-cell header span { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.card-summary-cell.lang-en header span { color: var(--color-lang-en); }
+.card-summary-cell.lang-ja header span { color: var(--color-lang-ja); }
+.card-summary-cell.lang-zh header span { color: color-mix(in srgb, var(--color-lang-zh) 72%, var(--color-text-primary)); }
+.card-summary-cell header em { padding: 2px 8px; color: var(--color-text-secondary); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-full); font-size: 12px; font-style: normal; }
+.card-summary-cell p { margin: 0; overflow-wrap: anywhere; font-size: 22px; font-weight: 600; line-height: 1.3; }
+.card-summary-cell.lang-ja p { font-family: var(--font-ja); }
+.card-summary-cell p small { display: block; margin-bottom: 2px; color: var(--color-text-secondary); font-size: 12px; font-weight: 400; line-height: 1.3; }
+.card-summary-voice { width: 34px; height: 34px; flex: none; display: inline-grid; place-items: center; padding: 0; color: var(--color-text-inverse); border: 0; border-radius: 50%; cursor: pointer; }
+.card-summary-voice.lang-en { background: var(--color-lang-en); }
+.card-summary-voice.lang-ja { background: var(--color-lang-ja); }
+.card-summary-voice svg { width: 14px; height: 14px; fill: currentColor; }
+.card-summary-voice .is-spinning { fill: none; animation: card-summary-spin .9s linear infinite; }
+@keyframes card-summary-spin { to { transform: rotate(360deg); } }
+.card-summary-error { grid-column: 1 / -1; margin: 0; padding: 8px 20px; color: var(--color-danger); border-top: 1px solid var(--color-border); font-size: 12px; }
+/* The summary carries the translations, so the body does not repeat them. A
+   line with a highlight in it stays, so no saved highlight goes out of view. */
+.card-content-layout.has-summary .react-card-renderer li[data-card-field="translation"]:not(:has(mark.card-annotation-highlight)) { display: none; }
+
+.card-scenario-outline { position: sticky; top: 16px; max-height: calc(100dvh - 140px); overflow: auto; padding: 12px; background: var(--color-bg-canvas); border: 1px solid var(--color-border); border-radius: var(--radius-modal); scrollbar-width: thin; }
+.card-scenario-outline p { margin: 0 0 6px; padding: 4px 8px; color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
+.card-scenario-outline ol { margin: 0; padding: 0; display: grid; gap: 1px; list-style: none; }
+.card-scenario-outline button { width: 100%; min-height: 32px; padding: 6px 10px; display: flex; align-items: baseline; gap: 8px; color: var(--color-text-primary); background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; font: 13px/1.35 var(--font-sans); text-align: left; }
+.card-scenario-outline button:hover { background: var(--color-bg-subtle); }
+.card-scenario-outline button[aria-current="true"] { background: var(--color-card-scenario-surface); font-weight: 600; }
+.card-outline-index { flex: none; color: var(--color-card-scenario-text); font-family: var(--font-mono); }
+.card-outline-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.card-engagement-summary { box-sizing: border-box; width: calc(100% - 48px); max-width: 1272px; margin: 24px auto 0; padding: 14px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; border: 1px solid var(--color-border); border-radius: var(--radius-modal); }
+.card-engagement-summary h2 { margin: 0; color: var(--color-text-secondary); font-size: 13px; }
+.card-engagement-summary dl { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.card-engagement-summary dl > div { display: flex; gap: 6px; font-size: 14px; }
+.card-engagement-summary dt { color: var(--color-text-secondary); }
+.card-engagement-summary dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-engagement-summary p { margin: 0 0 0 auto; color: var(--color-text-secondary); font-size: 12px; }
 
 .react-card-renderer { color: var(--color-text-primary); font-size: 18px; line-height: 1.75; }
 .react-card-renderer > h1:first-child { display: none; }
 .react-card-renderer h2 { margin: 30px 0 16px; padding: 11px 14px; font-size: 15px; color: var(--color-card-trilingual-text); background: var(--color-card-trilingual-surface); border-left: 3px solid var(--color-card-trilingual-border); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
 .react-card-renderer.card-type-grammar_ja h2 { color: var(--color-card-grammar-text); background: var(--color-card-grammar-surface); border-left-color: var(--color-card-grammar-border); }
 .react-card-renderer.card-type-scenario_phrase h2 { color: var(--color-card-scenario-text); background: var(--color-card-scenario-surface); border-left-color: var(--color-card-scenario-strong); }
+/* The heading text ("1. 英文:") stays in the DOM, since highlights are anchored
+   to the card's text; it is hidden and the clean label is drawn instead. */
+.react-card-renderer h2[data-section-label] { position: relative; height: 20px; margin: 30px 0 14px; padding: 0; overflow: hidden; color: transparent; background: none; border: 0; border-radius: 0; font-size: 0; line-height: 20px; }
+.react-card-renderer h2[data-section-label]::before { content: attr(data-section-label); position: relative; z-index: 1; padding-right: 12px; color: var(--color-card-trilingual-text); background: var(--color-bg-elevated); font-size: 14px; font-weight: 700; }
+.react-card-renderer h2[data-section-label]::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--color-border); }
+.react-card-renderer.card-type-grammar_ja h2[data-section-label]::before { color: var(--color-card-grammar-text); }
+.react-card-renderer.card-type-scenario_phrase h2[data-section-label]::before { color: var(--color-card-scenario-text); }
+.react-card-renderer h2[data-section-lang="en"]::before { color: var(--color-lang-en); }
+.react-card-renderer h2[data-section-lang="ja"]::before { color: var(--color-lang-ja); }
+.react-card-renderer h2[data-section-lang="zh"]::before { color: color-mix(in srgb, var(--color-lang-zh) 72%, var(--color-text-primary)); }
+.card-reading-column .react-card-renderer > h1:first-child + h2[data-section-label],
+.card-reading-column .card-reader-v3 > section:first-of-type > h2[data-section-label] { margin-top: 4px; }
+
+/* "label: value" items: the label in its own grey column, the value beside it.
+   The label was link blue, which read as something to click. */
+.react-card-renderer ul:has(> li[data-card-field]) { margin: 0; padding: 0; display: grid; gap: 12px; list-style: none; }
+.react-card-renderer li[data-card-field] { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; column-gap: 12px; }
+.react-card-renderer li[data-card-field] > p:first-child { display: contents; }
+.react-card-renderer .card-field-label { grid-column: 1; color: var(--color-text-secondary); font-size: 13px; font-weight: 600; }
+.react-card-renderer .card-field-sep { display: none; }
+.react-card-renderer .card-field-body { grid-column: 2; min-width: 0; }
+.react-card-renderer .card-field-tail { white-space: nowrap; }
+.react-card-renderer li[data-card-field] > :not(.card-field-label):not(.card-field-sep):not(.card-field-body):not(p) { grid-column: 2; }
+.react-card-renderer li[data-card-field] > ul { margin: 2px 0 0; padding: 0; color: var(--color-text-secondary); font-size: 16px; list-style: none; }
+.react-card-renderer li[data-card-field]:has(.audio-btn) { padding-right: 0; }
+.react-card-renderer .card-field-body .audio-btn { position: static; width: 26px; height: 26px; margin-left: 6px; vertical-align: 2px; background: var(--color-bg-surface); border-color: var(--color-border-strong); font-size: 10px; }
+
+/* Scenario expressions: one block each, number in the gutter and the Chinese
+   sentence as its title, with English, Japanese and the usage tip under it. */
+.react-card-renderer .card-scenario-block { margin: 0 0 16px; padding: 16px 20px; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 12px; align-items: baseline; border: 1px solid var(--color-border); border-radius: var(--radius-modal); scroll-margin-top: 16px; }
+.react-card-renderer .card-scenario-block > h3 { grid-column: 1; margin: 0; padding: 0; white-space: nowrap; color: var(--color-card-scenario-text); border: 0; font: 600 13px/1 var(--font-mono); }
+.react-card-renderer .card-scenario-block > :not(h3) { grid-column: 2; }
+.react-card-renderer .card-scenario-block ul { gap: 8px; }
+.react-card-renderer .card-scenario-block li[data-card-field="zh"] { display: block; font-size: 17px; font-weight: 600; }
+.react-card-renderer .card-scenario-block li[data-card-field="zh"] > .card-field-label { display: none; }
+.react-card-renderer .card-scenario-block li[data-card-field] { grid-template-columns: 52px minmax(0, 1fr); }
+.react-card-renderer .card-scenario-block li[data-card-field="tip"] { padding-top: 8px; color: var(--color-text-secondary); border-top: 1px solid var(--color-bg-muted); font-size: 15px; }
 .react-card-renderer h3 { margin: 24px 0 10px; padding-top: 18px; border-top: 1px solid var(--color-border); font-size: 17px; }
 .react-card-renderer p, .react-card-renderer li { overflow-wrap: anywhere; }
 .react-card-renderer strong { color: var(--color-primary); }
@@ -92,26 +179,32 @@
 .intel-dimension-extras { margin-top: 14px; }
 .intel-bar > div { height: 5px; margin-top: 8px; overflow: hidden; background: var(--color-bg-subtle); border-radius: var(--radius-full); }
 .intel-bar i { display: block; height: 100%; background: var(--color-primary); }
+.intel-raw summary { color: var(--color-text-secondary); cursor: pointer; font: 600 12px/1.4 var(--font-sans); }
+.intel-raw[open] summary { margin-bottom: 10px; }
 .intel-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; color: var(--color-obs-text); background: var(--color-obs-bg); border-radius: var(--radius-md); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font-mono); }
 
-.delete-confirm { position: absolute; top: 64px; left: 18px; z-index: 4; width: min(340px, calc(100% - 36px)); padding: 16px; background: var(--color-bg-elevated); border: 1px solid var(--color-danger); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.delete-confirm { position: absolute; top: 64px; right: 18px; z-index: 4; width: min(340px, calc(100% - 36px)); padding: 16px; background: var(--color-bg-elevated); border: 1px solid var(--color-danger); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
 .delete-confirm p { color: var(--color-text-secondary); }
 .delete-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
 .delete-confirm button { min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); cursor: pointer; }
 .delete-confirm .danger-button { color: white; background: var(--color-danger); border-color: var(--color-danger); }
 
+@media (max-width: 1080px) {
+  .card-content-layout.has-outline { grid-template-columns: minmax(0, 760px); }
+  .card-scenario-outline { display: none; }
+}
+
 @media (max-width: 760px) {
   .card-modal-backdrop { padding: 0; }
   .react-card-modal { width: 100%; height: 100dvh; border: 0; border-radius: 0; }
-  .react-card-head { min-height: 90px; gap: 8px; padding: 8px 10px; }
-  .react-card-head h1 { font-size: 26px; }
-  .react-card-head p { font-size: 12px; }
-  .card-modal-tabs { padding: 0 8px; }
-  .card-modal-tabs > button { min-width: 84px; padding: 0 10px; }
-  .highlight-selection-button { font-size: 0 !important; }
-  .highlight-selection-button svg { width: 18px; height: 18px; }
-  .card-content-layout { grid-template-columns: 1fr; padding: 18px 14px; }
-  .card-study-meta { position: static; }
+  .react-card-head { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .card-head-title { flex: 1 1 100%; }
+  .card-head-title h1 { font-size: 20px; }
+  .card-modal-tabs { margin-left: 0; }
+  .highlight-selection-button, .reading-toggle-button { font-size: 0 !important; }
+  .card-content-layout, .card-content-layout.has-outline { grid-template-columns: 1fr; padding: 18px 14px; }
+  .card-summary { grid-template-columns: 1fr; }
+  .card-summary-cell + .card-summary-cell { border-left: 0; border-top: 1px solid var(--color-border); }
   .react-card-renderer { font-size: 16px; line-height: 1.7; }
   .react-card-renderer h2 { margin-top: 24px; }
   .intel-grid { grid-template-columns: 1fr; padding: 14px; }
@@ -121,7 +214,7 @@
 }
 
 /* —— UI 精修:微动效 —— */
-.card-modal-tabs > button, .react-card-renderer .audio-btn, .card-modal-close {
+.card-modal-tabs > button, .react-card-renderer .audio-btn, .card-modal-close, .card-scenario-outline button, .card-summary-voice {
   transition: background var(--duration-fast) var(--ease-standard),
               border-color var(--duration-fast) var(--ease-standard),
               box-shadow var(--duration-fast) var(--ease-standard),

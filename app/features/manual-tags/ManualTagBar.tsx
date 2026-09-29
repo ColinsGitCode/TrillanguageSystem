@@ -40,11 +40,14 @@ export function ManualTagBar({
   targetId,
   readOnly = false,
   compact = false,
+  inline = false,
 }: {
   targetKind: ManualTagTargetKind;
   targetId: number;
   readOnly?: boolean;
   compact?: boolean;
+  /** Sits in a header row: chips only, no "暂无标签" row, a small "标签" button. */
+  inline?: boolean;
 }) {
   const queryClient = useQueryClient();
   const queryKey = ['manual-tags', targetKind, targetId] as const;
@@ -125,14 +128,29 @@ export function ManualTagBar({
   });
 
   return (
-    <div className={`manual-tag-bar${compact ? ' is-compact' : ''}`} data-testid={`manual-tags-${targetKind}-${targetId}`}>
+    <div className={`manual-tag-bar${compact ? ' is-compact' : ''}${inline ? ' is-inline' : ''}`} data-testid={`manual-tags-${targetKind}-${targetId}`}>
       <div className="manual-tag-chips" aria-label="页面标签">
         {assigned.map((tag) => <span key={tag.id} className={`manual-tag-chip color-${tag.color}`}><i aria-hidden="true" />{tag.name}</span>)}
-        {!assigned.length && !tagsQuery.isLoading && <span className="manual-tag-empty">暂无标签</span>}
+        {!inline && !assigned.length && !tagsQuery.isLoading && <span className="manual-tag-empty">暂无标签</span>}
       </div>
-      <button type="button" className="manual-tag-open" onClick={() => { setSelectedIds(assignedIds); setOpen(true); }} disabled={tagsQuery.isLoading}>
-        <Tags aria-hidden="true" />{readOnly ? '查看标签' : '管理标签'}
-      </button>
+      {inline ? (
+        (!readOnly || assigned.length > 0) && (
+          <button
+            type="button"
+            className="manual-tag-open"
+            aria-label={readOnly ? '查看标签' : '管理标签'}
+            title={readOnly ? '查看标签' : '管理标签'}
+            onClick={() => { setSelectedIds(assignedIds); setOpen(true); }}
+            disabled={tagsQuery.isLoading}
+          >
+            {assigned.length ? <Tags aria-hidden="true" /> : <><Plus aria-hidden="true" />标签</>}
+          </button>
+        )
+      ) : (
+        <button type="button" className="manual-tag-open" onClick={() => { setSelectedIds(assignedIds); setOpen(true); }} disabled={tagsQuery.isLoading}>
+          <Tags aria-hidden="true" />{readOnly ? '查看标签' : '管理标签'}
+        </button>
+      )}
 
       {open && (
         <DialogSurface

@@ -26,7 +26,9 @@ async function selectVisibleText(page, text, { keyboard = false } = {}) {
     const nodes = [];
     let node = walker.nextNode();
     while (node) {
-      nodes.push(node);
+      // Only text a reader can see: a trilingual card keeps its translation
+      // lines in the DOM under the summary but hides them.
+      if (node.parentElement?.getClientRects().length) nodes.push(node);
       node = walker.nextNode();
     }
     const joined = nodes.map((item) => item.nodeValue || '').join('');

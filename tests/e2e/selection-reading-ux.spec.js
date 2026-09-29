@@ -376,7 +376,10 @@ test('UX16 dirty note guards close, backdrop, Escape and delete; explicit discar
     if (action === 'close') await page.getByTestId('react-card-modal-close').click();
     if (action === 'backdrop') await page.getByTestId('react-card-modal').click({ position: { x: 2, y: 2 } });
     if (action === 'escape') await page.getByTestId('react-card-modal-close').press('Escape');
-    if (action === 'delete') await page.getByRole('button', { name: '删除卡片', exact: true }).click();
+    if (action === 'delete') {
+      await page.getByRole('button', { name: '更多操作' }).click();
+      await page.getByRole('menuitem', { name: '删除这张卡…' }).click();
+    }
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: '继续编辑' })).toBeFocused();
     if (action === 'close') await page.screenshot({ path: 'output/playwright/ux16-discard-guard.png' });

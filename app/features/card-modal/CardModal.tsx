@@ -1,8 +1,10 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -11,7 +13,6 @@ import {
   Eraser,
   Highlighter,
   Languages,
-  Trash2,
   X,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,6 +39,8 @@ import {
   extractMarkdownTitle,
   renderCardMarkdown,
 } from './markdown';
+import { extractScenarioOutline, extractTrilingualSummary } from './card-layout.mjs';
+import { CardMoreMenu } from './CardMoreMenu';
 import {
   inferLookupKind,
   inferLookupLanguage,
@@ -84,9 +87,21 @@ const DeferredManualTagBar = lazy(async () => {
   const module = await import('../manual-tags/ManualTagBar');
   return { default: module.ManualTagBar };
 });
-const DeferredCardEngagementMeta = lazy(async () => {
+const DeferredCardOpenRecorder = lazy(async () => {
   const module = await import('./CardEngagementMeta');
-  return { default: module.CardEngagementMeta };
+  return { default: module.CardOpenRecorder };
+});
+const DeferredCardEngagementSummary = lazy(async () => {
+  const module = await import('./CardEngagementMeta');
+  return { default: module.CardEngagementSummary };
+});
+const DeferredCardSummaryStrip = lazy(async () => {
+  const module = await import('./CardReadingAids');
+  return { default: module.CardSummaryStrip };
+});
+const DeferredScenarioOutline = lazy(async () => {
+  const module = await import('./CardReadingAids');
+  return { default: module.ScenarioOutline };
 });
 const DeferredPronunciationCardContent = lazy(async () => {
   const module = await import('./PronunciationCardContent');
@@ -273,6 +288,16 @@ export function CardModal({
     retry: false,
   });
   const displayTitle = extractMarkdownTitle(cardQuery.data?.markdown || '', selection.title);
+  // Reading aids read the Markdown, never the rendered body, so nothing they
+  // show enters the text that highlights are anchored to.
+  const summary = useMemo(() => (
+    selection.cardType === 'trilingual' ? extractTrilingualSummary(cardQuery.data?.markdown || '') : null
+  ), [cardQuery.data?.markdown, selection.cardType]);
+  const outline = useMemo(() => (
+    selection.cardType === 'scenario_phrase' ? extractScenarioOutline(cardQuery.data?.markdown || '') : []
+  ), [cardQuery.data?.markdown, selection.cardType]);
+  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
+  const getContentRoot = useCallback(() => contentRef.current, []);
 
   useEffect(() => {
     markUiInteractionEnd('card-modal-open');
@@ -303,7 +328,7 @@ export function CardModal({
     const markdown = cardQuery.data?.markdown;
     if (!markdown) return;
     let cancelled = false;
-    const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+    const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder, { readingLayout: true });
     annotationStateRef.current = null;
     setAnnotationSnapshot([]);
     setAnnotationMode('pending');
@@ -522,7 +547,7 @@ export function CardModal({
 
   const renderAnnotationSnapshot = (annotations: CardAnnotation[]) => {
     const markdown = cardQuery.data?.markdown || '';
-    const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder);
+    const freshHtml = renderCardMarkdown(markdown, selection.cardType, selection.folder, { readingLayout: true });
     const wrapper = document.createElement('div');
     wrapper.innerHTML = freshHtml;
     applyAnnotations(wrapper, annotations);
@@ -1002,91 +1027,96 @@ export function CardModal({
     }}>
       <section className="react-card-modal" role="dialog" aria-modal="true" aria-labelledby="react-card-title">
         <header className="react-card-head">
-          {readOnly ? <span className="card-modal-readonly">READ ONLY</span> : (
-            <button className="icon-button danger" type="button" aria-label="删除卡片" onClick={() => requestNoteExit('delete')}>
-              <Trash2 aria-hidden="true" />
-            </button>
-          )}
-          <div>
-            <h1 id="react-card-title">{displayTitle}</h1>
-            <p>{CARD_TYPE_LABEL[selection.cardType] || '学习卡'}</p>
+          <div className="card-head-title">
+            <h1 id="react-card-title" title={displayTitle}>{displayTitle}</h1>
+            <span className={`card-type-chip type-${selection.cardType}`}>{CARD_TYPE_LABEL[selection.cardType] || '学习卡'}</span>
+            {readOnly && <span className="card-modal-readonly">READ ONLY</span>}
+            {cardQuery.data?.record?.id && (
+              <Suspense fallback={null}>
+                <DeferredManualTagBar
+                  targetKind="generation"
+                  targetId={cardQuery.data.record.id}
+                  readOnly={readOnly}
+                  inline
+                />
+              </Suspense>
+            )}
           </div>
-          <button ref={closeRef} className="icon-button" type="button" aria-label="关闭学习卡片" data-testid="react-card-modal-close" onClick={() => requestNoteExit('card')}>
-            <X aria-hidden="true" />
-          </button>
+          <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
+            <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
+          </nav>
+          <div className="card-head-actions">
+            {tab === 'content' && (
+              <button
+                className="reading-toggle-button"
+                type="button"
+                aria-pressed={showReadings}
+                data-testid="card-reading-toggle"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  const next = !showReadings;
+                  setReadingsPreference((current) => ({ ...current, [legacyRubyCard ? 'legacy' : 'current']: next }));
+                  storeShowReadings(legacyRubyCard, next);
+                }}
+              >
+                <Languages aria-hidden="true" /> {showReadings ? '隐藏注音' : '显示注音'}
+              </button>
+            )}
+            {tab === 'content' && !readOnly && (
+              <button
+                className="highlight-selection-button"
+                type="button"
+                aria-label="标记为高亮"
+                disabled={!hasSelection || annotationMode !== 'annotations' || isSavingAnnotation}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => void saveHighlight()}
+              >
+                <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标记'}
+              </button>
+            )}
+            {!readOnly && <CardMoreMenu onDelete={() => requestNoteExit('delete')} />}
+            <button ref={closeRef} className="icon-button" type="button" aria-label="关闭学习卡片" data-testid="react-card-modal-close" onClick={() => requestNoteExit('card')}>
+              <X aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
-        <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
-          <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
-          {tab === 'content' && (
-            <button
-              className="reading-toggle-button"
-              type="button"
-              aria-pressed={showReadings}
-              data-testid="card-reading-toggle"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                const next = !showReadings;
-                setReadingsPreference((current) => ({ ...current, [legacyRubyCard ? 'legacy' : 'current']: next }));
-                storeShowReadings(legacyRubyCard, next);
-              }}
-            >
-              <Languages aria-hidden="true" /> {showReadings ? '隐藏注音' : '显示注音'}
-            </button>
-          )}
-          {tab === 'content' && !readOnly && (
-            <button
-              className="highlight-selection-button"
-              type="button"
-              disabled={!hasSelection || annotationMode !== 'annotations' || isSavingAnnotation}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void saveHighlight()}
-            >
-              <Highlighter aria-hidden="true" /> {isSavingAnnotation ? '保存中…' : '标红选区'}
-            </button>
-          )}
-        </nav>
+        <Suspense fallback={null}>
+          <DeferredCardOpenRecorder
+            generationId={generationId}
+            openEventKey={`card-open:${modalOpenIdRef.current}`}
+            phrase={cardQuery.data?.record?.phrase || selection.title}
+            cardType={selection.cardType}
+            readOnly={readOnly}
+          />
+        </Suspense>
 
-        {cardQuery.data?.record?.id && (
-          <Suspense fallback={null}>
-            <DeferredManualTagBar
-              targetKind="generation"
-              targetId={cardQuery.data.record.id}
-              readOnly={readOnly}
-            />
-          </Suspense>
-        )}
-
-        <div className="react-card-scroll" onScroll={() => {
+        <div ref={setScrollRoot} className="react-card-scroll" onScroll={() => {
           setToolbar(null);
         }}>
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
-            <div className="card-content-layout">
-              {cardContent}
-              <aside className="card-study-meta">
-                {/* Card type, model and storage format belong to 生成信息: repeating
-                    them here put generation facts inside the study view and gave
-                    the reader three untranslated developer labels up front. */}
-                <p className="eyebrow">学习记录</p>
-                <dl>
+            <div className={`card-content-layout${summary ? ' has-summary' : ''}${outline.length ? ' has-outline' : ''}`}>
+              {outline.length > 0 && (
+                <Suspense fallback={null}>
+                  <DeferredScenarioOutline items={outline} getContentRoot={getContentRoot} scrollRoot={scrollRoot} />
+                </Suspense>
+              )}
+              <div className="card-reading-column">
+                {summary && (
                   <Suspense fallback={null}>
-                    <DeferredCardEngagementMeta
-                      generationId={generationId}
-                      openEventKey={`card-open:${modalOpenIdRef.current}`}
-                      phrase={cardQuery.data?.record?.phrase || selection.title}
-                      cardType={selection.cardType}
-                      readOnly={readOnly}
-                    />
+                    <DeferredCardSummaryStrip summary={summary} generationId={generationId ? Number(generationId) : null} />
                   </Suspense>
-                </dl>
-              </aside>
+                )}
+                {cardContent}
+              </div>
             </div>
           )}
           {tab === 'intel' && (
             <Suspense fallback={<div className="modal-panel-loading" role="status">正在载入生成信息…</div>}>
+              <DeferredCardEngagementSummary generationId={generationId ? Number(generationId) : null} />
               <DeferredIntelPanel record={cardQuery.data?.record || null} />
             </Suspense>
           )}
@@ -1251,7 +1281,7 @@ export function CardModal({
             <p>卡片、音频和关联记录都会被删除。</p>
             {deleteMutation.isError && <p className="form-error">删除失败，请重试。</p>}
             <div>
-              <button type="button" onClick={() => setConfirmDelete(false)}>取消</button>
+              <button type="button" autoFocus onClick={() => setConfirmDelete(false)}>取消</button>
               <button className="danger-button" type="button" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
                 {deleteMutation.isPending ? '删除中…' : '确认删除'}
               </button>

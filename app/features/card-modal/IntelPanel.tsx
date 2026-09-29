@@ -88,14 +88,15 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
           </dl>
         ) : null}
       </section>
-      <section className="intel-panel intel-wide">
-        <p className="eyebrow">生成要求</p>
+      {/* For troubleshooting a generation, so they start folded. */}
+      <details className="intel-panel intel-wide intel-raw">
+        <summary>生成要求</summary>
         <pre>{textValue(obs?.prompt_full || obs?.prompt_parsed)}</pre>
-      </section>
-      <section className="intel-panel intel-wide">
-        <p className="eyebrow">模型原始输出</p>
+      </details>
+      <details className="intel-panel intel-wide intel-raw">
+        <summary>模型原始输出</summary>
         <pre>{textValue(obs?.llm_output)}</pre>
-      </section>
+      </details>
     </div>
   );
 }

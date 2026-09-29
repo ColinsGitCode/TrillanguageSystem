@@ -350,7 +350,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const modal = page.getByTestId('react-card-modal');
     await expect(modal).toBeVisible();
     await expect(page.getByTestId('react-card-content')).toContainText(phrase);
-    await expect(modal).toContainText('打开次数');
+    await page.getByRole('tab', { name: '生成信息' }).click();
+    await expect(page.getByTestId('card-engagement-summary')).toContainText('打开');
     await page.getByTestId('react-card-modal-close').click();
 
     await duplicatePanel.getByRole('button', { name: '加入今日' }).click();
@@ -531,7 +532,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(modal).toBeHidden();
   });
 
-  test('a tab round trip replays one idempotent open event instead of counting a new open', async ({ page }) => {
+  test('switching tabs records the open once, and the study record lives in 生成信息', async ({ page }) => {
     const idempotentFlags = [];
     page.on('response', async (response) => {
       if (response.request().method() !== 'POST') return;
@@ -545,15 +546,18 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
     await expect(page.getByTestId('react-card-modal')).toBeVisible();
-    await expect(page.locator('.card-study-meta')).toContainText('打开次数');
     await expect.poll(() => idempotentFlags.length).toBe(1);
     expect(idempotentFlags[0]).toBe(false);
+    // The record moved out of the reading view, so reading shows no counters.
+    await expect(page.getByTestId('card-engagement-summary')).toHaveCount(0);
     await page.getByRole('tab', { name: '生成信息' }).click();
     await expect(page.getByTestId('react-card-intel')).toBeVisible();
+    await expect(page.getByTestId('card-engagement-summary')).toContainText(/打开\s*\d+ 次/u);
     await page.getByRole('tab', { name: '学习内容' }).click();
-    await expect(page.locator('.card-study-meta')).toContainText('打开次数');
-    await expect.poll(() => idempotentFlags.length).toBe(2);
-    expect(idempotentFlags[1]).toBe(true);
+    await page.getByRole('tab', { name: '生成信息' }).click();
+    await page.waitForTimeout(300);
+    // Recording belongs to the modal, not to a tab: no second request at all.
+    expect(idempotentFlags).toHaveLength(1);
   });
 
   test('draws quality dimensions against their own maximum and keeps content length out of the bars', async ({ page }) => {
@@ -658,6 +662,82 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await close();
     await open('新卡片');
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('a trilingual card opens on its three translations, and the phrase itself can be heard', async ({ page }) => {
+    const requests = [];
+    await page.route('**/api/tts/selection', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 } });
+      }
+      requests.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, body: Buffer.from('fixture-audio'), headers: { 'content-type': 'audio/mpeg', 'x-tts-cache': 'MISS' } });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const summary = page.getByTestId('card-summary');
+    await expect(summary).toContainText('A deterministic English equivalent for the input expression');
+    await expect(summary.locator('p[lang="ja"]')).toContainText('react trilingual fixture');
+    await expect(summary.locator('p[lang="zh-CN"]')).toContainText('react trilingual fixture');
+
+    // The body keeps its translation lines, since highlights are anchored to
+    // its text, but does not show them twice.
+    const content = page.getByTestId('react-card-content');
+    const translations = content.locator('li[data-card-field="translation"]');
+    await expect(translations).toHaveCount(3);
+    for (const line of await translations.all()) await expect(line).toBeHidden();
+    await expect(content.locator('h2[data-section-label="英文"]')).toHaveCount(1);
+
+    // Only example sentences had audio; now the phrase is voiced too.
+    await summary.getByRole('button', { name: '播放英文说法' }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toMatchObject({ text: 'A deterministic English equivalent for the input expression', language: 'en' });
+
+    // A translation line holding a highlight stays in view.
+    await translations.first().evaluate((line) => {
+      const body = line.querySelector('.card-field-body');
+      const mark = document.createElement('mark');
+      mark.className = 'card-annotation-highlight study-highlight-red';
+      mark.append(...body.childNodes);
+      body.append(mark);
+    });
+    await expect(translations.first()).toBeVisible();
+  });
+
+  test('delete lives in the ⋯ menu, which closes on Escape without closing the card', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const modal = page.getByTestId('react-card-modal');
+    await expect(modal.getByRole('button', { name: '删除卡片' })).toHaveCount(0);
+    const trigger = modal.getByRole('button', { name: '更多操作' });
+    await trigger.click();
+    const item = page.getByRole('menuitem', { name: '删除这张卡…' });
+    await expect(item).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(item).toHaveCount(0);
+    await expect(modal).toBeVisible();
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await item.click();
+    const confirm = page.getByRole('alertdialog', { name: '确认删除卡片' });
+    await expect(confirm.getByRole('button', { name: '取消' })).toBeFocused();
+    await confirm.getByRole('button', { name: '取消' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(modal).toBeVisible();
+  });
+
+  test('a scenario card lists its expressions by their Chinese sentence and jumps to one', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const outline = page.getByTestId('card-scenario-outline');
+    await expect(outline.getByRole('button')).toHaveCount(20);
+    const last = outline.getByRole('button').nth(19);
+    await expect(last).toContainText('20');
+    await expect(last).not.toHaveText(/^20\.?$/u);
+    await last.click();
+    await expect(page.getByTestId('react-card-content').locator('.card-scenario-block[data-block-index="20"]')).toBeInViewport();
+    await expect(last).toHaveAttribute('aria-current', 'true');
   });
 
   test('shows a curated foreign source for loanwords and a dictionary form for inflected verbs', async ({ page }) => {
@@ -778,7 +858,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/annotations'
     ));
-    await page.getByRole('button', { name: '标红选区' }).click();
+    await page.getByRole('button', { name: '标记为高亮' }).click();
     const savedResponse = await saved;
     expect(savedResponse.status()).toBe(201);
     const savedAnnotation = (await savedResponse.json()).annotation;
@@ -816,7 +896,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
     await expect(page.getByTestId('card-selection-preview')).toHaveAttribute('title', '解释');
-    const highlight = page.getByRole('button', { name: '标红选区' });
+    const highlight = page.getByRole('button', { name: '标记为高亮' });
     await expect(highlight).toBeEnabled();
     const saved = page.waitForResponse((response) => (
       response.request().method() === 'POST'
@@ -1086,7 +1166,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
         nodes.push(node);
         node = walker.nextNode();
       }
-      const start = nodes.find((candidate) => candidate.nodeValue?.includes('deterministic'));
+      // The translation lines are hidden under the summary; use words a reader can see.
+      const start = nodes.find((candidate) => candidate.nodeValue?.includes('deterministic')
+        && candidate.parentElement?.getClientRects().length);
       const startBlock = start.parentElement.closest('li, p, h1, h2, h3, h4, blockquote');
       const blocks = Array.from(container.querySelectorAll('li, p, h1, h2, h3, h4, blockquote'));
       const endBlock = blocks.slice(blocks.indexOf(startBlock) + 1).find((candidate) => candidate.textContent?.trim());
@@ -1109,7 +1191,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const englishPoint = await content.evaluate((container) => {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let node = walker.nextNode();
-      while (node && !node.nodeValue?.includes('deterministic')) node = walker.nextNode();
+      while (node && !(node.nodeValue?.includes('deterministic') && node.parentElement?.getClientRects().length)) {
+        node = walker.nextNode();
+      }
       const start = node.nodeValue.indexOf('deterministic');
       const range = document.createRange();
       range.setStart(node, start);
@@ -1126,7 +1210,8 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
 
     const japaneseTokens = content.locator('.pronunciation-token[data-pronunciation-status="accepted"]');
     const japaneseIndex = await japaneseTokens.evaluateAll((nodes) => nodes.findIndex((node) => (
-      /[\p{Script=Han}々〆ヵヶ]/u.test(node.getAttribute('data-pronunciation-surface') || '')
+      node.getClientRects().length > 0
+      && /[\p{Script=Han}々〆ヵヶ]/u.test(node.getAttribute('data-pronunciation-surface') || '')
     )));
     expect(japaneseIndex).toBeGreaterThanOrEqual(0);
     const japaneseToken = japaneseTokens.nth(japaneseIndex);
