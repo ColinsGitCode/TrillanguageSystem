@@ -1,5 +1,5 @@
 import { Copy, LoaderCircle, Volume2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { selectionTtsApi } from './selection-tts';
 import { reportPronunciationTelemetry } from './pronunciation-telemetry';
@@ -41,7 +41,10 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
   const controllerRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
-  const renderedHtml = enhancePronunciationHtml(html, tokens);
+  // Same reason as PronunciationCardContent: a new dangerouslySetInnerHTML
+  // object makes React 19 rewrite the text on every overlay open and close.
+  const renderedHtml = useMemo(() => enhancePronunciationHtml(html, tokens), [html, tokens]);
+  const renderedMarkup = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
   const Content = tagName;
   const overlayBasicForm = overlay ? pronunciationBasicForm(overlay.token) : null;
   const overlayForeignOrigin = overlay ? pronunciationForeignOrigin(overlay.token) : null;
@@ -201,7 +204,7 @@ export function PronunciationText({ html, tokens, className = '', testId, tagNam
           open(token, false);
         }
         }}
-        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        dangerouslySetInnerHTML={renderedMarkup}
       />
       {overlay && (
         <div

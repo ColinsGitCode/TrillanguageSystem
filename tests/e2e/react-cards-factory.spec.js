@@ -532,6 +532,51 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(modal).toBeHidden();
   });
 
+  test('a tooltip dismissed with Escape stays closed when the word under the pointer is re-rendered', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const token = page.getByTestId('react-card-content')
+      .locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await expect(token).toBeVisible();
+    await token.hover();
+    const tooltip = page.getByRole('tooltip', { name: '日语读音' });
+    await expect(tooltip).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tooltip).toBeHidden();
+    // The card body can be re-rendered under a still pointer, e.g. when its
+    // highlights finish loading. That is not the reader pointing again.
+    await token.evaluate((node) => node.replaceWith(node.cloneNode(true)));
+    await page.waitForTimeout(600);
+    await expect(tooltip).toBeHidden();
+    await expect(page.getByTestId('react-card-modal')).toBeVisible();
+    // Pointing at the word again does show it.
+    await page.mouse.move(2, 2);
+    await page.getByTestId('react-card-content')
+      .locator('.pronunciation-token[data-pronunciation-status="accepted"]').first().hover();
+    await expect(tooltip).toBeVisible();
+  });
+
+  test('closing the reading details with Escape does not bring the hover tooltip back', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();
+    const token = page.getByTestId('react-card-content')
+      .locator('.pronunciation-token[data-pronunciation-status="accepted"]').first();
+    await expect(token).toBeVisible();
+    await token.focus();
+    await page.keyboard.press('Enter');
+    const details = page.getByRole('dialog', { name: '读音详情' });
+    await expect(details).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    // Focus returns to the word, as it should; that is not a request to show it again.
+    await expect(token).toBeFocused();
+    await page.waitForTimeout(600);
+    await expect(page.getByRole('tooltip', { name: '日语读音' })).toHaveCount(0);
+    // Moving on to another word still shows its reading.
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tooltip', { name: '日语读音' })).toBeVisible();
+  });
+
   test('switching tabs records the open once, and the study record lives in 生成信息', async ({ page }) => {
     const idempotentFlags = [];
     page.on('response', async (response) => {

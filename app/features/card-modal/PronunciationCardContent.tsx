@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Component, useEffect, useRef, useState } from 'react';
+import { Component, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode, RefObject } from 'react';
 import { ApiError } from '../../lib/api/client';
 import { factoryApi } from '../factory/factory-api';
@@ -71,6 +71,7 @@ type OverlayState = {
 };
 
 const TOOLTIP_DELAY_MS = 250;
+const NO_TOKENS: PronunciationToken[] = [];
 
 export function PronunciationCardContent({
   html,
@@ -95,9 +96,14 @@ export function PronunciationCardContent({
     enabled: Boolean(generationId),
     retry: false,
   });
-  const tokens = pronunciationQuery.data?.tokens || [];
+  const tokens = pronunciationQuery.data?.tokens || NO_TOKENS;
   const tokenRef = useRef<PronunciationToken[]>([]);
   const closeTimerRef = useRef<number | null>(null);
+  // Escape dismisses a word's reading until the pointer leaves that word or
+  // focus moves on. The body can still be re-rendered under a still pointer
+  // when highlights or readings finish loading, and that fires mouseover
+  // without the reader pointing again.
+  const dismissedKeyRef = useRef<string | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [correctionReading, setCorrectionReading] = useState('');
@@ -150,6 +156,7 @@ export function PronunciationCardContent({
       event.preventDefault();
       event.stopPropagation();
       const trigger = triggerRef.current;
+      dismissedKeyRef.current = overlay.token.tokenKey;
       setOverlay(null);
       if (overlay.mode === 'popover' && trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
@@ -285,8 +292,15 @@ export function PronunciationCardContent({
     }
   };
 
-  const contentHtml = enhancePronunciationHtml(html, tokens);
-  const legacySurface = <div dangerouslySetInnerHTML={{ __html: contentHtml }} />;
+  // React 19 rewrites innerHTML whenever the dangerouslySetInnerHTML object is
+  // new, even when its string is identical. Built inline, every overlay open or
+  // close replaced the whole card body: the focused word was destroyed (Enter
+  // dropped focus to <body>), and a word re-created under a still pointer fired
+  // mouseover, reopening a tooltip just dismissed with Escape. It also re-parsed
+  // the whole card on every hover.
+  const contentHtml = useMemo(() => enhancePronunciationHtml(html, tokens), [html, tokens]);
+  const contentMarkup = useMemo(() => ({ __html: contentHtml }), [contentHtml]);
+  const legacySurface = <div dangerouslySetInnerHTML={contentMarkup} />;
   const canaryResetKey = `${generationId || 0}:${cardDocument?.version || 'v2'}`;
   const overlayBasicForm = overlay ? pronunciationBasicForm(overlay.token) : null;
   const overlayForeignOrigin = overlay ? pronunciationForeignOrigin(overlay.token) : null;
@@ -304,16 +318,23 @@ export function PronunciationCardContent({
         onMouseOver={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
           if (!token || (event.relatedTarget instanceof Node && token.contains(event.relatedTarget))) return;
+          if (token.dataset.pronunciationTokenKey === dismissedKeyRef.current) return;
           if (window.getSelection() && !window.getSelection()?.isCollapsed) return;
           openOverlay(token, 'tooltip');
         }}
         onMouseOut={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
-          if (token && !(event.relatedTarget instanceof Node && token.contains(event.relatedTarget))) scheduleClose();
+          if (!token || (event.relatedTarget instanceof Node && token.contains(event.relatedTarget))) return;
+          if (token.dataset.pronunciationTokenKey === dismissedKeyRef.current) dismissedKeyRef.current = null;
+          scheduleClose();
         }}
         onFocus={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
-          if (token) openOverlay(token, 'tooltip');
+          if (token && token.dataset.pronunciationTokenKey !== dismissedKeyRef.current) openOverlay(token, 'tooltip');
+        }}
+        onBlur={(event) => {
+          const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
+          if (token?.dataset.pronunciationTokenKey === dismissedKeyRef.current) dismissedKeyRef.current = null;
         }}
         onKeyDown={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
