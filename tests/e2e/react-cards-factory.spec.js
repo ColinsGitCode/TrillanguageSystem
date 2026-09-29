@@ -161,7 +161,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('factory-library-toolbar')).toBeVisible();
     await expect(page.getByTestId('react-file-list').locator('.file-card')).toHaveCount(5);
 
-    await search.fill('场景表达');
+    await search.fill('场景卡');
     await expect(page.getByTestId('react-file-list').locator('.file-card')).toHaveCount(1);
     await expect(page.getByTestId('react-file-list')).toContainText('Zeta handoff');
     await search.fill('not-present');
@@ -221,7 +221,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(page.getByTestId('react-phrase-input')).toHaveValue('');
     await expect(page.getByTestId('shell-feedback')).toContainText(/生成任务 #\d+ 已加入队列/u);
     await page.getByRole('button', { name: '后台活动' }).click();
-    await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('场景表达生成');
+    await expect(page.getByRole('dialog', { name: '活动中心' })).toContainText('场景卡生成');
     await page.getByRole('button', { name: '关闭后台活动' }).click();
     await expect.poll(async () => {
       const response = await request.get('/api/generation-jobs?limit=30');
@@ -564,8 +564,12 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(intel).toBeVisible();
     const bars = intel.locator('.intel-bar');
     await expect(bars).toHaveCount(4);
-    await expect(bars.first()).toContainText('完整性');
+    await expect(bars.first()).toContainText('结构完整');
     await expect(bars.first()).toContainText('40 / 40');
+    // The checker is structural; the panel must not present it as a
+    // translation-accuracy verdict.
+    await expect(intel).not.toContainText('准确性');
+    await expect(intel.locator('.intel-score-panel')).toContainText('不判断翻译是否正确');
     // The fixture is a perfect 100, so every bar must be full. Raw points read
     // as percentages used to render this same card as 40/30/20/10.
     const fills = await intel.locator('.intel-bar i').evaluateAll(
@@ -1060,7 +1064,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     const selectedPhrase = await preview.getAttribute('title');
     expect(selectedPhrase).toBeTruthy();
     await page.getByRole('button', { name: '生成卡片' }).click();
-    await page.getByRole('menuitem', { name: '单词卡' }).click();
+    await page.getByRole('menuitem', { name: '三语卡' }).click();
     await expect(queuedRequest).resolves.toMatchObject({
       phrase: selectedPhrase,
       card_type: 'trilingual',
@@ -1170,7 +1174,7 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await page.keyboard.press('Escape');
     await expect(generateTrigger).toBeFocused();
     await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: '单词卡' }).click();
+    await page.getByRole('menuitem', { name: '三语卡' }).click();
     await expect(queuedRequest).resolves.toMatchObject({
       phrase: selectedPhrase,
       card_type: 'trilingual',

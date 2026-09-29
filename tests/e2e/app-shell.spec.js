@@ -539,7 +539,7 @@ test.describe('React root shell', () => {
           id: '42',
           kind: 'generation-job',
           status: 'queued',
-          title: '三语卡片生成',
+          title: '三语卡生成',
           summary: '任务 #42 正在等待生成',
           href: '/?queue=1&job=42',
           updatedAt: '2026-07-30T12:02:00.000Z',
@@ -565,7 +565,7 @@ test.describe('React root shell', () => {
     await expect(drawer.getByTestId('activity-group-attention')).toContainText('待处理');
     await expect(drawer.getByTestId('activity-group-attention')).toContainText('朝の情景 · 待校对');
     await expect(drawer.getByTestId('activity-group-attention')).toContainText('3 个知识点待确认');
-    await expect(drawer.getByTestId('activity-group-active')).toContainText('三语卡片生成');
+    await expect(drawer.getByTestId('activity-group-active')).toContainText('三语卡生成');
     await expect(drawer.getByRole('link', { name: /继续校对/ })).toHaveAttribute(
       'href',
       '/textbooks?track=12&stage=review'

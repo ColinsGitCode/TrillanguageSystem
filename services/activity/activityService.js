@@ -28,9 +28,9 @@ function publicStatus(status) {
 }
 
 function generationTitle(jobType) {
-  if (jobType === 'trilingual') return '三语卡片生成';
-  if (jobType === 'grammar_ja') return '日语语法卡生成';
-  if (jobType === 'scenario_phrase') return '场景表达卡生成';
+  if (jobType === 'trilingual') return '三语卡生成';
+  if (jobType === 'grammar_ja') return '语法卡生成';
+  if (jobType === 'scenario_phrase') return '场景卡生成';
   return '学习卡生成';
 }
 

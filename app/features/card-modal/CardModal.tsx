@@ -101,7 +101,7 @@ type Props = {
 };
 
 const CARD_TYPE_LABEL: Record<CardType, string> = {
-  trilingual: '单词卡',
+  trilingual: '三语卡',
   grammar_ja: '语法卡',
   scenario_phrase: '场景卡',
 };

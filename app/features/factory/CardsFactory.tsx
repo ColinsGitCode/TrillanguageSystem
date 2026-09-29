@@ -26,9 +26,9 @@ function createInteractionKey(prefix: string) {
 }
 
 const CARD_CONFIG: Record<CardType, { label: string }> = {
-  trilingual: { label: '三语卡片' },
-  grammar_ja: { label: '日语语法' },
-  scenario_phrase: { label: '场景表达' },
+  trilingual: { label: '三语卡' },
+  grammar_ja: { label: '语法卡' },
+  scenario_phrase: { label: '场景卡' },
 };
 
 function useHydrated() {

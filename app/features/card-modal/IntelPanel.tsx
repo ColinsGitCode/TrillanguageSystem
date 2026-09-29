@@ -8,15 +8,19 @@ function parseObject(value: unknown): Record<string, number> {
   return {};
 }
 
+// Named for what the checker actually measures. It is structural throughout:
+// "accuracy" there is "the phrase appears, all three scripts appear, there are
+// three or more headings", so labelling it 准确性 and the total 内容质量 claimed
+// a translation check that never happens.
 // Mirrors the maxima in services/observability/observabilityService.js. The
 // stored dimensions are raw points, not percentages: completeness 40/40 is a
 // perfect score, so drawing it as a 40% bar reads as a failure. contentLength
 // is a character count the backend explicitly excludes from the total, so it
 // is a fact, not a bar.
 const SCORE_DIMENSIONS: Array<{ key: string; label: string; max: number }> = [
-  { key: 'completeness', label: '完整性', max: 40 },
-  { key: 'accuracy', label: '准确性', max: 30 },
-  { key: 'exampleQuality', label: '例句质量', max: 20 },
+  { key: 'completeness', label: '结构完整', max: 40 },
+  { key: 'accuracy', label: '三语覆盖', max: 30 },
+  { key: 'exampleQuality', label: '例句数量与长度', max: 20 },
   { key: 'formatting', label: '格式规范', max: 10 },
 ];
 
@@ -49,9 +53,10 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
   return (
     <div className="intel-grid" data-testid="react-card-intel">
       <section className="intel-score-panel">
-        <p className="eyebrow">内容质量</p>
+        <p className="eyebrow">格式检查</p>
         <strong>{score}</strong>
-        <span>{score >= 80 ? '可使用' : score >= 60 ? '建议检查' : '需要检查'}</span>
+        <span>{score >= 80 ? '结构齐全' : score >= 60 ? '部分缺失' : '缺失较多'}</span>
+        <small>只检查结构是否齐全，不判断翻译是否正确</small>
       </section>
       <section className="intel-panel">
         <p className="eyebrow">生成信息</p>
@@ -64,7 +69,7 @@ export function IntelPanel({ record }: { record: GenerationRecord | null }) {
         </dl>
       </section>
       <section className="intel-panel intel-wide">
-        <p className="eyebrow">质量维度</p>
+        <p className="eyebrow">检查分项</p>
         {scored.length ? (
           <div className="intel-bars">
             {scored.map(({ key, label, max, value }) => (

@@ -55,8 +55,8 @@ const evidenceSourceLabels = {
 const studyUnitLabels: Record<string, string> = {
   trilingual_en: '三语卡 · 英语',
   trilingual_ja: '三语卡 · 日语',
-  grammar_ja: '日语语法',
-  scenario_bilingual: '场景表达 · 英日',
+  grammar_ja: '语法卡',
+  scenario_bilingual: '场景卡 · 英日',
   textbook_en: '教材课程 · 英语',
   textbook_ja: '教材课程 · 日语',
   whole_card: '完整卡片',

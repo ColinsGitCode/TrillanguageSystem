@@ -1,4 +1,5 @@
 import { isKatakanaLoanwordCandidate } from './pronunciation-token-details';
+import { showsReadingAbove } from './reading-layer.mjs';
 
 export type PronunciationToken = {
   id?: number;
@@ -51,9 +52,8 @@ function createTokenSpan(document: Document, token: PronunciationToken, fragment
   span.dataset.pronunciationStatus = token.status;
   span.dataset.pronunciationSource = token.source;
   span.dataset.pronunciationInformative = tokenRevealsSomething(token) ? 'true' : 'false';
-  // Drives the optional always-on reading layer. Only words whose reading is
-  // not already the visible text get one; ruby over kana would be noise.
-  span.dataset.pronunciationRuby = tokenReadingDiffersFromSurface(token) ? 'true' : 'false';
+  // Drives the optional always-on reading layer: only words with kanji get one.
+  span.dataset.pronunciationRuby = showsReadingAbove(token.surface, token.readingHiragana) ? 'true' : 'false';
   span.dataset.pronunciationFragmentIndex = String(fragmentIndex);
   span.dataset.pronunciationFragmentCount = String(fragmentCount);
   span.tabIndex = fragmentIndex === 0 ? 0 : -1;

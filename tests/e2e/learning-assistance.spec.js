@@ -52,7 +52,7 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
 
     await page.getByRole('button', { name: 'Japanese' }).click();
     await expect(page.getByText(`${JAPANESE_ONLY_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
-    await expect(page.getByText('场景表达固定为 EN+JA')).toBeVisible();
+    await expect(page.getByText('场景卡固定为 EN+JA')).toBeVisible();
     await page.getByRole('button', { name: 'Japanese' }).click();
     await expect(page.getByText(`${TOTAL_STUDY_ITEM_COUNT} 个`, { exact: true })).toBeVisible();
 
@@ -72,7 +72,7 @@ test.describe.serial('Learning Assistance 2.0 desktop flow', () => {
     await savePlanButton.click();
     await review.locator('dl > div').filter({ hasText: '学习范围' }).getByRole('button', { name: '修改' }).click();
     await expect(review).toBeHidden();
-    await expect(page.getByRole('button', { name: /三语卡片/ })).toBeFocused();
+    await expect(page.getByRole('button', { name: /^三语卡/ })).toBeFocused();
     await savePlanButton.click();
     await page.getByRole('button', { name: `保存 ${TOTAL_STUDY_ITEM_COUNT} 个单元并生成今日队列` }).click();
     await expect(page).toHaveURL(/\/learn$/);

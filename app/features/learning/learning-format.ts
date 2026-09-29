@@ -9,10 +9,10 @@ export const RATING_OPTIONS = [
 
 export function itemPresentation(item: Pick<StudyItem, 'unitKind' | 'prompt'> | null | undefined) {
   switch (item?.unitKind) {
-    case 'trilingual_en': return { type: '三语', language: 'EN', instruction: '用英语说出这个表达', tone: 'trilingual' };
-    case 'trilingual_ja': return { type: '三语', language: 'JA', instruction: '用日语说出这个表达', tone: 'trilingual' };
-    case 'grammar_ja': return { type: '日语语法', language: 'JA', instruction: '回忆含义、接续方式和使用场景', tone: 'grammar' };
-    case 'scenario_bilingual': return { type: '场景表达', language: 'EN+JA', instruction: '先用日语、再用英语说出这个表达', tone: 'scenario' };
+    case 'trilingual_en': return { type: '三语卡', language: 'EN', instruction: '用英语说出这个表达', tone: 'trilingual' };
+    case 'trilingual_ja': return { type: '三语卡', language: 'JA', instruction: '用日语说出这个表达', tone: 'trilingual' };
+    case 'grammar_ja': return { type: '语法卡', language: 'JA', instruction: '回忆含义、接续方式和使用场景', tone: 'grammar' };
+    case 'scenario_bilingual': return { type: '场景卡', language: 'EN+JA', instruction: '先用日语、再用英语说出这个表达', tone: 'scenario' };
     case 'textbook_en': return { type: '教材课程', language: 'EN', instruction: '根据中文提示说出教材英文原句', tone: 'scenario' };
     case 'textbook_ja': return { type: '教材课程', language: 'JA', instruction: '根据中文提示说出教材日文原句', tone: 'grammar' };
     default: return { type: '完整卡片', language: item?.prompt.targetLanguages.join('+').toUpperCase() || 'EN+JA', instruction: '回忆这张卡片的核心内容', tone: 'trilingual' };

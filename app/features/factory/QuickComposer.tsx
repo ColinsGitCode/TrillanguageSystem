@@ -34,7 +34,7 @@ const TYPE_CONFIG: Record<CardType, {
     placeholder: '输入一个词或短语，按回车生成',
   },
   grammar_ja: {
-    short: '日语语法',
+    short: '语法卡',
     unit: '张语法卡',
     icon: BookOpen,
     description: '一个语法点 → 中文讲解、日语例句和常见误用',
@@ -42,7 +42,7 @@ const TYPE_CONFIG: Record<CardType, {
     placeholder: '输入一个语法点，可以在括号里补充语境',
   },
   scenario_phrase: {
-    short: '场景表达',
+    short: '场景卡',
     unit: '张场景卡',
     icon: MessagesSquare,
     description: '描述一个具体场景 → 这个场景里用得上的 20 条说法',

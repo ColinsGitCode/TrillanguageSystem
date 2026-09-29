@@ -229,7 +229,7 @@ test('UX12 Japanese ruby scopes preserve clean text in clipboard and every card 
     expect(await preview(page).getAttribute('title')).not.toMatch(/あんてい|▶/);
   }
   await expect(preview(page)).toHaveAttribute('title', '安定');
-  for (const [label, cardType] of [['单词卡', 'trilingual'], ['语法卡', 'grammar_ja'], ['场景卡', 'scenario_phrase']]) {
+  for (const [label, cardType] of [['三语卡', 'trilingual'], ['语法卡', 'grammar_ja'], ['场景卡', 'scenario_phrase']]) {
     if (payloads.length) await selectVisibleText(page, '安定');
     await page.getByRole('button', { name: '整句', exact: true }).click();
     await expect(preview(page)).not.toHaveAttribute('title', '安定');

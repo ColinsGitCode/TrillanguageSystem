@@ -78,6 +78,7 @@
 .intel-score-panel .eyebrow { color: var(--color-obs-muted); }
 .intel-score-panel strong { font: 600 72px/1 var(--font-mono); }
 .intel-score-panel span { margin-top: 6px; color: var(--color-success); font: 600 12px/1 var(--font-mono); }
+.intel-score-panel small { max-width: 22ch; margin-top: 12px; color: var(--color-obs-muted); font-size: 12px; line-height: 1.5; text-align: center; }
 .intel-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .intel-facts div { padding: 9px; background: var(--color-bg-subtle); border-radius: var(--radius-md); }
 .intel-facts dt { color: var(--color-text-tertiary); font-size: 12px; letter-spacing: .01em; }
@@ -744,8 +745,11 @@
   display: contents;
 }
 
+/* The underline marks the word under the pointer, not every word at rest: a
+   dotted line under nearly every Japanese word read as a page of spelling
+   errors. The cursor still says the word can be looked up. */
 .pronunciation-token {
-  border-bottom: 1px dotted color-mix(in srgb, var(--color-primary) 58%, transparent);
+  border-bottom: 1px dotted transparent;
   color: inherit;
   cursor: help;
   outline: none;
@@ -753,7 +757,6 @@
 /* Particles and kana whose reading is the character itself stay unmarked: they
    keep every interaction, they just no longer claim to hide a reading. */
 .pronunciation-token[data-pronunciation-informative="false"] {
-  border-bottom-color: transparent;
   cursor: text;
 }
 .pronunciation-token[data-pronunciation-informative="false"]:hover {
@@ -796,6 +799,7 @@
 .pronunciation-token:focus-visible,
 .pronunciation-token[data-pronunciation-status="unresolved"] {
   border-bottom-style: solid;
+  border-bottom-color: color-mix(in srgb, var(--color-primary) 58%, transparent);
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 .pronunciation-token:focus-visible {
