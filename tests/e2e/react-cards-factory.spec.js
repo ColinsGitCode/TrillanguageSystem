@@ -738,6 +738,11 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await last.click();
     await expect(page.getByTestId('react-card-content').locator('.card-scenario-block[data-block-index="20"]')).toBeInViewport();
     await expect(last).toHaveAttribute('aria-current', 'true');
+    // Long sentences are cut with an ellipsis instead of widening the list.
+    await outline.locator('.card-outline-label').first().evaluate((label) => {
+      label.textContent = '如果你那边不方便调整，没关系，我们可以在工位上讨论，然后再约时间'.repeat(2);
+    });
+    expect(await outline.evaluate((nav) => nav.scrollWidth <= nav.clientWidth)).toBeTruthy();
   });
 
   test('shows a curated foreign source for loanwords and a dictionary form for inflected verbs', async ({ page }) => {
