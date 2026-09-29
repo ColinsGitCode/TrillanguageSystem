@@ -5,7 +5,7 @@ import { factoryApi } from '../factory/factory-api';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { selectionTtsApi, type SelectionTtsLanguage } from './selection-tts';
 import { readingFromTokens } from './card-layout.mjs';
-import type { ScenarioOutlineItem, TrilingualSummary } from './card-layout.mjs';
+import type { GrammarSummary, ScenarioOutlineItem, TrilingualSummary } from './card-layout.mjs';
 
 type Playback = { lang: SelectionTtsLanguage; status: 'loading' | 'playing' } | null;
 
@@ -113,6 +113,26 @@ export function CardSummaryStrip({ summary, generationId }: { summary: Trilingua
         <p lang="zh-CN">{summary.zh}</p>
       </div>
       {error && <p className="card-summary-error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * What a grammar card is about, before its sections: the grammar point and
+ * its structure. No voice button: the title often mixes in Chinese, and the
+ * example sentences below already have audio.
+ */
+export function GrammarSummaryStrip({ summary }: { summary: GrammarSummary }) {
+  return (
+    <section className="card-summary is-grammar" aria-label="语法要点" data-testid="card-summary">
+      <div className="card-summary-cell">
+        <header><span>语法点</span></header>
+        <p>{summary.point}</p>
+      </div>
+      <div className="card-summary-cell">
+        <header><span>核心结构</span></header>
+        <p>{summary.structure}</p>
+      </div>
     </section>
   );
 }

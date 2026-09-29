@@ -66,7 +66,11 @@
 .card-summary-error { grid-column: 1 / -1; margin: 0; padding: 8px 20px; color: var(--color-danger); border-top: 1px solid var(--color-border); font-size: 12px; }
 /* The summary carries the translations, so the body does not repeat them. A
    line with a highlight in it stays, so no saved highlight goes out of view. */
-.card-content-layout.has-summary .react-card-renderer li[data-card-field="translation"]:not(:has(mark.card-annotation-highlight)) { display: none; }
+.card-content-layout.has-summary .react-card-renderer li:is([data-card-field="translation"], [data-card-field="point"], [data-card-field="structure"]):not(:has(mark.card-annotation-highlight)) { display: none; }
+.card-summary.is-grammar { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.card-summary.is-grammar header span { color: var(--color-card-grammar-text); }
+.card-summary.is-grammar header { min-height: 0; }
+.card-summary.is-grammar p { font-size: 18px; line-height: 1.5; }
 
 .card-scenario-outline { position: sticky; top: 16px; max-height: calc(100dvh - 140px); overflow: auto; padding: 12px; background: var(--color-bg-canvas); border: 1px solid var(--color-border); border-radius: var(--radius-modal); scrollbar-width: thin; }
 .card-scenario-outline p { margin: 0 0 6px; padding: 4px 8px; color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
@@ -153,10 +157,15 @@
 .react-card-renderer mark.study-highlight-yellow { background: color-mix(in srgb, var(--color-warning) 28%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-warning) 70%, transparent); }
 .react-card-renderer mark.study-highlight-green { background: color-mix(in srgb, var(--color-success) 22%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-success) 62%, transparent); }
 .react-card-renderer mark.study-highlight-blue { background: color-mix(in srgb, var(--color-primary) 20%, transparent); box-shadow: inset 0 -2px color-mix(in srgb, var(--color-primary) 60%, transparent); }
-.loanword-block { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-.loanword-label, .loanword-tag { padding: 3px 8px; border-radius: var(--radius-full); font-size: 12px; }
-.loanword-label { color: var(--color-text-inverse); background: var(--color-data-purple); }
-.loanword-tag { color: var(--color-text-secondary); background: var(--color-bg-subtle); border: 1px solid var(--color-border); }
+/* Older cards' loanword notes. They were a filled purple pill louder than the
+   example they annotate, and 151 of them say only "无". Now a quiet footnote;
+   the empty ones are hidden. They sit outside the anchored text. */
+.loanword-block { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.loanword-block[data-loanword-empty="true"] { display: none; }
+.loanword-label { color: var(--color-text-tertiary); font-size: 12px; font-weight: 600; }
+.loanword-tag { padding: 1px 8px; color: var(--color-text-secondary); background: var(--color-bg-subtle); border-radius: var(--radius-full); font-size: 12px; }
+.loanword-block .pronunciation-token { border-bottom-color: transparent !important; background: none !important; cursor: text; }
+.react-card-markdown.show-readings .loanword-block .pronunciation-token::after { content: none; }
 .safe-render-error { padding: 18px; color: var(--color-danger); background: var(--color-danger-subtle); border-radius: var(--radius-md); }
 
 .intel-grid { max-width: 1320px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 12px; }

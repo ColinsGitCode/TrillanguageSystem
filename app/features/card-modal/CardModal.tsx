@@ -39,7 +39,7 @@ import {
   extractMarkdownTitle,
   renderCardMarkdown,
 } from './markdown';
-import { extractScenarioOutline, extractTrilingualSummary } from './card-layout.mjs';
+import { extractGrammarSummary, extractScenarioOutline, extractTrilingualSummary } from './card-layout.mjs';
 import { CardMoreMenu } from './CardMoreMenu';
 import {
   inferLookupKind,
@@ -98,6 +98,10 @@ const DeferredCardEngagementSummary = lazy(async () => {
 const DeferredCardSummaryStrip = lazy(async () => {
   const module = await import('./CardReadingAids');
   return { default: module.CardSummaryStrip };
+});
+const DeferredGrammarSummaryStrip = lazy(async () => {
+  const module = await import('./CardReadingAids');
+  return { default: module.GrammarSummaryStrip };
 });
 const DeferredScenarioOutline = lazy(async () => {
   const module = await import('./CardReadingAids');
@@ -292,6 +296,9 @@ export function CardModal({
   // show enters the text that highlights are anchored to.
   const summary = useMemo(() => (
     selection.cardType === 'trilingual' ? extractTrilingualSummary(cardQuery.data?.markdown || '') : null
+  ), [cardQuery.data?.markdown, selection.cardType]);
+  const grammarSummary = useMemo(() => (
+    selection.cardType === 'grammar_ja' ? extractGrammarSummary(cardQuery.data?.markdown || '') : null
   ), [cardQuery.data?.markdown, selection.cardType]);
   const outline = useMemo(() => (
     selection.cardType === 'scenario_phrase' ? extractScenarioOutline(cardQuery.data?.markdown || '') : []
@@ -1098,7 +1105,7 @@ export function CardModal({
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
-            <div className={`card-content-layout${summary ? ' has-summary' : ''}${outline.length ? ' has-outline' : ''}`}>
+            <div className={`card-content-layout${summary || grammarSummary ? ' has-summary' : ''}${outline.length ? ' has-outline' : ''}`}>
               {outline.length > 0 && (
                 <Suspense fallback={null}>
                   <DeferredScenarioOutline items={outline} getContentRoot={getContentRoot} scrollRoot={scrollRoot} />
@@ -1108,6 +1115,11 @@ export function CardModal({
                 {summary && (
                   <Suspense fallback={null}>
                     <DeferredCardSummaryStrip summary={summary} generationId={generationId ? Number(generationId) : null} />
+                  </Suspense>
+                )}
+                {grammarSummary && (
+                  <Suspense fallback={null}>
+                    <DeferredGrammarSummaryStrip summary={grammarSummary} />
                   </Suspense>
                 )}
                 {cardContent}

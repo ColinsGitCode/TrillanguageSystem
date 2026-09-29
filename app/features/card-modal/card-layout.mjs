@@ -24,6 +24,8 @@ const FIELD_LABELS = [
   [/^(英文|英语)$/u, 'en'],
   [/^(日本語|日语|日文)$/u, 'ja'],
   [/^使用提示$/u, 'tip'],
+  [/^语法点$/u, 'point'],
+  [/^核心结构$/u, 'structure'],
 ];
 
 const FIELD_LINE = /^\s*[-*]\s*\*\*(.+?)\*\*\s*[:：]\s*(.*)$/u;
@@ -118,6 +120,28 @@ export function extractTrilingualSummary(markdown) {
     zh,
     register: cleanMarkdownValue(sections.zh?.register) || null,
   };
+}
+
+/**
+ * What a grammar card opens with: its 语法点 and 核心结构 from the first
+ * section (all 195 grammar cards on record have both), or null.
+ */
+export function extractGrammarSummary(markdown) {
+  let inFirstSection = false;
+  const fields = {};
+  for (const line of String(markdown || '').split(/\r?\n/u)) {
+    const heading = /^##\s+(.+)$/u.exec(line);
+    if (heading) {
+      inFirstSection = /^1\s*[.．、]/u.test(cleanMarkdownValue(heading[1]));
+      continue;
+    }
+    if (!inFirstSection) continue;
+    const field = FIELD_LINE.exec(line);
+    if (!field) continue;
+    const kind = fieldOf(cleanMarkdownValue(field[1]));
+    if ((kind === 'point' || kind === 'structure') && !(kind in fields)) fields[kind] = cleanMarkdownValue(field[2]);
+  }
+  return fields.point && fields.structure ? { point: fields.point, structure: fields.structure } : null;
 }
 
 function indexOfSequence(haystack, needle, from = 0) {
@@ -324,6 +348,13 @@ export function decorateCardRoot(root, cardType) {
     if (first && first.tagName === 'P' && item.firstElementChild === first) owner = first;
     const label = decorateField(owner, doc);
     if (label !== null) item.dataset.cardField = fieldOf(label);
+  });
+  // Older cards note loanwords under each example, and 151 of those notes say
+  // only "无". The notes sit outside the anchored text, so marking them for
+  // CSS to hide changes nothing highlights depend on.
+  root.querySelectorAll('.loanword-block').forEach((block) => {
+    const tags = Array.from(block.querySelectorAll('.loanword-tag')).map((tag) => visibleText(tag).trim());
+    if (tags.length && tags.every((tag) => /^(无|なし|none|[-—])$/iu.test(tag))) block.dataset.loanwordEmpty = 'true';
   });
   if (cardType === 'scenario_phrase') groupScenarioBlocks(root, doc);
   root.dataset.cardLayout = 'v1';

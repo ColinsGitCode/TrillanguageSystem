@@ -704,6 +704,51 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(translations.first()).toBeVisible();
   });
 
+  test('a grammar card opens on its grammar point and structure', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: '〜なくなった' }).click();
+    const summary = page.getByTestId('card-summary');
+    await expect(summary).toContainText('语法点');
+    await expect(summary).toContainText('核心结构');
+    const content = page.getByTestId('react-card-content');
+    for (const field of ['point', 'structure']) {
+      await expect(content.locator(`li[data-card-field="${field}"]`)).toHaveCount(1);
+      await expect(content.locator(`li[data-card-field="${field}"]`)).toBeHidden();
+    }
+    // The rest of the overview stays in the body.
+    await expect(content.locator('li[data-card-field="other"]').first()).toBeVisible();
+  });
+
+  test('older cards keep real loanword notes as a quiet line and hide the ones that say 无', async ({ page }) => {
+    await page.route('**/api/card-engagement/today', (route) => route.fulfill({ json: {
+      success: true, learningDay: '2026-06-02', timeZone: 'Asia/Tokyo', cards: [],
+    } }));
+    await page.route('**/api/folders', (route) => route.fulfill({ json: { folders: ['20260602'] } }));
+    await page.route('**/api/folders/20260602/files', (route) => route.fulfill({ json: {
+      files: [{ file: 'loanwords.html', title: '外来语旧卡', cardType: 'trilingual' }],
+    } }));
+    await page.route('**/api/folders/20260602/files/loanwords.md', (route) => route.fulfill({
+      contentType: 'text/markdown',
+      body: [
+        '# 外来语旧卡', '', '## 1. 英文:', '- **翻译**: reuse', '', '## 2. 日本語:', '- **翻訳**: 使い回す',
+        '- **例句1**: すみません。', '  - 不好意思。',
+        '  <div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line"><span class="loanword-tag">无</span></span></div>',
+        '- **例句2**: プレゼンを使い回す。', '  - 反复使用演示。',
+        '  <div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line"><span class="loanword-tag">presentation → プレゼン</span></span></div>',
+        '', '## 3. 中文:', '- **翻译**: 反复利用', '',
+      ].join('\n'),
+    }));
+    await page.route('**/api/records/by-file?*', (route) => route.fulfill({ status: 404, json: { error: 'not found' } }));
+    await page.goto('/');
+    await page.getByTestId('react-file-list').getByRole('button', { name: /外来语旧卡/u }).click();
+    const blocks = page.getByTestId('react-card-content').locator('.loanword-block');
+    await expect(blocks).toHaveCount(2);
+    await expect(blocks.nth(0)).toBeHidden();
+    await expect(blocks.nth(1)).toBeVisible();
+    await expect(blocks.nth(1)).toContainText('presentation → プレゼン');
+    await expect(blocks.nth(1).locator('.loanword-label')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+
   test('delete lives in the ⋯ menu, which closes on Escape without closing the card', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('react-file-list').locator('button').filter({ hasText: '保育园交接' }).click();

@@ -112,6 +112,50 @@ test('the Japanese reading comes from the pronunciation tokens after 翻訳', as
   assert.equal(readingFromTokens(plainText, tokens, '見つからない'), null);
 });
 
+test('a grammar card summary takes 语法点 and 核心结构 from its first section', async () => {
+  const { extractGrammarSummary, fieldOf } = await import(moduleUrl('card-layout.mjs'));
+  assert.deepEqual(extractGrammarSummary(`# において
+
+## 1. 语法概述（中文）
+- **语法点**: において（在……场所、场合、方面、时间）
+- **核心结构**: 名词 + において
+- **使用场景**: 表示动作或状态发生的场所。
+
+## 2. 日本語:
+- **例句1**: 会議室において説明会を行います。
+`), { point: 'において（在……场所、场合、方面、时间）', structure: '名词 + において' });
+  // Older cards put ruby even on Chinese words; the reading is dropped.
+  assert.deepEqual(extractGrammarSummary(`# 〜やすい
+
+## 1. 语法概述
+- **语法点**: 表示做某事的难易程度。
+- **核心结构**: <ruby>动词<rt>どうし</rt></ruby>ます形 + やすい
+`), { point: '表示做某事的难易程度。', structure: '动词ます形 + やすい' });
+  assert.equal(extractGrammarSummary('# x\n## 2. 日本語:\n- **语法点**: not in section one'), null);
+  assert.equal(fieldOf('语法点'), 'point');
+  assert.equal(fieldOf('核心结构'), 'structure');
+});
+
+test('loanword notes that only say 无 are marked empty; real ones are not', async () => {
+  const { decorateCardRoot } = await import(moduleUrl('card-layout.mjs'));
+  const { buildVisibleTextProjection } = await import(moduleUrl('text-projection.mjs'));
+  const dom = new JSDOM('<div class="react-card-renderer"><ul><li><strong>例句1</strong>: すみません。<ul><li>不好意思。</li></ul>'
+    + '<div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line"><span class="loanword-tag">无</span></span></div></li>'
+    + '<li><strong>例句2</strong>: プレゼンです。<ul><li>是演示。</li></ul>'
+    + '<div class="loanword-block"><span class="loanword-label">外来语标注</span><span class="loanword-line"><span class="loanword-tag">presentation → プレゼン</span></span></div></li></ul></div>');
+  try {
+    const root = dom.window.document.querySelector('.react-card-renderer');
+    const before = buildVisibleTextProjection(root).text;
+    decorateCardRoot(root, 'trilingual');
+    assert.equal(buildVisibleTextProjection(root).text, before);
+    const blocks = root.querySelectorAll('.loanword-block');
+    assert.equal(blocks[0].dataset.loanwordEmpty, 'true');
+    assert.equal(blocks[1].dataset.loanwordEmpty, undefined);
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('the scenario outline labels each expression by its Chinese sentence', async () => {
   const { extractScenarioOutline } = await import(moduleUrl('card-layout.mjs'));
   assert.deepEqual(extractScenarioOutline(SCENARIO), [
