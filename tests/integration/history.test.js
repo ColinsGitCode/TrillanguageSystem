@@ -54,6 +54,27 @@ test.describe('GET /api/history (+ statistics / search / recent / :id)', () => {
     assert.equal(p1.body.pagination.totalPages, 3);
   });
 
+  test.it('library search matches any part of the phrase and never errors on punctuation', async () => {
+    await createGeneration('persistence layer');
+    await createGeneration('团队在共享办公室调整会议');
+    await createGeneration("it's fine");
+    const search = async (q) => {
+      const res = await api('GET', `/api/history?search=${encodeURIComponent(q)}&limit=10`);
+      assert.equal(res.status, 200, `search ${q} returned ${res.status}`);
+      return res.body.records.map((r) => r.phrase);
+    };
+    // Part of a word, in either script, and regardless of Latin case.
+    assert.deepEqual(await search('sist'), ['persistence layer']);
+    assert.deepEqual(await search('PERSIST'), ['persistence layer']);
+    assert.deepEqual(await search('团队'), ['团队在共享办公室调整会议']);
+    // Input that is FTS syntax used to raise a 500.
+    assert.deepEqual(await search("it's"), ["it's fine"]);
+    assert.deepEqual(await search('persistence-layer'), []);
+    assert.deepEqual(await search('"quoted'), []);
+    // Body text the list never shows is not a title match.
+    assert.deepEqual(await search('deterministic'), []);
+  });
+
   test.it('GET /api/history/:id returns 404 for an unknown id', async () => {
     const res = await api('GET', '/api/history/99999');
     assert.equal(res.status, 404);

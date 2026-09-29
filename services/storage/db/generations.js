@@ -13,6 +13,18 @@ const { getScenarioExpressionCount } = require('../../../lib/scenarioCardContrac
 const { enqueueJob: enqueueKgSourceSyncJob } = require('./kgSourceSyncJobs');
 const log = require('../../../lib/logger').child({ module: 'svc/db/generations' });
 const CARDS_FACTORY_SCOPE = `g.card_type <> 'textbook_track'`;
+
+// The card library searches what it shows: the phrase and the card's own "# "
+// title line (a scenario card is listed under its short AI title). It used an
+// FTS MATCH, which found whole tokens only (not "团队" inside "团队在共享…", not
+// "sist" in "persistence"), matched body text the list never shows, and threw
+// a syntax error - a 500 - for ordinary input like "it's" or "hamster-wheel".
+// instr() is a plain substring test, so user input needs no escaping; lower()
+// makes Latin letters case-insensitive.
+function librarySearchClause(alias = '') {
+  const titleLine = `substr(${alias}markdown_content, 1, instr(${alias}markdown_content || char(10), char(10)))`;
+  return ` AND (instr(lower(${alias}phrase), lower(@search)) > 0 OR instr(lower(${titleLine}), lower(@search)) > 0)`;
+}
 const CARDS_FACTORY_SCOPE_UNQUALIFIED = `card_type <> 'textbook_track'`;
 
 function insertGeneration(db, data) {
@@ -192,11 +204,10 @@ function query(db, { page = 1, limit = 20, provider, cardType, dateFrom, dateTo,
     params.dateTo = dateTo;
   }
 
-  if (search) {
-    sql += ` AND g.id IN (
-      SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-    )`;
-    params.search = search;
+  const librarySearch = String(search || '').trim();
+  if (librarySearch) {
+    sql += librarySearchClause('g.');
+    params.search = librarySearch;
   }
 
   sql += ` ORDER BY g.created_at DESC LIMIT @limit OFFSET @offset`;
@@ -214,11 +225,10 @@ function getTotalCount(db, { provider, cardType, dateFrom, dateTo, search }) {
   if (cardType) { sql += ` AND card_type = @cardType`; params.cardType = cardType; }
   if (dateFrom) { sql += ` AND generation_date >= @dateFrom`; params.dateFrom = dateFrom; }
   if (dateTo) { sql += ` AND generation_date <= @dateTo`; params.dateTo = dateTo; }
-  if (search) {
-    sql += ` AND id IN (
-      SELECT rowid FROM generations_fts WHERE generations_fts MATCH @search
-    )`;
-    params.search = search;
+  const librarySearch = String(search || '').trim();
+  if (librarySearch) {
+    sql += librarySearchClause();
+    params.search = librarySearch;
   }
 
   return db.prepare(sql).get(params).total;
