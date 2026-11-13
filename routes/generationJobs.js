@@ -6,6 +6,7 @@ const generationJobService = require('../services/generation/generationJobServic
 const cardEngagementService = require('../services/cardEngagement/cardEngagementService');
 const dbService = require('../services/storage/databaseService');
 const { assertDuplicatePolicy, normalizeDuplicatePolicy } = require('../services/application/cardAdmission');
+const { resolveGenerationOrigin } = require('../services/application/generationOrigin');
 const { DEFAULT_DEEPSEEK_MODEL, normalizeCardType, normalizeSourceMode } = require('../lib/serverConfig');
 
 const router = express.Router();
@@ -110,7 +111,11 @@ router.post('/api/generation-jobs', async (req, res) => {
     const sourceMode = normalizeSourceMode(req.body?.source_mode);
     const provider = 'deepseek';
     const llmModel = DEFAULT_DEEPSEEK_MODEL;
-    const targetFolder = String(req.body?.target_folder || '').trim();
+    const { targetFolder, sourceContext } = resolveGenerationOrigin({
+      sourceMode,
+      targetFolder: req.body?.target_folder,
+      sourceContext: req.body?.source_context,
+    });
     const duplicatePolicy = normalizeDuplicatePolicy(req.body?.duplicate_policy);
     const requestInteractionKey = interactionKey(req.body?.interaction_key);
     const preflightRecorded = req.body?.preflight_recorded === true;
@@ -153,10 +158,6 @@ router.post('/api/generation-jobs', async (req, res) => {
         metadata: { existingVersionCount: duplicates.length },
       });
     }
-    const sourceContext = req.body?.source_context && typeof req.body.source_context === 'object'
-      ? req.body.source_context
-      : {};
-
     const job = generationJobService.enqueue({
       jobType,
       phraseRaw: phrase,

@@ -142,6 +142,12 @@ export const factoryApi = {
     cardType: CardType;
     sourceMode: SourceMode;
     targetFolder?: string;
+    sourceContext?: {
+      surface: 'card-modal';
+      generationId: number | null;
+      folder: string;
+      baseFilename: string;
+    };
     duplicatePolicy?: 'reject' | 'create-version';
     interactionKey?: string;
     preflightRecorded?: boolean;
@@ -153,6 +159,7 @@ export const factoryApi = {
         card_type: payload.cardType,
         source_mode: payload.sourceMode,
         target_folder: payload.targetFolder || '',
+        source_context: payload.sourceContext,
         duplicate_policy: payload.duplicatePolicy || 'reject',
         interaction_key: payload.interactionKey || '',
         preflight_recorded: payload.preflightRecorded === true,

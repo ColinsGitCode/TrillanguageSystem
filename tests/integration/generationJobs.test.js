@@ -3,6 +3,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { api, resetState, closeServer, dbService } = require('./_harness');
+const fs = require('node:fs');
+const { executeGenerationJob } = require('../../services/application/executeGenerationJob');
+const { RECORDS_TIMEZONE } = require('../../lib/serverConfig');
+const getTodayFolderName = () => new Intl.DateTimeFormat('sv-SE', {
+  timeZone: RECORDS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date()).replaceAll('-', '');
 
 function insertExistingCard(phrase) {
   dbService.insertGeneration({
@@ -42,6 +48,66 @@ test.after(async () => { await closeServer(); });
 
 test.describe('/api/generation-jobs/*', () => {
   test.beforeEach(() => resetState());
+
+  for (const cardType of ['trilingual', 'grammar_ja', 'scenario_phrase']) {
+    test.it(`archives queued ${cardType} selections today and persists the separate source reference`, async () => {
+      const source = await api('POST', '/api/generate', {
+        body: { phrase: `source ${cardType}`, source_mode: 'input', target_folder: '20000101' },
+      });
+      assert.equal(source.status, 200);
+      const sourceRecord = dbService.getGenerationById(source.body.generationId);
+      const sourceContext = {
+        surface: 'card-modal', generationId: sourceRecord.id,
+        folder: sourceRecord.folder_name, baseFilename: sourceRecord.base_filename,
+      };
+      const created = await api('POST', '/api/generation-jobs', {
+        body: {
+          phrase: `selection ${cardType}`, card_type: cardType, source_mode: 'selection',
+          target_folder: '20000101', source_context: sourceContext,
+        },
+      });
+      assert.equal(created.status, 200);
+      const job = created.body.job;
+      assert.equal(job.targetFolder, '');
+      assert.equal(job.requestPayload.target_folder, '');
+      assert.deepEqual(job.sourceContext, sourceContext);
+      assert.deepEqual(job.requestPayload.source_context, sourceContext);
+
+      // The harness disables background workers; execute the persisted command directly.
+      const result = await executeGenerationJob(job);
+      const today = getTodayFolderName();
+      const record = dbService.getGenerationById(result.generationId);
+      assert.equal(result.result.folder, today);
+      assert.equal(record.folder_name, today);
+      assert.equal(record.generation_date, `${today.slice(0, 4)}-${today.slice(4, 6)}-${today.slice(6, 8)}`);
+      assert.deepEqual(record.observability.metadata.sourceContext, sourceContext);
+      assert.deepEqual(JSON.parse(fs.readFileSync(record.meta_file_path, 'utf8')).source_context, sourceContext);
+      assert.equal(dbService.getGenerationById(sourceRecord.id).folder_name, '20000101');
+      assert.equal(fs.readFileSync(sourceRecord.md_file_path, 'utf8'), sourceRecord.markdown_content);
+      const folders = await api('GET', '/api/folders');
+      assert.ok(folders.body.folders.includes(today));
+    });
+  }
+
+  test.it('executes a legacy selection job without reusing its old date', async () => {
+    const result = await executeGenerationJob({
+      phraseNormalized: 'legacy archived selection', sourceMode: 'selection',
+      jobType: 'trilingual', targetFolder: '19991231', createdAt: '1999-12-31T12:00:00Z',
+    });
+    const record = dbService.getGenerationById(result.generationId);
+    assert.equal(record.folder_name, getTodayFolderName());
+    assert.deepEqual(record.observability.metadata.sourceContext, { folder: '19991231' });
+  });
+
+  test.it('uses the execution clock and records timezone, not the queue timestamp or UTC date', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-13T15:30:00Z') });
+    const result = await executeGenerationJob({
+      phraseNormalized: 'after midnight selection', sourceMode: 'selection', jobType: 'trilingual',
+      targetFolder: '20000101', createdAt: '2026-11-12T12:00:00Z',
+    });
+    assert.equal(result.result.folder, getTodayFolderName());
+    if (RECORDS_TIMEZONE === 'Asia/Tokyo') assert.equal(result.result.folder, '20261114');
+  });
 
   test.it('POST /api/generation-jobs 400 when phrase missing', async () => {
     const res = await api('POST', '/api/generation-jobs', { body: {} });

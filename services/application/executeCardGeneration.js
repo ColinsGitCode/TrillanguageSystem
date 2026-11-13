@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { cardGenerationPorts } = require('./cardGenerationPorts');
 const { CardAdmissionError, normalizeDuplicatePolicy } = require('./cardAdmission');
+const { resolveGenerationOrigin } = require('./generationOrigin');
 
 class GenerationCommandError extends Error {
   constructor(message) {
@@ -28,12 +29,13 @@ class GenerationValidationError extends Error {
 function normalizeCommand(command, ports) {
   const phrase = String(command?.phrase || '').trim();
   if (!phrase) throw new GenerationCommandError('Phrase required');
+  const sourceMode = ports.normalizeSourceMode(command.sourceMode);
 
   return {
     phrase,
     cardType: ports.normalizeCardType(command.cardType),
-    sourceMode: ports.normalizeSourceMode(command.sourceMode),
-    targetFolder: String(command.targetFolder || '').trim(),
+    sourceMode,
+    ...resolveGenerationOrigin({ sourceMode, targetFolder: command.targetFolder, sourceContext: command.sourceContext }),
     duplicatePolicy: normalizeDuplicatePolicy(command.duplicatePolicy),
     requestedProvider: command.requestedProvider || ports.activeProvider,
     modelOverride: command.modelOverride || ports.defaultModel,
@@ -91,6 +93,7 @@ function createCardGenerationUseCase(customPorts = {}) {
         cardType,
         sourceMode,
         targetFolder,
+        sourceContext,
         duplicatePolicy,
         requestedProvider,
         modelOverride,
@@ -110,6 +113,9 @@ function createCardGenerationUseCase(customPorts = {}) {
           });
       const { output: content, prompt, observability, baseName, targetDir, folderName } = generation;
       const providerUsed = observability?.metadata?.provider || requestedProvider;
+      if (sourceMode === 'selection' && Object.keys(sourceContext).length) {
+        observability.metadata = { ...observability.metadata, sourceContext };
+      }
 
       ports.postProcessGeneratedContent(content);
       const validationErrors = ports.validateGeneratedContent(content, {
@@ -140,6 +146,7 @@ function createCardGenerationUseCase(customPorts = {}) {
         folderName,
         cardType,
         sourceMode,
+        ...(sourceMode === 'selection' ? { sourceContext } : {}),
       });
 
       let audio = null;

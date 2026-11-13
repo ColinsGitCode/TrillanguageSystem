@@ -31,6 +31,7 @@ router.post('/api/generate', async (req, res) => {
       card_type = 'trilingual',
       source_mode = null,
       target_folder = '',
+      source_context = {},
       duplicate_policy = 'reject',
     } = req.body;
     if (!phrase) return res.status(400).json({ error: 'Phrase required' });
@@ -39,6 +40,7 @@ router.post('/api/generate', async (req, res) => {
       cardType: card_type,
       sourceMode: source_mode,
       targetFolder: target_folder,
+      sourceContext: source_context,
       duplicatePolicy: duplicate_policy,
     });
     return res.json(result);

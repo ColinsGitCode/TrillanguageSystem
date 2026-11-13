@@ -26,6 +26,7 @@ test.describe('executeGenerationJob', () => {
       cardType: 'scenario_phrase',
       sourceMode: 'ocr',
       targetFolder: '2026.07.13',
+      sourceContext: {},
       duplicatePolicy: 'create-version',
       requestedProvider: 'deepseek',
       modelOverride: 'deepseek-v4-flash',
@@ -56,5 +57,26 @@ test.describe('executeGenerationJob', () => {
 
   test.it('rejects a non-function use-case adapter', () => {
     assert.throws(() => createGenerationJobExecutor(null), /must be a function/);
+  });
+
+  test.it('does not reuse a historical destination when an old selection job is retried', async () => {
+    let command;
+    const execute = createGenerationJobExecutor(async (value) => { command = value; });
+    await execute({
+      phraseNormalized: 'selected phrase',
+      jobType: 'trilingual',
+      sourceMode: 'selection',
+      targetFolder: '20000101',
+      createdAt: '2000-01-01T00:00:00Z',
+    });
+    assert.equal(command.targetFolder, '');
+    assert.deepEqual(command.sourceContext, { folder: '20000101' });
+  });
+
+  test.it('passes a new selection job source reference to the shared use case', () => {
+    const sourceContext = { surface: 'card-modal', generationId: 7, folder: '20000101', baseFilename: 'source' };
+    const command = commandFromGenerationJob({ sourceMode: 'selection', sourceContext });
+    assert.equal(command.targetFolder, '');
+    assert.deepEqual(command.sourceContext, sourceContext);
   });
 });

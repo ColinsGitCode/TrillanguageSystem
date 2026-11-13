@@ -99,6 +99,7 @@ export function CardsFactory() {
   const trackedJobIdsRef = useRef<Set<number>>(new Set());
   const publishedJobStatusRef = useRef<Map<number, GenerationJob['status']>>(new Map());
   const dateGroupsInitializedRef = useRef(false);
+  const knownFoldersRef = useRef<Set<string>>(new Set());
 
   const healthQuery = useQuery({
     queryKey: ['health'], queryFn: factoryApi.health, enabled: hydrated, refetchInterval: 15_000,
@@ -504,19 +505,26 @@ export function CardsFactory() {
   }, [folders]);
 
   useEffect(() => {
-    if (!groupedFolders.length) return;
+    // Today activity can arrive before the archive; do not treat its first snapshot as newly added dates.
+    if (!foldersQuery.data || !groupedFolders.length) return;
     const available = new Set(groupedFolders.map(([group]) => group));
     const selectedGroup = selectedFolder ? dateParts(selectedFolder).group : null;
+    const addedGroups = folders
+      .filter((folder) => !knownFoldersRef.current.has(folder))
+      .map((folder) => dateParts(folder).group);
+    knownFoldersRef.current = new Set(folders);
     setExpandedDateGroups((current) => {
       const next = new Set([...current].filter((group) => available.has(group)));
       if (!dateGroupsInitializedRef.current) {
         groupedFolders.slice(0, 2).forEach(([group]) => next.add(group));
         dateGroupsInitializedRef.current = true;
+      } else {
+        addedGroups.forEach((group) => next.add(group));
       }
       if (selectedGroup && available.has(selectedGroup)) next.add(selectedGroup);
       return next;
     });
-  }, [groupedFolders, selectedFolder]);
+  }, [folders, foldersQuery.data, groupedFolders, selectedFolder]);
 
   const openFile = (file: FolderFile) => {
     const baseName = file.sourceBaseFilename || file.file.replace(/\.html$/i, '');

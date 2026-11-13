@@ -4,12 +4,31 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { api, resetState, closeServer, dbService } = require('./_harness');
 const { executeCardGeneration } = require('../../services/application/executeCardGeneration');
+const { RECORDS_TIMEZONE } = require('../../lib/serverConfig');
 
 test.before(() => resetState());
 test.after(async () => { await closeServer(); });
 
 test.describe('POST /api/generate (E2E fixture branch)', () => {
   test.beforeEach(() => resetState());
+
+  test.it('ignores a selection destination from an old HTTP client and retains its provenance', async () => {
+    const res = await api('POST', '/api/generate', {
+      body: {
+        phrase: 'legacy http selection', source_mode: 'selection', target_folder: '20000101',
+        source_context: { surface: 'card-modal', baseFilename: 'source-card' },
+      },
+    });
+    assert.equal(res.status, 200);
+    const record = dbService.getGenerationById(res.body.generationId);
+    const today = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: RECORDS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date()).replaceAll('-', '');
+    assert.equal(record.folder_name, today);
+    assert.deepEqual(record.observability.metadata.sourceContext, {
+      surface: 'card-modal', folder: '20000101', baseFilename: 'source-card',
+    });
+  });
 
   test.it('400 on missing phrase', async () => {
     const res = await api('POST', '/api/generate', { body: {} });

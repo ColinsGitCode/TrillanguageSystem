@@ -342,6 +342,9 @@ function saveGeneratedFiles(phrase, content, options = {}) {
         card_type: cardType,
         source_mode: sourceMode || null
     };
+    if (options.sourceContext && Object.keys(options.sourceContext).length) {
+        meta.source_context = options.sourceContext;
+    }
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
     
     return {

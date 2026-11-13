@@ -137,6 +137,27 @@ function createHarness(overrides = {}) {
 }
 
 test.describe('executeCardGeneration application use case', () => {
+  for (const cardType of ['trilingual', 'grammar_ja', 'scenario_phrase']) {
+    test.it(`uses the execution date and saves source provenance for ${cardType} selections`, async () => {
+      let savedOptions;
+      const { calls, execute } = createHarness({
+        saveGeneratedFiles: (_phrase, _content, options) => {
+          savedOptions = options;
+          return {
+            folder: options.folderName, baseName: options.baseName, targetDir: options.targetDir,
+            files: [], absPaths: {},
+          };
+        },
+      });
+      const sourceContext = { surface: 'card-modal', generationId: 8, folder: '20000101', baseFilename: 'origin' };
+      const result = await execute({ phrase: 'new selection', cardType, sourceMode: 'selection', targetFolder: '20000101', sourceContext });
+      assert.equal(calls.generatedOptions.targetFolder, '');
+      assert.deepEqual(savedOptions.sourceContext, sourceContext);
+      assert.deepEqual(calls.insertData.observability.metadata.sourceContext, sourceContext);
+      assert.equal(result.observability.metadata.provider, 'deepseek');
+    });
+  }
+
   test.it('owns generation, TTS, persistence, and the stable result envelope', async () => {
     const { calls, execute } = createHarness();
     const result = await execute({

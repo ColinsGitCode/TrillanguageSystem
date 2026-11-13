@@ -594,7 +594,12 @@ export function CardModal({
       phrase: vars.phrase,
       cardType: vars.cardType,
       sourceMode: 'selection',
-      targetFolder: selection.folder,
+      sourceContext: {
+        surface: 'card-modal',
+        generationId,
+        folder: selection.folder,
+        baseFilename: selection.baseName,
+      },
     }),
     onSuccess: async (_data, vars) => {
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
@@ -608,7 +613,7 @@ export function CardModal({
       setColorMenuOpen(false);
       setKnowledgeDraft(null);
       setHasSelection(false);
-      showToast(`✦ 已加入生成队列 · ${CARD_TYPE_LABEL[vars.cardType]}`);
+      showToast(`✦ 已加入生成队列 · ${CARD_TYPE_LABEL[vars.cardType]}，完成后按生成日期归档`);
     },
     onError: (error) => {
       const duplicate = error instanceof ApiError && error.status === 409;
