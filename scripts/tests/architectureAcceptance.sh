@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[1/7] React typecheck"
+echo "[1/8] React typecheck"
 npm run typecheck:react
 
-echo "[2/7] ESLint"
+echo "[2/8] ESLint"
 npm run lint
 
-echo "[3/7] Unit tests"
+echo "[3/8] Unit tests"
 npm test
 
-echo "[4/7] Integration tests"
+echo "[4/8] Development toolchain security"
+npm run test:toolchain-security
+
+echo "[5/8] Integration tests"
 npm run test:integration
 
-echo "[5/7] Architecture ownership and completion gates"
+echo "[6/8] Architecture ownership and completion gates"
 npm run test:architecture
 
-echo "[6/7] Production smoke"
+echo "[7/8] Production smoke"
 npm run smoke
 
-echo "[7/7] Playwright functional and visual tests"
+echo "[8/8] Playwright functional and visual tests"
 npm run test:e2e
 
 echo "Architecture acceptance OK"
