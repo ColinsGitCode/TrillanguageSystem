@@ -114,6 +114,8 @@ test.describe('GenerationJobService', () => {
     });
     try {
       const first = service.enqueue(jobPayload('first'));
+      // The worker wakeup is unref'ed; keep this HTTP-free test alive until it runs.
+      await waitFor(() => service.running);
       await started;
       const second = service.enqueue(jobPayload('second'));
 
@@ -151,6 +153,7 @@ test.describe('GenerationJobService', () => {
     });
     try {
       const job = service.enqueue(jobPayload('slow'));
+      await waitFor(() => service.running);
       await started;
       assert.deepEqual(
         await service.shutdown({ timeoutMs: 5 }),
