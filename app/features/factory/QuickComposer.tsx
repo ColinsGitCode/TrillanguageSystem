@@ -1,3 +1,4 @@
+import { supportsFieldSizing } from '../../lib/platform/capabilities';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQueries } from '@tanstack/react-query';
@@ -132,7 +133,10 @@ export function QuickComposer({
   useLayoutEffect(() => {
     const area = textareaRef.current;
     if (!area) return;
+    const nativeSizing = supportsFieldSizing();
+    area.dataset.autoSize = nativeSizing ? 'native' : 'fallback';
     area.style.height = 'auto';
+    if (nativeSizing) return;
     area.style.height = `${area.scrollHeight}px`;
   }, [text, cardType]);
 

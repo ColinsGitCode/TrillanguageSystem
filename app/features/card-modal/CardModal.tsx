@@ -1,3 +1,7 @@
+import { useBlocker } from 'react-router';
+import { useOverlayScope } from '../../components/overlays/OverlayScope';
+import { useSelectionHighlight } from './useSelectionHighlight';
+import { useToolbarNavigation } from './useToolbarNavigation';
 import {
   lazy,
   Suspense,
@@ -214,6 +218,7 @@ export function CardModal({
 }: Props) {
   const queryClient = useQueryClient();
   const onCloseRef = useRef(onClose);
+  const overlayScope = useOverlayScope();
   const backdropRef = useRef<HTMLDivElement>(null);
   const tabsId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -227,7 +232,7 @@ export function CardModal({
   const [detailHost, setDetailHost] = useState<HTMLDivElement | null>(null);
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
   const [noteBusy, setNoteBusy] = useState(false);
-  const [noteExit, setNoteExit] = useState<'note' | 'card' | 'delete' | null>(null);
+  const [noteExit, setNoteExit] = useState<'note' | 'card' | 'delete' | 'route' | null>(null);
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const lookupSourceRef = useRef<Record<string, unknown>>({});
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -242,6 +247,15 @@ export function CardModal({
   // is new on every return and the server can never dedupe it.
   const modalOpenIdRef = useRef('');
   if (!modalOpenIdRef.current) modalOpenIdRef.current = crypto.randomUUID();
+  const routeBlocker = useBlocker(Boolean(noteBusy || (noteDraft && noteDraft.text !== noteDraft.initialText)));
+  useEffect(() => {
+    if (routeBlocker.state === 'blocked') setNoteExit('route');
+  }, [routeBlocker.state]);
+  const cancelNoteExit = () => {
+    if (routeBlocker.state === 'blocked') routeBlocker.reset();
+    setNoteExit(null);
+    focusNote();
+  };
   const [tab, setTab] = useState<'content' | 'intel'>('content');
   const [readingsPreference, setReadingsPreference] = useState<ReadingsPreference>(
     () => (typeof window === 'undefined' ? DEFAULT_READINGS : readStoredShowReadings())
@@ -314,8 +328,15 @@ export function CardModal({
   const getContentRoot = useCallback(() => contentRef.current, []);
 
   useEffect(() => {
-    markUiInteractionEnd('card-modal-open');
-  }, []);
+    if (!renderedHtml) return;
+    let frame = 0;
+    const ready = () => {
+      if (!contentRef.current?.textContent) { frame = requestAnimationFrame(ready); return; }
+      frame = requestAnimationFrame(() => markUiInteractionEnd('card-modal-open'));
+    };
+    frame = requestAnimationFrame(ready);
+    return () => cancelAnimationFrame(frame);
+  }, [renderedHtml]);
 
   useEffect(() => setPreviewExpanded(false), [toolbar?.phrase]);
 
@@ -385,9 +406,9 @@ export function CardModal({
     const previous = restoreFocusTo
       || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (!overlayScope.native) document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
-    const restoreBackground = backdropRef.current ? isolateDialogBackground(backdropRef.current) : () => {};
+    const restoreBackground = !overlayScope.native && backdropRef.current ? isolateDialogBackground(backdropRef.current) : () => {};
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const target = event.target instanceof Element ? event.target : null;
@@ -421,7 +442,7 @@ export function CardModal({
         onCloseRef.current();
         return;
       }
-      if (event.key !== 'Tab') return;
+      if (event.key !== 'Tab' || overlayScope.native) return;
       const dialog = closeRef.current?.closest('[role="dialog"]');
       const focusable = Array.from(dialog?.querySelectorAll<HTMLElement>(
         'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
@@ -440,12 +461,19 @@ export function CardModal({
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (!overlayScope.native) document.body.style.overflow = previousOverflow;
       restoreBackground();
       cardAudio.stop();
       previous?.focus({ preventScroll: true });
     };
-  }, [cardAudio.stop, restoreFocusTo]);
+  }, [cardAudio.stop, restoreFocusTo, overlayScope.native]);
+
+  useEffect(() => {
+    const guard = overlayScope.closeGuard;
+    if (!guard) return;
+    guard.current = () => onCloseRef.current();
+    return () => { guard.current = null; };
+  }, [overlayScope.closeGuard]);
 
   const dismissDelete = () => {
     setConfirmDelete(false);
@@ -523,17 +551,25 @@ export function CardModal({
       });
     };
     clampToViewport();
+    // ResizeObserver, visualViewport and window resize may fire in one frame.
+    // Measure once, keeping the first placement synchronous to avoid a flash.
+    let frame = 0;
+    const scheduleClamp = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => { frame = 0; clampToViewport(); });
+    };
     const resizeObserver = typeof ResizeObserver === 'function'
-      ? new ResizeObserver(clampToViewport)
+      ? new ResizeObserver(scheduleClamp)
       : null;
     if (resizeObserver && toolbarRef.current) resizeObserver.observe(toolbarRef.current);
     if (resizeObserver && contentRef.current) resizeObserver.observe(contentRef.current);
-    window.addEventListener('resize', clampToViewport);
-    window.visualViewport?.addEventListener('resize', clampToViewport);
+    window.addEventListener('resize', scheduleClamp);
+    window.visualViewport?.addEventListener('resize', scheduleClamp);
     return () => {
+      if (frame) window.cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
-      window.removeEventListener('resize', clampToViewport);
-      window.visualViewport?.removeEventListener('resize', clampToViewport);
+      window.removeEventListener('resize', scheduleClamp);
+      window.visualViewport?.removeEventListener('resize', scheduleClamp);
     };
   }, [
     toolbar?.annotationId,
@@ -708,10 +744,12 @@ export function CardModal({
   const focusNote = () => window.requestAnimationFrame(() => {
     document.querySelector<HTMLTextAreaElement>('.csa-note-editor textarea')?.focus({ preventScroll: true });
   });
-  const finishNoteExit = (action: 'note' | 'card' | 'delete') => {
+  const finishNoteExit = (action: 'note' | 'card' | 'delete' | 'route') => {
+    if (noteBusy) return;
     setNoteDraft(null);
     setNoteExit(null);
-    if (action === 'card') onClose();
+    if (action === 'route' && routeBlocker.state === 'blocked') routeBlocker.proceed();
+    else if (action === 'card') onClose();
     else if (action === 'delete') setConfirmDelete(true);
     else (lookupTriggerRef.current || contentRef.current)?.focus({ preventScroll: true });
   };
@@ -962,14 +1000,23 @@ export function CardModal({
     generateTriggerRef.current?.focus({ preventScroll: true });
   };
 
+  useSelectionHighlight(selectedRangeRef, toolbar);
+  useToolbarNavigation(toolbarRef, Boolean(toolbar), true);
+
   const handleToolbarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.defaultPrevented || !(event.target instanceof Element)
+      || !event.currentTarget.contains(event.target)
+      || event.target.closest('.csa-reading-details, .csa-tts-language, [role="menu"]')) return;
+    if (event.currentTarget.hasAttribute('focusgroup')) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.target instanceof HTMLSelectElement && ['Home', 'End'].includes(event.key)) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const buttons = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
-    ).filter((button) => button.offsetParent !== null);
+      event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), select:not([disabled])')
+    ).filter((button) => button.offsetParent !== null && !button.closest('[role="menu"], [role="dialog"] .csa-tts-language, .csa-reading-details'));
     if (!buttons.length) return;
-    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLElement);
     const nextIndex = event.key === 'Home'
       ? 0
       : event.key === 'End'
@@ -1074,7 +1121,7 @@ export function CardModal({
     <div ref={backdropRef} className="card-modal-backdrop" data-testid="react-card-modal" onMouseDown={(event) => {
       if (event.target === event.currentTarget) { event.preventDefault(); requestNoteExit('card'); }
     }}>
-      <section className="react-card-modal" role="dialog" aria-modal="true" aria-labelledby="react-card-title">
+      <section className="react-card-modal" role={overlayScope.native ? undefined : 'dialog'} aria-modal={overlayScope.native ? undefined : true} aria-labelledby="react-card-title">
         <header className="react-card-head">
           <div className="card-head-title">
             <h1 id="react-card-title" title={displayTitle}>{displayTitle}</h1>
@@ -1163,7 +1210,7 @@ export function CardModal({
               <div className="card-reading-column">
                 {summary && (
                   <Suspense fallback={null}>
-                    <DeferredCardSummaryStrip summary={summary} generationId={generationId ? Number(generationId) : null} />
+                    <DeferredCardSummaryStrip summary={summary} showReadings={showReadings} generationId={generationId ? Number(generationId) : null} />
                   </Suspense>
                 )}
                 {grammarSummary && (
@@ -1296,7 +1343,7 @@ export function CardModal({
         )}
         {noteExit && (
           <div className="note-exit-backdrop" onKeyDown={(event) => {
-            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setNoteExit(null); focusNote(); }
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancelNoteExit(); }
             if (event.key === 'Tab') {
               event.preventDefault();
               const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button');
@@ -1306,8 +1353,8 @@ export function CardModal({
             <div className="note-exit-confirm" role="alertdialog" aria-modal="true" aria-labelledby="note-exit-title" aria-describedby="note-exit-description">
               <strong id="note-exit-title">笔记尚未保存</strong>
               <p id="note-exit-description">离开会丢弃这次修改。可以继续编辑并保存。</p>
-              <button type="button" autoFocus onClick={() => { setNoteExit(null); focusNote(); }}>继续编辑</button>
-              <button type="button" className="danger-button" onClick={() => finishNoteExit(noteExit)}>放弃修改{noteExit === 'card' ? '并关闭' : ''}</button>
+              <button type="button" autoFocus onClick={() => { cancelNoteExit(); }}>继续编辑</button>
+              <button type="button" className="danger-button" disabled={noteBusy} onClick={() => finishNoteExit(noteExit)}>放弃修改{noteExit === 'card' ? '并关闭' : ''}</button>
             </div>
           </div>
         )}

@@ -1,0 +1,3 @@
+/* The card owns one top-layer dialog across lazy-loading boundaries. */
+.native-card-owner { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; background: transparent; color: inherit; overflow: hidden; }
+.native-card-owner::backdrop { background: transparent; }

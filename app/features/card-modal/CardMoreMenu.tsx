@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Ellipsis, Trash2 } from 'lucide-react';
+import { nativeOverlaysEnabled, supportsAnchoredPopover } from '../../lib/platform/capabilities';
 
 /**
  * "⋯" menu in the card header. Deleting used to be the first control a
@@ -9,9 +10,12 @@ export function CardMoreMenu({ onDelete }: { onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [native] = useState(() => nativeOverlaysEnabled() && supportsAnchoredPopover());
+  const anchorName = `--card-menu-${useId().replace(/[^a-z0-9]/gi, '')}`;
 
   useEffect(() => {
     if (!open) return undefined;
+    if (native) menuRef.current?.showPopover();
     menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -19,7 +23,7 @@ export function CardMoreMenu({ onDelete }: { onDelete: () => void }) {
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
+  }, [open, native]);
 
   const close = () => {
     setOpen(false);
@@ -36,6 +40,7 @@ export function CardMoreMenu({ onDelete }: { onDelete: () => void }) {
         aria-haspopup="menu"
         aria-expanded={open}
         data-testid="card-more-menu-trigger"
+        style={native ? { anchorName } as CSSProperties : undefined}
         onClick={() => setOpen((value) => !value)}
       >
         <Ellipsis aria-hidden="true" />
@@ -44,6 +49,9 @@ export function CardMoreMenu({ onDelete }: { onDelete: () => void }) {
         <div
           ref={menuRef}
           className="card-more-menu-list"
+          popover={native ? 'auto' : undefined}
+          style={native ? { positionAnchor: anchorName } as CSSProperties : undefined}
+          onToggle={(event) => { if (native && event.newState === 'closed') setOpen(false); }}
           role="menu"
           aria-label="更多操作"
           onKeyDown={(event) => {

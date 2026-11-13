@@ -15,7 +15,7 @@ type Playback = { lang: SelectionTtsLanguage; status: 'loading' | 'playing' } | 
  * and Japanese are voiced on demand by the selection read-aloud service, which
  * writes nothing. Chinese has no speech service in this project.
  */
-export function CardSummaryStrip({ summary, generationId }: { summary: TrilingualSummary; generationId: number | null }) {
+export function CardSummaryStrip({ summary, generationId, showReadings = true }: { summary: TrilingualSummary; generationId: number | null; showReadings?: boolean }) {
   const [playback, setPlayback] = useState<Playback>(null);
   const [error, setError] = useState('');
   const controllerRef = useRef<AbortController | null>(null);
@@ -104,7 +104,7 @@ export function CardSummaryStrip({ summary, generationId }: { summary: Trilingua
       <div className="card-summary-cell lang-ja">
         <header><span>日本語</span>{voiceButton('ja', summary.ja, '日语说法')}</header>
         <p lang="ja">
-          {jaReading && <small data-testid="card-summary-reading">{jaReading}</small>}
+          {showReadings && jaReading && <small data-testid="card-summary-reading">{jaReading}</small>}
           {summary.ja}
         </p>
       </div>

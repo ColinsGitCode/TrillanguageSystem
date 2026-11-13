@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { observeWebVitals } from './web-vitals';
 import { useLocation, useNavigation } from 'react-router';
 import {
   configureUiPerformance,
@@ -10,27 +11,6 @@ type PerformanceConfig = {
   enabled: boolean;
   sampleRate: number;
 };
-
-type EventTimingEntry = PerformanceEntry & {
-  duration: number;
-  interactionId?: number;
-};
-
-type LayoutShiftEntry = PerformanceEntry & {
-  value: number;
-  hadRecentInput: boolean;
-};
-
-function observe(type: string, callback: (entries: PerformanceEntry[]) => void) {
-  if (typeof PerformanceObserver === 'undefined') return null;
-  try {
-    const observer = new PerformanceObserver((list) => callback(list.getEntries()));
-    observer.observe({ type, buffered: true });
-    return observer;
-  } catch {
-    return null;
-  }
-}
 
 export function UiPerformanceObserver({
   config,
@@ -54,44 +34,12 @@ export function UiPerformanceObserver({
 
   useEffect(() => {
     if (!config?.enabled) return undefined;
-    const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    if (navigationEntry?.responseStart) {
-      recordUiPerformanceMetric('ttfb', navigationEntry.responseStart);
-    }
-
-    let cumulativeLayoutShift = 0;
-    let largestInteraction = 0;
-    const observers = [
-      observe('paint', (entries) => {
-        const fcp = entries.find((entry) => entry.name === 'first-contentful-paint');
-        if (fcp) recordUiPerformanceMetric('fcp', fcp.startTime);
-      }),
-      observe('largest-contentful-paint', (entries) => {
-        const entry = entries.at(-1);
-        if (entry) recordUiPerformanceMetric('lcp', entry.startTime);
-      }),
-      observe('layout-shift', (entries) => {
-        for (const entry of entries as LayoutShiftEntry[]) {
-          if (!entry.hadRecentInput) cumulativeLayoutShift += entry.value;
-        }
-        if (cumulativeLayoutShift > 0) {
-          recordUiPerformanceMetric('cls', cumulativeLayoutShift);
-        }
-      }),
-      observe('event', (entries) => {
-        for (const entry of entries as EventTimingEntry[]) {
-          if (entry.interactionId && entry.duration > largestInteraction) {
-            largestInteraction = entry.duration;
-          }
-        }
-        if (largestInteraction > 0) recordUiPerformanceMetric('inp', largestInteraction);
-      }),
-    ].filter(Boolean) as PerformanceObserver[];
+    observeWebVitals(true);
 
     const onPageHide = () => flushUiPerformance(true);
     window.addEventListener('pagehide', onPageHide);
     return () => {
-      observers.forEach((observer) => observer.disconnect());
+      observeWebVitals(false);
       window.removeEventListener('pagehide', onPageHide);
       flushUiPerformance();
     };

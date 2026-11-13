@@ -1,8 +1,11 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { nativeOverlaysEnabled } from '../../lib/platform/capabilities';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { DialogSurface } from '../../components/overlays';
 import { PageState } from '../../components/states';
 import { markUiInteractionStart } from '../../lib/performance';
 import type { CardSelection } from '../factory/types';
+
+const NativeCardOverlayBoundary = lazy(() => import('../../components/overlays/CardOverlayBoundary').then(m => ({default:m.CardOverlayBoundary})));
 
 let cardModalModuleLoaded = false;
 const LoadedCardModal = lazy(async () => {
@@ -20,6 +23,7 @@ export function DeferredCardModal({
   readOnly?: boolean;
   onClose: () => void;
 }) {
+  const [native] = useState(nativeOverlaysEnabled);
   const performanceKey = `${selection.folder}/${selection.baseName}`;
   const measuredKeyRef = useRef('');
   if (measuredKeyRef.current !== performanceKey) {
@@ -38,9 +42,24 @@ export function DeferredCardModal({
     window.requestAnimationFrame(() => opener.focus({ preventScroll: true }));
   }, []);
 
-  return (
+  const loading = (<PageState
+            variant="loading"
+            eyebrow="学习卡"
+            title="正在打开学习卡"
+            description="正在载入内容、注解和发音工具。"
+            compact
+            testId="card-modal-module-loading"
+          />);
+  const content = (
     <Suspense
-      fallback={(
+      fallback={native ? (
+        <div className="dialog-backdrop" data-testid="card-modal-loading-backdrop">
+          <section className="dialog-surface dialog-size-large">
+            <button type="button" className="dialog-close" autoFocus onClick={onClose}>关闭学习卡</button>
+            {loading}
+          </section>
+        </div>
+      ) : (
         <DialogSurface
           size="large"
           ariaLabel="正在打开学习卡"
@@ -49,14 +68,7 @@ export function DeferredCardModal({
           restoreFocus={false}
           backdropTestId="card-modal-loading-backdrop"
         >
-          <PageState
-            variant="loading"
-            eyebrow="学习卡"
-            title="正在打开学习卡"
-            description="正在载入内容、注解和发音工具。"
-            compact
-            testId="card-modal-module-loading"
-          />
+          {loading}
         </DialogSurface>
       )}
     >
@@ -68,4 +80,5 @@ export function DeferredCardModal({
       />
     </Suspense>
   );
+  return native ? <Suspense fallback={<button type="button" onClick={onClose}>取消打开学习卡</button>}><NativeCardOverlayBoundary onClose={onClose}>{content}</NativeCardOverlayBoundary></Suspense> : content;
 }

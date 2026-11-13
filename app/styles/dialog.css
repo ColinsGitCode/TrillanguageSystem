@@ -112,3 +112,5 @@
   border-color: var(--color-danger);
   background: var(--color-danger);
 }
+
+.dialog-surface { overscroll-behavior: contain; scrollbar-gutter: stable; }

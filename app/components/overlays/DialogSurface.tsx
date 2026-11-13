@@ -1,3 +1,4 @@
+import { useOverlayScope } from './OverlayScope';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { focusableElements } from './focus-management';
@@ -33,6 +34,7 @@ export function DialogSurface({
   closeLabel?: string;
   backdropTestId?: string;
 }) {
+  const { native } = useOverlayScope();
   const surfaceRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const busyRef = useRef(busy);
@@ -48,7 +50,7 @@ export function DialogSurface({
 
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
-    if (lockBodyScroll) document.body.style.overflow = 'hidden';
+    if (lockBodyScroll && !native) document.body.style.overflow = 'hidden';
 
     const focusFrame = window.requestAnimationFrame(() => {
       const preferred = surface.querySelector<HTMLElement>('[data-dialog-initial-focus]');
@@ -87,7 +89,7 @@ export function DialogSurface({
     return () => {
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', handleKeyDown);
-      if (lockBodyScroll) document.body.style.overflow = previousOverflow;
+      if (lockBodyScroll && !native) document.body.style.overflow = previousOverflow;
       if (restoreFocus && previousFocus?.isConnected) {
         window.requestAnimationFrame(() => {
           const active = document.activeElement;
@@ -97,7 +99,7 @@ export function DialogSurface({
         });
       }
     };
-  }, [closeOnEscape, restoreFocus, lockBodyScroll]);
+  }, [closeOnEscape, restoreFocus, lockBodyScroll, native]);
 
   const requestClose = () => {
     if (!busy) onClose();

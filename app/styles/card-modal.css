@@ -1121,3 +1121,14 @@
 .note-exit-confirm { width: min(400px, calc(100vw - 48px)); padding: 24px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); color: var(--color-text-primary); }
 .note-exit-confirm p { color: var(--color-text-secondary); }
 .note-exit-confirm button { min-height: 36px; margin-right: 12px; padding: 6px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-bg-surface); }
+
+/* Temporary selection does not alter text nodes or persistent annotations. */
+::highlight(three-lans-active-selection) { background-color: var(--color-primary); color: var(--color-text-inverse); }
+.react-card-scroll { overscroll-behavior: contain; scrollbar-gutter: stable; }
+.csa-note-error { grid-column: 1 / -1; margin: 4px 0; padding: 8px; border-left: 3px solid var(--color-danger); color: var(--color-danger); }
+.card-more-menu-list[popover] { position: fixed; inset: auto; margin: 6px 0; position-area: bottom span-left; position-try-fallbacks: flip-block, flip-inline; max-width: calc(100vw - 16px); max-height: calc(100dvh - 24px); overflow: auto; }
+@media (forced-colors: active) { ::highlight(three-lans-active-selection) { background-color: Highlight; color: HighlightText; } }
+@media (prefers-reduced-motion: no-preference) {
+  .react-card-modal, .card-note-panel { animation: card-surface-reveal 140ms ease-out; }
+  @keyframes card-surface-reveal { from { opacity: 0; } to { opacity: 1; } }
+}

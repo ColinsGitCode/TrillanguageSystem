@@ -33,7 +33,8 @@ let flushTimer: number | null = null;
 
 function currentRoute() {
   if (typeof window === 'undefined') return '/other';
-  return window.location.pathname || '/';
+  const path = window.location.pathname || '/';
+  return ['/', '/learn', '/learn/plan', '/learn/history', '/learn/session', '/textbooks', '/knowledge', '/dictionary'].includes(path) ? path : '/other';
 }
 
 function resolveSample() {

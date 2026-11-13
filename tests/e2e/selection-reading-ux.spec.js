@@ -39,6 +39,7 @@ async function note(page) {
 
 // Independent fixtures prevent a failed UX case from skipping the remaining matrix.
 test.beforeEach(async ({ request, page }) => {
+  if (process.env.MWG_NATIVE_OVERLAYS === '1') await page.addInitScript(() => sessionStorage.setItem('three-lans:native-overlays', '1'));
   await resetServerState(request);
   await enqueueAndWait(request, title, 'trilingual');
   page.on('pageerror', (error) => { throw error; });
@@ -205,7 +206,7 @@ test('UX08 note failure preserves text and enables retry', async ({ page }) => {
   await openSelection(page); await note(page);
   await page.getByRole('textbox', { name: '阅读笔记' }).fill('应保留的草稿');
   await page.getByRole('button', { name: '保存笔记' }).click();
-  await expect(page.locator('.card-selection-toast')).toContainText('保存失败');
+  await expect(page.locator('.csa-note-error')).toContainText('保存失败');
   await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('应保留的草稿');
   await expect(page.getByRole('button', { name: '保存笔记' })).toBeEnabled();
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/annotations') && r.request().method() === 'POST');
@@ -596,7 +597,8 @@ test('UX26 tabs have roving focus and associated panels; background stays inert'
   await page.keyboard.press('ArrowLeft');
   await expect(contentTab).toBeFocused();
   const isolation = await page.evaluate(() => {
-    const link = [...document.querySelectorAll('a[href]')].find((node) => node.closest('[inert]'));
+    const modal = document.querySelector('dialog[open], [data-testid="react-card-modal"]');
+    const link = [...document.querySelectorAll('a[href]')].find((node) => !modal?.contains(node));
     if (!link) return { found: false, focused: false };
     window.__reviewBackgroundLink = link;
     link.focus();
@@ -604,7 +606,10 @@ test('UX26 tabs have roving focus and associated panels; background stays inert'
   });
   expect(isolation).toEqual({ found: true, focused: false });
   await page.getByRole('button', { name: '关闭学习卡片' }).click();
-  expect(await page.evaluate(() => Boolean(window.__reviewBackgroundLink?.closest('[inert]')))).toBeFalsy();
+  expect(await page.evaluate(() => {
+    window.__reviewBackgroundLink?.focus();
+    return document.activeElement === window.__reviewBackgroundLink;
+  })).toBe(true);
 });
 
 for (const unavailable of ['caretRangeFromPoint', 'caretPositionFromPoint']) {

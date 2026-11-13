@@ -311,3 +311,7 @@
               transform var(--duration-fast) var(--ease-standard);
 }
 .learning-rating-button:active, .learning-reveal-button:active { transform: scale(.985); }
+
+.learning-onboarding-collapsed { width: min(1220px, 100%); margin: 0 auto 12px; }
+.learning-onboarding-collapsed > summary { cursor: pointer; padding: 10px 0; color: var(--color-text-secondary); }
+.learning-onboarding-collapsed > summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }

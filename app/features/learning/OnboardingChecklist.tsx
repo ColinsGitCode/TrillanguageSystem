@@ -6,7 +6,7 @@ import { onboardingApi } from '../../lib/onboarding/onboarding';
 
 const DISMISSED_KEY = 'three-lans-onboarding-dismissed-v1';
 
-export function OnboardingChecklist() {
+export function OnboardingChecklist({ compact = false }: { compact?: boolean }) {
   const [hydrated, setHydrated] = useState(false);
   const [dismissed, setDismissed] = useState(true);
   const onboardingQuery = useQuery({
@@ -29,7 +29,7 @@ export function OnboardingChecklist() {
     setDismissed(true);
   };
 
-  return (
+  const checklist = (
     <section className="surface learning-onboarding" data-testid="learning-onboarding" aria-labelledby="learning-onboarding-title">
       <header>
         <div>
@@ -52,7 +52,7 @@ export function OnboardingChecklist() {
           </li>
         ))}
       </ol>
-      {state.nextStep && (
+      {state.nextStep && !compact && (
         <footer>
           <span>下一步：{state.nextStep.title}</span>
           <Link className="learning-primary-button" to={state.nextStep.href}>{state.nextStep.actionLabel}</Link>
@@ -60,4 +60,5 @@ export function OnboardingChecklist() {
       )}
     </section>
   );
+  return compact ? <details className="learning-onboarding-collapsed"><summary>首次学习清单 · {state.completedCount} / {state.total}</summary>{checklist}</details> : checklist;
 }

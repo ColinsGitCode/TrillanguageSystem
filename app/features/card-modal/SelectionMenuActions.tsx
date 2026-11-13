@@ -1,3 +1,4 @@
+import { useOverlayScope } from '../../components/overlays/OverlayScope';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ChevronDown, Highlighter, Palette, Sparkles } from 'lucide-react';
 import type { Ref } from 'react';
@@ -8,7 +9,7 @@ export function SelectionHighlightAction({ colorMenuOpen, setColorMenuOpen, tool
   colorMenuOpen: boolean; setColorMenuOpen: (v: boolean) => void; toolbarFirstActionRef: Ref<HTMLButtonElement>;
   annotationMode: string; isSavingAnnotation: boolean; annotationId: string | null;
   colors: Array<{ value: AnnotationColor; label: string }>; saveHighlight: (color: AnnotationColor) => Promise<void>;
-}) { return (<DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
+}) { const { container: portalContainer } = useOverlayScope(); return (<DropdownMenu.Root open={colorMenuOpen} onOpenChange={setColorMenuOpen} modal={false}>
       <DropdownMenu.Trigger asChild>
         <button
           ref={toolbarFirstActionRef}
@@ -22,7 +23,7 @@ export function SelectionHighlightAction({ colorMenuOpen, setColorMenuOpen, tool
           <ChevronDown aria-hidden="true" className="csa-caret" />
         </button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
+      <DropdownMenu.Portal container={portalContainer}>
         <DropdownMenu.Content
           className="csa-gen-menu csa-color-menu"
           sideOffset={5}
@@ -47,7 +48,7 @@ export function SelectionHighlightAction({ colorMenuOpen, setColorMenuOpen, tool
 export function SelectionGenerateAction({ genMenuOpen, setGenMenuOpen, generateTriggerRef, pending, restoreGenerateTriggerFocus, types, labels, onGenerate }: {
   genMenuOpen: boolean; setGenMenuOpen: (v: boolean) => void; generateTriggerRef: Ref<HTMLButtonElement>; pending: boolean;
   restoreGenerateTriggerFocus: (event: Event) => void; types: CardType[]; labels: Record<CardType, string>; onGenerate: (type: CardType) => void;
-}) { return (<div className="csa-generate-wrap">
+}) { const { container: portalContainer } = useOverlayScope(); return (<div className="csa-generate-wrap">
       <DropdownMenu.Root open={genMenuOpen} onOpenChange={setGenMenuOpen} modal={false}>
         <DropdownMenu.Trigger asChild>
           <button
@@ -60,7 +61,7 @@ export function SelectionGenerateAction({ genMenuOpen, setGenMenuOpen, generateT
             <ChevronDown aria-hidden="true" className="csa-caret" />
           </button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
+        <DropdownMenu.Portal container={portalContainer}>
           <DropdownMenu.Content
             className="csa-gen-menu"
             sideOffset={5}

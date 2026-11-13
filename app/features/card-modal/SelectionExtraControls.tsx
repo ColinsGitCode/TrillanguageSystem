@@ -1,13 +1,15 @@
+import { useOverlayScope } from '../../components/overlays/OverlayScope';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { BookOpen, MoreHorizontal, Search } from 'lucide-react';
 import { useRef, type Ref } from 'react';
 export function SelectionMoreActions({ hasPronunciation, readOnly, onPronunciation, onKnowledge, onNote, triggerRef }: {
   hasPronunciation: boolean; readOnly: boolean; onPronunciation: () => void; onKnowledge: () => void; onNote: () => void; triggerRef: Ref<HTMLButtonElement>;
 }) {
+  const { container: portalContainer } = useOverlayScope();
   const afterCloseRef = useRef<(() => void) | null>(null);
   return <DropdownMenu.Root modal={false}>
     <DropdownMenu.Trigger asChild><button ref={triggerRef} type="button" className="csa-icon-action" aria-label="更多学习操作" title="更多学习操作"><MoreHorizontal aria-hidden="true" /></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content className="csa-gen-menu" sideOffset={5} onCloseAutoFocus={(event) => {
+    <DropdownMenu.Portal container={portalContainer}><DropdownMenu.Content className="csa-gen-menu" sideOffset={5} onCloseAutoFocus={(event) => {
       const action = afterCloseRef.current;
       afterCloseRef.current = null;
       if (!action) return;

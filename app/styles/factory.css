@@ -362,3 +362,5 @@
 }
 .primary-button:not(:disabled):active,
 .file-card:not(.is-pending):active { transform: scale(.985); }
+
+textarea[data-auto-size="native"] { field-sizing: content; height: auto; }

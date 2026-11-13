@@ -70,10 +70,10 @@ function QueueRow({ entry }: { entry: QueueEntry }) {
   );
 }
 
-function TodayLearningShell({ children }: { children: React.ReactNode }) {
+function TodayLearningShell({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
   return (
     <ProductShell active="today" title="今日学习">
-      <OnboardingChecklist />
+      <OnboardingChecklist compact={compact} />
       {children}
     </ProductShell>
   );
@@ -119,7 +119,7 @@ export function TodayLearningPage() {
 
   if (loading) {
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <PageState
           variant="loading"
           eyebrow="今日学习"
@@ -134,7 +134,7 @@ export function TodayLearningPage() {
   if (planQuery.isError || queueQuery.isError || sessionQuery.isError) {
     const error = planQuery.error || queueQuery.error || sessionQuery.error;
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <PageState
           variant="error"
           eyebrow="今日学习"
@@ -160,7 +160,7 @@ export function TodayLearningPage() {
     const reviewed = activeSession.reviewSummary.total;
     const timeZone = planQuery.data?.profile.timeZone || 'Asia/Tokyo';
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <section className="surface learning-recovery" data-testid="learning-stale-session">
           <History aria-hidden="true" />
           <div>
@@ -195,7 +195,7 @@ export function TodayLearningPage() {
   if (!plan) {
     const onlyPending = planQuery.data?.scopePreview.studyItemCount === 0 && (unresolved + quarantined) > 0;
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <section className="surface learning-empty" data-testid="learning-no-plan">
           <CalendarClock aria-hidden="true" />
           <p className="eyebrow">第一个学习日</p>
@@ -211,12 +211,12 @@ export function TodayLearningPage() {
   }
 
   if (plan.status === 'paused') {
-    return <TodayLearningShell><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><p className="eyebrow">计划已暂停</p><h1>学习计划已暂停</h1><p>历史记录和调度状态都已保留。恢复后再生成新的今日队列。</p><button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 查看学习计划</button></section></TodayLearningShell>;
+    return <TodayLearningShell compact={Boolean(activeSession)}><section className="surface learning-empty"><CalendarClock aria-hidden="true" /><p className="eyebrow">计划已暂停</p><h1>学习计划已暂停</h1><p>历史记录和调度状态都已保留。恢复后再生成新的今日队列。</p><button className="learning-primary-button" type="button" onClick={() => navigate('/learn/plan')}><Settings2 aria-hidden="true" /> 查看学习计划</button></section></TodayLearningShell>;
   }
 
   if (!queue) {
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <section className="surface learning-empty">
           <CalendarClock aria-hidden="true" />
           <p className="eyebrow">今日队列</p>
@@ -238,7 +238,7 @@ export function TodayLearningPage() {
 
   if (queue.status === 'completed' || (!metrics.unfinished.length && queue.progress.actionCount > 0)) {
     return (
-      <TodayLearningShell>
+      <TodayLearningShell compact={Boolean(activeSession)}>
         <section className="learning-page learning-complete" data-testid="learning-complete">
           <CheckCircle2 aria-hidden="true" />
           <p className="eyebrow">今日完成 · {queue.learningDay}</p>
@@ -251,7 +251,7 @@ export function TodayLearningPage() {
   }
 
   return (
-    <TodayLearningShell>
+    <TodayLearningShell compact={Boolean(activeSession)}>
       <div className="learning-page" data-testid="today-learning-page">
         <PageHeader
           className="learning-today-head"

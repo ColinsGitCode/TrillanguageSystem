@@ -22,6 +22,8 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 
 当前实施与设计入口：
 
+- [Features/Modern_Web_Guidance_Frontend_Interaction_Design.md](Features/Modern_Web_Guidance_Frontend_Interaction_Design.md)：现代 Web 前端交互专题方案；**A/B/C/D 代码已实施并部署，B 原生弹层默认关闭、人工兼容验收待完成**；保留固定 MWG/MDN 来源、设计时证据及采用/回退合同，不替代既有领域基线；
+- [TestReports/2026-11-13-modern-web-guidance-abcd.md](TestReports/2026-11-13-modern-web-guidance-abcd.md)：A/B/C/D 实施与正式发布报告；记录 653 项单元、125 项最终专项浏览器测试、基线同现的集成失败、性能边界、生产零业务写入验收、备份及镜像回退；发布快照与后续 Git 提交分别记录；
 - ../README.md：启动与运行；
 - ../CLAUDE.md：当前架构索引；
 - Architecture/Fullstack_Migration_React_Router.md：正式架构迁移基线；
