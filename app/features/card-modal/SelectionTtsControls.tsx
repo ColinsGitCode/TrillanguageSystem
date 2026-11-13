@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CircleAlert, LoaderCircle, RotateCcw, Square, Volume2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '../../lib/api/client';
@@ -25,9 +26,11 @@ function errorMessage(error: unknown) {
 export function SelectionTtsControls({
   phrase,
   languageHint,
+  feedbackHost,
 }: {
   phrase: string;
   languageHint?: SelectionTtsLanguage | null;
+  feedbackHost: HTMLElement | null;
 }) {
   const configQuery = useQuery({
     queryKey: ['selection-tts', 'config'],
@@ -188,6 +191,7 @@ export function SelectionTtsControls({
         <option value="1">1.0×</option>
         <option value="1.2">1.2×</option>
       </select>
+      {feedbackHost && createPortal(<>
       {(state === 'loading' || state === 'error' || message) && (
         <span className={`csa-tts-status${state === 'error' ? ' is-error' : ''}`} role="status">
           {busy && state === 'loading' ? '发音服务正忙，正在排队…' : message}
@@ -220,6 +224,7 @@ export function SelectionTtsControls({
           </button>
         </span>
       )}
+      </>, feedbackHost)}
     </span>
   );
 }

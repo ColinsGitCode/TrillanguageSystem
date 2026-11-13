@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -25,6 +26,8 @@ import type {
 } from '../factory/factory-api';
 import type { CardSelection, CardType } from '../factory/types';
 import { ApiError } from '../../lib/api/client';
+import { DialogSurface } from '../../components/overlays';
+import { isolateDialogBackground } from '../../components/overlays/focus-management';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
 import { markUiInteractionEnd } from '../../lib/performance';
 import { createAnchor, resolveAnchor } from './annotation-anchor.mjs';
@@ -211,6 +214,8 @@ export function CardModal({
 }: Props) {
   const queryClient = useQueryClient();
   const onCloseRef = useRef(onClose);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const tabsId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardAudio = useExclusiveAudio();
@@ -253,6 +258,8 @@ export function CardModal({
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [knowledgeDraft, setKnowledgeDraft] = useState<KnowledgeLookupDraft | null>(null);
   const [pronunciationDetailTokenKey, setPronunciationDetailTokenKey] = useState<string | null>(null);
+  const overlayStateRef = useRef({ toolbar, confirmDelete, knowledgeDraft, noteDraft });
+  overlayStateRef.current = { toolbar, confirmDelete, knowledgeDraft, noteDraft };
   const toastTimerRef = useRef<number | null>(null);
   const annotationStateRef = useRef<{
     target: AnnotationTarget;
@@ -380,23 +387,31 @@ export function CardModal({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
+    const restoreBackground = backdropRef.current ? isolateDialogBackground(backdropRef.current) : () => {};
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      const target = event.target instanceof Element ? event.target : null;
+      // The nested confirmation owns both Tab and Escape, even with body portals.
+      if (overlayStateRef.current.confirmDelete || target?.closest('.note-exit-confirm')) return;
       if (event.key === 'Escape') {
-        const target = event.target instanceof Element ? event.target : null;
         // Radix menus are portaled outside the dialog. Let their own Escape and
         // focus-restoration contract run before considering the dialog close.
         if (target?.closest('.csa-gen-menu, .note-exit-confirm')) return;
         if (target?.closest('.manual-tag-dialog')) return;
         if (target?.closest('.pronunciation-popover')) return;
-        if (target?.closest('.card-knowledge-inspector')) {
+        if (overlayStateRef.current.knowledgeDraft) {
           event.preventDefault();
           setKnowledgeDraft(null);
           lookupTriggerRef.current?.focus({ preventScroll: true });
           return;
         }
         if (target?.closest('.csa-tts-language')) return;
-        if (target?.closest('.card-selection-toolbar')) {
+        if (overlayStateRef.current.noteDraft && !target?.closest('.card-selection-toolbar')) {
+          event.preventDefault();
+          onCloseRef.current();
+          return;
+        }
+        if (overlayStateRef.current.toolbar) {
           event.preventDefault();
           setToolbar(null);
           contentRef.current?.focus({ preventScroll: true });
@@ -410,7 +425,7 @@ export function CardModal({
       const dialog = closeRef.current?.closest('[role="dialog"]');
       const focusable = Array.from(dialog?.querySelectorAll<HTMLElement>(
         'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
-      ) || []).filter((node) => node.offsetParent !== null);
+      ) || []).filter((node) => node.tabIndex >= 0 && node.offsetParent !== null);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -426,10 +441,18 @@ export function CardModal({
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
+      restoreBackground();
       cardAudio.stop();
       previous?.focus({ preventScroll: true });
     };
   }, [cardAudio.stop, restoreFocusTo]);
+
+  const dismissDelete = () => {
+    setConfirmDelete(false);
+    window.requestAnimationFrame(() => {
+      backdropRef.current?.querySelector<HTMLButtonElement>('[data-testid="card-more-menu-trigger"]')?.focus({ preventScroll: true });
+    });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => factoryApi.deleteRecord(cardQuery.data?.record || null, selection),
@@ -457,27 +480,45 @@ export function CardModal({
       if (!node) return;
       const viewportPadding = 8;
       const dimensions = node.getBoundingClientRect();
+      const range = selectedRangeRef.current;
+      let anchorRect = range?.commonAncestorContainer.isConnected ? range.getBoundingClientRect() : null;
+      if (toolbar.annotationId && contentRef.current) {
+        const fragments = Array.from(contentRef.current.querySelectorAll<HTMLElement>('[data-annotation-id]'))
+          .filter((element) => element.dataset.annotationId === toolbar.annotationId)
+          .map((element) => element.getBoundingClientRect()).filter((rect) => rect.width > 0);
+        if (fragments.length) {
+          const left = Math.min(...fragments.map((rect) => rect.left));
+          const top = Math.min(...fragments.map((rect) => rect.top));
+          anchorRect = new DOMRect(left, top,
+            Math.max(...fragments.map((rect) => rect.right)) - left,
+            Math.max(...fragments.map((rect) => rect.bottom)) - top);
+        }
+      }
       const halfWidth = dimensions.width / 2;
       const minimum = viewportPadding + halfWidth;
       const maximum = window.innerWidth - viewportPadding - halfWidth;
       setToolbar((current) => {
         if (!current) return current;
+        const anchorLeft = anchorRect?.width ? anchorRect.left + anchorRect.width / 2 : current.anchorLeft;
+        const anchorTop = anchorRect?.width ? anchorRect.top : current.anchorTop;
+        const anchorBottom = anchorRect?.width ? anchorRect.bottom : current.anchorBottom;
         const left = minimum > maximum
           ? window.innerWidth / 2
-          : Math.min(maximum, Math.max(minimum, current.anchorLeft));
-        const aboveSpace = current.anchorTop - viewportPadding * 2;
-        const belowSpace = window.innerHeight - current.anchorBottom - viewportPadding * 2;
+          : Math.min(maximum, Math.max(minimum, anchorLeft));
+        const aboveSpace = anchorTop - viewportPadding * 2;
+        const belowSpace = window.innerHeight - anchorBottom - viewportPadding * 2;
         const placeBelow = aboveSpace < dimensions.height && belowSpace > aboveSpace;
-        const anchorTop = placeBelow ? current.anchorBottom : current.anchorTop;
+        const placementTop = placeBelow ? anchorBottom : anchorTop;
         const minimumTop = placeBelow ? 0 : dimensions.height + (viewportPadding * 2);
         const maximumTop = placeBelow
           ? window.innerHeight - dimensions.height - (viewportPadding * 2)
           : window.innerHeight - viewportPadding;
         const top = minimumTop > maximumTop
           ? window.innerHeight / 2
-          : Math.min(maximumTop, Math.max(minimumTop, anchorTop));
+          : Math.min(maximumTop, Math.max(minimumTop, placementTop));
         return Math.abs(current.left - left) > 0.5 || Math.abs(current.top - top) > 0.5 || current.placeBelow !== placeBelow
-          ? { ...current, left, top, placeBelow }
+          || Math.abs(current.anchorLeft - anchorLeft) > 0.5 || Math.abs(current.anchorTop - anchorTop) > 0.5 || Math.abs(current.anchorBottom - anchorBottom) > 0.5
+          ? { ...current, left, top, placeBelow, anchorLeft, anchorTop, anchorBottom }
           : current;
       });
     };
@@ -486,12 +527,16 @@ export function CardModal({
       ? new ResizeObserver(clampToViewport)
       : null;
     if (resizeObserver && toolbarRef.current) resizeObserver.observe(toolbarRef.current);
+    if (resizeObserver && contentRef.current) resizeObserver.observe(contentRef.current);
     window.addEventListener('resize', clampToViewport);
+    window.visualViewport?.addEventListener('resize', clampToViewport);
     return () => {
       resizeObserver?.disconnect();
       window.removeEventListener('resize', clampToViewport);
+      window.visualViewport?.removeEventListener('resize', clampToViewport);
     };
   }, [
+    toolbar?.annotationId,
     toolbar?.anchorLeft,
     toolbar?.left,
     toolbar?.phrase,
@@ -937,10 +982,10 @@ export function CardModal({
   };
 
   const handleContentContextMenuCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
+    const claimContextMenu = () => { event.preventDefault(); event.stopPropagation(); };
     const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]');
     if (marker?.dataset.annotationId) {
+      claimContextMenu();
       activateAnnotation(marker.dataset.annotationId, true);
       return;
     }
@@ -949,12 +994,14 @@ export function CardModal({
 
     const current = buildSelectionCandidate(container);
     if (current && ((event.clientX === 0 && event.clientY === 0) || selectionRangeContainsPoint(current.range, event.clientX, event.clientY))) {
+      claimContextMenu();
       window.requestAnimationFrame(() => captureSelection(true));
       return;
     }
 
     const storedRange = selectedRangeRef.current;
     if (storedRange && selectionRangeContainsPoint(storedRange, event.clientX, event.clientY)) {
+      claimContextMenu();
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(storedRange.cloneRange());
@@ -964,12 +1011,14 @@ export function CardModal({
 
     const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');
     if (token && selectPronunciationToken(token)) {
+      claimContextMenu();
       window.requestAnimationFrame(() => captureSelection(true, true));
       return;
     }
 
     const range = buildWordRangeAtPoint(container, event.clientX, event.clientY);
     if (range) {
+      claimContextMenu();
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);
@@ -977,14 +1026,7 @@ export function CardModal({
       return;
     }
 
-    window.getSelection()?.removeAllRanges();
-    selectedRangeRef.current = null;
-    selectedAnchorRef.current = null;
-    selectedTextRef.current = '';
-    originalScopeAnchorRef.current = null;
-    setHasSelection(false);
-    setToolbar(null);
-    event.stopPropagation();
+    // Keep the browser's menu and existing selection when point APIs are unavailable.
   };
 
   const plainCardContent = renderedHtml ? (
@@ -994,7 +1036,7 @@ export function CardModal({
       data-testid="react-card-content"
       tabIndex={0}
       aria-label="学习卡片正文，可选择文字后操作"
-      onMouseUp={() => captureSelection(false)}
+      onMouseUp={(event) => { if (event.button === 0) captureSelection(false); }}
       onKeyDown={(event) => {
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
           event.preventDefault(); window.requestAnimationFrame(() => captureSelection(true));
@@ -1029,7 +1071,7 @@ export function CardModal({
   ) : null;
 
   return (
-    <div className="card-modal-backdrop" data-testid="react-card-modal" onMouseDown={(event) => {
+    <div ref={backdropRef} className="card-modal-backdrop" data-testid="react-card-modal" onMouseDown={(event) => {
       if (event.target === event.currentTarget) { event.preventDefault(); requestNoteExit('card'); }
     }}>
       <section className="react-card-modal" role="dialog" aria-modal="true" aria-labelledby="react-card-title">
@@ -1049,9 +1091,15 @@ export function CardModal({
               </Suspense>
             )}
           </div>
-          <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
-            <button type="button" role="tab" aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
+          <nav className="card-modal-tabs" aria-label="学习卡片视图" role="tablist" onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const next = event.key === 'Home' ? 'content' : event.key === 'End' ? 'intel' : tab === 'content' ? 'intel' : 'content';
+            setTab(next);
+            event.currentTarget.querySelector<HTMLButtonElement>(`[data-card-tab="${next}"]`)?.focus();
+          }}>
+            <button id={`${tabsId}-content`} data-card-tab="content" type="button" role="tab" aria-controls={`${tabsId}-content-panel`} tabIndex={tab === 'content' ? 0 : -1} aria-selected={tab === 'content'} className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>学习内容</button>
+            <button id={`${tabsId}-intel`} data-card-tab="intel" type="button" role="tab" aria-controls={`${tabsId}-intel-panel`} tabIndex={tab === 'intel' ? 0 : -1} aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
           </nav>
           <div className="card-head-actions">
             {tab === 'content' && (
@@ -1102,6 +1150,7 @@ export function CardModal({
         <div ref={setScrollRoot} className="react-card-scroll" onScroll={() => {
           setToolbar(null);
         }}>
+          <div role="tabpanel" id={`${tabsId}-content-panel`} aria-labelledby={`${tabsId}-content`} tabIndex={0} hidden={tab !== 'content'}>
           {cardQuery.isLoading && <div className="modal-state">正在读取 Markdown…</div>}
           {cardQuery.isError && <div className="modal-state error">无法读取卡片内容。</div>}
           {tab === 'content' && renderedHtml && (
@@ -1126,12 +1175,15 @@ export function CardModal({
               </div>
             </div>
           )}
+          </div>
+          <div role="tabpanel" id={`${tabsId}-intel-panel`} aria-labelledby={`${tabsId}-intel`} tabIndex={0} hidden={tab !== 'intel'}>
           {tab === 'intel' && (
             <Suspense fallback={<div className="modal-panel-loading" role="status">正在载入生成信息…</div>}>
               <DeferredCardEngagementSummary generationId={generationId ? Number(generationId) : null} />
               <DeferredIntelPanel record={cardQuery.data?.record || null} />
             </Suspense>
           )}
+          </div>
         </div>
 
         {tab === 'content' && toolbar && (
@@ -1209,7 +1261,7 @@ export function CardModal({
                   <Copy aria-hidden="true" />复制
                 </button>
                 <Suspense fallback={<span className="csa-tool-loading" aria-label="正在载入朗读工具" />}>
-                  <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} />
+                  <DeferredSelectionTtsControls phrase={toolbar.phrase} languageHint={toolbar.language} feedbackHost={detailHost} />
                 </Suspense>
                 <Suspense fallback={null}><DeferredSelectionMoreActions hasPronunciation={Boolean(toolbar.pronunciationToken)} readOnly={readOnly}
                   triggerRef={lookupTriggerRef} onKnowledge={openKnowledgeLookup} onNote={() => openNote()}
@@ -1288,17 +1340,18 @@ export function CardModal({
         {toast && <div className="card-selection-toast" role="status">{toast}</div>}
 
         {confirmDelete && !readOnly && (
-          <div className="delete-confirm" role="alertdialog" aria-label="确认删除卡片">
+          <DialogSurface role="alertdialog" ariaLabel="确认删除卡片" size="small" className="card-delete-confirm"
+            busy={deleteMutation.isPending} onClose={dismissDelete} restoreFocus={false} lockBodyScroll={false}>
             <strong>删除此学习卡片？</strong>
             <p>卡片、音频和关联记录都会被删除。</p>
             {deleteMutation.isError && <p className="form-error">删除失败，请重试。</p>}
             <div>
-              <button type="button" autoFocus onClick={() => setConfirmDelete(false)}>取消</button>
+              <button type="button" data-dialog-initial-focus disabled={deleteMutation.isPending} onClick={dismissDelete}>取消</button>
               <button className="danger-button" type="button" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
                 {deleteMutation.isPending ? '删除中…' : '确认删除'}
               </button>
             </div>
-          </div>
+          </DialogSurface>
         )}
       </section>
     </div>

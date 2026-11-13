@@ -313,7 +313,7 @@ export function PronunciationCardContent({
         data-testid="react-card-content"
         tabIndex={0}
         aria-label="学习卡片正文，可选择文字后操作"
-        onMouseUp={() => onCaptureSelection(false)}
+        onMouseUp={(event) => { if (event.button === 0) onCaptureSelection(false); }}
         onClick={onContentClick}
         onMouseOver={(event) => {
           const token = (event.target as HTMLElement).closest<HTMLElement>('.pronunciation-token');

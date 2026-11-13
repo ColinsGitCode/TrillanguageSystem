@@ -14,6 +14,7 @@ export function DialogSurface({
   closeOnBackdrop = false,
   closeOnEscape = true,
   restoreFocus = true,
+  lockBodyScroll = true,
   closeLabel,
   backdropTestId = 'dialog-backdrop',
 }: {
@@ -28,6 +29,7 @@ export function DialogSurface({
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   restoreFocus?: boolean;
+  lockBodyScroll?: boolean;
   closeLabel?: string;
   backdropTestId?: string;
 }) {
@@ -46,7 +48,7 @@ export function DialogSurface({
 
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (lockBodyScroll) document.body.style.overflow = 'hidden';
 
     const focusFrame = window.requestAnimationFrame(() => {
       const preferred = surface.querySelector<HTMLElement>('[data-dialog-initial-focus]');
@@ -85,7 +87,7 @@ export function DialogSurface({
     return () => {
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (lockBodyScroll) document.body.style.overflow = previousOverflow;
       if (restoreFocus && previousFocus?.isConnected) {
         window.requestAnimationFrame(() => {
           const active = document.activeElement;
@@ -95,7 +97,7 @@ export function DialogSurface({
         });
       }
     };
-  }, [closeOnEscape, restoreFocus]);
+  }, [closeOnEscape, restoreFocus, lockBodyScroll]);
 
   const requestClose = () => {
     if (!busy) onClose();

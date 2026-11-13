@@ -24,10 +24,18 @@ export type SelectionCandidate = {
 };
 
 function caretRangeFromPoint(document: Document, clientX: number, clientY: number): Range | null {
-  const chromiumDocument = document as Document & {
+  const pointDocument = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
   };
-  return chromiumDocument.caretRangeFromPoint?.(clientX, clientY) || null;
+  const position = pointDocument.caretPositionFromPoint?.(clientX, clientY);
+  if (position) {
+    const range = document.createRange();
+    range.setStart(position.offsetNode, position.offset);
+    range.collapse(true);
+    return range;
+  }
+  return pointDocument.caretRangeFromPoint?.(clientX, clientY) || null;
 }
 
 function isWordCharacter(value: string): boolean {

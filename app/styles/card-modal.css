@@ -192,11 +192,11 @@
 .intel-raw[open] summary { margin-bottom: 10px; }
 .intel-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; color: var(--color-obs-text); background: var(--color-obs-bg); border-radius: var(--radius-md); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font-mono); }
 
-.delete-confirm { position: absolute; top: 64px; right: 18px; z-index: 4; width: min(340px, calc(100% - 36px)); padding: 16px; background: var(--color-bg-elevated); border: 1px solid var(--color-danger); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
-.delete-confirm p { color: var(--color-text-secondary); }
-.delete-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
-.delete-confirm button { min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); cursor: pointer; }
-.delete-confirm .danger-button { color: white; background: var(--color-danger); border-color: var(--color-danger); }
+.card-delete-confirm { padding: 24px; border-color: var(--color-danger); }
+.card-delete-confirm p { color: var(--color-text-secondary); }
+.card-delete-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
+.card-delete-confirm button { min-height: 36px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); cursor: pointer; }
+.card-delete-confirm .danger-button { color: white; background: var(--color-danger); border-color: var(--color-danger); }
 
 @media (max-width: 1080px) {
   .card-content-layout.has-outline { grid-template-columns: minmax(0, 760px); }
@@ -592,12 +592,9 @@
 }
 .card-selection-toolbar .csa-tts-status,
 .card-selection-toolbar .csa-tts-language {
-  position: absolute;
-  z-index: 15;
-  top: calc(100% + 7px);
-  left: 50%;
-  min-width: 190px;
-  transform: translateX(-50%);
+  display: block;
+  margin: 8px 10px;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
@@ -607,8 +604,7 @@
 }
 .card-selection-toolbar[data-placement="above"] .csa-tts-status,
 .card-selection-toolbar[data-placement="above"] .csa-tts-language {
-  top: auto;
-  bottom: calc(100% + 7px);
+  position: static;
 }
 .card-selection-toolbar .csa-tts-status {
   padding: 7px 9px;
@@ -620,7 +616,7 @@
 }
 .card-selection-toolbar .csa-tts-language {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   padding: 8px;
 }
@@ -636,7 +632,7 @@
   border: 1px solid var(--color-border);
 }
 .card-selection-toolbar .csa-tts-language button:last-child {
-  grid-column: 1 / -1;
+  color: var(--color-text-secondary);
 }
 .card-selection-toolbar .is-spinning {
   animation: csa-tts-spin .8s linear infinite;

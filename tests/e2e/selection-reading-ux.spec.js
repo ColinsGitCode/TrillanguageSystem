@@ -490,3 +490,171 @@ test('UX21 adding a note to an existing highlight updates it rather than creatin
   await mark.click();
   await expect(page.getByRole('textbox', { name: '阅读笔记' })).toHaveValue('附加到已有标记');
 });
+
+for (const viewport of [{ width: 1440, height: 1000 }, { width: 1024, height: 768 }]) {
+  test(`UX22 language confirmation is visible and hit-testable at ${viewport.width}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    let synthesisRequests = 0;
+    await page.route('**/api/selection-tts', (route) => {
+      synthesisRequests++;
+      return route.fulfill({ status: 503, json: { error: 'Test provider unavailable' } });
+    });
+    await openSelection(page);
+    await page.getByTestId('react-card-content').evaluate((container) => {
+      const text = document.createElement('p');
+      text.textContent = '纯汉字';
+      container.prepend(text);
+      text.scrollIntoView({ block: 'center' });
+    });
+    await selectVisibleText(page, '纯汉字');
+    await page.getByRole('button', { name: '朗读选区', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '选择朗读语言' });
+    await expect(dialog).toBeVisible();
+    for (const label of ['English', '日本語', '取消']) {
+      const button = dialog.getByRole('button', { name: label, exact: true });
+      await expect(button).toBeInViewport({ ratio: 1 });
+      await expect.poll(() => button.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      })).toBeTruthy();
+    }
+    expect(synthesisRequests).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '朗读选区', exact: true })).toBeFocused();
+    await expect(toolbar(page)).toBeVisible();
+  });
+}
+
+test('UX23 Escape dismisses a mouse selection before the card', async ({ page }) => {
+  await openSelection(page);
+  await page.getByTestId('react-card-content').evaluate((node) => node.focus({ preventScroll: true }));
+  await expect(toolbar(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(toolbar(page)).toHaveCount(0);
+  await expect(page.getByTestId('react-card-modal')).toBeVisible();
+  await expect(page.getByTestId('react-card-content')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('react-card-modal')).toHaveCount(0);
+});
+
+test('UX24 delete confirmation traps Tab and restores focus without closing the card', async ({ page }) => {
+  await openSelection(page);
+  await page.getByTestId('card-more-menu-trigger').click();
+  await page.getByRole('menuitem', { name: '删除这张卡…' }).click();
+  const dialog = page.getByRole('alertdialog', { name: '确认删除卡片' });
+  const cancel = dialog.getByRole('button', { name: '取消', exact: true });
+  const confirm = dialog.getByRole('button', { name: '确认删除', exact: true });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('react-card-modal')).toBeVisible();
+  await expect(page.getByTestId('card-more-menu-trigger')).toBeFocused();
+});
+
+test('UX25 toolbar remeasures the selection when the desktop viewport changes', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openSelection(page);
+  const before = await toolbar(page).boundingBox();
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect.poll(() => toolbar(page).evaluate((node) => {
+    const selection = window.getSelection();
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const expected = Math.max(8 + box.width / 2, Math.min(window.innerWidth - 8 - box.width / 2, rect.x + rect.width / 2));
+    return Math.abs(box.x + box.width / 2 - expected);
+  })).toBeLessThan(2);
+  const after = await toolbar(page).boundingBox();
+  expect(Math.abs(after.x - before.x)).toBeGreaterThan(50);
+  await expect(toolbar(page)).toBeInViewport({ ratio: 1 });
+});
+
+test('UX26 tabs have roving focus and associated panels; background stays inert', async ({ page }) => {
+  await openSelection(page);
+  const contentTab = page.getByRole('tab', { name: '学习内容' });
+  const intelTab = page.getByRole('tab', { name: '生成信息' });
+  await contentTab.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(intelTab).toBeFocused();
+  await expect(intelTab).toHaveAttribute('aria-selected', 'true');
+  await expect(contentTab).toHaveAttribute('tabindex', '-1');
+  await expect(page.getByRole('tabpanel', { name: '生成信息' })).toBeVisible();
+  for (const tab of [contentTab, intelTab]) {
+    expect(await tab.evaluate((node) => document.getElementById(node.getAttribute('aria-controls'))?.getAttribute('role'))).toBe('tabpanel');
+  }
+  await page.keyboard.press('Home');
+  await expect(contentTab).toBeFocused();
+  await expect(page.getByRole('tabpanel', { name: '学习内容' })).toBeVisible();
+  await page.keyboard.press('End');
+  await expect(intelTab).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(contentTab).toBeFocused();
+  const isolation = await page.evaluate(() => {
+    const link = [...document.querySelectorAll('a[href]')].find((node) => node.closest('[inert]'));
+    if (!link) return { found: false, focused: false };
+    window.__reviewBackgroundLink = link;
+    link.focus();
+    return { found: true, focused: document.activeElement === link };
+  });
+  expect(isolation).toEqual({ found: true, focused: false });
+  await page.getByRole('button', { name: '关闭学习卡片' }).click();
+  expect(await page.evaluate(() => Boolean(window.__reviewBackgroundLink?.closest('[inert]')))).toBeFalsy();
+});
+
+for (const unavailable of ['caretRangeFromPoint', 'caretPositionFromPoint']) {
+  test(`UX27 right-click word selection works without ${unavailable}`, async ({ page }) => {
+    await openSelection(page);
+    const hasFallback = await page.evaluate((method) => typeof document[method === 'caretRangeFromPoint' ? 'caretPositionFromPoint' : 'caretRangeFromPoint'] === 'function', unavailable);
+    test.skip(!hasFallback, 'This engine has no alternate caret API; UX28 covers its native-menu fallback');
+    await page.getByTestId('react-card-content').evaluate((node) => node.focus({ preventScroll: true }));
+    await page.keyboard.press('Escape');
+    const point = await page.getByTestId('react-card-content').evaluate((container, method) => {
+      Object.defineProperty(document, method, { configurable: true, value: undefined });
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const index = (node.textContent || '').indexOf('Playwright');
+        if (index < 0 || !node.parentElement.getClientRects().length) continue;
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + 10);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      }
+      throw new Error('Fixture word not found');
+    }, unavailable);
+    await page.mouse.click(point.x, point.y, { button: 'right' });
+    await expect(preview(page)).toHaveAttribute('title', 'Playwright');
+  });
+}
+
+test('UX28 missing point APIs leave the native menu and existing selection intact', async ({ page }) => {
+  await openSelection(page);
+  const result = await page.getByTestId('react-card-content').evaluate((container) => {
+    for (const method of ['caretRangeFromPoint', 'caretPositionFromPoint']) {
+      Object.defineProperty(document, method, { configurable: true, value: undefined });
+    }
+    const before = window.getSelection().toString();
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    container.dispatchEvent(event);
+    return { before, after: window.getSelection().toString(), prevented: event.defaultPrevented };
+  });
+  expect(result).toEqual({ before: 'deterministic', after: 'deterministic', prevented: false });
+  await expect(toolbar(page)).toBeVisible();
+});
+
+test('UX29 deleting the fixture restores page scrolling and background interaction', async ({ page }) => {
+  await openSelection(page);
+  await page.getByTestId('card-more-menu-trigger').click();
+  await page.getByRole('menuitem', { name: '删除这张卡…' }).click();
+  await page.getByRole('alertdialog', { name: '确认删除卡片' }).getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(page.getByTestId('react-card-modal')).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  expect(await page.locator('[inert]').count()).toBe(0);
+});
