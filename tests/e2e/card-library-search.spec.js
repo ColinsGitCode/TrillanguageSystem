@@ -85,3 +85,32 @@ test('all-card loading and errors are not reported as empty search results', asy
   await page.getByTestId('factory-history-results').getByRole('button', { name: '重试', exact: true }).click();
   await expect(page.getByText('全部卡片中没有匹配结果')).toBeVisible();
 });
+
+test('keyboard scope and IME commit issue only the final all-date search', async ({ page }) => {
+  const terms = [];
+  page.on('request', req => {
+    const url = new URL(req.url());
+    if (url.pathname === '/api/history' && url.searchParams.has('search')) terms.push(url.searchParams.get('search'));
+  });
+  await page.goto('/');
+  const dates = page.getByRole('tab', { name: '日期', exact: true });
+  await dates.focus();
+  await dates.press('End');
+  await expect(page.getByRole('tab', { name: '全部卡片' })).toBeFocused();
+  const box = page.getByRole('searchbox', { name: '搜索全部卡片' });
+  await box.dispatchEvent('compositionstart');
+  await box.fill('に');
+  await box.press('Enter');
+  await page.waitForTimeout(350);
+  expect(terms).toEqual([]);
+  await box.fill('日本語');
+  await box.dispatchEvent('compositionend');
+  await box.press('Enter');
+  await expect.poll(() => terms).toEqual(['日本語']);
+  await box.fill('new');
+  await box.fill('new search');
+  await expect.poll(() => terms).toEqual(['日本語', 'new search']);
+  await page.getByRole('tab', { name: '全部卡片' }).press('Home');
+  await expect(dates).toBeFocused();
+  await expect(page.getByRole('tabpanel', { name: '日期' })).toBeVisible();
+});

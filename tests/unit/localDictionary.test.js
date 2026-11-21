@@ -7,6 +7,31 @@ const { readCatalog } = require('../../services/localGlossary/localDictionaryCat
 const { LocalGlossaryService } = require('../../services/localGlossary/localGlossaryService');
 const localDictionaryDomain = require('../../services/storage/db/localDictionary');
 
+test('catalog statistics isolate cached rows, observe external imports and never cache rolled-back counts', t => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'dict-stats-'));
+  const file = path.join(dir, 'fixture.sqlite');
+  const service = new DatabaseService(file);
+  const writer = require('better-sqlite3')(file);
+  t.after(() => { writer.close(); service.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const read = () => localDictionaryDomain.listSourceStats(service.db);
+  const count = () => read().reduce((sum, row) => sum + row.entryCount, 0);
+  const original = count();
+  assert.ok(original > 0);
+  read()[0].entryCount = -100;
+  assert.equal(count(), original);
+  const remove = 'DELETE FROM local_dictionary_entries WHERE id = (SELECT MIN(id) FROM local_dictionary_entries)';
+  writer.prepare(remove).run();
+  assert.equal(count(), original - 1);
+  assert.throws(service.db.transaction(() => {
+    service.db.prepare(remove).run();
+    assert.equal(count(), original - 2);
+    throw Error('rollback');
+  }), /rollback/);
+  assert.equal(count(), original - 1);
+});
+
 test('loads the versioned local English/Japanese starter dictionary into SQLite', () => {
   const database = new DatabaseService(':memory:');
   try {

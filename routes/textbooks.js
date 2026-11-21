@@ -78,8 +78,8 @@ function route(handler) {
 
 router.use('/api/textbooks', requireEnabled);
 
-router.get('/api/textbooks/courses', route((_req, res) => send(res, {
-  courses: dbService.listTextbookCourses(),
+router.get('/api/textbooks/courses', route((req, res) => send(res, {
+  courses: dbService.listTextbookCourses(req.query.include === 'tracks'),
 })));
 
 router.get('/api/textbooks/courses/:id', route((req, res) => {

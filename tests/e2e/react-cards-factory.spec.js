@@ -72,6 +72,9 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
   test('background queue polling does not move the factory workspace', async ({ page }) => {
     let jobsCalls = 0;
     let releaseSecondRequest = () => {};
+    await page.route('**/api/generation-jobs/summary', (route) => route.fulfill({
+      json: { summary: { queued: 0, running: 1, success: 0, failed: 0 } },
+    }));
     await page.route('**/api/health', (route) => route.fulfill({
       json: { status: 'healthy', system: { criticalOnline: true }, services: [] },
     }));

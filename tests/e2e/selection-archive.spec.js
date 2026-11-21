@@ -37,6 +37,27 @@ test('late initial archive data does not expand all historical months after toda
   await expect(page.getByRole('button', { name: '日期 2026.09.30', exact: true })).toHaveCount(0);
 });
 
+test('cold empty archive waits for both sources and leaves idle job details unfetched', async ({ page }) => {
+  let finish;
+  const gate = new Promise(resolve => { finish = resolve; });
+  let jobs = 0;
+  await page.route('**/api/generation-jobs?limit=30', route => { jobs++; return route.fulfill({ json: { jobs: [] } }); });
+  await page.route('**/api/folders', route => route.fulfill({ json: { folders: [] } }));
+  await page.route('**/api/card-engagement/today', async route => {
+    await gate;
+    await route.fulfill({ json: { learningDay: '2026-11-21', cards: [] } });
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('factory-files-loading')).toBeVisible();
+  await expect(page.getByText('暂无卡片日期')).toHaveCount(0);
+  finish();
+  await expect(page.getByText('还没有学习卡', { exact: true })).toBeVisible();
+  await page.waitForTimeout(1800);
+  expect(jobs).toBe(0);
+  await page.getByTestId('react-queue-status').click();
+  await expect.poll(() => jobs).toBeGreaterThan(0);
+});
+
 for (const [label, cardType] of [['三语卡', 'trilingual'], ['语法卡', 'grammar_ja'], ['场景卡', 'scenario_phrase']]) {
   test(`selection ${cardType} appears in today's archive without reloading or moving its source`, async ({ page, request }, testInfo) => {
     const sourceFiles = (await (await request.get(`/api/folders/${sourceFolder}/files`)).json()).files;

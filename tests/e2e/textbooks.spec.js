@@ -43,7 +43,7 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
   });
 
   test('keeps a course service failure distinct from the first-use empty state', async ({ page }) => {
-    await page.route('**/api/textbooks/courses', (route) => route.fulfill({
+    await page.route('**/api/textbooks/courses?include=tracks', (route) => route.fulfill({
       status: 503,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'fixture unavailable' }),
@@ -165,8 +165,26 @@ test.describe.serial('Textbook Courses SaaS workflow desktop acceptance', () => 
 
   test('restores a deep-linked Track and task across history navigation', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`/textbooks?track=${publishedTrackId}&stage=complete`);
+    const workflows = [];
+    page.on('request', req => {
+      if (/^\/api\/textbooks\/tracks\/\d+\/workflow$/u.test(new URL(req.url()).pathname)) workflows.push(req.url());
+    });
+    await page.goto(`/textbooks?track=${publishedTrackId}`);
+    const directList = page.locator('.textbook-published-list li button');
+    await directList.nth(1).click();
+    await expect(page).toHaveURL(/expression=\d+/u);
+    await page.reload();
+    await expect(directList.nth(1)).toHaveClass(/active/u);
+    expect(workflows).toEqual([]);
+    await expect(page.locator('.textbook-expression-content .pronunciation-token').first()).toBeVisible();
+    await expect(page).toHaveScreenshot('textbook-direct-reading-desktop.png', { animations: 'disabled' });
+    await expect(page.getByTestId(/^manual-tags-textbook_/u)).toHaveCount(0);
+    await page.getByText('管理教材和表达标签', { exact: true }).click();
+    await expect(page.getByRole('group', { name: '整轨标签' }).getByRole('button').first()).toBeVisible();
+    await expect(page.getByRole('group', { name: '当前表达标签' }).getByRole('button').first()).toBeVisible();
+    await page.getByRole('button', { name: '查看发布流程' }).click();
     await expect(page.getByRole('heading', { name: '教材 Track 已可学习' })).toBeVisible();
+    expect(workflows.length).toBeGreaterThan(0);
     const expressionButtons = page.locator('.textbook-published-list li button');
     await expressionButtons.nth(1).click();
     const secondUrl = page.url();

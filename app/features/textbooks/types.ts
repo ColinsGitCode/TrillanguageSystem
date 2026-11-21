@@ -73,6 +73,7 @@ export type TextbookAudio = {
 };
 
 export type TextbookTrack = TextbookTrackSummary & {
+  active_operation_id?: number | null;
   course_key: string;
   course_title: string;
   revision_number: number | null;

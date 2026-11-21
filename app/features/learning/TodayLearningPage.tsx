@@ -167,6 +167,9 @@ export function TodayLearningPage() {
             <p className="eyebrow">未结束会话 · {sessionStartLabel(activeSession.startedAtUtc, timeZone)}</p>
             <h1>上次学习还没有结束</h1>
             <p>已提交 {reviewed} / {sessionTotal} 项评分。未评分内容仍保留，没有产生失败记录。</p>
+            <details className="learning-recovery-preview"><summary>查看今日安排</summary>
+              <p>{queueQuery.data?.queue ? `今日队列共 ${queueQuery.data.queue.entries.length} 项。` : '今日队列尚未生成。'}查看不会结束上次会话。</p>
+            </details>
           </div>
           <div className="learning-recovery-actions">
             <button className="learning-primary-button" type="button" onClick={() => navigate('/learn/session')}>

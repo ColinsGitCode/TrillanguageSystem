@@ -128,7 +128,6 @@ export function KnowledgePointsPage() {
   const [resolutionError, setResolutionError] = useState('');
   const [confirmItem, setConfirmItem] = useState<StudyItem | null>(null);
   const [actionMessage, setActionMessage] = useState('');
-  const resolutionAutoEntryRef = useRef(false);
 
   const availabilityQuery = useQuery({
     queryKey: ['knowledge', 'availability'],
@@ -160,11 +159,14 @@ export function KnowledgePointsPage() {
     queryFn: () => knowledgeApi.resolutionCase(selectedCaseId!),
     enabled: availabilityQuery.isSuccess && selectedCaseId !== null,
   });
-  const planQuery = useQuery({ queryKey: ['learning', 'plan'], queryFn: learningApi.plan });
-  const queueQuery = useQuery({ queryKey: ['learning', 'queue', 'today'], queryFn: learningApi.todayQueue });
+  const planQuery = useQuery({
+    queryKey: ['learning', 'plan'], queryFn: learningApi.plan,
+    enabled: availabilityQuery.isSuccess && Boolean(query.trim() || selectedPointId),
+  });
+  const queueQuery = useQuery({ queryKey: ['learning', 'queue', 'today'], queryFn: learningApi.todayQueue, enabled: Boolean(selectedPointId && !resolutionMode) });
   const intentsQuery = useQuery({
     queryKey: ['learning', 'manual-intents', 'today'],
-    queryFn: learningApi.todayManualIntents,
+    queryFn: learningApi.todayManualIntents, enabled: Boolean(selectedPointId && !resolutionMode),
   });
 
   const studyItemIds = useMemo(() => [...new Set(
@@ -229,13 +231,6 @@ export function KnowledgePointsPage() {
     setResolutionMode(routeMode);
     setSelectedCaseId(routeMode && Number.isInteger(routeId) && routeId > 0 ? routeId : null);
   }, [routeParams]);
-
-  useEffect(() => {
-    if (resolutionAutoEntryRef.current || !resolutionCasesQuery.isSuccess) return;
-    resolutionAutoEntryRef.current = true;
-    if (routeParams.get('mode') === 'resolution' || !resolutionCases.length) return;
-    openResolution(resolutionCases[0].id, true);
-  }, [openResolution, resolutionCases, resolutionCasesQuery.isSuccess, routeParams]);
 
   useEffect(() => {
     if (!resolutionMode || selectedCaseId || !resolutionCases.length) return;

@@ -337,8 +337,8 @@ class DatabaseService {
     return textbooksDomain.importDraft(this.db, payload);
   }
 
-  listTextbookCourses() {
-    return textbooksDomain.listCourses(this.db);
+  listTextbookCourses(includeTracks = false) {
+    return textbooksDomain.listCourses(this.db, includeTracks);
   }
 
   getTextbookCourse(id) {

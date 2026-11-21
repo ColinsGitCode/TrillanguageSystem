@@ -23,6 +23,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { knowledgeApi } from '../knowledge/knowledge-api';
 import { factoryApi } from '../factory/factory-api';
+import { rememberSubmittedJob } from '../factory/queue-cache';
 import type {
   AnnotationColor,
   AnnotationTarget,
@@ -601,7 +602,8 @@ export function CardModal({
         baseFilename: selection.baseName,
       },
     }),
-    onSuccess: async (_data, vars) => {
+    onSuccess: async (data, vars) => {
+      rememberSubmittedJob(queryClient, data.job);
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
       window.getSelection()?.removeAllRanges();
       selectedRangeRef.current = null;

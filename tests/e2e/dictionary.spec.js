@@ -2,6 +2,24 @@
 
 const { test, expect } = require('@playwright/test');
 
+test('counts stay unknown until a successful catalog response, including a real zero', async ({ page }) => {
+  let fail = true;
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/api/local-glossary/catalog', async route => {
+    await gate;
+    return fail ? route.fulfill({ status: 503, json: {} }) : route.fulfill({ json: { catalog: { manual: [], dictionaries: [] } } });
+  });
+  await page.goto('/dictionary');
+  const overview = page.getByRole('region', { name: '词典概览' });
+  await expect(overview.getByText('—', { exact: true })).toHaveCount(3);
+  release();
+  await expect(page.getByText('词典统计暂不可用')).toBeVisible();
+  fail = false;
+  await page.getByRole('button', { name: '重试统计' }).click();
+  await expect(overview.getByText('0', { exact: true })).toHaveCount(3);
+});
+
 test('manages manual dictionary overrides without editing imported providers', async ({ page }) => {
   let entry = null;
   const catalog = {

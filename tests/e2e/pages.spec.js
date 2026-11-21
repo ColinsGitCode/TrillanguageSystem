@@ -129,6 +129,13 @@ test.describe('React page smoke', () => {
 
     await page.goto('/learn');
     await expect(page.getByTestId('learning-stale-session')).toContainText('上次学习还没有结束');
+    const writes = [];
+    page.on('request', req => {
+      if (req.method() !== 'GET' && req.url().includes('/api/learning/')) writes.push(req.url());
+    });
+    await page.getByText('查看今日安排', { exact: true }).click();
+    await expect(page.getByText(/今日队列尚未生成/)).toBeVisible();
+    expect(writes).toEqual([]);
     await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '继续上次学习' })).toBeVisible();
     await expect(page.getByRole('button', { name: '结束上次会话并生成今日队列' })).toBeVisible();

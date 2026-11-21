@@ -220,6 +220,9 @@ test.describe('Knowledge Points unresolved workbench', () => {
     });
 
     await page.goto('/knowledge');
+    await expect(page.getByTestId('knowledge-start-state')).toBeVisible();
+    await expect(page.getByTestId('knowledge-resolution-workbench')).toHaveCount(0);
+    await page.getByRole('button', { name: '待确认 1', exact: true }).click();
     await expect(page.getByTestId('knowledge-resolution-workbench')).toBeVisible();
     await expect(page.getByPlaceholder('搜索待确认项')).toBeVisible();
     await expect(page).toHaveURL(/mode=resolution.*case=91/u);

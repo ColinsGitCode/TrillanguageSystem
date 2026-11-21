@@ -1,5 +1,7 @@
 'use strict';
 
+const sourceStats = new WeakMap();
+
 function mapEntry(row) {
   if (!row) return null;
   return {
@@ -55,6 +57,7 @@ function findEntryByIdentity(db, payload) {
 }
 
 function retirePreviousVersions(db, { sourceId, dictionaryVersion, updatedAtUtc }) {
+  sourceStats.delete(db);
   return db.prepare(`
     UPDATE local_dictionary_entries
     SET status = 'retired', updated_at_utc = @updatedAtUtc
@@ -65,6 +68,7 @@ function retirePreviousVersions(db, { sourceId, dictionaryVersion, updatedAtUtc 
 }
 
 function upsertEntry(db, payload) {
+  sourceStats.delete(db);
   db.prepare(`
     INSERT INTO local_dictionary_entries(
       language, surface_form, normalized_form, lemma, reading, part_of_speech,
@@ -97,7 +101,11 @@ function countEntries(db, dictionaryVersion) {
 }
 
 function listSourceStats(db) {
-  return db.prepare(`
+  // CLI imports use a different connection. Never publish uncommitted statistics.
+  const version = db.pragma('data_version', { simple: true });
+  const cached = sourceStats.get(db);
+  if (!db.inTransaction && cached?.version === version) return cached.rows.map(row => ({ ...row }));
+  const rows = db.prepare(`
     SELECT source_id AS sourceId,
       dictionary_version AS dictionaryVersion,
       language,
@@ -108,6 +116,8 @@ function listSourceStats(db) {
     GROUP BY source_id, dictionary_version, language, status
     ORDER BY status = 'active' DESC, source_id, dictionary_version DESC, language
   `).all().map((row) => ({ ...row, entryCount: Number(row.entryCount) }));
+  if (!db.inTransaction) sourceStats.set(db, { version, rows });
+  return rows.map(row => ({ ...row }));
 }
 
 module.exports = {

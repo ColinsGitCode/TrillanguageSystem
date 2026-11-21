@@ -16,6 +16,7 @@ export function useTextbookWorkflowRoute() {
     return {
       trackId: positiveInteger(params.get('track')),
       stage: validStages.has(stage as WorkflowStage) ? stage as WorkflowStage : null,
+      expressionId: positiveInteger(params.get('expression')),
       taskId: positiveInteger(params.get('task')),
       operationId: positiveInteger(params.get('operation')),
     };
@@ -33,9 +34,11 @@ export function useTextbookWorkflowRoute() {
   const selectTrack = useCallback((trackId: number, replace = false) => update({
     track: trackId,
     stage: null,
+    expression: null,
     task: null,
     operation: null,
   }, replace), [update]);
+  const selectExpression = useCallback((id: number) => update({ expression: id }, true), [update]);
   const selectTask = useCallback((taskId: number | null, replace = false) => update({ task: taskId }, replace), [update]);
   const selectStage = useCallback((stage: WorkflowStage, replace = false) => update({ stage }, replace), [update]);
   const selectOperation = useCallback((operationId: number, replace = false) => update({
@@ -49,9 +52,10 @@ export function useTextbookWorkflowRoute() {
   return useMemo(() => ({
     ...context,
     selectTrack,
+    selectExpression,
     selectTask,
     selectStage,
     selectOperation,
     normalize,
-  }), [context, normalize, selectOperation, selectStage, selectTask, selectTrack]);
+  }), [context, normalize, selectExpression, selectOperation, selectStage, selectTask, selectTrack]);
 }

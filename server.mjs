@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import assets from './lib/clientAssets.js';
 import { createRequestHandler } from '@react-router/express';
 import runtime from './lib/httpRuntime.js';
 
@@ -9,7 +9,7 @@ let reactHandler;
 
 if (production) {
   const build = await import('./build/server/index.js');
-  reactAssetsMiddleware = express.static('build/client', { index: false });
+  reactAssetsMiddleware = assets.clientAssets();
   reactHandler = createRequestHandler({ build, mode: 'production' });
 } else {
   const { createServer: createViteServer } = await import('vite');

@@ -53,7 +53,7 @@ export function DictionaryPage() {
       includeArchived: status !== 'active',
     }),
   });
-  const catalogQuery = useQuery({ queryKey: ['dictionary', 'catalog'], queryFn: dictionaryApi.catalog });
+  const catalogQuery = useQuery({ queryKey: ['dictionary', 'catalog'], queryFn: dictionaryApi.catalog, staleTime: 60_000 });
   const entries = useMemo(() => (entriesQuery.data?.entries || []).filter((entry) => (
     status === 'all' || entry.status === status
   )), [entriesQuery.data?.entries, status]);
@@ -123,10 +123,10 @@ export function DictionaryPage() {
           actions={<button className="dictionary-primary" type="button" onClick={openCreate}><Plus aria-hidden="true" />新建人工词条</button>}
         />
 
-        <section className="dictionary-summary" aria-label="词典概览">
-          <div><BookOpen aria-hidden="true" /><span><strong>{manualCount}</strong><small>人工优先词条</small></span></div>
-          <div><Database aria-hidden="true" /><span><strong>{directCount || '—'}</strong><small>直接日中词条</small></span></div>
-          <div><span className="dictionary-source-count">{activeSources.length}</span><span><strong>本机可用</strong><small>当前词典来源</small></span></div>
+        <section className="dictionary-summary" aria-label="词典概览" aria-busy={catalogQuery.isPending}>
+          <div><BookOpen aria-hidden="true" /><span><strong>{catalogQuery.data ? manualCount : '—'}</strong><small>人工优先词条</small></span></div>
+          <div><Database aria-hidden="true" /><span><strong>{catalogQuery.data ? directCount : '—'}</strong><small>直接日中词条</small></span></div>
+          <div><span className="dictionary-source-count">{catalogQuery.data ? activeSources.length : '—'}</span><span><strong>本机可用</strong><small>当前词典来源</small></span></div>
         </section>
 
         <div className="dictionary-workbench">
@@ -139,6 +139,7 @@ export function DictionaryPage() {
               <li><strong>英中桥接</strong><span>低置信兜底</span></li>
             </ol>
             <div className="dictionary-source-list">
+              {catalogQuery.isError && !catalogQuery.data && <PageState variant="error" title="词典统计暂不可用" description="人工词条仍可单独读取。" compact actions={<button onClick={() => void catalogQuery.refetch()}>重试统计</button>} />}
               {activeSources.map((source) => (
                 <article key={`${source.sourceId}:${source.dictionaryVersion}:${source.language}`}>
                   <strong>{sourceLabel(source.sourceId)}</strong>
@@ -153,8 +154,8 @@ export function DictionaryPage() {
             <header>
               <div><p className="eyebrow">MANUAL OVERRIDES</p><h2>人工词条</h2></div>
               <DataRefreshStatus
-                refreshing={entriesQuery.isFetching || catalogQuery.isFetching}
-                failed={entriesQuery.isError || catalogQuery.isError}
+                refreshing={Boolean((entriesQuery.data && entriesQuery.isFetching) || (catalogQuery.data && catalogQuery.isFetching))}
+                failed={Boolean((entriesQuery.isError && entriesQuery.data) || (catalogQuery.isError && catalogQuery.data))}
                 onRetry={() => void refresh()}
               />
             </header>
@@ -169,7 +170,7 @@ export function DictionaryPage() {
             </div>
             {message && <p className="dictionary-message" role="status">{message}</p>}
             {entriesQuery.isPending ? <PageState variant="loading" title="正在读取人工词条" description="正在从本机 SQLite 读取，不会访问网络。" />
-              : entriesQuery.isError ? <PageState variant="error" title="人工词条读取失败" description="已有词典数据没有改变，可以重试读取。" actions={<button type="button" onClick={() => void entriesQuery.refetch()}>重试</button>} />
+              : entriesQuery.isError && !entriesQuery.data ? <PageState variant="error" title="人工词条读取失败" description="已有词典数据没有改变，可以重试读取。" actions={<button type="button" onClick={() => void entriesQuery.refetch()}>重试</button>} />
                 : entries.length === 0 ? <PageState variant="empty" title="当前筛选下没有人工词条" description="可以新建一个简明中文释义，之后查词会优先使用。" actions={<button type="button" onClick={openCreate}>新建词条</button>} />
                   : <div className="dictionary-table" role="table" aria-label="人工词条列表">
                     <div className="dictionary-table-head" role="row"><span>词语</span><span>中文释义</span><span>消歧 / 可信度</span><span>状态</span><span>操作</span></div>

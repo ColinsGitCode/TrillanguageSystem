@@ -14,7 +14,7 @@ import type {
 } from './types';
 
 export const textbookApi = {
-  courses: () => requestJson<{ success: true; courses: TextbookCourse[] }>('/api/textbooks/courses'),
+  courses: () => requestJson<{ success: true; courses: TextbookCourse[] }>('/api/textbooks/courses?include=tracks'),
   course: (id: number) => requestJson<{ success: true; course: TextbookCourse }>(`/api/textbooks/courses/${id}`),
   track: (id: number) => requestJson<{ success: true; track: TextbookTrack }>(`/api/textbooks/tracks/${id}`),
   workflow: (id: number, operationId?: number | null) => requestJson<{ success: true; workflow: TextbookWorkflow }>(

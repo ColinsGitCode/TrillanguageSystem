@@ -238,6 +238,14 @@ test('textbook imports validate, persist draft rows, and stay out of Cards Facto
   const courses = await api('GET', '/api/textbooks/courses');
   assert.equal(courses.status, 200);
   assert.equal(courses.body.courses.length, 1);
+  assert.equal(Object.hasOwn(courses.body.courses[0], 'tracks'), false);
+  const directory = await api('GET', '/api/textbooks/courses?include=tracks');
+  assert.equal(directory.status, 200);
+  const [summary] = directory.body.courses[0].tracks;
+  assert.equal(summary.id, imported.body.track.id);
+  assert.equal(summary.expression_count, 2);
+  assert.equal(summary.status, 'draft');
+  assert.equal(Object.hasOwn(summary, 'expressions'), false);
   const search = await api('GET', '/api/textbooks/search?q=Get');
   assert.equal(search.status, 200);
   assert.equal(search.body.results.length, 1);

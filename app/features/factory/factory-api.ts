@@ -77,13 +77,13 @@ export const factoryApi = {
   files: (folder: string) => requestJson<{ files: FolderFile[] }>(
     `/api/folders/${encodeURIComponent(folder)}/files`
   ),
-  history: (search = '', page = 1) => {
+  history: (search = '', page = 1, signal?: AbortSignal) => {
     const params = new URLSearchParams({ page: String(page), limit: '20' });
     if (search.trim()) params.set('search', search.trim());
     return requestJson<{
       records: GenerationRecord[];
       pagination: { page: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean };
-    }>(`/api/history?${params}`);
+    }>(`/api/history?${params}`, { signal });
   },
   card: async (selection: CardSelection) => {
     const file = `${selection.baseName}.md`;

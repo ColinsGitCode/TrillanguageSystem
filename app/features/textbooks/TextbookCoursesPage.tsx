@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileCheck2, Images, ListChecks } from 'lucide-react';
 import { ProductShell } from '../../components/ProductShell';
@@ -23,10 +23,12 @@ import { TextbookIntakeTools } from './components/TextbookIntakeTools';
 import { TextbookProcessingView } from './components/TextbookProcessingView';
 import { TextbookPublishedBrowser } from './components/TextbookPublishedBrowser';
 import { TextbookReleaseReview } from './components/TextbookReleaseReview';
-import { TextbookReviewWorkbench } from './components/TextbookReviewWorkbench';
 import { TextbookTrackRail } from './components/TextbookTrackRail';
 import { TextbookWorkflowHeader } from './components/TextbookWorkflowHeader';
 import type { TextbookAsset, TextbookReviewTask } from './types';
+
+const TextbookReviewWorkbench = lazy(() => import('./components/TextbookReviewWorkbench')
+  .then(module => ({ default: module.TextbookReviewWorkbench })));
 
 function messageFor(error: unknown): WorkflowError {
   if (error instanceof ApiError) {
@@ -50,6 +52,7 @@ export function TextbookCoursesPage() {
   const generatedAudio = useExclusiveAudio();
   const officialAudioOwnerRef = useRef(Symbol('official-track-audio'));
   const preferredExpressionIdRef = useRef<number | null>(null);
+  const settledOperationRef = useRef('');
   const [search, setSearch] = useState('');
   const [intakeMessage, setIntakeMessage] = useState('');
   const [derivationMessage, setDerivationMessage] = useState('');
@@ -59,21 +62,23 @@ export function TextbookCoursesPage() {
   const [errors, setErrors] = useState<WorkflowError[]>([]);
 
   const coursesQuery = useQuery({ queryKey: ['textbooks', 'courses'], queryFn: textbookApi.courses, retry: false });
-  const courseDetailsQuery = useQuery({
-    queryKey: ['textbooks', 'course-details', coursesQuery.data?.courses.map((course) => course.id).join(',') || 'empty'],
-    queryFn: () => Promise.all((coursesQuery.data?.courses || []).map((course) => textbookApi.course(course.id).then((result) => result.course))),
-    enabled: Boolean(coursesQuery.data?.courses.length),
-  });
-  const courses = courseDetailsQuery.data || coursesQuery.data?.courses || [];
+  const courses = coursesQuery.data?.courses || [];
   const trackQuery = useQuery({
     queryKey: ['textbooks', 'track', route.trackId],
     queryFn: () => textbookApi.track(Number(route.trackId)),
     enabled: Boolean(route.trackId),
   });
+  const track = trackQuery.data?.track || null;
+  // Explicit stage/task/operation links retain their workflow semantics.
+  const readingPublished = track?.status === 'published' && track.revision_status === 'published' && !track.active_operation_id && !route.stage && !route.operationId && !route.taskId;
+  useEffect(() => {
+    if (track?.active_operation_id && !route.operationId && !route.stage) route.selectOperation(track.active_operation_id, true);
+  }, [track?.active_operation_id, route]);
+  const workflowNeeded = Boolean(route.trackId && (route.stage || route.operationId || route.taskId || (track && !readingPublished)));
   const workflowQuery = useQuery({
     queryKey: ['textbooks', 'workflow', route.trackId, route.operationId],
     queryFn: () => textbookApi.workflow(Number(route.trackId), route.operationId),
-    enabled: Boolean(route.trackId),
+    enabled: workflowNeeded,
     refetchInterval: (query) => {
       const status = query.state.data?.workflow.operation?.status;
       return status && ['queued', 'running'].includes(status) ? 700 : false;
@@ -110,7 +115,7 @@ export function TextbookCoursesPage() {
   }, [courses, route]);
   useEffect(() => {
     const workflow = workflowQuery.data?.workflow;
-    if (!workflow) return;
+    if (!workflow || !workflowNeeded) return;
     const routedTask = workflow.review.tasks.find((task) => Number(task.id) === route.taskId);
     const preferredExpressionId = preferredExpressionIdRef.current;
     const preferredTask = workflow.review.tasks.find(
@@ -130,7 +135,7 @@ export function TextbookCoursesPage() {
       normalized.task = Number(fallback.id);
     }
     if (Object.keys(normalized).length) route.normalize(normalized);
-  }, [route, workflowQuery.data?.workflow]);
+  }, [route, workflowNeeded, workflowQuery.data?.workflow]);
   useEffect(() => {
     const track = trackQuery.data?.track;
     if (!track) return setHighlightHtml('');
@@ -145,6 +150,9 @@ export function TextbookCoursesPage() {
   useEffect(() => {
     const operation = operationQuery.data?.operation;
     if (!operation || ['queued', 'running'].includes(operation.status)) return;
+    const key = [route.trackId, operation.id, operation.status].join(':');
+    if (settledOperationRef.current === key) return;
+    settledOperationRef.current = key;
     void queryClient.invalidateQueries({ queryKey: ['textbooks', 'workflow', route.trackId] });
     void queryClient.invalidateQueries({ queryKey: ['textbooks', 'track', route.trackId] });
     void queryClient.invalidateQueries({ queryKey: ['learning'] });
@@ -298,29 +306,32 @@ export function TextbookCoursesPage() {
     onError: (error) => setDerivationMessage(messageFor(error).message),
   });
 
-  const workflow = workflowQuery.data?.workflow || null;
-  const track = trackQuery.data?.track || null;
+  const workflow = workflowNeeded ? workflowQuery.data?.workflow || null : null;
   const operation = operationQuery.data?.operation || workflow?.operation || null;
-  const activeStage = route.stage || workflow?.stage || 'intake';
+  const activeStage = route.stage || workflow?.stage || (readingPublished ? 'complete' : 'intake');
   const stages = workflow ? workflowStages({ ...workflow, operation }) : [];
   const audio = officialAudio(track?.assets || []);
   const missingTts = Math.max((workflow?.release.unitCount || 0) - (track?.tts_audio.length || 0), 0);
   const featureDisabled = coursesQuery.isError && coursesQuery.error instanceof ApiError && coursesQuery.error.status === 404;
   const coursesInitialLoading = coursesQuery.isLoading && !coursesQuery.data;
   const coursesInitialError = coursesQuery.isError && !coursesQuery.data && !featureDisabled;
-  const courseRefreshFailed = (courseDetailsQuery.isError && Boolean(coursesQuery.data))
+  const courseRefreshFailed = (coursesQuery.isError && Boolean(coursesQuery.data))
     || (trackQuery.isError && Boolean(trackQuery.data))
     || (workflowQuery.isError && Boolean(workflowQuery.data));
   const courseRefreshing = (
     (coursesQuery.isFetching && Boolean(coursesQuery.data))
-    || (courseDetailsQuery.isFetching && Boolean(courseDetailsQuery.data))
     || (trackQuery.isFetching && Boolean(trackQuery.data))
   ) && !courseRefreshFailed;
   const generatedOperation = workflowOperation(operation);
   const activeExpressionId = useMemo(() => {
+    if (readingPublished && track) {
+      let saved = 0;
+      try { saved = Number(sessionStorage.getItem('textbook-reading:' + track.id + ':' + track.revision_id)); } catch { /* Storage is optional. */ }
+      return route.expressionId || saved || track.expressions[0]?.id || null;
+    }
     const task = workflow?.review.tasks.find((item) => Number(item.id) === route.taskId);
     return task?.expressionRevisionId || track?.expressions[0]?.id || null;
-  }, [route.taskId, track?.expressions, workflow?.review.tasks]);
+  }, [route.taskId, route.expressionId, readingPublished, track, workflow?.review.tasks]);
   const playGenerated = (url: string) => {
     officialAudioRef.current?.pause();
     void generatedAudio.playUrl(url);
@@ -336,6 +347,28 @@ export function TextbookCoursesPage() {
       return current === 'dirty' ? 'clean' : current;
     });
   };
+
+  const reader = track && (
+    <TextbookPublishedBrowser
+      track={track}
+      activeExpressionId={activeExpressionId}
+      highlightHtml={highlightHtml}
+      annotationMode={highlightQuery.isPending
+        ? 'pending'
+        : highlightQuery.data ? 'annotations' : 'unavailable'}
+      audioFiles={track.tts_audio}
+      busy={highlightMutation.isPending || derivationMutation.isPending}
+      message={derivationMessage}
+      onSelect={(id) => {
+        if (!readingPublished) { route.selectTask(id); return; }
+        try { sessionStorage.setItem('textbook-reading:' + track.id + ':' + track.revision_id, String(id)); } catch { /* URL still restores the position. */ }
+        route.selectExpression(id);
+      }}
+      onSaveAnnotation={(selector) => highlightMutation.mutate({ selector })}
+      onDerive={(payload) => derivationMutation.mutate(payload)}
+      onPlayAudio={playGenerated}
+    />
+  );
 
   return (
     <ProductShell active="textbooks" title="教材课程">
@@ -369,6 +402,7 @@ export function TextbookCoursesPage() {
           <>
             <TextbookWorkflowHeader
               workflow={workflow}
+              readingTrack={readingPublished ? track : null}
               officialAudio={audio}
               audioRef={officialAudioRef}
               onOfficialAudioPlay={() => {
@@ -385,9 +419,8 @@ export function TextbookCoursesPage() {
               label="教材课程"
               onRetry={() => void Promise.all([
                 coursesQuery.refetch(),
-                courseDetailsQuery.refetch(),
                 route.trackId ? trackQuery.refetch() : Promise.resolve(),
-                route.trackId ? workflowQuery.refetch() : Promise.resolve(),
+                workflowNeeded ? workflowQuery.refetch() : Promise.resolve(),
               ])}
               testId="textbook-refresh-status"
             />
@@ -403,7 +436,16 @@ export function TextbookCoursesPage() {
             />
             <div className={`textbook-workflow-layout${activeStage === 'complete' ? ' is-published' : ''}`}>
               <TextbookTrackRail courses={courses} activeTrackId={route.trackId} onSelect={(trackId) => route.selectTrack(trackId)} />
-              {workflow ? (
+              {readingPublished && track ? (
+                <section className="textbook-reading-view">
+                  {reader}
+                  <nav aria-label="教材操作" className="textbook-reading-actions">
+                    <a href={'/learn/plan?textbookTrack=' + track.id}>加入学习计划</a>
+                    <a href="/learn">今日学习</a>
+                    <button type="button" onClick={() => route.selectStage('complete')}>查看发布流程</button>
+                  </nav>
+                </section>
+              ) : workflow ? (
                 <WorkflowShell
                   eyebrow={`${workflow.track.courseKey} · TRACK ${String(workflow.track.trackNumber).padStart(2, '0')}`}
                   title={workflow.track.title}
@@ -413,7 +455,7 @@ export function TextbookCoursesPage() {
                   onStageChange={navigateStage}
                 >
                   {activeStage === 'review' && (
-                    <TextbookReviewWorkbench
+                    <Suspense fallback={<span role="status">正在打开教材校对…</span>}><TextbookReviewWorkbench
                       key={`${workflow.track.id}:${route.taskId || 'none'}`}
                       workflow={workflow}
                       activeTaskId={route.taskId ? String(route.taskId) : null}
@@ -428,7 +470,7 @@ export function TextbookCoursesPage() {
                       errors={errors}
                       onReload={() => { setErrors([]); setSaveState('clean'); void workflowQuery.refetch(); }}
                       onDirtyChange={updateReviewDirtyState}
-                    />
+                    /></Suspense>
                   )}
                   {activeStage === 'release' && (
                     <TextbookReleaseReview
@@ -458,23 +500,7 @@ export function TextbookCoursesPage() {
                         generatedAudioCount={track?.tts_audio.length || 0}
                         onReview={() => route.selectStage('review')}
                       />
-                      {track && (
-                        <TextbookPublishedBrowser
-                          track={track}
-                          activeExpressionId={activeExpressionId}
-                          highlightHtml={highlightHtml}
-                          annotationMode={highlightQuery.isPending
-                            ? 'pending'
-                            : highlightQuery.data ? 'annotations' : 'unavailable'}
-                          audioFiles={track.tts_audio}
-                          busy={highlightMutation.isPending || derivationMutation.isPending}
-                          message={derivationMessage}
-                          onSelect={(id) => route.selectTask(id)}
-                          onSaveAnnotation={(selector) => highlightMutation.mutate({ selector })}
-                          onDerive={(payload) => derivationMutation.mutate(payload)}
-                          onPlayAudio={playGenerated}
-                        />
-                      )}
+                      {reader}
                     </>
                   )}
                 </WorkflowShell>

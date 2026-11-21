@@ -1,27 +1,29 @@
 import { Headphones } from 'lucide-react';
 import type { RefObject } from 'react';
 import { PageHeader } from '../../../components/PageHeader';
-import type { TextbookAsset, TextbookWorkflow } from '../types';
+import type { TextbookAsset, TextbookTrack, TextbookWorkflow } from '../types';
 
 export function TextbookWorkflowHeader({
   workflow,
+  readingTrack,
   officialAudio,
   audioRef,
   onOfficialAudioPlay,
 }: {
   workflow: TextbookWorkflow | null;
+  readingTrack?: TextbookTrack | null;
   officialAudio: TextbookAsset | null;
   audioRef: RefObject<HTMLAudioElement | null>;
   onOfficialAudioPlay: () => void;
 }) {
-  const published = workflow?.track.status === 'published' || workflow?.stage === 'complete';
+  const published = Boolean(readingTrack) || workflow?.track.status === 'published' || workflow?.stage === 'complete';
   return (
     <PageHeader
       className="textbook-workflow-header"
       testId="textbook-page-header"
       eyebrow={published ? '教材课程 · 已发布' : '教材课程 · 人工校对'}
-      title={workflow?.track.title || '教材课程'}
-      description={workflow && published
+      title={readingTrack?.title || workflow?.track.title || '教材课程'}
+      description={readingTrack ? `Track ${readingTrack.track_number} · ${readingTrack.expressions.length} 条表达 · 选择表达开始阅读或播放整轨音频。` : workflow && published
         ? `Track ${String(workflow.track.trackNumber).padStart(2, '0')} · ${workflow.release.expressionCount} 条表达已发布，可以直接浏览、朗读或加入学习计划。`
         : workflow
           ? `Track ${String(workflow.track.trackNumber).padStart(2, '0')} · 结构化解析已完成，请在本页完成人工校对和发布。`

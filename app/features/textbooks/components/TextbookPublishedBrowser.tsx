@@ -67,6 +67,7 @@ export function TextbookPublishedBrowser({
   onDerive: (payload: { expressionId: number; selectionText: string; selectionLanguage: 'en' | 'ja'; targetCardType: 'trilingual' | 'grammar_ja' }) => void;
   onPlayAudio: (url: string) => void;
 }) {
+  const [tagsOpen, setTagsOpen] = useState(false);
   const expressions = track.expressions;
   const expression = expressions.find((row) => row.id === activeExpressionId) || expressions[0] || null;
   const contentRef = useRef<HTMLDivElement>(null);
@@ -158,10 +159,6 @@ export function TextbookPublishedBrowser({
   };
   return (
     <div className="textbook-published-browser">
-      <div className="textbook-track-tags">
-        <span>Track 标签</span>
-        <Suspense fallback={null}><DeferredManualTagBar targetKind="textbook_track" targetId={track.id} compact /></Suspense>
-      </div>
       <aside className="surface textbook-published-list">
         <header><p className="eyebrow">EXPRESSIONS</p><h2>教材浏览</h2></header>
         <DesktopVirtualList
@@ -184,7 +181,6 @@ export function TextbookPublishedBrowser({
       </aside>
       <article className="surface textbook-study-detail">
         <header><p className="eyebrow">EXPR {String(expression.display_ordinal).padStart(2, '0')}</p><h2>英日表达</h2></header>
-        <Suspense fallback={null}><DeferredManualTagBar targetKind="textbook_expression" targetId={expression.expression_id} compact /></Suspense>
         <div ref={contentRef} className="textbook-expression-content" onMouseUp={captureSelection}>
           <section>
             <p className="textbook-lang-label">English official</p>
@@ -224,6 +220,13 @@ export function TextbookPublishedBrowser({
           {grammar.map((item) => <p key={`${item.label}-${item.explanation}`}><strong>{item.label}</strong><span>{item.explanation}</span></p>)}
           {!grammar.length && <small>暂无语法点。</small>}
         </section>
+        <details className="textbook-reading-tags" onToggle={event => setTagsOpen(event.currentTarget.open)}>
+          <summary>管理教材和表达标签</summary>
+          {tagsOpen && <Suspense fallback={<span role="status">正在读取标签…</span>}>
+            <div role="group" aria-label="整轨标签"><strong>整轨标签</strong><DeferredManualTagBar targetKind="textbook_track" targetId={track.id} compact /></div>
+            <div role="group" aria-label="当前表达标签"><strong>当前表达标签</strong><DeferredManualTagBar targetKind="textbook_expression" targetId={expression.expression_id} compact /></div>
+          </Suspense>}
+        </details>
       </article>
     </div>
   );

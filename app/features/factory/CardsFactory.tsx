@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays, ChevronDown, LayoutGrid, List, Plus, Search, X,
 } from 'lucide-react';
@@ -14,12 +14,14 @@ import {
 import { ApiError } from '../../lib/api/client';
 import { DeferredCardModal } from '../card-modal/DeferredCardModal';
 import { factoryApi } from './factory-api';
-import { QueuePanel } from './QueuePanel';
+import { rememberSubmittedJob } from './queue-cache';
 import { QuickComposer, type ComposerSubmitResult } from './QuickComposer';
 import type { CardSelection, CardType, DuplicateCardSummary, FolderFile, GenerationJob, SourceMode } from './types';
 
 type CardSort = 'newest' | 'title' | 'type';
 type CardDensity = 'comfortable' | 'compact';
+
+const QueuePanel = lazy(() => import('./QueuePanel').then(module => ({ default: module.QueuePanel })));
 
 function createInteractionKey(prefix: string) {
   return `${prefix}:${crypto.randomUUID()}`;
@@ -46,9 +48,7 @@ function dateParts(folder: string) {
   const match = folder.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (!match) return { group: '其它', day: folder, title: folder };
   const day = Number(match[3]);
-  const lastTwo = day % 100;
-  const suffix = lastTwo >= 11 && lastTwo <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
-  return { group: `${match[1]}.${match[2]}`, day: `${day}${suffix}`, title: `${match[1]}.${match[2]}.${match[3]}` };
+  return { group: `${match[1]}.${match[2]}`, day: `${day} 日`, title: `${match[1]}.${match[2]}.${match[3]}` };
 }
 
 function queueCounts(jobs: GenerationJob[]) {
@@ -91,6 +91,18 @@ export function CardsFactory() {
   const [expandedDateGroups, setExpandedDateGroups] = useState<Set<string>>(new Set());
   const [historyPage, setHistoryPage] = useState(1);
   const [cardSearch, setCardSearch] = useState('');
+  const [historyTerm, setHistoryTerm] = useState('');
+  const [composing, setComposing] = useState(false);
+  const searchPending = composing || historyTerm !== cardSearch.trim();
+  useEffect(() => {
+    if (composing || historyTerm === cardSearch.trim()) return;
+    const timer = window.setTimeout(() => {
+      setHistoryTerm(cardSearch.trim());
+      setHistoryPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [cardSearch, composing, historyTerm]);
+
   const [cardSort, setCardSort] = useState<CardSort>('newest');
   const [cardDensity, setCardDensity] = useState<CardDensity>('comfortable');
   const [libraryPreferencesLoaded, setLibraryPreferencesLoaded] = useState(false);
@@ -115,18 +127,34 @@ export function CardsFactory() {
     queryFn: () => factoryApi.files(selectedFolder),
     enabled: hydrated && Boolean(selectedFolder),
   });
-  const jobsQuery = useQuery({
-    queryKey: ['queue', 'jobs'], queryFn: factoryApi.jobs, enabled: hydrated, refetchInterval: 1500,
-  });
   const summaryQuery = useQuery({
-    queryKey: ['queue', 'summary'], queryFn: factoryApi.queueSummary, enabled: hydrated, refetchInterval: 1500,
+    queryKey: ['queue', 'summary'], queryFn: factoryApi.queueSummary, enabled: hydrated,
+    refetchOnWindowFocus: 'always',
+    refetchInterval: ({ state }) => queueOpen || state.data?.summary.running || state.data?.summary.queued ? 1500 : 30_000,
+  });
+  const summaryActive = Boolean(summaryQuery.data?.summary.running || summaryQuery.data?.summary.queued);
+  const jobsQuery = useQuery({
+    queryKey: ['queue', 'jobs'], queryFn: factoryApi.jobs,
+    enabled: (query) => hydrated && (queueOpen || summaryActive || summaryQuery.isError
+      || Boolean(query.state.data?.jobs.some(job => job.status === 'running' || job.status === 'queued'))),
+    refetchInterval: 1500,
+    refetchOnWindowFocus: 'always',
   });
   const historyQuery = useQuery({
-    queryKey: ['history', cardSearch, historyPage],
-    queryFn: () => factoryApi.history(cardSearch, historyPage),
-    enabled: hydrated && libraryMode === 'history',
+    queryKey: ['history', historyTerm, historyPage],
+    queryFn: ({ signal }) => factoryApi.history(historyTerm, historyPage, signal),
+    enabled: hydrated && libraryMode === 'history' && !searchPending,
   });
 
+  const lastSummarySuccess = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const success = summaryQuery.data?.summary.success;
+    if (success === undefined) return;
+    if (lastSummarySuccess.current !== undefined && success !== lastSummarySuccess.current) {
+      for (const key of ['folders', 'files', 'history', 'card-engagement']) void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    lastSummarySuccess.current = success;
+  }, [summaryQuery.data?.summary.success, queryClient]);
   const physicalFolders = foldersQuery.data?.folders || [];
   const todayFolder = todayCardsQuery.data?.learningDay?.replaceAll('-', '') || '';
   const folders = useMemo(() => {
@@ -176,6 +204,8 @@ export function CardsFactory() {
     return result;
   }, [cardSearch, cardSort, files]);
   const jobs = jobsQuery.data?.jobs || [];
+  const fileCountKnown = Boolean(filesQuery.data && (files.length || todayCardsQuery.isSuccess))
+    || (!selectedFolder && !folders.length && foldersQuery.isSuccess && todayCardsQuery.isSuccess);
   const computedCounts = queueCounts(jobs);
   const summary = summaryQuery.data?.summary || computedCounts;
   const activeJob = jobs.find((job) => job.status === 'running') || jobs.find((job) => job.status === 'queued') || null;
@@ -194,16 +224,16 @@ export function CardsFactory() {
       ? '刷新失败'
       : queueInitialLoading
         ? '读取中'
-        : activeJob?.status === 'running'
+        : (summary.running || activeJob?.status === 'running')
           ? '生成中'
-          : activeJob?.status === 'queued' ? '排队中' : '空闲';
+          : (summary.queued || activeJob?.status === 'queued') ? '排队中' : '空闲';
   const queueStatusDescription = queueUnavailable
     ? '点击查看详情并重新读取'
     : queueRefreshFailed
       ? '正在显示上次成功读取的队列'
       : queueInitialLoading
         ? '正在读取任务状态'
-        : activeJob?.phraseNormalized || '当前没有生成任务';
+        : activeJob?.phraseNormalized || (summaryActive ? '正在读取任务详情' : '当前没有生成任务');
 
   useEffect(() => {
     if (!folders.length) return;
@@ -346,6 +376,7 @@ export function CardsFactory() {
   };
 
   const registerSubmittedJob = (job: GenerationJob) => {
+    rememberSubmittedJob(queryClient, job);
     trackedJobIdsRef.current.add(job.id);
     publishedJobStatusRef.current.set(job.id, job.status);
     publishShellActivity({
@@ -632,13 +663,9 @@ export function CardsFactory() {
         <div className="factory-workspace">
           <section className="factory-library-grid">
             <aside className="surface date-rail">
-              <div className="library-tabs" role="tablist">
-                <button type="button" role="tab" aria-selected={libraryMode === 'folders'} className={libraryMode === 'folders' ? 'active' : ''} onClick={() => setLibraryMode('folders')}>日期</button>
-                <button type="button" role="tab" aria-selected={libraryMode === 'history'} className={libraryMode === 'history' ? 'active' : ''} onClick={() => setLibraryMode('history')}>全部卡片</button>
-              </div>
               <div className="date-groups" data-testid="react-folder-list">
-                <div className="rail-heading"><p className="eyebrow">日期归档</p><h2>日期</h2><span>{folders.length}</span></div>
-                {foldersQuery.isLoading && !foldersQuery.data ? (
+                <div className="rail-heading"><p className="eyebrow">日期归档</p><h2>日期</h2><span>{foldersQuery.data && todayCardsQuery.data ? folders.length : '—'}</span></div>
+                {(!hydrated || foldersQuery.isPending) && !foldersQuery.data ? (
                   <PageState variant="loading" title="正在读取日期" description="正在恢复卡片归档。" compact testId="factory-folders-loading" />
                 ) : foldersQuery.isError && !foldersQuery.data ? (
                   <PageState
@@ -676,7 +703,7 @@ export function CardsFactory() {
                               })}
                             >
                               <span>{group}</span>
-                              <small>{items.length}</small>
+                              <small>{items.length} 天</small>
                               <ChevronDown aria-hidden="true" />
                             </button>
                           </h3>
@@ -687,6 +714,7 @@ export function CardsFactory() {
                                   key={item.folder}
                                   type="button"
                                   className={libraryMode === 'folders' && selectedFolder === item.folder ? 'active' : ''}
+                                  aria-pressed={libraryMode === 'folders' && selectedFolder === item.folder}
                                   title={item.title}
                                   aria-label={`日期 ${item.title}`}
                                   onClick={() => { setSelectedFolder(item.folder); setLibraryMode('folders'); }}
@@ -697,7 +725,7 @@ export function CardsFactory() {
                         </section>
                       );
                     })}
-                    {!folders.length && <div className="empty-copy">暂无卡片日期</div>}
+                    {!folders.length && <div className="empty-copy">{todayCardsQuery.isPending ? '正在确认今日卡片…' : todayCardsQuery.isError ? '今日卡片暂不可读' : '暂无卡片日期'}</div>}
                   </>
                 )}
               </div>
@@ -706,10 +734,24 @@ export function CardsFactory() {
             <article className={`surface card-library density-${cardDensity}`}>
               <header className="surface-heading">
                 <div><p className="eyebrow">学习卡片</p><h2>卡片库</h2><span id="library-search-scope">{libraryMode === 'history' ? '范围：全部日期 · 按标题搜索' : `范围：${dateParts(selectedFolder).title || '当前日期'} · 按标题或类型搜索`}</span></div>
-                {libraryMode === 'history' ? <b aria-label={historyQuery.data ? `共 ${historyQuery.data.pagination.total} 条` : '正在读取总数'}>{historyQuery.data?.pagination.total ?? '…'}</b> : <b aria-label={cardSearch.trim() ? `${visibleFiles.length} 条匹配，共 ${files.length} 条` : `共 ${files.length} 条`}>
+                {libraryMode === 'history' ? <b aria-label={historyQuery.data && !searchPending ? `共 ${historyQuery.data.pagination.total} 条` : '正在读取总数'}>{searchPending ? '…' : historyQuery.data?.pagination.total ?? '…'}</b> : !fileCountKnown ? <b aria-label="数量待确认">…</b> : <b aria-label={cardSearch.trim() ? `${visibleFiles.length} 条匹配，共 ${files.length} 条` : `共 ${files.length} 条`}>
                   {cardSearch.trim() ? `${visibleFiles.length}/${files.length}` : files.length}
                 </b>}
               </header>
+              <div className="library-tabs" role="tablist" aria-label="搜索范围">
+                {(['folders', 'history'] as const).map((mode, index) => (
+                  <button key={mode} id={`scope-${mode}`} type="button" role="tab" aria-controls="library-results"
+                    tabIndex={mode === libraryMode ? 0 : -1} aria-selected={mode === libraryMode}
+                    className={mode === libraryMode ? 'active' : ''} onClick={() => setLibraryMode(mode)}
+                    onKeyDown={(event) => {
+                      if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+                      event.preventDefault();
+                      const next = event.key === 'Home' ? 'folders' : event.key === 'End' ? 'history' : index ? 'folders' : 'history';
+                      setLibraryMode(next);
+                      document.getElementById('scope-' + next)?.focus();
+                    }}>{mode === 'folders' ? '日期' : '全部卡片'}</button>
+                ))}
+              </div>
               <div className="card-library-toolbar" data-testid="factory-library-toolbar">
                 <label className="card-library-search">
                   <Search aria-hidden="true" />
@@ -719,9 +761,15 @@ export function CardsFactory() {
                     aria-label={libraryMode === 'history' ? '搜索全部卡片' : '搜索当前日期卡片'}
                     aria-describedby="library-search-scope"
                     placeholder={libraryMode === 'history' ? '搜索所有日期的卡片标题' : '搜索当前日期标题或卡片类型'}
-                    onChange={(event) => { setCardSearch(event.target.value); setHistoryPage(1); }}
+                    onCompositionStart={() => setComposing(true)}
+                    onCompositionEnd={(event) => { setCardSearch(event.currentTarget.value); setComposing(false); }}
+                    onChange={(event) => {
+                      setCardSearch(event.target.value);
+                      if (!event.target.value) { setHistoryTerm(''); setHistoryPage(1); }
+                    }}
                     onKeyDown={(event) => {
-                      if (event.key !== 'Enter' || !cardSearch.trim()) return;
+                      if (event.key !== 'Enter' || event.nativeEvent.isComposing || composing || !cardSearch.trim()) return;
+                      setHistoryTerm(cardSearch.trim()); setHistoryPage(1);
                       void factoryApi.recordEngagement({
                         eventKey: createInteractionKey('library-search'),
                         phrase: cardSearch.trim(),
@@ -733,7 +781,7 @@ export function CardsFactory() {
                     }}
                   />
                   {cardSearch && (
-                    <button type="button" aria-label="清除卡片搜索" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>
+                    <button type="button" aria-label="清除卡片搜索" onClick={() => { setCardSearch(''); setHistoryTerm(''); setHistoryPage(1); }}>
                       <X aria-hidden="true" />
                     </button>
                   )}
@@ -772,10 +820,11 @@ export function CardsFactory() {
                 </div>
               </div>
 
+              <div role="tabpanel" id="library-results" aria-labelledby={'scope-' + libraryMode}>
               {libraryMode === 'history' ? (
                 <div className="history-results" data-testid="factory-history-results">
                   <div className="card-file-grid history-items" data-testid="react-file-list">
-                    {historyQuery.isLoading && !historyQuery.data ? (
+                    {searchPending || (historyQuery.isPending && !historyQuery.data) ? (
                       <PageState variant="loading" title="正在读取全部卡片" description="正在搜索所有日期的卡片标题。" compact />
                     ) : historyQuery.isError && !historyQuery.data ? (
                       <PageState
@@ -805,17 +854,19 @@ export function CardsFactory() {
                             <span>{CARD_CONFIG[record.card_type || 'trilingual'].label}</span><strong>{record.phrase}</strong><small>{record.generation_date || record.folder_name}</small>
                           </button>
                         ))}
-                        {!historyQuery.data?.records.length && <div className="empty-library"><Search aria-hidden="true" /><strong>全部卡片中没有匹配结果</strong><span>当前按标题搜索，请尝试其它关键词。</span>{cardSearch && <button type="button" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>清除搜索</button>}</div>}
+                        {!historyQuery.data?.records.length && <div className="empty-library"><Search aria-hidden="true" /><strong>全部卡片中没有匹配结果</strong><span>当前按标题搜索，请尝试其它关键词。</span>{cardSearch && <button type="button" onClick={() => { setCardSearch(''); setHistoryTerm(''); setHistoryPage(1); }}>清除搜索</button>}</div>}
                       </>
                     )}
                   </div>
                   <div className="history-pager">
-                    <button type="button" disabled={!historyQuery.data?.pagination.hasPrev} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}>上一页</button>
+                    <button type="button" disabled={searchPending || !historyQuery.data?.pagination.hasPrev} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}>上一页</button>
                     <span>{historyPage} / {historyQuery.data?.pagination.totalPages || 1}</span>
-                    <button type="button" disabled={!historyQuery.data?.pagination.hasNext} onClick={() => setHistoryPage((page) => page + 1)}>下一页</button>
+                    <button type="button" disabled={searchPending || !historyQuery.data?.pagination.hasNext} onClick={() => setHistoryPage((page) => page + 1)}>下一页</button>
                   </div>
                 </div>
-              ) : filesQuery.isLoading && !filesQuery.data ? (
+              ) : (!selectedFolder && (foldersQuery.isError || todayCardsQuery.isError)) || (selectedFolder && !files.length && todayCardsQuery.isError && !todayCardsQuery.data && !filesQuery.isError) ? (
+                <PageState variant="error" title="无法确认卡片日期" description="请重新读取日期归档。" compact actions={<button onClick={() => { void foldersQuery.refetch(); void todayCardsQuery.refetch(); }}>重新读取</button>} />
+              ) : (!selectedFolder && (!foldersQuery.isSuccess || !todayCardsQuery.isSuccess || folders.length > 0)) || (selectedFolder && (filesQuery.isPending || (!files.length && !filesQuery.isError && todayCardsQuery.isPending))) ? (
                 <PageState variant="loading" title="正在读取卡片" description="正在恢复所选日期的卡片列表。" compact testId="factory-files-loading" />
               ) : filesQuery.isError && !filesQuery.data ? (
                 <PageState
@@ -857,18 +908,19 @@ export function CardsFactory() {
                       );
                     })}
                   </div>
-                  {!files.length && !(selectedFolder === todayFolder && pendingSessionJobs.length > 0) && <div className="empty-library"><CalendarDays aria-hidden="true" /><strong>这个日期还没有学习卡</strong><span>点右上角的“新建学习卡”创建第一张。</span></div>}
+                  {!files.length && (selectedFolder !== todayFolder || todayCardsQuery.isSuccess) && !(selectedFolder === todayFolder && pendingSessionJobs.length > 0) && <div className="empty-library"><CalendarDays aria-hidden="true" /><strong>{selectedFolder ? '这个日期还没有学习卡' : '还没有学习卡'}</strong><span>点右上角的“新建学习卡”创建第一张。</span></div>}
                   {files.length > 0 && !visibleFiles.length && (
                     <div className="empty-library is-filtered">
                       <Search aria-hidden="true" />
                       <strong>没有匹配卡片</strong>
                       <span>仅搜索 {dateParts(selectedFolder).title}，其它日期可能有匹配卡片。</span>
                       <button className="primary" type="button" onClick={() => { setLibraryMode('history'); setHistoryPage(1); }}>在全部卡片中搜索</button>
-                      <button type="button" onClick={() => { setCardSearch(''); setHistoryPage(1); }}>清除搜索</button>
+                      <button type="button" onClick={() => { setCardSearch(''); setHistoryTerm(''); setHistoryPage(1); }}>清除搜索</button>
                     </div>
                   )}
                 </>
               )}
+              </div>
             </article>
           </section>
           {composerOpen && (
@@ -896,7 +948,7 @@ export function CardsFactory() {
           )}
         </div>
 
-        <QueuePanel
+        {queueOpen && <Suspense fallback={<span role="status">正在打开任务队列…</span>}><QueuePanel
           open={queueOpen}
           onClose={() => setQueueRoute(false)}
           jobs={jobs}
@@ -904,7 +956,7 @@ export function CardsFactory() {
           selectedJobId={selectedQueueJobId}
           onSelectJob={(jobId) => setQueueRoute(true, jobId)}
           onOpenResult={openGeneratedResult}
-        />
+        /></Suspense>}
         {selectedCard && <DeferredCardModal selection={selectedCard} onClose={() => setSelectedCard(null)} />}
       </div>
     </ProductShell>

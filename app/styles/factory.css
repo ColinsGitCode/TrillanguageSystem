@@ -364,3 +364,6 @@
 .file-card:not(.is-pending):active { transform: scale(.985); }
 
 textarea[data-auto-size="native"] { field-sizing: content; height: auto; }
+
+.card-library > .library-tabs { align-self: flex-start; padding: 0 0 8px; border: 0; }
+.card-library > .library-tabs button { padding-inline: 14px; }

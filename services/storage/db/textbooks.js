@@ -242,8 +242,8 @@ function escapeHtml(value) {
     .replace(/'/gu, '&#39;');
 }
 
-function listCourses(db) {
-  return db.prepare(`
+function listCourses(db, includeTracks = false) {
+  const courses = db.prepare(`
     SELECT c.*,
       COUNT(t.id) AS track_count,
       SUM(CASE WHEN t.status = 'published' THEN 1 ELSE 0 END) AS published_track_count
@@ -252,6 +252,15 @@ function listCourses(db) {
     GROUP BY c.id
     ORDER BY c.updated_at_utc DESC, c.id DESC
   `).all();
+  if (!includeTracks) return courses;
+  const byCourse = new Map(courses.map(course => [course.id, { ...course, tracks: [] }]));
+  for (const track of db.prepare(`
+    SELECT t.id, t.course_id, t.track_number, t.display_order, t.title, t.status, r.expression_count
+    FROM textbook_tracks t
+    LEFT JOIN textbook_track_revisions r ON r.id = COALESCE(t.pending_revision_id, t.current_revision_id)
+    ORDER BY t.course_id, t.display_order, t.track_number
+  `).all()) byCourse.get(track.course_id)?.tracks.push(track);
+  return [...byCourse.values()];
 }
 
 function getCourse(db, id) {
@@ -270,6 +279,7 @@ function getCourse(db, id) {
 function getTrack(db, id) {
   const track = db.prepare(`
     SELECT t.*, c.course_key, c.title AS course_title,
+      (SELECT op.id FROM textbook_operations op WHERE op.track_id = t.id AND op.status IN ('queued', 'running') ORDER BY op.id DESC LIMIT 1) AS active_operation_id,
       r.id AS revision_id, r.revision_number, r.status AS revision_status,
       r.expression_count, r.manifest_hash, r.source_fingerprint, r.content_hash, r.projection_hash
     FROM textbook_tracks t

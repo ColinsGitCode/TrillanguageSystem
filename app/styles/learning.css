@@ -315,3 +315,6 @@
 .learning-onboarding-collapsed { width: min(1220px, 100%); margin: 0 auto 12px; }
 .learning-onboarding-collapsed > summary { cursor: pointer; padding: 10px 0; color: var(--color-text-secondary); }
 .learning-onboarding-collapsed > summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.learning-recovery-preview { margin-top: 12px; }
+.learning-recovery-preview summary { cursor: pointer; }
