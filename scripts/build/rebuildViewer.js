@@ -27,7 +27,34 @@ function collectBuildMetadata(root) {
   return { commit, dirty, sourceHash: hash.digest('hex'), builtAtUtc: new Date().toISOString() };
 }
 
-function rebuildViewer({ root = path.resolve(__dirname, '../..'), run = execFileSync } = {}) {
+// A host may run the viewer from a separate runtime directory that holds its
+// own .env and Compose file (X86-MAC: /Users/colin/ThreeLANS/app). The image is
+// still built from this checkout, but the container must be recreated with the
+// runtime directory's configuration: recreating it from a checkout picks up the
+// checkout's .env, which there is a stale August copy.
+function runtimeCompose(root, runtimeDir) {
+  if (!runtimeDir) return { args: ['compose', '-p', 'three_lans_system'], cwd: root, pull: [] };
+  const dir = path.resolve(runtimeDir);
+  const composeFile = path.join(dir, 'docker-compose.yml');
+  for (const required of [composeFile, path.join(dir, '.env')]) {
+    if (!fs.existsSync(required)) throw new Error(`Runtime directory is missing ${required}; viewer was not rebuilt.`);
+  }
+  if (!fs.readFileSync(composeFile).equals(fs.readFileSync(path.join(root, 'docker-compose.yml')))) {
+    throw new Error(`${composeFile} differs from this checkout's docker-compose.yml; sync it deliberately before deploying.`);
+  }
+  return {
+    args: ['compose', '-p', 'three_lans_system', '--project-directory', dir, '-f', composeFile],
+    cwd: dir,
+    pull: ['--pull', 'never'],
+  };
+}
+
+function rebuildViewer({
+  root = path.resolve(__dirname, '../..'),
+  run = execFileSync,
+  runtimeDir = process.env.THREE_LANS_RUNTIME_DIR || '',
+} = {}) {
+  const target = runtimeCompose(root, runtimeDir);
   const metadata = collectBuildMetadata(root);
   const compose = ['compose', '-p', 'three_lans_system'];
   const buildArgs = Object.entries({
@@ -42,7 +69,7 @@ function rebuildViewer({ root = path.resolve(__dirname, '../..'), run = execFile
   if (after.commit !== metadata.commit || after.dirty !== metadata.dirty || after.sourceHash !== metadata.sourceHash) {
     throw new Error('Source changed during build; viewer was not restarted. Rebuild from a stable checkout.');
   }
-  run('docker', [...compose, 'up', '-d', '--no-build', '--no-deps', 'viewer'], { cwd: root, stdio: 'inherit' });
+  run('docker', [...target.args, 'up', '-d', '--no-build', '--no-deps', ...target.pull, 'viewer'], { cwd: target.cwd, stdio: 'inherit' });
   return metadata;
 }
 

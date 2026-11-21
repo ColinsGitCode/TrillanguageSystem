@@ -58,6 +58,43 @@ test('deployment passes metadata and restarts viewer only without dependencies o
   ]);
 });
 
+test('a runtime directory recreates the viewer with its own configuration', (t) => {
+  const root = repository(t);
+  fs.writeFileSync(path.join(root, 'docker-compose.yml'), 'name: three_lans_system\n');
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'viewer-runtime-'));
+  t.after(() => fs.rmSync(runtimeDir, { recursive: true, force: true }));
+  fs.copyFileSync(path.join(root, 'docker-compose.yml'), path.join(runtimeDir, 'docker-compose.yml'));
+  fs.writeFileSync(path.join(runtimeDir, '.env'), 'SECRET=runtime');
+  const calls = [];
+  rebuildViewer({ root, runtimeDir, run: (command, args, options) => calls.push({ command, args, cwd: options.cwd }) });
+  assert.equal(calls.length, 2);
+  // The image is built from the checkout ...
+  assert.equal(calls[0].cwd, root);
+  assert.deepEqual(calls[0].args.slice(0, 4), ['compose', '-p', 'three_lans_system', 'build']);
+  // ... and the container is recreated from the runtime directory.
+  const composeFile = path.join(runtimeDir, 'docker-compose.yml');
+  assert.equal(calls[1].cwd, runtimeDir);
+  assert.deepEqual(calls[1].args, [
+    'compose', '-p', 'three_lans_system', '--project-directory', runtimeDir, '-f', composeFile,
+    'up', '-d', '--no-build', '--no-deps', '--pull', 'never', 'viewer',
+  ]);
+});
+
+test('a runtime directory that is incomplete or out of sync stops before building', (t) => {
+  const root = repository(t);
+  fs.writeFileSync(path.join(root, 'docker-compose.yml'), 'name: three_lans_system\n');
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'viewer-runtime-'));
+  t.after(() => fs.rmSync(runtimeDir, { recursive: true, force: true }));
+  let calls = 0;
+  const run = () => { calls += 1; };
+  fs.writeFileSync(path.join(runtimeDir, 'docker-compose.yml'), 'name: three_lans_system\n');
+  assert.throws(() => rebuildViewer({ root, runtimeDir, run }), /missing .*\.env/u);
+  fs.writeFileSync(path.join(runtimeDir, '.env'), 'SECRET=runtime');
+  fs.writeFileSync(path.join(runtimeDir, 'docker-compose.yml'), 'name: three_lans_system\nservices: {}\n');
+  assert.throws(() => rebuildViewer({ root, runtimeDir, run }), /differs from this checkout/u);
+  assert.equal(calls, 0);
+});
+
 test('a build failure leaves the running viewer untouched', (t) => {
   const root = repository(t);
   let calls = 0;

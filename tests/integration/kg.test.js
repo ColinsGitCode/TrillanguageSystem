@@ -1,6 +1,6 @@
 'use strict';
 
-process.env.KG_ENABLED = '1';
+process.env.TEST_KG_ENABLED = '1';
 
 const assert = require('node:assert/strict');
 const test = require('node:test');

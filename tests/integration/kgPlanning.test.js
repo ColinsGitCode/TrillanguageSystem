@@ -1,8 +1,8 @@
 'use strict';
 
-process.env.KG_ENABLED = '1';
-process.env.KG_PLANNING_ENABLED = '1';
-process.env.KG_LLM_ENRICHMENT_ENABLED = '0';
+process.env.TEST_KG_ENABLED = '1';
+process.env.TEST_KG_PLANNING_ENABLED = '1';
+process.env.TEST_KG_LLM_ENRICHMENT_ENABLED = '0';
 
 const assert = require('node:assert/strict');
 const test = require('node:test');

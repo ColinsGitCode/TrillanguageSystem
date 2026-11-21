@@ -1,5 +1,8 @@
 'use strict';
 
+// Enable this domain before the harness loads process-wide service singletons.
+process.env.TEST_KG_ENABLED = '1';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -76,22 +79,30 @@ test.describe('/api/activity', () => {
       manifestRelativePath: 'activity/manifest.json',
       manifestHash: 'm'.repeat(64),
     });
-    dbService.db.prepare(`
+    const inserted = dbService.db.prepare(`
       INSERT INTO kg_resolution_cases(
         case_key, case_kind, language, kp_kind_hint, normalized_input,
         candidates_json, status, revision, created_at_utc, updated_at_utc
       ) VALUES (?, 'ambiguous-surface', 'ja', 'lexeme', 'はし', '[]', 'open', 1, ?, ?)
     `).run('k'.repeat(64), '2026-07-30T12:00:00.000Z', '2026-07-30T12:00:00.000Z');
 
+    const changesBefore = dbService.db.prepare('SELECT total_changes() AS count').get().count;
     const response = await api('GET', '/api/activity');
     assert.equal(response.status, 200);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(dbService.db.prepare('SELECT total_changes() AS count').get().count, changesBefore);
+    assert.deepEqual(response.body.sources.find((source) => source.id === 'knowledge'), {
+      id: 'knowledge', status: 'available',
+    });
     const review = response.body.items.find((item) => item.kind === 'textbook-review');
     const resolution = response.body.items.find((item) => item.kind === 'knowledge-resolution');
+    assert.ok(review, 'The imported textbook draft must remain visible for review');
+    assert.ok(resolution, 'Enabled KG must expose the persisted open resolution case');
     assert.equal(review.status, 'needs_attention');
     assert.equal(review.href, `/textbooks?track=${track.id}&stage=review`);
     assert.match(review.summary, /1\/1 条表达仍待人工确认/u);
     assert.equal(resolution.status, 'needs_attention');
-    assert.equal(resolution.href, '/knowledge?mode=resolution&case=1');
+    assert.equal(resolution.href, `/knowledge?mode=resolution&case=${inserted.lastInsertRowid}`);
     assert.equal(response.body.summary.needsAttention, 2);
   });
 });

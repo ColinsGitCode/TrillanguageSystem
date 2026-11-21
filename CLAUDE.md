@@ -42,7 +42,17 @@ Retired code, routes, schema, tests, and visual snapshots must not be restored d
     npm run test:textbooks:acceptance
     docker compose up -d --build
 
-The Compose project name is three_lans_system. The user-visible app is http://127.0.0.1:3010/.
+The Compose project name is three_lans_system. The viewer listens on 127.0.0.1:3010 of the host that runs it.
+
+## Host and workspace
+
+Since 2026-10-30 the project runs and is developed on **X86-MAC** (SSH alias `ts_x86_mac`); the earlier workstation deployment was retired after a verified migration. The user-visible app is https://x86-mac.tailc3818f.ts.net/, served by Tailscale Serve from loopback port 3010.
+
+- `/Users/colin/ThreeLANS/source-repository`: the Git workspace for development, tests and commits. It pushes to GitHub with a repository deploy key (SSH alias `github.com-colin`). Its `.env` is a stale August copy that must never configure the running viewer.
+- `/Users/colin/ThreeLANS/app`: the runtime directory. It holds the live `.env` (mode 0600) and the Compose file the running containers use; it is not a Git checkout.
+- `/Users/colin/ThreeLANS/bin/compose`: Compose bound to the runtime directory and Docker context `colima`. Never run `down -v` or a global Docker prune. Release evidence, SQLite backups and rollback image tags live under `/Users/colin/ThreeLANS/releases/`.
+
+A clone on another machine has no `.env`, dependencies or containers; it is only a Git copy.
 
 ## Local textbook tooling
 
@@ -350,7 +360,7 @@ Generated files live under RECORDS_PATH. Do not expose RECORDS_PATH through expr
 
 ## Traceable Viewer Deployment
 
-Use `npm run deploy:viewer` for viewer-only updates. It records the Git baseline commit, UTC build time, dirty state, and a SHA-256 fingerprint of Git-visible source in the image's `build-info.json`. Ignored secrets and runtime data are excluded from that fingerprint; it is not an image digest. A source change during build aborts before restart. OCR/TTS and volumes remain untouched.
+Use `npm run deploy:viewer` for viewer-only updates. On X86-MAC run it from the source repository with `THREE_LANS_RUNTIME_DIR=/Users/colin/ThreeLANS/app`: the image is built from the checkout, and the container is recreated from the runtime directory's `.env` and Compose file with `--pull never`. The script refuses to deploy when the runtime directory lacks `.env` or its Compose file differs from the checkout's; sync Compose changes deliberately. Back up the SQLite database and keep a rollback image tag before each release. It records the Git baseline commit, UTC build time, dirty state, and a SHA-256 fingerprint of Git-visible source in the image's `build-info.json`. Ignored secrets and runtime data are excluded from that fingerprint; it is not an image digest. A source change during build aborts before restart. OCR/TTS and volumes remain untouched.
 
 Preview metadata without deploying: `npm run deploy:viewer -- --metadata-only`. `/api/runtime` and the help drawer report the baked values; runtime environment overrides cannot relabel an image. Dirty builds identify a baseline, not a clean release. Before rebuilding, retain the running image ID/tag for rollback; restore its Compose image tag and run `docker compose up -d --no-build --no-deps viewer` if needed.
 
@@ -374,7 +384,7 @@ Integration tests:
 
     npm run test:integration
 
-The harness boots the real Express stack with DB_PATH=:memory:, E2E_TEST_MODE=1, and a random port.
+The harness boots the real Express stack with DB_PATH=:memory:, E2E_TEST_MODE=1, and a random port. `server.js` loads the checkout's `.env`, so the harness pins the language-metadata and Knowledge Graph feature flags off; a test file opts in with `TEST_LANGUAGE_METADATA_*` or `TEST_KG_*` before requiring the harness. Never let a developer `.env` decide a test result.
 
 Playwright:
 

@@ -37,6 +37,14 @@ process.env.RECORDS_PATH = tmpRecords;
 // requiring this harness.
 process.env.LANGUAGE_METADATA_ENABLED = process.env.TEST_LANGUAGE_METADATA_ENABLED || '0';
 process.env.LANGUAGE_METADATA_EXTRACTION_ENABLED = process.env.TEST_LANGUAGE_METADATA_EXTRACTION_ENABLED || '0';
+// The same holds for the Knowledge Graph flags. server.js loads the checkout's
+// .env, and a developer .env with KG_ENABLED=1 decided whether tests that never
+// asked for KG saw KG data: activity.test.js passed on such machines and failed
+// in a clean container. Opt in through TEST_KG_* before requiring this harness.
+process.env.KG_ENABLED = process.env.TEST_KG_ENABLED || '0';
+process.env.KG_PLANNING_ENABLED = process.env.TEST_KG_PLANNING_ENABLED || '0';
+process.env.KG_LLM_ENRICHMENT_ENABLED = process.env.TEST_KG_LLM_ENRICHMENT_ENABLED || '0';
+process.env.KG_INCREMENTAL_SYNC_ENABLED = process.env.TEST_KG_INCREMENTAL_SYNC_ENABLED || '0';
 
 // Require AFTER env is pinned. server.js calls app.listen(PORT, cb)
 // synchronously; the bound port is only known once 'listening' fires.
