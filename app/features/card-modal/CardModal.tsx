@@ -23,6 +23,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { knowledgeApi } from '../knowledge/knowledge-api';
 import { factoryApi } from '../factory/factory-api';
+import { PracticeEntry } from '../practice/PracticeEntry';
 import { rememberSubmittedJob } from '../factory/queue-cache';
 import type {
   AnnotationColor,
@@ -1156,6 +1157,9 @@ export function CardModal({
             <button id={`${tabsId}-intel`} data-card-tab="intel" type="button" role="tab" aria-controls={`${tabsId}-intel-panel`} tabIndex={tab === 'intel' ? 0 : -1} aria-selected={tab === 'intel'} className={tab === 'intel' ? 'active' : ''} onClick={() => setTab('intel')}>生成信息</button>
           </nav>
           <div className="card-head-actions">
+            {!readOnly && selection.cardType === 'trilingual' && generationId && (
+              <PracticeEntry generationId={generationId} />
+            )}
             {tab === 'content' && (
               <button
                 className="reading-toggle-button"

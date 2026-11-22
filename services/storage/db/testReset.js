@@ -77,6 +77,7 @@ const TABLES_IN_DELETE_ORDER = [
   'learning_source_admissions',
 
   // generations + observability children
+  'sentence_practice_attempts',
   'audio_files',
   'observability_metrics',
   'generation_errors',

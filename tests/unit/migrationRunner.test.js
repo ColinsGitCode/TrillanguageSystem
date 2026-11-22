@@ -83,11 +83,11 @@ function textbookManifestForMigration() {
 test.after(() => databaseModule.close());
 
 test.describe('versioned migration runner', () => {
-  test.it('registers 001-016 on a new database and creates every product table', () => {
+  test.it('registers 001-017 on a new database and creates every product table', () => {
     const service = new DatabaseService(':memory:');
     try {
       assert.deepEqual(service.migrationResult, {
-        applied: ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016'],
+        applied: ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016', '017'],
         skipped: [],
         baselineRegistered: false,
       });
@@ -111,6 +111,7 @@ test.describe('versioned migration runner', () => {
         { version: '014', is_baseline: 0 },
         { version: '015', is_baseline: 0 },
         { version: '016', is_baseline: 0 },
+        { version: '017', is_baseline: 0 },
       ]);
       const tables = new Set(service.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -129,6 +130,7 @@ test.describe('versioned migration runner', () => {
       LOCAL_DICTIONARY_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       LOCAL_GLOSSARY_FEEDBACK_TABLES.forEach((table) => assert.ok(tables.has(table), table));
       LANGUAGE_METADATA_TABLES.forEach((table) => assert.ok(tables.has(table), table));
+      assert.ok(tables.has('sentence_practice_attempts'));
       assert.deepEqual(
         service.db.prepare("PRAGMA foreign_key_list('card_engagement_events')").all(),
         []
@@ -174,6 +176,7 @@ test.describe('versioned migration runner', () => {
         { version: '014', is_baseline: 0 },
         { version: '015', is_baseline: 0 },
         { version: '016', is_baseline: 0 },
+        { version: '017', is_baseline: 0 },
       ]);
       assert.deepEqual(schemaObjects(migrated.db), schemaObjects(fresh.db));
     } finally {

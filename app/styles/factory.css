@@ -11,6 +11,12 @@
 .factory-composer-trigger svg { width: 16px; height: 16px; }
 /* Keeps the full-height library that the two-column wrapper used to provide. */
 .factory-content-fill { width: 100%; max-width: 1360px; margin: 0 auto; min-height: calc(100dvh - 116px); display: flex; flex-direction: column; flex: 1; }
+.factory-practice-entry { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; padding: 9px 0; border-block: 1px solid var(--color-border); }
+.factory-practice-entry h2, .factory-practice-entry p { margin: 0; }
+.factory-practice-entry h2 { font-size: 16px; }
+.factory-practice-entry p { color: var(--color-text-secondary); font-size: 13px; }
+.factory-practice-entry a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 11px; border-radius: 6px; color: var(--color-practice-action-ink); background: var(--color-practice-action); text-decoration: none; font-weight: 600; }
+.factory-practice-entry svg { width: 16px; height: 16px; flex: none; }
 .factory-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 14px; }
 .factory-content-fill.is-composing .factory-workspace { grid-template-columns: minmax(0, 1fr) minmax(340px, 380px); }
 .factory-library-grid { width: 100%; min-height: 0; display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 3fr); align-items: stretch; gap: 14px; }
@@ -328,14 +334,17 @@
 
 @media (max-width: 760px) {
   .factory-content-fill { min-height: auto; display: block; flex: none; }
-  .factory-workspace, .factory-content-fill.is-composing .factory-workspace { grid-template-columns: 1fr; }
+  .factory-workspace, .factory-content-fill.is-composing .factory-workspace { grid-template-columns: minmax(0, 1fr); }
   .qc-panel { position: static; max-height: none; order: -1; }
   .factory-content-fill.is-composing .date-rail { display: block; }
   .factory-content-fill.is-composing .card-file-grid { grid-template-columns: 1fr; }
   .date-rail { display: block; }
   .card-library { display: block; }
   .empty-library { flex: none; }
-  .factory-library-grid { grid-template-columns: 1fr; flex: none; }
+  .factory-library-grid { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .card-library-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .card-library-search { grid-column: 1 / -1; }
+  .card-library-sort { justify-content: flex-start; }
   .queue-status { min-height: 0; }
   .date-groups, .history-rail { max-height: 360px; }
   .date-groups section > div { grid-template-columns: repeat(5, minmax(48px, 1fr)); overflow-x: auto; }

@@ -26,6 +26,8 @@
   --color-primary-subtle: #eaf1ff;
   --color-success: #0f8a5f;
   --color-success-subtle: #e7f7f1;
+  --color-practice-action: #17583f;
+  --color-practice-action-ink: #ffffff;
   --color-warning: #b76508;
   --color-warning-subtle: #fff3dc;
   --color-danger: #c43b4d;
@@ -117,6 +119,8 @@
   --color-primary-subtle: #23334f;
   --color-success: #5fd1a5;
   --color-success-subtle: #19392f;
+  --color-practice-action: #a9e6c6;
+  --color-practice-action-ink: #142a21;
   --color-warning: #f0b35e;
   --color-warning-subtle: #443019;
   --color-danger: #ff8794;

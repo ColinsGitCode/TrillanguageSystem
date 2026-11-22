@@ -22,6 +22,7 @@ type CardSort = 'newest' | 'title' | 'type';
 type CardDensity = 'comfortable' | 'compact';
 
 const QueuePanel = lazy(() => import('./QueuePanel').then(module => ({ default: module.QueuePanel })));
+const PracticeEntry = lazy(() => import('../practice/PracticeEntry').then(module => ({ default: module.PracticeEntry })));
 
 function createInteractionKey(prefix: string) {
   return `${prefix}:${crypto.randomUUID()}`;
@@ -660,6 +661,7 @@ export function CardsFactory() {
       )}
     >
       <div className={`factory-content-fill${composerOpen ? ' is-composing' : ''}`} data-testid="react-cards-factory">
+        <Suspense fallback={null}><PracticeEntry /></Suspense>
         <div className="factory-workspace">
           <section className="factory-library-grid">
             <aside className="surface date-rail">
