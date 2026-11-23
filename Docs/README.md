@@ -70,6 +70,7 @@ SaaS App Shell 与复杂长流程现代化的 35 项任务已于 2026-07-23 全�
 - Features/prototypes/tc-d1-prototype.html：已确认的 TC-D1 桌面端 12 状态可视化原型，使用合成内容并覆盖校对、官方/TTS 音频、派生卡和学习辅助接入；
 - Architecture/Textbook_Courses_Domain_Data_and_Media_ADR.md：已接受的 TC-D2 ADR 及 TC-P0-TC-P4 实施/验收记录，定义教材七表、修订、逐方向 hash、Manifest、API、媒体安全、Cards Factory 隔离和 LA-D2 增补；
 - Operations/Textbook_Courses_Runbook.md：教材导入、校对、发布、媒体、修订、备份恢复与故障降级运行手册；
+- Operations/Google_Drive_Core_Backup_Runbook.md：核心数据每日加密异地备份至 Google Drive（独立 `drive.file` 客户端、零停机 SQLite 快照、反向验签、仅移回收站保留、LaunchAgent 调度与两步式离线恢复演练）运行手册；
 - TestReports/Textbook_Courses_TC_P4_Acceptance_20260715.md：TC-P4 完整验收报告；
 - TestReports/SaaS_Textbook_Workflow_DS_W2_Acceptance_20260723.md：DS-W2 教材 SaaS 长流程迁移验收，记录 workflow、copy-on-write、逐表达确认、operation、桌面 E2E/visual 与边界证据；
 - TestReports/SaaS_Workflow_DS_W3_Acceptance_20260723.md：DS-W3 横向一致性验收，记录 ProductShell、Cards Factory、Learning Plan、KG unresolved 与 Review Session 的共享交互及领域边界；
