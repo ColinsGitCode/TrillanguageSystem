@@ -118,6 +118,12 @@ function createCardGenerationUseCase(customPorts = {}) {
       }
 
       ports.postProcessGeneratedContent(content);
+      if (typeof ports.enforceJapaneseHeadwordInMarkdown === 'function') {
+        content.markdown_content = await ports.enforceJapaneseHeadwordInMarkdown(
+          content.markdown_content,
+          { phrase, cardType }
+        );
+      }
       const validationErrors = ports.validateGeneratedContent(content, {
         allowMissingHtml: true,
         cardType,

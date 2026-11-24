@@ -48,6 +48,15 @@ test.describe('promptEngine trilingual language contract', () => {
     assert.match(prompt, /^\s*-\s*外来语标注[:：]/m);
     assert.doesNotMatch(prompt, /A2 正文合同/);
   });
+
+  test.it('injects strict Japanese headword preservation guidance for Japanese kanji inputs', () => {
+    const jaPrompt = buildMarkdownPrompt({ phrase: '計測', cardType: 'trilingual' });
+    assert.match(jaPrompt, /必须严格原样保留输入词本身/);
+    assert.match(jaPrompt, /日语原词保留约束：输入短语“計測”本身是日语词/);
+
+    const enPrompt = buildMarkdownPrompt({ phrase: 'measurement', cardType: 'trilingual' });
+    assert.doesNotMatch(enPrompt, /日语原词保留约束/);
+  });
 });
 
 test.describe('promptEngine scenario_phrase routing', () => {

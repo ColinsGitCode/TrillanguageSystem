@@ -3,6 +3,7 @@
 const { PerformanceMonitor } = require('../observability/observabilityService');
 const { renderHtmlFromMarkdown, prepareMarkdownForCard } = require('../generation/htmlRenderer');
 const { postProcessGeneratedContent } = require('../generation/contentPostProcessor');
+const { enforceJapaneseHeadwordInMarkdown } = require('../generation/japaneseHeadwordGuard');
 const {
   cleanupGenerationArtifacts,
   createGenerationStagingArea,
@@ -57,6 +58,7 @@ const cardGenerationPorts = {
   postProcessGeneratedContent: (content) => postProcessGeneratedContent(content, {
     removeInlineLoanwordAnnotations: LANGUAGE_METADATA_A2_ENABLED,
   }),
+  enforceJapaneseHeadwordInMarkdown,
   validateGeneratedContent,
   resolveCardAudioTasks,
   prepareMarkdownForCard,

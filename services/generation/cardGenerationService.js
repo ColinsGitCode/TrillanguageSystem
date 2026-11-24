@@ -13,6 +13,7 @@
 // transform over inputs + module-scope service singletons.
 
 const { buildMarkdownPrompt } = require('./promptEngine');
+const { enforceJapaneseHeadwordInMarkdown } = require('./japaneseHeadwordGuard');
 const deepseekService = require('../llm/deepseekService');
 const { buildBaseName, ensureTodayDirectory, ensureFolderDirectory } = require('../storage/fileManager');
 const { renderHtmlFromMarkdown, buildAudioTasksFromMarkdown, prepareMarkdownForCard } = require('./htmlRenderer');
@@ -61,7 +62,8 @@ async function generateWithProvider(phrase, _provider, perf, options = {}) {
     error.details = validationErrors;
     throw error;
   }
-  const markdown = extractMarkdownProviderResponse(response);
+  const rawMarkdown = extractMarkdownProviderResponse(response);
+  const markdown = await enforceJapaneseHeadwordInMarkdown(rawMarkdown, { phrase, cardType });
   const audioTasks = buildAudioTasksFromMarkdown(markdown);
   const preparedMarkdown = await prepareMarkdownForCard(markdown, { baseName, audioTasks, legacyRuby: false });
   const htmlContent = await renderHtmlFromMarkdown(preparedMarkdown, { baseName, audioTasks, prepared: true });

@@ -3,6 +3,14 @@ const path = require('path');
 const {
     CURRENT_SCENARIO_EXPRESSION_COUNT,
 } = require('../../lib/scenarioCardContract');
+const { hasJapanesePromptHint } = require('./japaneseHeadwordGuard');
+
+function applyJapaneseHeadwordContract(prompt, phrase, cardType) {
+    if (cardType !== 'trilingual') return prompt;
+    const trimmed = String(phrase || '').trim();
+    if (!hasJapanesePromptHint(trimmed)) return prompt;
+    return `${String(prompt || '').trimEnd()}\n\n日语原词保留约束：输入短语“${trimmed}”本身是日语词，## 2. 日本語 下的“- **翻訳**:”必须严格原样输出“${trimmed}”，绝不能改写成近义词或解释句；日语例句也应自然使用“${trimmed}”。`;
+}
 
 function buildScenarioAudioTaskExample() {
     const tasks = [];
@@ -145,7 +153,7 @@ JSON 结构:
 - **例句2**: 英文句子
   - 中文翻译
 ## 2. 日本語:
-- **翻訳**: ...（只写自然日语正文，不加括号假名或 HTML 注音）
+- **翻訳**: 若输入短语本身是日语词或日语汉字词，必须严格原样保留输入词本身，严禁替换为近义词或写成解释句；仅当输入为中文或英文时才给出自然日语翻译（只写自然日语正文，不加括号假名或 HTML 注音）
 - **解説**: ...（只写自然日语正文，不加括号假名或 HTML 注音）
 - **例句1**: 日文自然正文（不加括号假名或 HTML 注音）
   - 纯中文翻译（不含假名/注音/括号读音）
@@ -175,7 +183,10 @@ JSON 结构:
   ]
 }`;
 
-    return applyA2NewCardContract(strictCompactPrompt, omitInlineLoanwordAnnotations);
+    return applyA2NewCardContract(
+        applyJapaneseHeadwordContract(strictCompactPrompt, phrase, cardType),
+        omitInlineLoanwordAnnotations
+    );
 }
 
 function buildMarkdownPrompt(args) {
@@ -206,7 +217,11 @@ function buildMarkdownPrompt(args) {
     }
 
     return applyA2NewCardContract(
-        template.replace(/\{\{\s*phrase\s*\}\}/g, phrase),
+        applyJapaneseHeadwordContract(
+            template.replace(/\{\{\s*phrase\s*\}\}/g, phrase),
+            phrase,
+            cardType
+        ),
         omitInlineLoanwordAnnotations
     );
 }
