@@ -72,9 +72,10 @@ services:
       - TTS_MODEL_NAME=hexgrad/Kokoro-82M
       - TTS_LANG_CODE=a
       # PyTorch defaults to one thread per vCPU; on X86-MAC's 4-core, 8-thread
-      # CPU under Colima that oversubscribes and runs 2-3x slower than 4 threads.
-      - OMP_NUM_THREADS=${TTS_EN_THREADS:-4}
-      - MKL_NUM_THREADS=${TTS_EN_THREADS:-4}
+      # CPU under Colima that oversubscribes and runs 2-3x slower. 3 threads beat
+      # 4 by leaving a core for the viewer, VOICEVOX and a second concurrent request.
+      - OMP_NUM_THREADS=${TTS_EN_THREADS:-3}
+      - MKL_NUM_THREADS=${TTS_EN_THREADS:-3}
       - HF_HOME=/data/huggingface
     volumes:
       - kokoro_cache:/data/huggingface

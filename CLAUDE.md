@@ -207,7 +207,7 @@ routes/generate.js is a thin HTTP adapter. Both that route and the in-process wo
 - DeepSeek health verifies the configured model appears in the provider catalog; it does not establish generation quality.
 - Legacy provider names normalize to deepseek.
 - localLlmService is only an optional OpenAI-compatible OCR/development adapter.
-- English TTS: Kokoro, MP3. The `tts-en` container runs PyTorch with `OMP_NUM_THREADS`/`MKL_NUM_THREADS` = `TTS_EN_THREADS` (default 4). On X86-MAC the library default of 8 threads oversubscribed the 4-core CPU: a single word took 1.8-4.4 s and two simultaneous requests 10.2 s, against 0.9-1.5 s and 2.75 s at 4 threads (side-by-side, 2026-11-28).
+- English TTS: Kokoro, MP3. The `tts-en` container runs PyTorch with `OMP_NUM_THREADS`/`MKL_NUM_THREADS` = `TTS_EN_THREADS` (default 3). On X86-MAC the library default of 8 threads oversubscribed the 4-core CPU: a single word took 1.8-4.4 s and two simultaneous requests 10.2 s, against 0.9-1.5 s and 2.75 s at 4 threads. A second side-by-side on new texts favoured 3 over 4 (sentences 1.2-1.7 s vs 1.9-4.0 s), because 3 leaves a core for the viewer, VOICEVOX and a concurrent request (2026-11-28).
 - Japanese TTS: VOICEVOX, WAV.
 - Style-Bert-VITS2 is archived behind an opt-in Compose profile because resource cost exceeded its practical quality gain.
 - Selection TTS is a desktop-only, on-demand English/Japanese tool. It calls the same Kokoro/VOICEVOX providers through `synthesizeSpeech()` and the shared priority coordinator; interactive work enters before waiting batch work, while a 5-second anti-starvation window preserves batch progress.
