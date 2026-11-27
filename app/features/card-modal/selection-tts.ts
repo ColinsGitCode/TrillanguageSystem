@@ -32,6 +32,19 @@ export const selectionTtsApi = {
       maxChars: number;
     };
   },
+  /**
+   * Asks the server to synthesize phrases into its cache before they are
+   * clicked. Best effort: it answers at once and any failure is ignored, since
+   * a click still synthesizes on its own.
+   */
+  prewarm: (items: Array<{ text: string; language: SelectionTtsLanguage; speed: SelectionTtsSpeed }>) => (
+    fetch('/api/tts/selection/prewarm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+      keepalive: true,
+    }).then(() => undefined, () => undefined)
+  ),
   synthesize: async (
     payload: { text: string; language: SelectionTtsLanguage; speed: SelectionTtsSpeed },
     signal: AbortSignal

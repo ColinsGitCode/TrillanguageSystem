@@ -11,6 +11,7 @@ const QUOTA_ROUTES = [
   { category: 'generation', method: 'POST', pattern: /^\/api\/textbooks\/expressions\/\d+\/derivations$/u },
   { category: 'ocr', method: 'POST', pattern: /^\/api\/ocr$/u },
   { category: 'tts', method: 'POST', pattern: /^\/api\/tts\/selection$/u },
+  { category: 'tts', method: 'POST', pattern: /^\/api\/tts\/selection\/prewarm$/u },
   { category: 'tts', method: 'POST', pattern: /^\/api\/textbooks\/tracks\/\d+\/tts$/u },
   { category: 'tts', method: 'POST', pattern: /^\/api\/textbooks\/operations\/\d+\/retry$/u },
 ];

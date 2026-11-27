@@ -39,7 +39,9 @@ function waitForRecord(record, signal) {
       settled = true;
       if (signal) signal.removeEventListener('abort', onAbort);
       record.subscribers -= 1;
-      if (!record.settled && record.subscribers === 0) record.controller.abort();
+      // A warm-up keeps running when the reader who joined it moves on: the
+      // audio is still wanted for the next click.
+      if (!record.settled && record.subscribers === 0 && !record.keepAlive) record.controller.abort();
       callback(value);
     };
     const onAbort = () => finish(reject, abortError());
@@ -71,6 +73,11 @@ class SelectionTtsService {
     });
     this.active = 0;
     this.inFlight = new Map();
+    // Warm-ups run one at a time at batch priority and outside `active`, so
+    // they never make an interactive request report "busy".
+    this.maxWarmQueue = options.maxWarmQueue || 6;
+    this.warmQueue = [];
+    this.warmActive = false;
   }
 
   publicConfig() {
@@ -165,7 +172,63 @@ class SelectionTtsService {
     return waitForRecord(record, options.signal);
   }
 
-  async #generate(input, identity, key, controller) {
+  /**
+   * Synthesizes phrases into the cache ahead of a click. On this hardware a
+   * first English synthesis takes about 3 s even for one word, while a cache
+   * hit returns in about 0.1 s. Writes only the cache, like synthesize().
+   */
+  async prewarm(items) {
+    if (!this.enabled) {
+      throw selectionTtsError('SELECTION_TTS_DISABLED', '朗读选区功能未开启', 404);
+    }
+    if (!Array.isArray(items) || items.length === 0 || items.length > 4) {
+      throw selectionTtsError('SELECTION_TTS_INVALID_INPUT', 'items 必须是 1 到 4 条', 400);
+    }
+    const inputs = items.map((item) => this.validate(item));
+    const statuses = [];
+    for (const input of inputs) {
+      const { identity, key } = this.cacheKey(input);
+      let status;
+      if (this.inFlight.has(key) || this.warmQueue.some((entry) => entry.key === key)) {
+        status = 'pending';
+      } else if (await this.cache.get(key)) {
+        status = 'cached';
+      } else {
+        this.warmQueue.push({ input, identity, key });
+        // A reader flipping through cards keeps the newest ones.
+        while (this.warmQueue.length > this.maxWarmQueue) this.warmQueue.shift();
+        status = 'queued';
+      }
+      statuses.push({ language: input.language, status });
+    }
+    this.#drainWarmQueue();
+    return statuses;
+  }
+
+  #drainWarmQueue() {
+    if (this.warmActive) return;
+    const next = this.warmQueue.shift();
+    if (!next) return;
+    if (this.inFlight.has(next.key)) {
+      this.#drainWarmQueue();
+      return;
+    }
+    this.warmActive = true;
+    const controller = new AbortController();
+    const record = { controller, subscribers: 0, settled: false, keepAlive: true, promise: null };
+    record.promise = this.#generate(next.input, next.identity, next.key, controller, 'batch')
+      .finally(() => {
+        record.settled = true;
+        this.inFlight.delete(next.key);
+        this.warmActive = false;
+        this.#drainWarmQueue();
+      });
+    // A failed warm-up is not an error anyone sees; the click synthesizes again.
+    record.promise.catch(() => {});
+    this.inFlight.set(next.key, record);
+  }
+
+  async #generate(input, identity, key, controller, requestClass = 'interactive') {
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -173,7 +236,7 @@ class SelectionTtsService {
     }, this.timeoutMs);
     try {
       const result = await this.synthesizeSpeech(input, {
-        requestClass: 'interactive',
+        requestClass,
         signal: controller.signal,
       });
       if (!Buffer.isBuffer(result.buffer) || result.buffer.length === 0) {

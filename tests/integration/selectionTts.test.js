@@ -105,3 +105,28 @@ test('selection TTS rejects invalid inputs without exposing provider details', a
     assert.equal(JSON.stringify(response.body).includes(root), false);
   }
 });
+
+test('prewarm answers at once, fills the cache in the background and writes no domain data', async () => {
+  const before = snapshotDatabase(dbPath);
+  const englishCalls = calls.en;
+  const response = await api('POST', '/api/tts/selection/prewarm', {
+    body: { items: [{ text: 'Warm this phrase.', language: 'en', speed: 1 }] },
+  });
+  assert.equal(response.status, 202);
+  assert.equal(response.headers['cache-control'], 'no-store');
+  assert.deepEqual(response.body, { success: true, items: [{ language: 'en', status: 'queued' }] });
+
+  const deadline = Date.now() + 5000;
+  while (calls.en === englishCalls && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  let click;
+  do {
+    click = await api('POST', '/api/tts/selection', { body: { text: 'Warm this phrase.', language: 'en', speed: 1 } });
+  } while (click.headers['x-tts-cache'] !== 'HIT' && Date.now() < deadline);
+  assert.equal(click.headers['x-tts-cache'], 'HIT');
+  assert.equal(calls.en, englishCalls + 1);
+
+  const invalid = await api('POST', '/api/tts/selection/prewarm', { body: { items: [] } });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.body.code, 'SELECTION_TTS_INVALID_INPUT');
+  assert.equal(snapshotDatabase(dbPath).aggregateSha256, before.aggregateSha256);
+});

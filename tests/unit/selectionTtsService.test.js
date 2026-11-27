@@ -211,3 +211,109 @@ test('aborts the provider when the final subscriber leaves', async () => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(providerAborted, true);
 });
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('prewarm synthesizes queued phrases one at a time at batch priority, then clicks hit the cache', async () => {
+  const calls = [];
+  const tts = service({
+    synthesizeSpeech: async (input, options) => {
+      calls.push({ text: input.text, requestClass: options.requestClass });
+      return result(input.text);
+    },
+  });
+  const statuses = await tts.prewarm([
+    { text: '大丈夫だよ。', language: 'ja', speed: 1 },
+    { text: "It's no big deal.", language: 'en', speed: 1 },
+  ]);
+  assert.deepEqual(statuses, [
+    { language: 'ja', status: 'queued' },
+    { language: 'en', status: 'queued' },
+  ]);
+  while (tts.warmActive || tts.warmQueue.length) await tick();
+  assert.deepEqual(calls, [
+    { text: '大丈夫だよ。', requestClass: 'batch' },
+    { text: "It's no big deal.", requestClass: 'batch' },
+  ]);
+  const click = await tts.synthesize({ text: "It's no big deal.", language: 'en', speed: 1 });
+  assert.equal(click.cacheStatus, 'HIT');
+  assert.equal(calls.length, 2);
+  assert.deepEqual(await tts.prewarm([{ text: '大丈夫だよ。', language: 'ja', speed: 1 }]), [
+    { language: 'ja', status: 'cached' },
+  ]);
+});
+
+test('a warm-up never makes an interactive request report busy', async () => {
+  const gate = deferred();
+  const tts = service({
+    maxConcurrency: 1,
+    synthesizeSpeech: async (input, options) => {
+      if (options.requestClass === 'batch') await gate.promise;
+      return result(input.text);
+    },
+  });
+  await tts.prewarm([{ text: 'warm phrase', language: 'en', speed: 1 }]);
+  assert.equal(tts.warmActive, true);
+  const click = await tts.synthesize({ text: 'other phrase', language: 'en', speed: 1 });
+  assert.equal(click.cacheStatus, 'MISS');
+  gate.resolve();
+  while (tts.warmActive) await tick();
+});
+
+test('a reader who joins a warm-up and leaves does not cancel it', async () => {
+  const gate = deferred();
+  let aborted = false;
+  const tts = service({
+    synthesizeSpeech: async (_input, options) => {
+      options.signal.addEventListener('abort', () => { aborted = true; });
+      await gate.promise;
+      return result('warm');
+    },
+  });
+  await tts.prewarm([{ text: 'join me', language: 'en', speed: 1 }]);
+  assert.deepEqual(await tts.prewarm([{ text: 'join me', language: 'en', speed: 1 }]), [
+    { language: 'en', status: 'pending' },
+  ]);
+  const reader = new AbortController();
+  const joined = tts.synthesize({ text: 'join me', language: 'en', speed: 1 }, { signal: reader.signal });
+  reader.abort();
+  await assert.rejects(joined, (error) => error.code === 'SELECTION_TTS_ABORTED');
+  gate.resolve();
+  while (tts.warmActive) await tick();
+  assert.equal(aborted, false);
+  assert.equal((await tts.synthesize({ text: 'join me', language: 'en', speed: 1 })).cacheStatus, 'HIT');
+});
+
+test('the warm-up queue keeps the newest phrases and validates its input', async () => {
+  const gate = deferred();
+  const seen = [];
+  const tts = service({
+    maxWarmQueue: 2,
+    synthesizeSpeech: async (input) => {
+      seen.push(input.text);
+      if (input.text === 'first') await gate.promise;
+      return result(input.text);
+    },
+  });
+  await tts.prewarm([{ text: 'first', language: 'en', speed: 1 }]);
+  await tts.prewarm(['a', 'b', 'c'].map((text) => ({ text, language: 'en', speed: 1 })));
+  assert.deepEqual(tts.warmQueue.map((entry) => entry.input.text), ['b', 'c']);
+  gate.resolve();
+  while (tts.warmActive || tts.warmQueue.length) await tick();
+  assert.deepEqual(seen, ['first', 'b', 'c']);
+
+  await assert.rejects(tts.prewarm([]), (error) => error.code === 'SELECTION_TTS_INVALID_INPUT');
+  await assert.rejects(tts.prewarm(new Array(5).fill({ text: 'x', language: 'en', speed: 1 })),
+    (error) => error.code === 'SELECTION_TTS_INVALID_INPUT');
+  await assert.rejects(tts.prewarm([{ text: 'x', language: 'fr', speed: 1 }]),
+    (error) => error.code === 'SELECTION_TTS_INVALID_INPUT');
+  await assert.rejects(service({ enabled: false }).prewarm([{ text: 'x', language: 'en', speed: 1 }]),
+    (error) => error.code === 'SELECTION_TTS_DISABLED');
+});

@@ -28,6 +28,7 @@ test.describe('public sandbox quota', () => {
     assert.equal(classifyQuotaRequest('POST', '/api/generation-jobs'), 'generation');
     assert.equal(classifyQuotaRequest('POST', '/api/ocr'), 'ocr');
     assert.equal(classifyQuotaRequest('POST', '/api/tts/selection'), 'tts');
+    assert.equal(classifyQuotaRequest('POST', '/api/tts/selection/prewarm'), 'tts');
     assert.equal(classifyQuotaRequest('GET', '/api/history'), null);
     assert.equal(classifyQuotaRequest('POST', '/api/learning/queues/today'), null);
   });

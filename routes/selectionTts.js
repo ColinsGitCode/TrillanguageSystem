@@ -16,6 +16,17 @@ router.get('/api/tts/selection', (_req, res) => {
   res.json({ success: true, ...service.publicConfig() });
 });
 
+// Fire-and-forget: answers 202 at once and synthesizes into the cache in the
+// background, so a later click on the same phrase is a cache hit.
+router.post('/api/tts/selection/prewarm', async (req, res, next) => {
+  try {
+    const items = await service.prewarm(req.body?.items);
+    res.status(202).set('Cache-Control', 'no-store').json({ success: true, items });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/api/tts/selection', async (req, res, next) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();

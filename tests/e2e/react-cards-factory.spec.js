@@ -712,6 +712,59 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('opening a card warms its summary phrases, Japanese first, before any click', async ({ page }) => {
+    const warmups = [];
+    await page.route('**/api/tts/selection', (route) => route.fulfill({
+      json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 },
+    }));
+    await page.route('**/api/tts/selection/prewarm', (route) => {
+      warmups.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { success: true, items: [] } });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await expect(page.getByTestId('card-summary')).toBeVisible();
+    await expect.poll(() => warmups.length).toBe(1);
+    expect(warmups[0].items).toEqual([
+      { text: 'react trilingual fixture', language: 'ja', speed: 1 },
+      { text: 'A deterministic English equivalent for the input expression', language: 'en', speed: 1 },
+    ]);
+  });
+
+  test('example audio fetched on hover plays from memory on click', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__exampleAudio = [];
+      class FakeAudio extends EventTarget {
+        constructor(src) { super(); this.src = src; this.paused = true; window.__exampleAudio.push(src); }
+        play() { this.paused = false; return Promise.resolve(); }
+        pause() { this.paused = true; }
+        removeAttribute() {}
+        load() {}
+      }
+      window.Audio = FakeAudio;
+    });
+    // Fixture cards have no synthesized audio on disk; serve stand-in bytes.
+    const audioRequests = [];
+    await page.route(/\/api\/folders\/[^/]+\/files\/[^/]+\.(mp3|wav)$/u, (route) => {
+      audioRequests.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'audio/mpeg', body: Buffer.from('fixture-audio') });
+    });
+    await page.goto('/');
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    const button = page.getByTestId('react-card-content').locator('.audio-btn').first();
+    await expect(button).toBeVisible();
+    await button.hover();
+    await expect.poll(() => audioRequests.length).toBe(1);
+    // Give the fetched audio a moment to become a Blob URL before the click.
+    await page.waitForTimeout(200);
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.__exampleAudio.length)).toBe(1);
+    expect(await page.evaluate(() => window.__exampleAudio[0])).toMatch(/^blob:/u);
+    await expect(button).toHaveClass(/is-playing/u);
+    // No second download for the click.
+    expect(audioRequests).toHaveLength(1);
+  });
+
   test('a trilingual card opens on its three translations, and the phrase itself can be heard', async ({ page }) => {
     const requests = [];
     await page.route('**/api/tts/selection', async (route) => {

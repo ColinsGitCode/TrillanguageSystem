@@ -38,6 +38,22 @@ export function CardSummaryStrip({ summary, generationId, showReadings = true }:
     ? readingFromTokens(pronunciationQuery.data.plainText, pronunciationQuery.data.tokens, summary.ja)
     : null);
   const voices = configQuery.data?.enabled ? configQuery.data.languages : [];
+  const voiceKey = voices.join(',');
+
+  // A first synthesis takes 1-3 s on the server (English longer than
+  // Japanese); a cached one about 0.1 s. Warm both phrases shortly after the
+  // card opens, Japanese first, so the click is usually a cache hit. The delay
+  // skips cards that are only flipped past.
+  useEffect(() => {
+    if (!voiceKey) return undefined;
+    const items = [
+      { text: summary.ja, language: 'ja' as const, speed: 1 as const },
+      { text: summary.en, language: 'en' as const, speed: 1 as const },
+    ].filter((item) => voiceKey.split(',').includes(item.language) && item.text);
+    if (!items.length) return undefined;
+    const timer = window.setTimeout(() => { void selectionTtsApi.prewarm(items); }, 600);
+    return () => window.clearTimeout(timer);
+  }, [summary.ja, summary.en, voiceKey]);
 
   const release = () => {
     controllerRef.current?.abort();

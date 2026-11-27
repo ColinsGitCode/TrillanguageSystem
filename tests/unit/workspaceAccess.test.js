@@ -115,6 +115,14 @@ test.describe('workspace access policy', () => {
       }).code,
       'WORKSPACE_HIGH_COST_DISABLED'
     );
+    // Warming the TTS cache synthesizes speech, so it sits behind the same gate.
+    assert.equal(
+      authorizeWorkspaceRequest(policy, {
+        method: 'POST',
+        path: '/api/tts/selection/prewarm',
+      }).code,
+      'WORKSPACE_HIGH_COST_DISABLED'
+    );
   });
 
   test.it('enables high-cost operations only through an explicit second gate', () => {

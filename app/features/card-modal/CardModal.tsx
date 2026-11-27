@@ -226,6 +226,12 @@ export function CardModal({
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardAudio = useExclusiveAudio();
+  // Example audio fetched while the pointer rests on its button, kept as Blob
+  // URLs for this card. A click then plays from memory instead of starting a
+  // download. Only finished fetches are used: playback must start inside the
+  // click, so it never waits on one still in flight.
+  const prefetchedAudioRef = useRef(new Map<string, string>());
+  const prefetchingAudioRef = useRef(new Set<string>());
   const selectedRangeRef = useRef<Range | null>(null);
   const selectedAnchorRef = useRef<CardAnnotationSelector | null>(null);
   const selectedTextRef = useRef('');
@@ -502,6 +508,39 @@ export function CardModal({
   useEffect(() => () => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
   }, []);
+
+  const exampleAudioUrl = (source: string) => (
+    `/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`
+  );
+
+  useEffect(() => {
+    const prefetched = prefetchedAudioRef.current;
+    const prefetching = prefetchingAudioRef.current;
+    return () => {
+      prefetched.forEach((blobUrl) => URL.revokeObjectURL(blobUrl));
+      prefetched.clear();
+      prefetching.clear();
+    };
+  }, [selection.folder, selection.baseName]);
+
+  const prefetchExampleAudio = (target: EventTarget | null) => {
+    const button = target instanceof Element ? target.closest<HTMLButtonElement>('.audio-btn') : null;
+    const source = button?.dataset.src;
+    if (!source) return;
+    const url = exampleAudioUrl(source);
+    if (prefetchedAudioRef.current.has(url) || prefetchingAudioRef.current.has(url)) return;
+    prefetchingAudioRef.current.add(url);
+    const prefetching = prefetchingAudioRef.current;
+    void fetch(url)
+      .then((response) => (response.ok ? response.blob() : null))
+      .then((blob) => {
+        // Dropped if the card changed while the fetch ran.
+        if (!blob || prefetchingAudioRef.current !== prefetching || !prefetching.has(url)) return;
+        prefetchedAudioRef.current.set(url, URL.createObjectURL(blob));
+      })
+      .catch(() => {})
+      .finally(() => prefetching.delete(url));
+  };
 
   useLayoutEffect(() => {
     if (!toolbar) return;
@@ -975,8 +1014,9 @@ export function CardModal({
       cardAudio.stop();
       contentRef.current?.querySelectorAll('.audio-btn.is-playing').forEach((node) => node.classList.remove('is-playing'));
       button.classList.add('is-playing');
+      const url = exampleAudioUrl(source);
       void cardAudio.playUrl(
-        `/api/folders/${encodeURIComponent(selection.folder)}/files/${encodeURIComponent(source)}`,
+        prefetchedAudioRef.current.get(url) || url,
         {
           onEnded: () => button.classList.remove('is-playing'),
           onError: () => button.classList.remove('is-playing'),
@@ -1218,7 +1258,11 @@ export function CardModal({
                   <DeferredScenarioOutline items={outline} getContentRoot={getContentRoot} scrollRoot={scrollRoot} />
                 </Suspense>
               )}
-              <div className="card-reading-column">
+              <div
+                className="card-reading-column"
+                onPointerOver={(event) => { if (event.pointerType === 'mouse') prefetchExampleAudio(event.target); }}
+                onFocusCapture={(event) => prefetchExampleAudio(event.target)}
+              >
                 {summary && (
                   <Suspense fallback={null}>
                     <DeferredCardSummaryStrip summary={summary} showReadings={showReadings} generationId={generationId ? Number(generationId) : null} />
