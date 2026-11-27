@@ -18,6 +18,7 @@ function repository(t) {
   git('add', '.');
   git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
     '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture');
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=checkout');
   return root;
 }
 
@@ -56,6 +57,15 @@ test('deployment passes metadata and restarts viewer only without dependencies o
   assert.deepEqual(calls[1].args, [
     'compose', '-p', 'three_lans_system', 'up', '-d', '--no-build', '--no-deps', 'viewer',
   ]);
+});
+
+test('a checkout without .env and no runtime directory stops before building', (t) => {
+  const root = repository(t);
+  fs.unlinkSync(path.join(root, '.env'));
+  let calls = 0;
+  assert.throws(() => rebuildViewer({ root, runtimeDir: '', run: () => { calls += 1; } }),
+    /no \.env[\s\S]*THREE_LANS_RUNTIME_DIR/u);
+  assert.equal(calls, 0);
 });
 
 test('a runtime directory recreates the viewer with its own configuration', (t) => {

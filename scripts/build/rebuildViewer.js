@@ -30,10 +30,18 @@ function collectBuildMetadata(root) {
 // A host may run the viewer from a separate runtime directory that holds its
 // own .env and Compose file (X86-MAC: /Users/colin/ThreeLANS/app). The image is
 // still built from this checkout, but the container must be recreated with the
-// runtime directory's configuration: recreating it from a checkout picks up the
-// checkout's .env, which there is a stale August copy.
+// runtime directory's configuration. Without one, Compose reads the checkout's
+// .env; X86-MAC's checkout deliberately has none, and recreating the viewer
+// there would start it with every secret and setting blank.
 function runtimeCompose(root, runtimeDir) {
-  if (!runtimeDir) return { args: ['compose', '-p', 'three_lans_system'], cwd: root, pull: [] };
+  if (!runtimeDir) {
+    if (!fs.existsSync(path.join(root, '.env'))) {
+      throw new Error('This checkout has no .env, so the viewer would start without its configuration. '
+        + 'Set THREE_LANS_RUNTIME_DIR to the directory holding the live .env and Compose file '
+        + '(X86-MAC: /Users/colin/ThreeLANS/app); viewer was not rebuilt.');
+    }
+    return { args: ['compose', '-p', 'three_lans_system'], cwd: root, pull: [] };
+  }
   const dir = path.resolve(runtimeDir);
   const composeFile = path.join(dir, 'docker-compose.yml');
   for (const required of [composeFile, path.join(dir, '.env')]) {
