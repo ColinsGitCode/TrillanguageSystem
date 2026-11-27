@@ -20,6 +20,8 @@ Current runtime capabilities:
 - generation observability and infrastructure health;
 - Learning Assistance 2.0 desktop workflow for plan, daily queue, resumable review, idempotent rating, Study Item view models, learning history and outcome metrics;
 - Textbook Courses TC-P4: Git-external draft Manifest import, textbook search, controlled official Track audio streaming, `/textbooks` desktop review page, persisted selection highlights, human verification, explicit Track publishing to `textbook_track` generation projections, formal English/Japanese per-expression TTS assets, `textbook_en/ja` Study Items, learning plan scope v2, review item view-models, history filters, textbook selection card derivation, full desktop E2E/visual acceptance, and documented backup/recovery.
+- 练一句 sentence practice at `/practice`: Japanese or English prompts drawn from existing trilingual cards, one saved answer per prompt, one score-free DeepSeek feedback, and learner self-assessment;
+- encrypted daily off-host backup of core data to Google Drive, with offline restore.
 
 Retired on 2026-07-13:
 
@@ -51,6 +53,7 @@ Since 2026-10-30 the project runs and is developed on **X86-MAC** (SSH alias `ts
 - `/Users/colin/ThreeLANS/source-repository`: the Git workspace for development, tests and commits. It pushes to GitHub with a repository deploy key (SSH alias `github.com-colin`). Its `.env` is a stale August copy that must never configure the running viewer.
 - `/Users/colin/ThreeLANS/app`: the runtime directory. It holds the live `.env` (mode 0600) and the Compose file the running containers use; it is not a Git checkout.
 - `/Users/colin/ThreeLANS/bin/compose`: Compose bound to the runtime directory and Docker context `colima`. Never run `down -v` or a global Docker prune. Release evidence, SQLite backups and rollback image tags live under `/Users/colin/ThreeLANS/releases/`.
+- Daily off-host backup: LaunchAgent `com.threelans.core-backup.daily` runs at 04:15 Asia/Tokyo from `/Users/colin/ThreeLANS/backups/google-drive/tools`, a pinned copy of `scripts/backup/` made on 2026-11-23. It does not follow the checkout: after changing `scripts/backup/`, copy it there deliberately. Each run takes an online SQLite snapshot plus card text and textbook files, encrypts them on the host with only the public key (AES-256-GCM + RSA-OAEP), uploads to a private `drive.file` folder, verifies the upload, and only moves archives older than 30 days to the Drive trash while keeping at least three. Card audio, model caches and `.env` are excluded. The private key stays offline with the owner and must never be copied to X86-MAC or Drive. Logs live in `backups/google-drive/logs/`; see `Docs/Operations/Google_Drive_Core_Backup_Runbook.md`.
 
 A clone on another machine has no `.env`, dependencies or containers; it is only a Git copy.
 
@@ -108,6 +111,14 @@ Active route modules:
 - routes/learning.js: `/api/learning` plan, queue, session, review, Study Item and read-only history/metrics contract;
 - routes/textbooks.js: `/api/textbooks` draft import, course/track/search reads, human verification, explicit publish, persisted highlights, selection derivation jobs, official audio content, and generated per-expression TTS content, feature-flagged on by default for TC-P4;
 - routes/languageMetadata.js: `GET /api/language-metadata` read-only inspection, JLM-A1 adjudication (`POST .../proposals/:id/accept`, `.../reject`, `POST .../corrections`) and idempotent manual job compensation (`POST .../jobs`), all gated by `LANGUAGE_METADATA_ENABLED` and 404 by default;
+- routes/annotations.js: `/api/annotations` list, create, update and delete for `card_annotations` highlights and reading notes;
+- routes/cardEngagement.js: `POST /api/card-engagement/events` idempotent card-open and query events, per-card stats and today's summary over `card_engagement_events`;
+- routes/kg.js: `/api/kg` search, lookup submission, points, surface forms, Evidence and resolution cases, unavailable unless `KG_ENABLED`;
+- routes/manualTags.js: `/api/manual-tags` user-defined tag CRUD/archive, assignment replacement and tagged-target listing;
+- routes/onboarding.js: `GET /api/onboarding` read-only first-run checklist (content, plan, queue, first review);
+- routes/pronunciation.js: `GET /api/pronunciation` Japanese reading overlay and `POST /api/pronunciation/corrections` human reading corrections;
+- routes/pronunciationTelemetry.js: allowlisted pronunciation UI counters held in process memory, plus their read-only snapshot;
+- routes/sentencePractice.js: `/api/sentence-practice` prompt issue, answer and feedback, self-assessment and recent history, owner workspace only;
 - routes/testReset.js: E2E-only reset.
 
 Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must return 404.
@@ -117,6 +128,31 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
     services/
       fixtures/
         e2eFixtureService.js
+      activity/
+        activityService.js
+      annotations/
+        annotationService.js
+        annotationRuntime.js
+        annotationErrors.js
+        application/
+        domain/
+      application/
+        cardAdmission.js
+        cardGenerationPorts.js
+        deleteCard.js
+        executeCardGeneration.js
+        executeGenerationJob.js
+        generationOrigin.js
+      cardEngagement/
+        cardEngagementService.js
+        cardEngagementPlanningSignalReader.js
+      cardReader/
+        cardDocument.mjs
+        cardReaderShadow.mjs
+        cardReaderShadowService.js
+      dataPreparation/
+        cardTagging.js
+        rules.js
       generation/
         audioFormat.js
         cardGenerationService.js
@@ -124,6 +160,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         generationJobService.js
         htmlRenderer.js
         japaneseFurigana.js
+        japaneseHeadwordGuard.js
         markdownParser.js
         promptEngine.js
         ttsRequestCoordinator.js
@@ -169,6 +206,7 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
         databaseService.js
         databaseHelpers.js
         fileManager.js
+        sqliteBusyRetry.js
         db/
           generationJobs.js
           generations.js
@@ -179,6 +217,38 @@ Routes under /api/dashboard, /api/knowledge, and /api/srs do not exist and must 
           languageMetadata.js
           textbooks.js
           testReset.js
+          annotations.js
+          cardEngagement.js
+          cardTags.js
+          ftsInfrastructure.js
+          kgSourceSyncJobs.js
+          localGlossary.js
+          manualTags.js
+          migrationRunner.js
+          pronunciation.js
+          textbookOperations.js
+          textbookWorkflow.js
+      kg/
+        kgSourceSyncService.js
+        application/
+        domain/
+        storage/
+      manualTags/
+        manualTagService.js
+      onboarding/
+        onboardingService.js
+      practice/
+        sentencePracticeService.js
+      pronunciation/
+        pronunciationService.js
+        pronunciationPorts.js
+        pronunciationTelemetry.js
+        rubyParser.js
+        dictionaries/
+      sandbox/
+        sandboxInstanceManager.js
+        sandboxQuotaService.js
+        gatewayErrorPage.js
 
 Do not create a second copy of backend services inside the future React app. React server code must call existing backend capabilities through explicit server-only adapters or HTTP contracts.
 
@@ -261,6 +331,7 @@ Active files:
     app/features/factory/*
     app/features/card-modal/*
     app/features/learning/*
+    app/features/practice/*
     app/components/ProductShell.tsx
     app/lib/api/client.ts
     app/styles/tokens.css
@@ -268,6 +339,8 @@ Active files:
     app/styles/card-modal.css
 
 The shell has Cards Factory plus the Learning Workbench. User-visible learning routes are `/learn`, `/learn/plan`, `/learn/session`, and `/learn/history`; the review session is entered from today learning rather than treated as a sidebar destination. The card library is part of Cards Factory, not a separate route.
+
+`/practice` (练一句) is entered from the Cards Factory "今天练一句" bar or a trilingual card's 练一句 button and works at phone width. It is owner-workspace only. Prompts come from the target language's example sentences on existing trilingual cards and their Chinese translations. Another scenario for the same expression uses another example first, and DeepSeek drafts a new scenario only when the examples are used up. The reference answer stays on the server. A submitted answer is saved before DeepSeek returns one piece of feedback, never a score or pass/fail. A failed feedback can be retried without overwriting the answer, and the learner chooses 能独立表达, 还要练 or 我不同意. DeepSeek receives only the current scenario, target, reference example and submitted text. Migration 017 adds only `sentence_practice_attempts`. Practice never reads or writes review scheduling, Review Events, queues or card Markdown, and unsubmitted prompts are not history. See `Docs/Features/Sentence_Practice.md`.
 
 `marked`, `DOMPurify`, React Query and Lucide are production npm dependencies bundled into hashed local assets. Card rendering must preserve the Markdown -> audio/ruby adapter -> DOMPurify pipeline.
 
@@ -338,6 +411,18 @@ Current tables:
 - local_glossary_lookup_events;
 - language_metadata_jobs;
 - language_metadata_proposals;
+- card_engagement_events;
+- manual_tag_definitions;
+- manual_tag_assignments;
+- pronunciation_documents;
+- pronunciation_tokens;
+- pronunciation_correction_events;
+- textbook_operations;
+- textbook_operation_events;
+- textbook_expression_review_states;
+- kg_source_sync_jobs;
+- sentence_practice_attempts;
+- textbook_expressions_fts virtual table;
 - generations_fts virtual table and triggers.
 
 database/schema.sql is the complete desired-state schema source. Existing-database transitions are versioned and idempotent under database/migrations, with checksums recorded by services/storage/db/migrationRunner.js. Every future schema change must update the full schema and add its transition in the same commit. databaseService initializes schema.sql, keeps ensureSchemaMigrations only for pre-runner compatibility, then runs the versioned migration runner. Do not add learning-domain migrations to ensureSchemaMigrations. SQL storage infrastructure lives under services/storage/db; learning-domain application and scheduling code lives under services/learning.
