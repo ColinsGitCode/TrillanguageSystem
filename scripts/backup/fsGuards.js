@@ -139,6 +139,16 @@ function sha256FileSync(filePath) {
   return { sha256: hash.digest('hex'), size };
 }
 
+// tar prints member names in the caller's locale. Without a UTF-8 locale, as
+// under ssh, launchd or a bare spawn, macOS bsdtar escapes every non-ASCII byte
+// ("\345\210\206…"), and card filenames are almost all Chinese or Japanese:
+// the listing then fails the path check and offline restore stops. Every tar
+// call runs with an explicit UTF-8 locale instead of inheriting one.
+function tarEnv(extra = {}) {
+  const locale = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
+  return { ...process.env, LANG: locale, LC_ALL: locale, ...extra };
+}
+
 function assertSafeRelativePath(relPath) {
   if (typeof relPath !== 'string' || !relPath || relPath.includes('\0')) {
     throw new Error('invalid_archive_member_path');
@@ -229,4 +239,5 @@ module.exports = {
   sha256FileSync,
   assertSafeRelativePath,
   acquireNonBlockingLock,
+  tarEnv,
 };

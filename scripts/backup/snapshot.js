@@ -16,6 +16,7 @@ const {
   RUN_ID_RE,
   assertPrivateFile,
   assertSafeRelativePath,
+  tarEnv,
   ensurePrivateDir,
   sha256FileSync,
   writePrivateJsonAtomic,
@@ -279,7 +280,7 @@ function extractTarFileToDir(tarFilePath, destDir) {
   if (!fs.existsSync(tarFilePath) || fs.statSync(tarFilePath).size === 0) return;
   const res = spawnSync('tar', ['-xf', tarFilePath, '-C', destDir], {
     timeout: 300_000,
-    env: { ...process.env, COPYFILE_DISABLE: '1' },
+    env: tarEnv({ COPYFILE_DISABLE: '1' }),
     stdio: 'pipe',
   });
   if (res.status !== 0) {
@@ -600,7 +601,7 @@ async function createEncryptedSnapshot({
       ['-czf', tarPath, '-C', stagingDir, '.'],
       {
         timeout: 300_000,
-        env: { ...process.env, COPYFILE_DISABLE: '1' },
+        env: tarEnv({ COPYFILE_DISABLE: '1' }),
       }
     );
     if (tarRes.status !== 0) {

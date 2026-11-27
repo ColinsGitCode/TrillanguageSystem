@@ -23,6 +23,7 @@ const {
   SHA256_HEX_RE,
   assertPrivateFile,
   assertSafeRelativePath,
+  tarEnv,
   ensurePrivateDir,
   readPrivateJson,
   sha256FileSync,
@@ -178,6 +179,7 @@ async function downloadFromDrive({
 function validateTarEntriesSafe(tarGzPath) {
   const listRes = spawnSync('tar', ['-tzvf', tarGzPath], {
     encoding: 'utf8',
+    env: tarEnv(),
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -198,6 +200,7 @@ function validateTarEntriesSafe(tarGzPath) {
 
   const namesRes = spawnSync('tar', ['-tzf', tarGzPath], {
     encoding: 'utf8',
+    env: tarEnv(),
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -286,7 +289,7 @@ function verifyArchiveOffline(archivePath, privateKey, {
     const extractRes = spawnSync('tar', ['-xzf', tarGzPath, '-C', extractDir], {
       timeout: 300_000,
       stdio: 'pipe',
-      env: { ...process.env, COPYFILE_DISABLE: '1' },
+      env: tarEnv({ COPYFILE_DISABLE: '1' }),
     });
     if (extractRes.status !== 0) {
       throw new Error('offline_tar_extract_failed');
