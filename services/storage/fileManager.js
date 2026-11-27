@@ -41,12 +41,32 @@ function getTodayFolderName() {
     return `${year}${month}${day}`;
 }
 
+// True when `child` is strictly inside `parent`. A bare prefix test is not
+// enough: it accepted the parent itself (folder "." read the records root,
+// where the SQLite database lives) and siblings sharing a prefix
+// ("../20260101x" from folder 20260101).
+function isStrictlyInside(parent, child) {
+    const relative = path.relative(parent, child);
+    return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
 function resolveFolder(folderName) {
     const safeName = folderName || '';
     const folderPath = path.resolve(path.join(baseDir, safeName));
-    if (!folderPath.startsWith(baseDir)) return null;
+    if (!isStrictlyInside(path.resolve(baseDir), folderPath)) return null;
     if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) return null;
     return folderPath;
+}
+
+function resolveFileInFolder(folderName, filename) {
+    const folderPath = resolveFolder(folderName);
+    if (!folderPath) throw new Error('Folder not found');
+    const filePath = path.resolve(path.join(folderPath, filename || ''));
+    if (!isStrictlyInside(folderPath, filePath)) throw new Error('Invalid file path');
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        throw new Error('File not found');
+    }
+    return filePath;
 }
 
 function readMetaInfo(metaPath) {
@@ -156,14 +176,7 @@ function listHtmlFilesInFolder(folderName) {
 }
 
 function readFileInFolder(folderName, filename) {
-    const folderPath = resolveFolder(folderName);
-    if (!folderPath) throw new Error('Folder not found');
-    const safeFile = filename || '';
-    const filePath = path.resolve(path.join(folderPath, safeFile));
-    if (!filePath.startsWith(folderPath)) throw new Error('Invalid file path');
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-        throw new Error('File not found');
-    }
+    const filePath = resolveFileInFolder(folderName, filename);
     const ext = path.extname(filePath).toLowerCase();
     if (['.md', '.html', '.json', '.txt'].includes(ext)) {
         return fs.readFileSync(filePath, 'utf-8');
@@ -432,6 +445,7 @@ module.exports = {
     listFoldersWithHtml,
     listHtmlFilesInFolder,
     readFileInFolder,
+    resolveFileInFolder,
     deleteRecordFiles,
     createGenerationStagingArea,
     publishStagedGeneration,

@@ -27,22 +27,35 @@ router.get('/api/folders/:folder/files', (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+const AUDIO_CONTENT_TYPES = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg' };
+
 router.get('/api/folders/:folder/files/:file', (req, res) => {
-    const readFileInFolder = require('../services/storage/fileManager').readFileInFolder;
+    const { readFileInFolder, resolveFileInFolder } = require('../services/storage/fileManager');
+    const ext = path.extname(req.params.file || '').toLowerCase();
+    const audioType = AUDIO_CONTENT_TYPES[ext];
+    if (audioType) {
+        let filePath;
+        try {
+            filePath = resolveFileInFolder(req.params.folder, req.params.file);
+        } catch (e) {
+            res.status(404).send('Not Found');
+            return;
+        }
+        // Card audio used to be read whole into memory and sent without range
+        // support or cache headers. sendFile streams it and answers Range
+        // requests (Safari plays media only from servers that do), with ETag and
+        // Last-Modified. A short private max-age lets replays skip the network
+        // while a regenerated file with the same name is picked up quickly.
+        res.sendFile(filePath, {
+            headers: { 'Content-Type': audioType, 'Cache-Control': 'private, max-age=600' },
+            dotfiles: 'deny',
+        }, (error) => {
+            if (error && !res.headersSent) res.status(404).send('Not Found');
+        });
+        return;
+    }
     try {
-        const content = readFileInFolder(req.params.folder, req.params.file);
-        const ext = path.extname(req.params.file || '').toLowerCase();
-        if (ext === '.wav') {
-            res.set('Content-Type', 'audio/wav');
-            res.send(content);
-            return;
-        }
-        if (ext === '.mp3') {
-            res.set('Content-Type', 'audio/mpeg');
-            res.send(content);
-            return;
-        }
-        res.send(content);
+        res.send(readFileInFolder(req.params.folder, req.params.file));
     } catch (e) { res.status(404).send('Not Found'); }
 });
 
