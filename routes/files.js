@@ -44,13 +44,25 @@ router.get('/api/folders/:folder/files/:file', (req, res) => {
         // Card audio used to be read whole into memory and sent without range
         // support or cache headers. sendFile streams it and answers Range
         // requests (Safari plays media only from servers that do), with ETag and
-        // Last-Modified. A short private max-age lets replays skip the network
-        // while a regenerated file with the same name is picked up quickly.
+        // Last-Modified. In the owner workspace a short private max-age lets
+        // replays skip the network while a regenerated file with the same name
+        // is picked up quickly. A sandbox is chosen by cookie and can be reset
+        // under the same URLs, so its audio is never stored by the browser.
+        const owner = req.app.locals.workspacePolicy?.mode === 'owner';
         res.sendFile(filePath, {
-            headers: { 'Content-Type': audioType, 'Cache-Control': 'private, max-age=600' },
+            headers: { 'Content-Type': audioType, 'Cache-Control': owner ? 'private, max-age=600' : 'no-store' },
             dotfiles: 'deny',
         }, (error) => {
-            if (error && !res.headersSent) res.status(404).send('Not Found');
+            if (!error || res.headersSent) return;
+            // An unsatisfiable range (416, with Content-Range: bytes */size
+            // already set) or a failed precondition (412) is about a file that
+            // exists; only a missing file is a 404.
+            const status = error.status || error.statusCode;
+            if (status === 416 || status === 412) {
+                res.status(status).end();
+                return;
+            }
+            res.status(404).send('Not Found');
         });
         return;
     }

@@ -78,6 +78,7 @@ class SelectionTtsService {
     this.maxWarmQueue = options.maxWarmQueue || 6;
     this.warmQueue = [];
     this.warmActive = false;
+    this.warmChecking = null;
   }
 
   publicConfig() {
@@ -189,43 +190,77 @@ class SelectionTtsService {
     for (const input of inputs) {
       const { identity, key } = this.cacheKey(input);
       let status;
-      if (this.inFlight.has(key) || this.warmQueue.some((entry) => entry.key === key)) {
+      if (this.#warmKnown(key)) {
         status = 'pending';
-      } else if (await this.cache.get(key)) {
-        status = 'cached';
       } else {
-        this.warmQueue.push({ input, identity, key });
-        // A reader flipping through cards keeps the newest ones.
-        while (this.warmQueue.length > this.maxWarmQueue) this.warmQueue.shift();
-        status = 'queued';
+        const cached = await this.#cached(key);
+        // Checked again: another request may have queued the same phrase
+        // while this one read the cache.
+        const queuedMeanwhile = this.#warmKnown(key);
+        if (cached) {
+          status = 'cached';
+        } else if (queuedMeanwhile) {
+          status = 'pending';
+        } else {
+          this.warmQueue.push({ input, identity, key });
+          // A reader flipping through cards keeps the newest ones.
+          while (this.warmQueue.length > this.maxWarmQueue) this.warmQueue.shift();
+          status = 'queued';
+        }
       }
       statuses.push({ language: input.language, status });
     }
-    this.#drainWarmQueue();
+    void this.#drainWarmQueue();
     return statuses;
   }
 
-  #drainWarmQueue() {
-    if (this.warmActive) return;
-    const next = this.warmQueue.shift();
-    if (!next) return;
-    if (this.inFlight.has(next.key)) {
-      this.#drainWarmQueue();
-      return;
+  #warmKnown(key) {
+    return this.inFlight.has(key)
+      || key === this.warmChecking
+      || this.warmQueue.some((entry) => entry.key === key);
+  }
+
+  async #cached(key) {
+    try {
+      return Boolean(await this.cache.get(key));
+    } catch {
+      return false;
     }
+  }
+
+  async #drainWarmQueue() {
+    if (this.warmActive) return;
     this.warmActive = true;
-    const controller = new AbortController();
-    const record = { controller, subscribers: 0, settled: false, keepAlive: true, promise: null };
-    record.promise = this.#generate(next.input, next.identity, next.key, controller, 'batch')
-      .finally(() => {
-        record.settled = true;
-        this.inFlight.delete(next.key);
-        this.warmActive = false;
-        this.#drainWarmQueue();
-      });
-    // A failed warm-up is not an error anyone sees; the click synthesizes again.
-    record.promise.catch(() => {});
-    this.inFlight.set(next.key, record);
+    try {
+      while (this.warmQueue.length) {
+        const next = this.warmQueue.shift();
+        // A click may have synthesized this phrase since it was queued. While
+        // the cache is read the phrase is in neither the queue nor inFlight,
+        // so warmChecking keeps it visible to a prewarm arriving meanwhile.
+        this.warmChecking = next.key;
+        let skip;
+        try {
+          skip = this.inFlight.has(next.key) || await this.#cached(next.key) || this.inFlight.has(next.key);
+        } finally {
+          this.warmChecking = null;
+        }
+        if (skip) continue;
+        const controller = new AbortController();
+        const record = { controller, subscribers: 0, settled: false, keepAlive: true, promise: null };
+        record.promise = this.#generate(next.input, next.identity, next.key, controller, 'batch');
+        this.inFlight.set(next.key, record);
+        try {
+          await record.promise;
+        } catch {
+          // A failed warm-up is not an error anyone sees; the click synthesizes again.
+        } finally {
+          record.settled = true;
+          this.inFlight.delete(next.key);
+        }
+      }
+    } finally {
+      this.warmActive = false;
+    }
   }
 
   async #generate(input, identity, key, controller, requestClass = 'interactive') {

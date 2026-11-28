@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const { api, resetState, closeServer } = require('./_harness');
 const { serverInstance } = require('../../server.js');
@@ -63,6 +64,19 @@ test.describe('/api/folders/:folder/files/:file', () => {
     fs.writeFileSync(path.join(records, 'root-secret.db'), 'records root');
   });
 
+  // A directory outside the records root, reachable only through symlinks.
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'records-outside-'));
+  test.before(() => {
+    fs.writeFileSync(path.join(outside, 'outside.md'), 'outside secret');
+    fs.writeFileSync(path.join(outside, 'outside.wav'), 'outside secret');
+    fs.symlinkSync(outside, path.join(records, 'linkdir'), 'dir');
+    fs.symlinkSync(path.join(outside, 'outside.md'), path.join(records, '20260101', 'escape.md'));
+    fs.symlinkSync(path.join(outside, 'outside.wav'), path.join(records, '20260101', 'escape_ja_1.wav'));
+    fs.symlinkSync(path.join(records, 'root-secret.db'), path.join(records, '20260101', 'root_ja_1.wav'));
+    fs.symlinkSync('clip_ja_1.wav', path.join(records, '20260101', 'alias_ja_1.wav'));
+  });
+  test.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+
   test.it('streams card audio with byte ranges and a short private cache', async () => {
     const full = await rawGet('/api/folders/20260101/files/clip_ja_1.wav');
     assert.equal(full.status, 200);
@@ -94,5 +108,34 @@ test.describe('/api/folders/:folder/files/:file', () => {
       assert.equal(response.body.toString().includes('records root'), false, requestPath);
       assert.equal(response.body.toString().includes('sibling folder'), false, requestPath);
     }
+  });
+
+  test.it('does not follow a folder or file link out of its folder', async () => {
+    for (const requestPath of [
+      '/api/folders/linkdir/files/outside.md',
+      '/api/folders/linkdir/files/outside.wav',
+      '/api/folders/20260101/files/escape.md',
+      '/api/folders/20260101/files/escape_ja_1.wav',
+      '/api/folders/20260101/files/root_ja_1.wav',
+    ]) {
+      const response = await rawGet(requestPath);
+      assert.equal(response.status, 404, requestPath);
+      assert.equal(response.body.toString().includes('outside secret'), false, requestPath);
+      assert.equal(response.body.toString().includes('records root'), false, requestPath);
+    }
+    const listing = await api('GET', '/api/folders/linkdir/files');
+    assert.deepEqual(listing.body.files, []);
+    // A link that stays inside its folder is an ordinary file.
+    const alias = await rawGet('/api/folders/20260101/files/alias_ja_1.wav');
+    assert.equal(alias.status, 200);
+    assert.equal(alias.body.length, audio.length);
+  });
+
+  test.it('answers an unsatisfiable range with 416, and only a missing file with 404', async () => {
+    const unsatisfiable = await rawGet('/api/folders/20260101/files/clip_ja_1.wav', { Range: `bytes=${audio.length}-` });
+    assert.equal(unsatisfiable.status, 416);
+    assert.equal(unsatisfiable.headers['content-range'], `bytes */${audio.length}`);
+    const missing = await rawGet('/api/folders/20260101/files/missing_ja_1.wav', { Range: 'bytes=0-1' });
+    assert.equal(missing.status, 404);
   });
 });

@@ -115,14 +115,24 @@ test.describe('workspace access policy', () => {
       }).code,
       'WORKSPACE_HIGH_COST_DISABLED'
     );
-    // Warming the TTS cache synthesizes speech, so it sits behind the same gate.
-    assert.equal(
-      authorizeWorkspaceRequest(policy, {
-        method: 'POST',
-        path: '/api/tts/selection/prewarm',
-      }).code,
-      'WORKSPACE_HIGH_COST_DISABLED'
-    );
+  });
+
+  test.it('keeps background TTS warm-up to the owner workspace, whatever the sandbox allows', () => {
+    const request = { method: 'POST', path: '/api/tts/selection/prewarm' };
+    assert.equal(authorizeWorkspaceRequest(resolveWorkspacePolicy({}), request), null);
+    for (const overrides of [
+      {},
+      { SANDBOX_WRITE_ENABLED: 'true' },
+      { SANDBOX_WRITE_ENABLED: 'true', SANDBOX_HIGH_COST_ENABLED: 'true' },
+    ]) {
+      const denial = authorizeWorkspaceRequest(resolveWorkspacePolicy(sandboxEnv(overrides)), request);
+      assert.equal(denial.code, 'WORKSPACE_OWNER_ONLY');
+      assert.equal(denial.status, 403);
+    }
+    // A click still synthesizes in a sandbox that allows high-cost work.
+    assert.equal(authorizeWorkspaceRequest(resolveWorkspacePolicy(sandboxEnv({
+      SANDBOX_WRITE_ENABLED: 'true', SANDBOX_HIGH_COST_ENABLED: 'true',
+    })), { method: 'POST', path: '/api/tts/selection' }), null);
   });
 
   test.it('enables high-cost operations only through an explicit second gate', () => {

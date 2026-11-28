@@ -50,12 +50,27 @@ function isStrictlyInside(parent, child) {
     return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
+function realPathOrNull(target) {
+    try {
+        return fs.realpathSync(target);
+    } catch (err) {
+        return null;
+    }
+}
+
+// The string tests catch "." and "../", but not symbolic links: a folder or a
+// file in the records volume that links elsewhere would still be followed by
+// stat and read. Containment is therefore checked again on real paths, and the
+// real path is what callers read, so no link is followed after the check.
 function resolveFolder(folderName) {
     const safeName = folderName || '';
     const folderPath = path.resolve(path.join(baseDir, safeName));
-    if (!isStrictlyInside(path.resolve(baseDir), folderPath)) return null;
-    if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) return null;
-    return folderPath;
+    if (!isStrictlyInside(baseDir, folderPath)) return null;
+    const realBase = realPathOrNull(baseDir);
+    const realFolder = realPathOrNull(folderPath);
+    if (!realBase || !realFolder || !isStrictlyInside(realBase, realFolder)) return null;
+    if (!fs.statSync(realFolder).isDirectory()) return null;
+    return realFolder;
 }
 
 function resolveFileInFolder(folderName, filename) {
@@ -63,10 +78,11 @@ function resolveFileInFolder(folderName, filename) {
     if (!folderPath) throw new Error('Folder not found');
     const filePath = path.resolve(path.join(folderPath, filename || ''));
     if (!isStrictlyInside(folderPath, filePath)) throw new Error('Invalid file path');
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-        throw new Error('File not found');
-    }
-    return filePath;
+    const realFile = realPathOrNull(filePath);
+    if (!realFile) throw new Error('File not found');
+    if (!isStrictlyInside(folderPath, realFile)) throw new Error('Invalid file path');
+    if (!fs.statSync(realFile).isFile()) throw new Error('File not found');
+    return realFile;
 }
 
 function readMetaInfo(metaPath) {

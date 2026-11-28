@@ -222,6 +222,55 @@ test.describe('/api/runtime and workspace access middleware', () => {
     }
   });
 
+  test.it('caches card audio briefly for the owner, never in a sandbox, and keeps warm-up to the owner', async () => {
+    const records = process.env.RECORDS_PATH;
+    fs.mkdirSync(path.join(records, '20260102'), { recursive: true });
+    fs.writeFileSync(path.join(records, '20260102', 'clip_en_1.mp3'), Buffer.alloc(64, 1));
+    const workspaceId = 'sandbox_runtime_audio';
+    const instanceRoot = path.join(tmpRoot, workspaceId);
+    const policy = resolveWorkspacePolicy({
+      WORKSPACE_MODE: 'sandbox',
+      DEPLOYMENT_EXPOSURE: 'public',
+      SANDBOX_INSTANCE_ID: workspaceId,
+      SANDBOX_STORAGE_ROOT: tmpRoot,
+      SANDBOX_WRITE_ENABLED: 'true',
+      SANDBOX_HIGH_COST_ENABLED: 'true',
+      DB_PATH: path.join(instanceRoot, 'database', 'records.db'),
+      RECORDS_PATH: path.join(instanceRoot, 'records'),
+      TEXTBOOK_SOURCE_ROOT: path.join(instanceRoot, 'source'),
+      TEXTBOOK_WORK_PATH: path.join(instanceRoot, 'work'),
+      SELECTION_TTS_CACHE_PATH: path.join(instanceRoot, 'tts-cache'),
+    });
+    const quotaService = new SandboxQuotaService(policy, { generation: 0, ocr: 0, tts: 1, storageBytes: 1_000_000 });
+    const owner = await listen(createApp({ workspacePolicy: resolveWorkspacePolicy({}) }));
+    const sandbox = await listen(createApp({ workspacePolicy: policy, sandboxQuotaService: quotaService }));
+    try {
+      const ownerAudio = await fetch(`${owner.baseUrl}/api/folders/20260102/files/clip_en_1.mp3`);
+      assert.equal(ownerAudio.status, 200);
+      assert.equal(ownerAudio.headers.get('cache-control'), 'private, max-age=600');
+
+      // A reset sandbox serves new files under the same URLs and cookie-chosen
+      // origin, so the browser must not keep the old ones.
+      const sandboxAudio = await fetch(`${sandbox.baseUrl}/api/folders/20260102/files/clip_en_1.mp3`);
+      assert.equal(sandboxAudio.status, 200);
+      assert.equal(sandboxAudio.headers.get('cache-control'), 'no-store');
+
+      const warm = await fetch(`${sandbox.baseUrl}/api/tts/selection/prewarm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ items: [{ text: 'hello', language: 'en', speed: 1 }] }),
+      });
+      assert.equal(warm.status, 403);
+      assert.equal((await warm.json()).code, 'WORKSPACE_OWNER_ONLY');
+      const runtime = await (await fetch(`${sandbox.baseUrl}/api/runtime`)).json();
+      assert.equal(runtime.sandbox.quota.categories.tts.remaining, 1);
+    } finally {
+      await close(owner.server);
+      await close(sandbox.server);
+      fs.rmSync(instanceRoot, { recursive: true, force: true });
+    }
+  });
+
   test.it('exposes only safe public feedback URLs', async () => {
     assert.equal(sanitizePublicUrl('https://support.example.com/three-lans'), 'https://support.example.com/three-lans');
     assert.equal(sanitizePublicUrl('mailto:support@example.com'), 'mailto:support@example.com');

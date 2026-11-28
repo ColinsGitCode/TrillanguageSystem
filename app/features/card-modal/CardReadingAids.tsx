@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LoaderCircle, Play, Square } from 'lucide-react';
 import { factoryApi } from '../factory/factory-api';
 import { useExclusiveAudio } from '../../lib/audio/exclusive-audio';
+import { workspaceRuntimeApi } from '../../lib/runtime/workspace';
 import { selectionTtsApi, type SelectionTtsLanguage } from './selection-tts';
 import { readingFromTokens } from './card-layout.mjs';
 import type { GrammarSummary, ScenarioOutlineItem, TrilingualSummary } from './card-layout.mjs';
@@ -37,15 +38,24 @@ export function CardSummaryStrip({ summary, generationId, showReadings = true }:
   const jaReading = summary.jaRubyReading || (pronunciationQuery.data
     ? readingFromTokens(pronunciationQuery.data.plainText, pronunciationQuery.data.tokens, summary.ja)
     : null);
+  const ownerQuery = useQuery({
+    queryKey: ['runtime'],
+    queryFn: workspaceRuntimeApi.get,
+    staleTime: 60_000,
+    select: (data) => data.workspace.mode === 'owner',
+  });
   const voices = configQuery.data?.enabled ? configQuery.data.languages : [];
   const voiceKey = voices.join(',');
+  const warmUp = ownerQuery.data === true;
 
   // A first synthesis takes 1-3 s on the server (English longer than
   // Japanese); a cached one about 0.1 s. Warm both phrases shortly after the
   // card opens, Japanese first, so the click is usually a cache hit. The delay
-  // skips cards that are only flipped past.
+  // skips cards that are only flipped past. Only the owner workspace warms up:
+  // a sandbox counts every synthesis against its quota, so merely opening a
+  // card there must not spend it.
   useEffect(() => {
-    if (!voiceKey) return undefined;
+    if (!voiceKey || !warmUp) return undefined;
     const items = [
       { text: summary.ja, language: 'ja' as const, speed: 1 as const },
       { text: summary.en, language: 'en' as const, speed: 1 as const },
@@ -53,7 +63,7 @@ export function CardSummaryStrip({ summary, generationId, showReadings = true }:
     if (!items.length) return undefined;
     const timer = window.setTimeout(() => { void selectionTtsApi.prewarm(items); }, 600);
     return () => window.clearTimeout(timer);
-  }, [summary.ja, summary.en, voiceKey]);
+  }, [summary.ja, summary.en, voiceKey, warmUp]);
 
   const release = () => {
     controllerRef.current?.abort();

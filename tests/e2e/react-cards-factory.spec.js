@@ -731,6 +731,31 @@ test.describe.serial('React Cards Factory P3 + P4 + CA-P5', () => {
     ]);
   });
 
+  test('a sandbox opens cards without warming phrases nobody asked to hear', async ({ page }) => {
+    // Every synthesis counts against a sandbox's quota, so only a click may spend it.
+    const warmups = [];
+    await page.route('**/api/runtime', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.workspace = { ...body.workspace, mode: 'sandbox' };
+      return route.fulfill({ response, json: body });
+    });
+    await page.route('**/api/tts/selection', (route) => route.fulfill({
+      json: { success: true, enabled: true, languages: ['en', 'ja'], speeds: [0.8, 1, 1.2], maxChars: 300 },
+    }));
+    await page.route('**/api/tts/selection/prewarm', (route) => {
+      warmups.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { success: true, items: [] } });
+    });
+    await page.goto('/');
+    await expect(page.locator('[data-workspace-mode="sandbox"]')).toBeVisible();
+    await page.getByTestId('react-file-list').locator('button').filter({ hasText: 'react trilingual fixture' }).click();
+    await expect(page.getByTestId('card-summary')).toBeVisible();
+    // The owner workspace warms up 600 ms after opening; wait well past that.
+    await page.waitForTimeout(1500);
+    expect(warmups).toEqual([]);
+  });
+
   test('example audio fetched on hover plays from memory on click', async ({ page }) => {
     await page.addInitScript(() => {
       window.__exampleAudio = [];

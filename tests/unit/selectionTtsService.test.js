@@ -291,6 +291,55 @@ test('a reader who joins a warm-up and leaves does not cancel it', async () => {
   assert.equal((await tts.synthesize({ text: 'join me', language: 'en', speed: 1 })).cacheStatus, 'HIT');
 });
 
+test('two warm-ups of the same phrase at once synthesize it only once', async () => {
+  // A slow cache read is where both requests used to pass the duplicate check.
+  const store = new Map();
+  const cache = {
+    async get(key) {
+      await tick();
+      await tick();
+      return store.get(key) || null;
+    },
+    async set(key, buffer, metadata) {
+      store.set(key, { buffer, metadata });
+      return true;
+    },
+  };
+  let calls = 0;
+  const tts = service({
+    cache,
+    synthesizeSpeech: async (input) => {
+      calls += 1;
+      return result(input.text);
+    },
+  });
+  const phrase = [{ text: 'same phrase', language: 'en', speed: 1 }];
+  const [first, second] = await Promise.all([tts.prewarm(phrase), tts.prewarm(phrase)]);
+  assert.deepEqual([first[0].status, second[0].status].sort(), ['pending', 'queued']);
+  while (tts.warmActive || tts.warmQueue.length) await tick();
+  assert.equal(calls, 1);
+  assert.equal((await tts.synthesize(phrase[0])).cacheStatus, 'HIT');
+  assert.equal(calls, 1);
+});
+
+test('a queued warm-up skips a phrase a click has already cached', async () => {
+  const gate = deferred();
+  const seen = [];
+  const tts = service({
+    synthesizeSpeech: async (input, options) => {
+      seen.push(`${options.requestClass}:${input.text}`);
+      if (input.text === 'first') await gate.promise;
+      return result(input.text);
+    },
+  });
+  await tts.prewarm([{ text: 'first', language: 'en', speed: 1 }]);
+  await tts.prewarm([{ text: 'clicked', language: 'en', speed: 1 }]);
+  assert.equal((await tts.synthesize({ text: 'clicked', language: 'en', speed: 1 })).cacheStatus, 'MISS');
+  gate.resolve();
+  while (tts.warmActive || tts.warmQueue.length) await tick();
+  assert.deepEqual(seen, ['batch:first', 'interactive:clicked']);
+});
+
 test('the warm-up queue keeps the newest phrases and validates its input', async () => {
   const gate = deferred();
   const seen = [];
